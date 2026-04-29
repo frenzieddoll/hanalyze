@@ -1,13 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
 module DataIO.CSV
   ( loadCSV
+  , loadTSV
+  , loadSSV
   , ParseError
   ) where
 
 import DataFrame.Core
 
-import Data.Csv (decodeByName, NamedRecord, Header)
 import qualified Data.ByteString.Lazy as BL
+import Data.Char (ord)
+import Data.Csv (NamedRecord, Header, defaultDecodeOptions, DecodeOptions(..), decodeByNameWith)
 import qualified Data.HashMap.Strict as HM
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -17,12 +20,28 @@ import Text.Read (readMaybe)
 
 type ParseError = String
 
-loadCSV :: FilePath -> IO (Either ParseError DataFrame)
-loadCSV path = do
+data FileType = CSV | TSV | SSV
+
+decodeOpts :: FileType -> DecodeOptions
+decodeOpts fileType = defaultDecodeOptions { decDelimiter = fromIntegral (ord delim)}
+  where
+    delim = case fileType of
+      CSV -> ','
+      TSV -> '\t'
+      SSV -> ' '
+
+loadFileType :: FileType -> FilePath -> IO (Either ParseError DataFrame)
+loadFileType fileType path = do
   content <- BL.readFile path
-  case decodeByName content of
+  let opts = decodeOpts fileType
+  case decodeByNameWith opts content of
     Left err          -> return (Left err)
     Right (hdr, rows) -> return (Right (toDataFrame hdr rows))
+
+loadCSV, loadTSV, loadSSV :: FilePath -> IO (Either ParseError DataFrame)
+loadCSV = loadFileType CSV
+loadTSV = loadFileType TSV
+loadSSV = loadFileType SSV
 
 toDataFrame :: Header -> V.Vector NamedRecord -> DataFrame
 toDataFrame hdr rows =
