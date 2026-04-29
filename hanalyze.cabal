@@ -1,0 +1,60 @@
+cabal-version: 3.0
+name:          hanalyze
+version:       0.1.0.0
+synopsis:      Interactive data analysis and visualization in Haskell
+license:       MIT
+author:        toshiaki
+maintainer:    frenzieddoll@gmail.com
+build-type:    Simple
+
+common warnings
+  ghc-options: -Wall -Wcompat -Widentities -Wredundant-constraints
+
+library
+  import:           warnings
+  hs-source-dirs:   src
+  default-language: GHC2021
+  exposed-modules:
+    DataFrame.Core
+    DataIO.CSV
+    Viz.Core
+    Viz.Scatter
+    Model.Core
+    Model.LM
+    Model.GLM
+  build-depends:
+      base                 >= 4.14 && < 5
+    , bytestring           >= 0.11 && < 0.13
+    , cassava              >= 0.5  && < 0.6
+    , containers           >= 0.6  && < 0.8
+    , hmatrix              >= 0.20 && < 0.22
+    , hvega                >= 0.12 && < 0.13
+    , mwc-random           >= 0.15 && < 0.16
+    , process              >= 1.6  && < 1.8
+    , statistics           >= 0.16 && < 0.17
+    , text                 >= 1.2  && < 2.2
+    , unordered-containers >= 0.2  && < 0.3
+    , vector               >= 0.12 && < 0.14
+
+executable hanalyze
+  import:           warnings
+  main-is:          Main.hs
+  hs-source-dirs:   app
+  default-language: GHC2021
+  build-depends:
+      base     >= 4.14 && < 5
+    , hanalyze
+    , text     >= 1.2  && < 2.2
+    , vector   >= 0.12 && < 0.14
+
+test-suite hanalyze-test
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  main-is:          Spec.hs
+  hs-source-dirs:   test
+  default-language: GHC2021
+  build-depends:
+      base     >= 4.14 && < 5
+    , hanalyze
+    , hspec    >= 2.10 && < 2.12
+    , vector   >= 0.12 && < 0.14
