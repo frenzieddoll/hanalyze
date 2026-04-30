@@ -8,6 +8,8 @@ module Viz.Scatter
   , scatterWithLMCIFile
   , scatterWithSmooth
   , scatterWithSmoothFile
+  , scatterMultiY
+  , scatterMultiYFile
   , predictedVsActual
   , predictedVsActualFile
   ) where
@@ -15,13 +17,13 @@ module Viz.Scatter
 import DataFrame.Core
 import Model.Core  (FitResult, fittedList)
 import Model.LM    (CIBand (..), SmoothFit (..))
-import Viz.Core (PlotConfig (..))
+import Viz.Core    (PlotConfig (..), OutputFormat, writeSpec)
 
 import Data.List (sortBy)
 import Data.Ord (comparing)
-import Graphics.Vega.VegaLite
 import Data.Text (Text)
 import qualified Data.Vector as V
+import Graphics.Vega.VegaLite
 
 -- | Build a Vega-Lite scatter plot spec from two numeric columns.
 scatterPlot :: PlotConfig -> DataFrame -> Text -> Text -> VegaLite
@@ -35,23 +37,20 @@ scatterPlot cfg df xCol yCol =
     , height (plotHeight cfg)
     ]
   where
-    xVals    = maybe [] V.toList (getNumeric xCol df)
-    yVals    = maybe [] V.toList (getNumeric yCol df)
-
+    xVals   = maybe [] V.toList (getNumeric xCol df)
+    yVals   = maybe [] V.toList (getNumeric yCol df)
     dataSpec = dataFromColumns []
                . dataColumn xCol (Numbers xVals)
                . dataColumn yCol (Numbers yVals)
                $ []
-
     encSpec  = encoding
                . position X [PName xCol, PmType Quantitative, PAxis [AxTitle xCol]]
                . position Y [PName yCol, PmType Quantitative, PAxis [AxTitle yCol]]
                $ []
 
--- | Write scatter plot to an HTML file.
-scatterPlotFile :: FilePath -> PlotConfig -> DataFrame -> Text -> Text -> IO ()
-scatterPlotFile path cfg df xCol yCol =
-  toHtmlFile path (scatterPlot cfg df xCol yCol)
+scatterPlotFile :: OutputFormat -> FilePath -> PlotConfig -> DataFrame -> Text -> Text -> IO ()
+scatterPlotFile fmt path cfg df xCol yCol =
+  writeSpec fmt path (scatterPlot cfg df xCol yCol)
 
 -- | Scatter plot with a fitted regression line overlaid.
 scatterWithLM :: PlotConfig -> DataFrame -> Text -> Text -> FitResult -> VegaLite
@@ -63,10 +62,8 @@ scatterWithLM cfg df xCol yCol res =
     , height (plotHeight cfg)
     ]
   where
-    xVals = maybe [] V.toList (getNumeric xCol df)
-    yVals = maybe [] V.toList (getNumeric yCol df)
-
-    -- sort (x, ŷ) by x so the line renders cleanly
+    xVals  = maybe [] V.toList (getNumeric xCol df)
+    yVals  = maybe [] V.toList (getNumeric yCol df)
     pairs  = sortBy (comparing fst) (zip xVals (fittedList res))
     xLine  = map fst pairs
     yLine  = map snd pairs
@@ -85,23 +82,21 @@ scatterWithLM cfg df xCol yCol res =
 
     lineLayer = asSpec
       [ dataFromColumns []
-          . dataColumn xCol      (Numbers xLine)
-          . dataColumn "fitted"  (Numbers yLine)
+          . dataColumn xCol     (Numbers xLine)
+          . dataColumn "fitted" (Numbers yLine)
           $ []
       , mark Line [MColor "red", MStrokeWidth 2.0]
       , encoding
-          . position X [PName xCol,      PmType Quantitative]
-          . position Y [PName "fitted",  PmType Quantitative]
+          . position X [PName xCol,     PmType Quantitative]
+          . position Y [PName "fitted", PmType Quantitative]
           $ []
       ]
 
--- | Write scatter + LM plot to an HTML file.
-scatterWithLMFile :: FilePath -> PlotConfig -> DataFrame -> Text -> Text -> FitResult -> IO ()
-scatterWithLMFile path cfg df xCol yCol res =
-  toHtmlFile path (scatterWithLM cfg df xCol yCol res)
+scatterWithLMFile :: OutputFormat -> FilePath -> PlotConfig -> DataFrame -> Text -> Text -> FitResult -> IO ()
+scatterWithLMFile fmt path cfg df xCol yCol res =
+  writeSpec fmt path (scatterWithLM cfg df xCol yCol res)
 
--- | Scatter plot with regression line and confidence band.
--- Layer order: CI band (bottom) → regression line → data points (top)
+-- | Scatter plot with regression line and confidence band (training-point CI).
 scatterWithLMCI :: PlotConfig -> DataFrame -> Text -> Text -> FitResult -> CIBand -> VegaLite
 scatterWithLMCI cfg df xCol yCol res ci =
   toVegaLite
@@ -114,17 +109,16 @@ scatterWithLMCI cfg df xCol yCol res ci =
     xVals = maybe [] V.toList (getNumeric xCol df)
     yVals = maybe [] V.toList (getNumeric yCol df)
 
-    -- Sort all line/band data by x for clean rendering
-    sorted4 = sortBy (comparing (\(x, _, _, _) -> x))
+    sorted4 = sortBy (comparing (\(x,_,_,_) -> x))
                 [ (x, f, l, u)
-                | ((x, f), (l, u)) <-
+                | ((x,f),(l,u)) <-
                     zip (zip xVals (fittedList res))
                         (zip (lowerBound ci) (upperBound ci))
                 ]
-    xSorted = [x | (x, _, _, _) <- sorted4]
-    fSorted = [f | (_, f, _, _) <- sorted4]
-    lSorted = [l | (_, _, l, _) <- sorted4]
-    uSorted = [u | (_, _, _, u) <- sorted4]
+    xSorted = [x | (x,_,_,_) <- sorted4]
+    fSorted = [f | (_,f,_,_) <- sorted4]
+    lSorted = [l | (_,_,l,_) <- sorted4]
+    uSorted = [u | (_,_,_,u) <- sorted4]
 
     pointLayer = asSpec
       [ dataFromColumns []
@@ -137,7 +131,6 @@ scatterWithLMCI cfg df xCol yCol res ci =
           . position Y [PName yCol, PmType Quantitative, PAxis [AxTitle yCol]]
           $ []
       ]
-
     lineLayer = asSpec
       [ dataFromColumns []
           . dataColumn xCol     (Numbers xSorted)
@@ -149,7 +142,6 @@ scatterWithLMCI cfg df xCol yCol res ci =
           . position Y [PName "fitted", PmType Quantitative]
           $ []
       ]
-
     ciLayer = asSpec
       [ dataFromColumns []
           . dataColumn xCol    (Numbers xSorted)
@@ -164,24 +156,28 @@ scatterWithLMCI cfg df xCol yCol res ci =
           $ []
       ]
 
--- | Write scatter + LM + CI plot to an HTML file.
-scatterWithLMCIFile :: FilePath -> PlotConfig -> DataFrame -> Text -> Text -> FitResult -> CIBand -> IO ()
-scatterWithLMCIFile path cfg df xCol yCol res ci =
-  toHtmlFile path (scatterWithLMCI cfg df xCol yCol res ci)
+scatterWithLMCIFile :: OutputFormat -> FilePath -> PlotConfig -> DataFrame -> Text -> Text -> FitResult -> CIBand -> IO ()
+scatterWithLMCIFile fmt path cfg df xCol yCol res ci =
+  writeSpec fmt path (scatterWithLMCI cfg df xCol yCol res ci)
 
--- | Scatter plot with a smooth fitted curve and CI band from a fine grid.
--- Layer order: CI band → curve → data points
-scatterWithSmooth :: PlotConfig -> DataFrame -> Text -> Text -> SmoothFit -> VegaLite
-scatterWithSmooth cfg df xCol yCol sf =
+-- | Scatter plot with smooth fitted curve.
+-- Renders a CI/PI band when sfHasBand is True.
+-- Shows an optional equation subtitle under the chart title.
+scatterWithSmooth :: PlotConfig -> Maybe Text -> DataFrame -> Text -> Text -> SmoothFit -> VegaLite
+scatterWithSmooth cfg mEquation df xCol yCol sf =
   toVegaLite
-    [ title (plotTitle cfg) []
-    , layer [ciLayer, lineLayer, pointLayer]
+    [ title (plotTitle cfg) titleOpts
+    , layer layers
     , width  (plotWidth  cfg)
     , height (plotHeight cfg)
     ]
   where
     xVals = maybe [] V.toList (getNumeric xCol df)
     yVals = maybe [] V.toList (getNumeric yCol df)
+
+    titleOpts = case mEquation of
+      Just eq -> [TSubtitle eq, TSubtitleFontSize 11, TSubtitleColor "#555"]
+      Nothing -> []
 
     pointLayer = asSpec
       [ dataFromColumns []
@@ -221,12 +217,45 @@ scatterWithSmooth cfg df xCol yCol sf =
           $ []
       ]
 
-scatterWithSmoothFile :: FilePath -> PlotConfig -> DataFrame -> Text -> Text -> SmoothFit -> IO ()
-scatterWithSmoothFile path cfg df xCol yCol sf =
-  toHtmlFile path (scatterWithSmooth cfg df xCol yCol sf)
+    layers = (if sfHasBand sf then [ciLayer] else []) ++ [lineLayer, pointLayer]
+
+scatterWithSmoothFile :: OutputFormat -> FilePath -> PlotConfig -> Maybe Text -> DataFrame -> Text -> Text -> SmoothFit -> IO ()
+scatterWithSmoothFile fmt path cfg mEq df xCol yCol sf =
+  writeSpec fmt path (scatterWithSmooth cfg mEq df xCol yCol sf)
+
+-- | Scatter plot with multiple y columns as color-coded series (no regression).
+scatterMultiY :: PlotConfig -> DataFrame -> Text -> [Text] -> VegaLite
+scatterMultiY cfg df xCol yCols =
+  toVegaLite
+    [ title (plotTitle cfg) []
+    , dataSpec
+    , transform
+        . foldAs yCols "series" "value"
+        $ []
+    , mark Point [MTooltip TTEncoding]
+    , encoding
+        . position X [PName xCol,    PmType Quantitative, PAxis [AxTitle xCol]]
+        . position Y [PName "value", PmType Quantitative, PAxis [AxTitle "value"]]
+        . color [MName "series", MmType Nominal]
+        $ []
+    , width  (plotWidth  cfg)
+    , height (plotHeight cfg)
+    ]
+  where
+    xVals = maybe [] V.toList (getNumeric xCol df)
+    yData = foldr (\col f -> dataColumn col (Numbers (maybe [] V.toList (getNumeric col df))) . f)
+                  id yCols
+
+    dataSpec = dataFromColumns []
+               . dataColumn xCol (Numbers xVals)
+               . yData
+               $ []
+
+scatterMultiYFile :: OutputFormat -> FilePath -> PlotConfig -> DataFrame -> Text -> [Text] -> IO ()
+scatterMultiYFile fmt path cfg df xCol yCols =
+  writeSpec fmt path (scatterMultiY cfg df xCol yCols)
 
 -- | Predicted vs Actual diagnostic plot.
--- Points cluster around the identity line (y = x) for a good fit.
 predictedVsActual :: PlotConfig -> [Double] -> [Double] -> VegaLite
 predictedVsActual cfg actuals preds =
   toVegaLite
@@ -253,7 +282,6 @@ predictedVsActual cfg actuals preds =
           $ []
       ]
 
-    -- Identity line: perfect predictions fall on y = x
     identityLayer = asSpec
       [ dataFromColumns []
           . dataColumn "ix" (Numbers [lo, hi])
@@ -266,6 +294,6 @@ predictedVsActual cfg actuals preds =
           $ []
       ]
 
-predictedVsActualFile :: FilePath -> PlotConfig -> [Double] -> [Double] -> IO ()
-predictedVsActualFile path cfg actuals preds =
-  toHtmlFile path (predictedVsActual cfg actuals preds)
+predictedVsActualFile :: OutputFormat -> FilePath -> PlotConfig -> [Double] -> [Double] -> IO ()
+predictedVsActualFile fmt path cfg actuals preds =
+  writeSpec fmt path (predictedVsActual cfg actuals preds)

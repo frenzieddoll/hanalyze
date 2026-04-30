@@ -5,6 +5,7 @@ module Model.LM
   , fitLM
   , designMatrix
   , polyDesignMatrix
+  , multiPolyDesignMatrix
   , linspace
   , fitDataFrameLM
   , confidenceBand
@@ -13,7 +14,7 @@ module Model.LM
   ) where
 
 import DataFrame.Core
-import Model.Core
+import Model.Core (FitResult (..), Model (..), Band (..), fittedList)
 
 import Data.Text (Text)
 import qualified Data.Vector as V
@@ -95,6 +96,18 @@ polyDesignMatrix degree xs = LA.fromColumns
   | k <- [0 .. degree]
   ]
 
+-- | Multi-column polynomial design matrix.
+-- Builds [1, x1, x1², …, x1^d1, x2, …, x2^d2, …] from a list of (column, degree) pairs.
+multiPolyDesignMatrix :: [(V.Vector Double, Int)] -> LA.Matrix Double
+multiPolyDesignMatrix [] = error "multiPolyDesignMatrix: empty predictor list"
+multiPolyDesignMatrix colDegs@((firstXs, _) : _) =
+  LA.fromColumns (intercept : concatMap polyExpand colDegs)
+  where
+    n           = V.length firstXs
+    intercept   = LA.konst 1.0 n
+    polyExpand (xs, deg) =
+      [ LA.fromList [ x ^ k | x <- V.toList xs ] | k <- [1 .. deg] ]
+
 -- | Grid of evenly spaced values from lo to hi.
 linspace :: Double -> Double -> Int -> [Double]
 linspace lo hi n
@@ -104,45 +117,58 @@ linspace lo hi n
 
 -- | Pre-computed smooth curve data for plotting (evaluated on a fine grid).
 data SmoothFit = SmoothFit
-  { sfX     :: [Double]  -- grid x values
-  , sfFit   :: [Double]  -- predicted y at grid points
-  , sfLower :: [Double]  -- CI lower bound
-  , sfUpper :: [Double]  -- CI upper bound
+  { sfX       :: [Double]  -- grid x values
+  , sfFit     :: [Double]  -- predicted y at grid points
+  , sfLower   :: [Double]  -- band lower bound (same as sfFit when sfHasBand = False)
+  , sfUpper   :: [Double]  -- band upper bound (same as sfFit when sfHasBand = False)
+  , sfHasBand :: Bool      -- whether to render the uncertainty band
   } deriving (Show)
 
--- | Fit polynomial LM of given degree and compute a smooth curve + CI band
+-- | Fit polynomial LM of given degree and compute a smooth curve with optional band
 -- on a fine grid of nGrid points for clean visualisation.
 fitPolyWithSmooth
-  :: Int        -- ^ polynomial degree
-  -> Double     -- ^ CI level (e.g. 0.95)
+  :: Band       -- ^ uncertainty band specification
   -> Int        -- ^ grid resolution for smooth curve
   -> DataFrame
   -> Text       -- ^ x column
   -> Text       -- ^ y column
   -> Maybe (FitResult, SmoothFit)
-fitPolyWithSmooth degree level nGrid df xCol yCol = do
+fitPolyWithSmooth band nGrid df xCol yCol = do
   xVec <- getNumeric xCol df
   yVec <- getNumeric yCol df
-  let dm    = polyDesignMatrix degree xVec
-      y     = LA.fromList (V.toList yVec)
-      res   = fitLM dm y
-      beta  = coefficients res
+  let degree = 1  -- kept for backward-compat; use fitGLMWithSmooth for poly
+      dm     = polyDesignMatrix degree xVec
+      y      = LA.fromList (V.toList yVec)
+      res    = fitLM dm y
+      beta   = coefficients res
 
-      xLa   = LA.fromList (V.toList xVec)
-      xGrid = V.fromList (linspace (LA.minElement xLa) (LA.maxElement xLa) nGrid)
-      dmG   = polyDesignMatrix degree xGrid
-      yGrid = LA.toList (dmG LA.#> beta)
+      xLa    = LA.fromList (V.toList xVec)
+      xGrid  = V.fromList (linspace (LA.minElement xLa) (LA.maxElement xLa) nGrid)
+      dmG    = polyDesignMatrix degree xGrid
+      yGrid  = LA.toList (dmG LA.#> beta)
 
-      dfStat   = fromIntegral (LA.rows dm - LA.cols dm) :: Double
-      s2       = (residuals res `LA.dot` residuals res) / dfStat
-      xtxi     = LA.inv (LA.tr dm LA.<> dm)
-      tVal     = quantile (studentT dfStat) ((1.0 + level) / 2.0)
-      halfW xi = tVal * sqrt (s2 * (xi `LA.dot` (xtxi LA.#> xi)))
-      gRows    = LA.toRows dmG
-      lowers   = zipWith (\yh xi -> yh - halfW xi) yGrid gRows
-      uppers   = zipWith (\yh xi -> yh + halfW xi) yGrid gRows
+      dfStat = fromIntegral (LA.rows dm - LA.cols dm) :: Double
+      s2     = (residuals res `LA.dot` residuals res) / dfStat
+      xtxi   = LA.inv (LA.tr dm LA.<> dm)
+      gRows  = LA.toRows dmG
 
-  return (res, SmoothFit (V.toList xGrid) yGrid lowers uppers)
+      computeBand level isPI =
+        let tVal   = quantile (studentT dfStat) ((1.0 + level) / 2.0)
+            extra  = if isPI then 1.0 else 0.0
+            halfW xi = tVal * sqrt (s2 * (extra + xi `LA.dot` (xtxi LA.#> xi)))
+            lowers = zipWith (\yh xi -> yh - halfW xi) yGrid gRows
+            uppers = zipWith (\yh xi -> yh + halfW xi) yGrid gRows
+        in (lowers, uppers)
+
+  case band of
+    NoBand ->
+      return (res, SmoothFit (V.toList xGrid) yGrid yGrid yGrid False)
+    CI level ->
+      let (lowers, uppers) = computeBand level False
+      in return (res, SmoothFit (V.toList xGrid) yGrid lowers uppers True)
+    PI level ->
+      let (lowers, uppers) = computeBand level True
+      in return (res, SmoothFit (V.toList xGrid) yGrid lowers uppers True)
 
 -- | R² = 1 − SS_res / SS_tot
 computeR2 :: LA.Vector Double -> LA.Vector Double -> Double

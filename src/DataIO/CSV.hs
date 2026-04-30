@@ -3,6 +3,7 @@ module DataIO.CSV
   ( loadCSV
   , loadTSV
   , loadSSV
+  , loadAuto
   , ParseError
   ) where
 
@@ -10,6 +11,7 @@ import DataFrame.Core
 
 import qualified Data.ByteString.Lazy as BL
 import Data.Char (ord)
+import Data.List (isSuffixOf)
 import Data.Csv (NamedRecord, Header, defaultDecodeOptions, DecodeOptions(..), decodeByNameWith)
 import qualified Data.HashMap.Strict as HM
 import Data.Text (Text)
@@ -42,6 +44,12 @@ loadCSV, loadTSV, loadSSV :: FilePath -> IO (Either ParseError DataFrame)
 loadCSV = loadFileType CSV
 loadTSV = loadFileType TSV
 loadSSV = loadFileType SSV
+
+loadAuto :: FilePath -> IO (Either ParseError DataFrame)
+loadAuto path
+  | ".tsv" `isSuffixOf` path = loadTSV path
+  | ".ssv" `isSuffixOf` path = loadSSV path
+  | otherwise                 = loadCSV path
 
 toDataFrame :: Header -> V.Vector NamedRecord -> DataFrame
 toDataFrame hdr rows =

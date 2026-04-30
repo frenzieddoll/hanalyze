@@ -2,13 +2,16 @@
 module Model.GLM
   ( Family (..)
   , parseFamily
+  , LinkFn (..)
+  , parseLink
+  , canonicalLink
   , fitGLM
   , fitGLMWithSmooth
   ) where
 
 import DataFrame.Core
 import Model.Core
-import Model.LM (polyDesignMatrix, linspace, SmoothFit (..))
+import Model.LM (multiPolyDesignMatrix, linspace, SmoothFit (..))
 
 import Data.Text (Text)
 import qualified Data.Vector as V
@@ -18,10 +21,9 @@ import Statistics.Distribution.Normal (normalDistr)
 import Statistics.Distribution.StudentT (studentT)
 
 -- ---------------------------------------------------------------------------
--- Family
+-- Family (response distribution)
 -- ---------------------------------------------------------------------------
 
--- | GLM family: encodes both the response distribution and its canonical link.
 data Family = Gaussian | Binomial | Poisson
   deriving (Show, Eq)
 
@@ -29,29 +31,44 @@ parseFamily :: String -> Either String Family
 parseFamily "gaussian" = Right Gaussian
 parseFamily "binomial" = Right Binomial
 parseFamily "poisson"  = Right Poisson
-parseFamily s          = Left ("Unknown family '" ++ s ++ "'. Use: gaussian | binomial | poisson")
+parseFamily s          = Left ("Unknown distribution '" ++ s ++ "'. Use: gaussian | binomial | poisson")
 
 -- ---------------------------------------------------------------------------
--- Link and variance functions
+-- Link function
 -- ---------------------------------------------------------------------------
 
--- (g, g⁻¹, g')
+data LinkFn = Identity | Log | Logit | Sqrt
+  deriving (Show, Eq)
+
+parseLink :: String -> Either String LinkFn
+parseLink "identity" = Right Identity
+parseLink "log"      = Right Log
+parseLink "logit"    = Right Logit
+parseLink "sqrt"     = Right Sqrt
+parseLink s          = Left ("Unknown link '" ++ s ++ "'. Use: identity | log | logit | sqrt")
+
+canonicalLink :: Family -> LinkFn
+canonicalLink Gaussian = Identity
+canonicalLink Binomial = Logit
+canonicalLink Poisson  = Log
+
+-- Internal triple: (g, g⁻¹, g')
 type Link = (Double -> Double, Double -> Double, Double -> Double)
 
-linkOf :: Family -> Link
-linkOf Gaussian = (id, id, const 1.0)
-linkOf Binomial = ( \x -> log (x / (1 - x))
-                  , \x -> 1 / (1 + exp (-x))
-                  , \mu -> 1.0 / (mu * (1 - mu))
-                  )
-linkOf Poisson  = (log, exp, recip)
+linkFnOf :: LinkFn -> Link
+linkFnOf Identity = (id,   id,                const 1.0)
+linkFnOf Log      = (log,  exp,               recip)
+linkFnOf Logit    = ( \x  -> log (x / (1 - x))
+                    , \eta -> 1 / (1 + exp (-eta))
+                    , \mu  -> 1.0 / (mu * (1 - mu))
+                    )
+linkFnOf Sqrt     = (sqrt, \eta -> eta * eta, \mu -> 0.5 / sqrt (max 1e-10 mu))
 
 varOf :: Family -> Double -> Double
 varOf Gaussian _  = 1.0
 varOf Binomial mu = mu * (1 - mu)
 varOf Poisson  mu = mu
 
--- Clamp μ to avoid log(0) or division by zero
 safeMu :: Family -> LA.Vector Double -> LA.Vector Double
 safeMu Binomial = LA.cmap (max 1e-8 . min (1 - 1e-8))
 safeMu Poisson  = LA.cmap (max 1e-8)
@@ -67,10 +84,9 @@ maxIter = 100
 tol :: Double
 tol = 1e-8
 
--- Initial β: intercept = g(ȳ), other terms = 0
-initBeta :: Family -> LA.Vector Double -> Int -> LA.Vector Double
-initBeta family y p =
-  let (g, _, _) = linkOf family
+initBeta :: Family -> LinkFn -> LA.Vector Double -> Int -> LA.Vector Double
+initBeta family linkFn y p =
+  let (g, _, _) = linkFnOf linkFn
       yMean = LA.sumElements y / fromIntegral (LA.size y)
       yC = case family of
              Binomial -> max 1e-6 (min (1 - 1e-6) yMean)
@@ -78,30 +94,28 @@ initBeta family y p =
              Gaussian -> yMean
   in LA.fromList (g yC : replicate (p - 1) 0.0)
 
--- One IRLS step via W^{1/2} transform (numerically stable QR solve)
-irlsStep :: Link -> (Double -> Double) -> (Family -> LA.Vector Double -> LA.Vector Double)
+irlsStep :: Link -> (Double -> Double)
+          -> (Family -> LA.Vector Double -> LA.Vector Double)
           -> Family -> LA.Matrix Double -> LA.Vector Double -> LA.Vector Double
           -> LA.Vector Double
 irlsStep (_, gInv, gDeriv) varFn clamp family x y beta =
-  let eta  = x LA.#> beta
-      mu   = clamp family (LA.cmap gInv eta)
-      muL  = LA.toList mu
-      etaL = LA.toList eta
-      yL   = LA.toList y
-      -- IRLS weights: wᵢ = 1 / (g'(μᵢ)² × Var(μᵢ))
-      ws   = LA.fromList [ max 1e-10 (1.0 / (gDeriv m ^ (2::Int) * varFn m)) | m <- muL ]
-      -- Adjusted dependent variable: zᵢ = ηᵢ + (yᵢ − μᵢ) × g'(μᵢ)
-      zs   = LA.fromList [ ei + (yi - mi) * gDeriv mi | (ei,yi,mi) <- zip3 etaL yL muL ]
+  let eta   = x LA.#> beta
+      mu    = clamp family (LA.cmap gInv eta)
+      muL   = LA.toList mu
+      etaL  = LA.toList eta
+      yL    = LA.toList y
+      ws    = LA.fromList [ max 1e-10 (1.0 / (gDeriv m ^ (2::Int) * varFn m)) | m <- muL ]
+      zs    = LA.fromList [ ei + (yi - mi) * gDeriv mi | (ei,yi,mi) <- zip3 etaL yL muL ]
       sqrtW = LA.diag (LA.cmap sqrt ws)
   in LA.flatten ((sqrtW LA.<> x) LA.<\> LA.asColumn (sqrtW LA.#> zs))
 
--- Run IRLS until convergence; also returns (XᵀWX)⁻¹ for CI computation
-runIRLS :: Family -> LA.Matrix Double -> LA.Vector Double
-         -> (FitResult, LA.Matrix Double)
-runIRLS family x y = (mkResult betaFinal, fisherInv betaFinal)
+runIRLS :: Family -> LinkFn -> LA.Matrix Double -> LA.Vector Double
+        -> (FitResult, LA.Matrix Double)
+runIRLS family linkFn x y = (mkResult betaFinal, fisherInv betaFinal)
   where
-    step  = irlsStep (linkOf family) (varOf family) safeMu family x y
-    beta0 = initBeta family y (LA.cols x)
+    link  = linkFnOf linkFn
+    step  = irlsStep link (varOf family) safeMu family x y
+    beta0 = initBeta family linkFn y (LA.cols x)
 
     betaFinal = converge maxIter beta0
 
@@ -115,18 +129,17 @@ runIRLS family x y = (mkResult betaFinal, fisherInv betaFinal)
     notFinite b = isNaN b || isInfinite b
 
     mkResult beta =
-      let (_, gInv, _) = linkOf family
+      let (_, gInv, _) = link
           mu    = safeMu family (LA.cmap gInv (x LA.#> beta))
           resid = y - mu
           r2    = pseudoR2 family y mu
       in FitResult beta mu resid r2
 
-    -- (XᵀWX)⁻¹ from converged β — used for CI
     fisherInv beta =
-      let (_, gInv, gDeriv) = linkOf family
-          mu  = safeMu family (LA.cmap gInv (x LA.#> beta))
-          muL = LA.toList mu
-          ws  = LA.fromList [ max 1e-10 (1.0 / (gDeriv m ^ (2::Int) * varOf family m)) | m <- muL ]
+      let (_, gInv, gDeriv) = link
+          mu   = safeMu family (LA.cmap gInv (x LA.#> beta))
+          muL  = LA.toList mu
+          ws   = LA.fromList [ max 1e-10 (1.0 / (gDeriv m ^ (2::Int) * varOf family m)) | m <- muL ]
           wMat = LA.diag ws
       in LA.inv (LA.tr x LA.<> wMat LA.<> x)
 
@@ -135,57 +148,83 @@ runIRLS family x y = (mkResult betaFinal, fisherInv betaFinal)
 -- ---------------------------------------------------------------------------
 
 fitGLM :: Family -> LA.Matrix Double -> LA.Vector Double -> FitResult
-fitGLM family x y = fst (runIRLS family x y)
+fitGLM family x y = fst (runIRLS family (canonicalLink family) x y)
 
--- | Fit GLM and compute smooth curve + CI band on a fine grid for plotting.
--- CI is computed in linear-predictor space, then back-transformed via g⁻¹.
+-- | Fit GLM with specified distribution and link function.
+-- Accepts multiple x columns with per-column polynomial degrees.
+-- Returns SmoothFit only when there is exactly one x column (for scatter plot).
+-- For PI with non-Gaussian families, falls back to CI (warn at call site).
 fitGLMWithSmooth
   :: Family
-  -> Int      -- ^ polynomial degree for the linear predictor
-  -> Double   -- ^ CI level (e.g. 0.95)
-  -> Int      -- ^ grid resolution for smooth curve
+  -> LinkFn
+  -> [(Text, Int)]   -- ^ [(x column name, polynomial degree)]
+  -> Band            -- ^ uncertainty band specification
+  -> Int             -- ^ grid resolution for smooth curve
   -> DataFrame
-  -> Text     -- ^ x column
-  -> Text     -- ^ y column
-  -> Maybe (FitResult, SmoothFit)
-fitGLMWithSmooth family degree level nGrid df xCol yCol = do
-  xVec <- getNumeric xCol df
-  yVec <- getNumeric yCol df
-  let dm            = polyDesignMatrix degree xVec
+  -> Text            -- ^ y column
+  -> Maybe (FitResult, Maybe SmoothFit)
+fitGLMWithSmooth family linkFn colDegs band nGrid df yCol = do
+  xVecs <- mapM (flip getNumeric df . fst) colDegs
+  yVec  <- getNumeric yCol df
+
+  let degrees       = map snd colDegs
+      dm            = multiPolyDesignMatrix (zip xVecs degrees)
       y             = LA.fromList (V.toList yVec)
-      (res, fisher) = runIRLS family dm y
-      (_, gInv, _)  = linkOf family
+      (res, fisher) = runIRLS family linkFn dm y
+      (_, gInv, _)  = linkFnOf linkFn
       beta          = coefficients res
+      n             = LA.rows dm
+      p             = LA.cols dm
 
-      -- Fine grid for smooth curve
-      xLa   = LA.fromList (V.toList xVec)
-      xGrid = V.fromList (linspace (LA.minElement xLa) (LA.maxElement xLa) nGrid)
-      dmG   = polyDesignMatrix degree xGrid
-      etaG  = dmG LA.#> beta
-      yGrid = map gInv (LA.toList etaG)
+      -- PI falls back to CI for non-Gaussian (caller should warn)
+      effectiveBand = case (band, family) of
+        (PI lvl, Gaussian) -> PI lvl
+        (PI lvl, _)        -> CI lvl
+        (b,      _)        -> b
 
-      -- Quantile: t-distribution for Gaussian, normal approximation otherwise
-      n    = LA.rows dm
-      p    = LA.cols dm
-      qVal = case family of
-               Gaussian -> quantile (studentT (fromIntegral (n - p))) ((1 + level) / 2)
-               _        -> quantile (normalDistr 0 1) ((1 + level) / 2)
+      mSmooth = case (xVecs, degrees) of
+        ([xVec], [deg]) -> Just (makeSmoothFit xVec deg)
+        _               -> Nothing
 
-      -- CI: η* ± q × SE(η*),  SE(η*)² = x*ᵀ (XᵀWX)⁻¹ x*
-      gRows  = LA.toRows dmG
-      halfW xi = qVal * sqrt (max 0 (xi `LA.dot` (fisher LA.#> xi)))
-      etaL   = LA.toList etaG
-      lowers = zipWith (\eta xi -> gInv (eta - halfW xi)) etaL gRows
-      uppers = zipWith (\eta xi -> gInv (eta + halfW xi)) etaL gRows
+      makeSmoothFit xVec deg =
+        let xLa    = LA.fromList (V.toList xVec)
+            xGrid  = V.fromList (linspace (LA.minElement xLa) (LA.maxElement xLa) nGrid)
+            dmG    = multiPolyDesignMatrix [(xGrid, deg)]
+            etaG   = dmG LA.#> beta
+            yGrid  = map gInv (LA.toList etaG)
+            gRows  = LA.toRows dmG
+        in case effectiveBand of
+          NoBand ->
+            SmoothFit (V.toList xGrid) yGrid yGrid yGrid False
+          CI level ->
+            let qVal  = ciQuantile level
+                halfW xi = qVal * sqrt (max 0 (xi `LA.dot` (fisher LA.#> xi)))
+                etaL  = LA.toList etaG
+                lowers = zipWith (\eta xi -> gInv (eta - halfW xi)) etaL gRows
+                uppers = zipWith (\eta xi -> gInv (eta + halfW xi)) etaL gRows
+            in SmoothFit (V.toList xGrid) yGrid lowers uppers True
+          PI level ->
+            -- Gaussian only: add s²·1 term to CI variance
+            let dfStat = fromIntegral (n - p) :: Double
+                s2     = (residuals res `LA.dot` residuals res) / dfStat
+                tVal   = quantile (studentT dfStat) ((1 + level) / 2)
+                xtxi   = LA.inv (LA.tr dm LA.<> dm)
+                halfW xi = tVal * sqrt (s2 * (1 + xi `LA.dot` (xtxi LA.#> xi)))
+                etaL  = LA.toList etaG
+                lowers = zipWith (\eta xi -> gInv (eta - halfW xi)) etaL gRows
+                uppers = zipWith (\eta xi -> gInv (eta + halfW xi)) etaL gRows
+            in SmoothFit (V.toList xGrid) yGrid lowers uppers True
 
-  return (res, SmoothFit (V.toList xGrid) yGrid lowers uppers)
+      ciQuantile level = case family of
+        Gaussian -> quantile (studentT (fromIntegral (n - p))) ((1 + level) / 2)
+        _        -> quantile (normalDistr 0 1) ((1 + level) / 2)
+
+  return (res, mSmooth)
 
 -- ---------------------------------------------------------------------------
 -- Goodness of fit
 -- ---------------------------------------------------------------------------
 
--- | Deviance-based R²: 1 - D_fitted / D_null  (always in [0,1] for fitted GLMs).
--- Gaussian uses OLS R²; Binomial/Poisson use the GLM deviance ratio.
 pseudoR2 :: Family -> LA.Vector Double -> LA.Vector Double -> Double
 pseudoR2 Gaussian y mu =
   let resid = y - mu
@@ -199,7 +238,6 @@ pseudoR2 family y mu =
       dNull  = glmDeviance family y muNull
   in if dNull == 0 then 1 else 1 - dFit / dNull
 
--- | GLM deviance: 2 * (logL_saturated - logL_fitted)
 glmDeviance :: Family -> LA.Vector Double -> LA.Vector Double -> Double
 glmDeviance Gaussian y mu =
   let r = y - mu in r `LA.dot` r
@@ -214,7 +252,6 @@ glmDeviance Poisson y mu =
                (LA.toList y) (LA.toList muC)
   in 2 * sum term
 
--- 0 * log(0) = 0 by convention
 xlogy :: Double -> Double -> Double
 xlogy 0 _ = 0
 xlogy x y = x * log y

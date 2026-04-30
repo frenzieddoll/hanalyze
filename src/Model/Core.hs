@@ -1,6 +1,7 @@
 module Model.Core
   ( FitResult (..)
   , Model (..)
+  , Band (..)
   , fittedList
   , coeffList
   ) where
@@ -20,6 +21,13 @@ fittedList = LA.toList . fitted
 
 coeffList :: FitResult -> [Double]
 coeffList = LA.toList . coefficients
+
+-- | Uncertainty band drawn around a fitted curve.
+data Band
+  = NoBand      -- ^ no band
+  | CI Double   -- ^ confidence interval for the mean response at given level
+  | PI Double   -- ^ prediction interval for individual obs at given level (Gaussian only)
+  deriving (Show, Eq)
 
 -- | Minimal interface every model must implement.
 class Model m where
