@@ -26,6 +26,8 @@ library
     Model.GLMM
     Model.HBM
     Model.MCMC
+    Model.HMC
+    Model.NUTS
     Stat.Distribution
     Stat.MCMC
     Viz.MCMC
@@ -72,6 +74,18 @@ executable glmm-demo
 executable hbm-example
   import:           warnings
   main-is:          HBMExample.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , text       >= 1.2  && < 2.2
+    , containers >= 0.6  && < 0.8
+    , mwc-random >= 0.15 && < 0.16
+
+executable test-hmc-nuts
+  import:           warnings
+  main-is:          TestHMCNUTS.hs
   hs-source-dirs:   demo
   default-language: GHC2021
   build-depends:
