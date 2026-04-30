@@ -2,13 +2,14 @@
 module Main where
 
 import DataIO.CSV     (loadAuto)
-import DataFrame.Core (DataFrame, columnNames, numRows, getNumeric)
+import DataFrame.Core (DataFrame, columnNames, numRows, getNumeric, getText)
 import Model.Core     (Band (..), rSquared, coeffList, fittedList)
 import Model.GLM      (Family (..), parseFamily, LinkFn (..), parseLink, canonicalLink,
                        fitGLMWithSmooth)
+import Model.GLMM     (GLMMResult (..), fitLMEDataFrame, fitGLMMDataFrame)
 import Viz.Core       (defaultConfig, openInBrowser, OutputFormat (..), parseFormat)
 import Viz.Scatter    (scatterWithSmoothFile, scatterMultiYFile, scatterPlotFile,
-                       predictedVsActualFile)
+                       scatterWithGroupsFile, predictedVsActualFile)
 
 import Data.Char          (isDigit)
 import Data.List          (intercalate)
@@ -40,6 +41,7 @@ data Config = Config
   , cfgDegree  :: DegreeSpec
   , cfgBand    :: Band
   , cfgFormat  :: OutputFormat
+  , cfgGroup   :: Maybe T.Text  -- grouping column → LME / GLMM
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
@@ -62,6 +64,7 @@ usageMsg = unlines
   , "  --ci [LEVEL]       show confidence interval (default level: 0.95)"
   , "  --pi [LEVEL]       show prediction interval (Gaussian only; default level: 0.95)"
   , "  --format FORMAT    output format: html|png|svg               (default: html)"
+  , "  --group COL        grouping column → LM+group: LME, GLM+group: GLMM"
   , ""
   , "Degree specification:"
   , "  N                  all columns get degree N"
@@ -70,7 +73,9 @@ usageMsg = unlines
   , "Examples:"
   , "  hanalyze data.csv x y"
   , "  hanalyze data.tsv \"x1 x2\" y LM --degree -1 2 -2 3 --ci 0.90"
-  , "  hanalyze data.csv x y GLM -d poisson -l log --pi"
+  , "  hanalyze data.csv x y GLM -d poisson -l log"
+  , "  hanalyze data.csv x y LM --group school"
+  , "  hanalyze data.csv x y GLM -d binomial -l logit --group hospital"
   , "  hanalyze data.csv x \"y1 y2\" NoReg"
   ]
 
@@ -83,8 +88,8 @@ parseArgs (file : xColsStr : yColsStr : rest) = do
     else if null yCols
     then Left "Error: ycols must not be empty"
     else do
-      (model, rest1)                           <- parseModelType rest
-      (mDist, mLink, degSpec, band, fmt, rest2) <- parseOptions rest1
+      (model, rest1)                                  <- parseModelType rest
+      (mDist, mLink, degSpec, band, fmt, mGrp, rest2) <- parseOptions rest1
       if not (null rest2)
         then Left ("Unexpected argument(s): " ++ unwords rest2)
         else do
@@ -100,6 +105,7 @@ parseArgs (file : xColsStr : yColsStr : rest) = do
             , cfgDegree = degSpec
             , cfgBand   = band
             , cfgFormat = fmt
+            , cfgGroup  = mGrp
             }
 parseArgs _ = Left usageMsg
 
@@ -110,20 +116,21 @@ parseModelType ("NoReg" : rest) = Right (NoReg, rest)
 parseModelType rest              = Right (LM,    rest)
 
 parseOptions :: [String]
-             -> Either String (Maybe Family, Maybe LinkFn, DegreeSpec, Band, OutputFormat, [String])
-parseOptions = go Nothing Nothing (AllDegree 1) NoBand HTML
+             -> Either String (Maybe Family, Maybe LinkFn, DegreeSpec, Band, OutputFormat,
+                               Maybe T.Text, [String])
+parseOptions = go Nothing Nothing (AllDegree 1) NoBand HTML Nothing
   where
-    go mDist mLink deg band fmt [] = Right (mDist, mLink, deg, band, fmt, [])
+    go mDist mLink deg band fmt mGrp [] = Right (mDist, mLink, deg, band, fmt, mGrp, [])
 
-    go mDist mLink deg band fmt (flag : rest)
+    go mDist mLink deg band fmt mGrp (flag : rest)
       | flag `elem` ["-d", "--dist"] = case rest of
           (v:rest') -> do fam <- parseFamily v
-                          go (Just fam) mLink deg band fmt rest'
+                          go (Just fam) mLink deg band fmt mGrp rest'
           []        -> Left "Error: -d/--dist requires an argument"
 
       | flag `elem` ["-l", "--link"] = case rest of
           (v:rest') -> do lnk <- parseLink v
-                          go mDist (Just lnk) deg band fmt rest'
+                          go mDist (Just lnk) deg band fmt mGrp rest'
           []        -> Left "Error: -l/--link requires an argument"
 
       | flag == "--degree" = do
@@ -131,22 +138,26 @@ parseOptions = go Nothing Nothing (AllDegree 1) NoBand HTML
           if null degTokens
             then Left "--degree requires a specification (e.g., 2 or -1 2 -2 3)"
             else do degSpec <- parseDegreeSpec degTokens
-                    go mDist mLink degSpec band fmt remaining
+                    go mDist mLink degSpec band fmt mGrp remaining
 
       | flag == "--ci" =
           let (level, rest') = consumeLevel 0.95 rest
-          in go mDist mLink deg (CI level) fmt rest'
+          in go mDist mLink deg (CI level) fmt mGrp rest'
 
       | flag == "--pi" =
           let (level, rest') = consumeLevel 0.95 rest
-          in go mDist mLink deg (PI level) fmt rest'
+          in go mDist mLink deg (PI level) fmt mGrp rest'
 
       | flag `elem` ["-f", "--format"] = case rest of
           (v:rest') -> do f <- parseFormat v
-                          go mDist mLink deg band f rest'
+                          go mDist mLink deg band f mGrp rest'
           []        -> Left "Error: -f/--format requires an argument"
 
-      | otherwise = Right (mDist, mLink, deg, band, fmt, flag : rest)
+      | flag == "--group" = case rest of
+          (v:rest') -> go mDist mLink deg band fmt (Just (T.pack v)) rest'
+          []        -> Left "Error: --group requires a column name"
+
+      | otherwise = Right (mDist, mLink, deg, band, fmt, mGrp, flag : rest)
 
 -- Consume an optional level (0 < v < 1) after a band flag.
 consumeLevel :: Double -> [String] -> (Double, [String])
@@ -209,11 +220,10 @@ runConfig cfg = do
       putStrLn "Columns:"
       mapM_ (TIO.putStrLn . ("  - " <>)) (columnNames df)
 
-      let fmt       = cfgFormat cfg
-          xCol1     = head (cfgXCols cfg)
-          yCols     = cfgYCols cfg
-          -- Force NoReg when multiple y columns are given
-          effModel  = if length yCols > 1 then NoReg else cfgModel cfg
+      let fmt      = cfgFormat cfg
+          xCol1    = head (cfgXCols cfg)
+          yCols    = cfgYCols cfg
+          effModel = if length yCols > 1 then NoReg else cfgModel cfg
 
       case effModel of
         -- ── No regression: scatter plot only ──────────────────────────────
@@ -233,17 +243,96 @@ runConfig cfg = do
               putStrLn $ "\nScatter plot (multi-y): " ++ scatterPath
               openInBrowser scatterPath
 
-        -- ── Regression: LM or GLM ─────────────────────────────────────────
+        -- ── Regression (LM / GLM) ─────────────────────────────────────────
         _ -> case yCols of
-          [yCol] -> runRegression cfg df fmt xCol1 yCol
-          _      -> do
-            -- Multiple y with regression: scatter only (regression not yet supported)
-            putStrLn "\nNote: regression with multiple y columns not yet supported. Plotting scatter only."
+          [yCol] ->
+            case cfgGroup cfg of
+              Just grpCol -> runMixedModel cfg df fmt xCol1 yCol grpCol
+              Nothing     -> runRegression cfg df fmt xCol1 yCol
+          _ -> do
+            putStrLn "\nNote: regression with multiple y columns not supported. Plotting scatter only."
             let scatterPath = "scatter.html"
                 scatterCfg  = defaultConfig (xCol1 <> " vs " <> T.intercalate ", " yCols)
             scatterMultiYFile fmt scatterPath scatterCfg df xCol1 yCols
             putStrLn $ "Scatter plot (multi-y): " ++ scatterPath
             openInBrowser scatterPath
+
+-- ---------------------------------------------------------------------------
+-- Mixed model (LME / GLMM)
+-- ---------------------------------------------------------------------------
+
+runMixedModel :: Config -> DataFrame -> OutputFormat -> T.Text -> T.Text -> T.Text -> IO ()
+runMixedModel cfg df fmt xCol1 yCol grpCol = do
+  let colDegs = applyDegreeSpec (cfgDegree cfg) (cfgXCols cfg)
+      (dist, lnk) = case cfgModel cfg of
+        LM    -> (Gaussian, Identity)
+        GLM   -> (cfgDist cfg, cfgLink cfg)
+        NoReg -> (Gaussian, Identity)  -- unreachable
+
+  let mResult = case cfgModel cfg of
+        LM    -> fitLMEDataFrame  colDegs grpCol yCol df
+        GLM   -> fitGLMMDataFrame dist lnk colDegs grpCol yCol df
+        NoReg -> Nothing
+
+  case mResult of
+    Nothing -> putStrLn "\nError: column(s) not found or not numeric/text"
+    Just gr -> do
+      let modelKind = case cfgModel cfg of
+            LM  -> "LME (Gaussian, exact EM)"
+            GLM -> "GLMM (" ++ modelLabel dist lnk ++ ", Laplace)"
+            _   -> ""
+          cs = coeffList (glmmFixed gr)
+
+      putStrLn $ "\nModel: " ++ T.unpack yCol ++ " ~ "
+              ++ modelFormula colDegs
+              ++ "  [" ++ modelKind ++ " | group: " ++ T.unpack grpCol ++ "]"
+
+      putStrLn "Fixed effects:"
+      mapM_ (\(lbl, v) -> printf "  %-30s = %9.4f\n" lbl v)
+            (zip (multiCoeffLabels colDegs) cs)
+
+      putStrLn "Variance components:"
+      printf "  %-30s = %9.4f\n" ("σ²_u (" ++ T.unpack grpCol ++ ")") (glmmRandVar gr)
+      case cfgModel cfg of
+        LM  -> printf "  %-30s = %9.4f\n" ("σ² (residual)" :: String) (glmmResidVar gr)
+        _   -> printf "  %-30s   (fixed by family)\n" ("σ² (residual)" :: String)
+      printf "  %-30s = %9.4f  (%d%% between-group)\n"
+             ("ICC" :: String) (glmmICC gr)
+             (round (glmmICC gr * 100) :: Int)
+
+      putStrLn $ "BLUPs (" ++ T.unpack grpCol ++ "):"
+      mapM_ (\(g, u) -> printf "  %-12s = %+9.4f\n" g u)
+            (zip (map T.unpack (V.toList (glmmGroups gr))) (V.toList (glmmBLUPs gr)))
+
+      let suffix = "  [" <> T.pack modelKind <> " | group: " <> grpCol <> "]"
+
+      -- Scatter with group-level fitted lines (single x only)
+      case (length (cfgXCols cfg), getNumeric xCol1 df, getNumeric yCol df, getText grpCol df) of
+        (1, Just xVec, Just yVec, Just gVec) -> do
+          let ptData = zip3 (V.toList gVec) (V.toList xVec) (V.toList yVec)
+              lnData = computeGroupLines lnk cs colDegs
+                         (glmmGroups gr) (glmmBLUPs gr) xVec
+              scatterPath = "scatter.html"
+              scatterCfg  = defaultConfig (xCol1 <> " vs " <> yCol <> suffix)
+          scatterWithGroupsFile fmt scatterPath scatterCfg xCol1 yCol ptData lnData
+          putStrLn $ "\nScatter plot:        " ++ scatterPath
+          openInBrowser scatterPath
+        _ ->
+          putStrLn "\n(Scatter plot skipped for multiple x columns)"
+
+      -- Predicted vs Actual
+      case getNumeric yCol df of
+        Nothing   -> return ()
+        Just yVec -> do
+          let pvsaPath = "pvsa.html"
+              pvsaCfg  = defaultConfig ("Predicted vs Actual" <> suffix)
+          predictedVsActualFile fmt pvsaPath pvsaCfg (V.toList yVec) (fittedList (glmmFixed gr))
+          putStrLn $ "Predicted vs Actual: " ++ pvsaPath
+          openInBrowser pvsaPath
+
+-- ---------------------------------------------------------------------------
+-- GLM regression (no random effects)
+-- ---------------------------------------------------------------------------
 
 runRegression :: Config -> DataFrame -> OutputFormat -> T.Text -> T.Text -> IO ()
 runRegression cfg df fmt xCol1 yCol = do
@@ -290,6 +379,43 @@ runRegression cfg df fmt xCol1 yCol = do
           predictedVsActualFile fmt pvsaPath pvsaCfg (V.toList yVec) (fittedList res)
           putStrLn $ "Predicted vs Actual: " ++ pvsaPath
           openInBrowser pvsaPath
+
+-- ---------------------------------------------------------------------------
+-- Group-level prediction helpers
+-- ---------------------------------------------------------------------------
+
+invLink :: LinkFn -> Double -> Double
+invLink Identity eta = eta
+invLink Log      eta = exp eta
+invLink Logit    eta = 1.0 / (1.0 + exp (negate eta))
+invLink Sqrt     eta = eta * eta
+
+-- | Generate per-group conditional fitted lines for visualization.
+-- Only produces data when there is exactly one x column (scatter plot is 2D).
+-- Returns [(group, xGrid, ŷ)] evaluated on a 100-point grid over [min(x), max(x)].
+computeGroupLines
+  :: LinkFn
+  -> [Double]           -- fixed coefficients [β₀, β₁, ..., βd]
+  -> [(T.Text, Int)]    -- x column / degree specs (length 1 → draw lines)
+  -> V.Vector T.Text    -- group labels (sorted)
+  -> V.Vector Double    -- BLUPs (same order as group labels)
+  -> V.Vector Double    -- observed x values (used to determine grid range)
+  -> [(T.Text, Double, Double)]
+computeGroupLines lnk coeffs colDegs groups blups xVec =
+  case colDegs of
+    [(_, deg)] | not (V.null xVec) ->
+      let xMin  = V.minimum xVec
+          xMax  = V.maximum xVec
+          nGrid = 100 :: Int
+          grid  = [ xMin + fromIntegral i * (xMax - xMin) / fromIntegral (nGrid - 1)
+                  | i <- [0 .. nGrid - 1] ]
+          b0    = head coeffs
+          bs    = tail coeffs
+          etaAt x = b0 + sum (zipWith (*) bs [x ^ k | k <- [1 .. deg :: Int]])
+      in [ (grp, x, invLink lnk (etaAt x + u))
+         | (grp, u) <- zip (V.toList groups) (V.toList blups)
+         , x <- grid ]
+    _ -> []
 
 -- ---------------------------------------------------------------------------
 -- Formatting helpers

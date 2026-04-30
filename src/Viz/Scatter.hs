@@ -10,6 +10,8 @@ module Viz.Scatter
   , scatterWithSmoothFile
   , scatterMultiY
   , scatterMultiYFile
+  , scatterWithGroups
+  , scatterWithGroupsFile
   , predictedVsActual
   , predictedVsActualFile
   ) where
@@ -297,3 +299,59 @@ predictedVsActual cfg actuals preds =
 predictedVsActualFile :: OutputFormat -> FilePath -> PlotConfig -> [Double] -> [Double] -> IO ()
 predictedVsActualFile fmt path cfg actuals preds =
   writeSpec fmt path (predictedVsActual cfg actuals preds)
+
+-- | Scatter with per-group conditional fitted lines (LME / GLMM).
+-- Points are colour-coded by group; one fitted line per group shares the same colour scheme.
+-- ptData: (group, x, y) for raw observations
+-- lnData: (group, x, ŷ) for smooth conditional fits (grid-evaluated)
+scatterWithGroups
+  :: PlotConfig
+  -> Text
+  -> Text
+  -> [(Text, Double, Double)]
+  -> [(Text, Double, Double)]
+  -> VegaLite
+scatterWithGroups cfg xCol yCol ptData lnData =
+  toVegaLite
+    [ title (plotTitle cfg) []
+    , layer [lineLayer, pointLayer]
+    , width  (plotWidth  cfg)
+    , height (plotHeight cfg)
+    ]
+  where
+    (ptGrps, ptXs, ptYs) = unzip3 ptData
+    (lnGrps, lnXs, lnYs) = unzip3 lnData
+
+    pointLayer = asSpec
+      [ dataFromColumns []
+          . dataColumn xCol    (Numbers ptXs)
+          . dataColumn yCol    (Numbers ptYs)
+          . dataColumn "group" (Strings ptGrps)
+          $ []
+      , mark Point [MTooltip TTEncoding]
+      , encoding
+          . position X [PName xCol,  PmType Quantitative, PAxis [AxTitle xCol]]
+          . position Y [PName yCol,  PmType Quantitative, PAxis [AxTitle yCol]]
+          . color [MName "group", MmType Nominal]
+          $ []
+      ]
+
+    lineLayer = asSpec
+      [ dataFromColumns []
+          . dataColumn xCol     (Numbers lnXs)
+          . dataColumn "fitted" (Numbers lnYs)
+          . dataColumn "group"  (Strings lnGrps)
+          $ []
+      , mark Line [MStrokeWidth 2.0]
+      , encoding
+          . position X [PName xCol,     PmType Quantitative]
+          . position Y [PName "fitted", PmType Quantitative]
+          . color [MName "group", MmType Nominal]
+          $ []
+      ]
+
+scatterWithGroupsFile
+  :: OutputFormat -> FilePath -> PlotConfig -> Text -> Text
+  -> [(Text, Double, Double)] -> [(Text, Double, Double)] -> IO ()
+scatterWithGroupsFile fmt path cfg xCol yCol ptData lnData =
+  writeSpec fmt path (scatterWithGroups cfg xCol yCol ptData lnData)
