@@ -1,4 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
+-- | MCMC 結果を1つの HTML ファイルにまとめた統合レポート。
+--
+-- モデルグラフ (Mermaid.js DAG)・事後要約テーブル・診断プロット・
+-- 自己相関・ペアスキャタープロットをナビゲーション付きで1画面に収めます。
+--
+-- @
+-- let report = (defaultReport "My Model" chain names)
+--                { reportGraph = Just graph
+--                , reportPairs = [("mu", "tau")]
+--                }
+-- renderReport "report.html" report
+-- @
 module Viz.Report
   ( MCMCReport (..)
   , defaultReport

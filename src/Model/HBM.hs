@@ -1,23 +1,41 @@
 {-# LANGUAGE OverloadedStrings #-}
+-- | 階層ベイズモデル (HBM) の自由モナド DSL。
+--
+-- モデルは do 記法で書き、後から複数のインタープリタで解釈します。
+--
+-- @
+-- import Model.HBM
+-- import Stat.Distribution
+--
+-- myModel :: [Double] -> Model Double
+-- myModel ys = do
+--   mu    <- sample "mu"    (Normal 0 10)
+--   sigma <- sample "sigma" (Exponential 1)
+--   observe "y" (Normal mu sigma) ys
+--   return mu
+-- @
 module Model.HBM
-  ( -- * Model type
+  ( -- * モデル型
     Model
   , ModelF (..)
-    -- * Primitives
+    -- * DSL プリミティブ
+    -- | 'sample' と 'observe' を do 記法で組み合わせてモデルを記述します。
   , sample
   , observe
-    -- * Structural inspection
+    -- * 構造の検査
   , NodeRole (..)
   , NodeInfo (..)
   , collectNodes
   , describeModel
-    -- * Log-density interpreter (Phase 2)
+    -- * 対数密度インタープリタ
+    -- | いずれも 'Params' マップ (潜在変数名→値) を受け取ります。
+    -- 変数が欠落しているか、台の外にある場合は @-Infinity@ を返します。
   , Params
   , logJoint
   , logPrior
   , logLikelihood
   , sampleNames
-    -- * Model graph (Phase 4 / visualization)
+    -- * モデルグラフ (可視化用)
   , ModelGraph (..)
   , buildModelGraph
   ) where

@@ -1,12 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
+-- | Random Walk Metropolis サンプラー。
+--
+-- 'metropolis' で事後分布からサンプルを得て、'posteriorMean' 等で要約します。
+-- ステップサイズ ('mcmcStepSizes') を調整して受容率が 20〜50% になるようにしてください。
+-- 'Viz.Report.renderReport' と組み合わせると診断プロットを一括生成できます。
 module Model.MCMC
-  ( -- * Configuration
+  ( -- * 設定
     MCMCConfig (..)
   , defaultMCMCConfig
-    -- * Sampler
+    -- * サンプラー
   , Chain (..)
   , metropolis
-    -- * Summary statistics
+    -- * 事後統計量
+    -- | 変数名が存在しない場合は 'Nothing' を返します。
   , acceptanceRate
   , posteriorMean
   , posteriorSD
@@ -29,10 +35,11 @@ import Model.HBM (Model, Params, logJoint, sampleNames)
 
 data MCMCConfig = MCMCConfig
   { mcmcIterations :: Int
+    -- ^ バーンイン後に保存するサンプル数
   , mcmcBurnIn     :: Int
+    -- ^ 破棄するバーンインステップ数
   , mcmcStepSizes  :: Map.Map Text Double
-    -- ^ Per-parameter proposal SD for the Normal random walk.
-    --   Tune so that acceptance rate is roughly 0.2–0.5.
+    -- ^ パラメータごとの提案分布 SD。受容率が 0.2〜0.5 になるよう調整する。
   } deriving (Show)
 
 -- | Sensible defaults: 2000 post-burn-in samples, 500 burn-in,
