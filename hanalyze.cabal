@@ -19,10 +19,18 @@ library
     DataIO.CSV
     Viz.Core
     Viz.Scatter
+    Viz.Histogram
     Model.Core
     Model.LM
     Model.GLM
     Model.GLMM
+    Model.HBM
+    Model.MCMC
+    Stat.Distribution
+    Stat.MCMC
+    Viz.MCMC
+    Viz.ModelGraph
+    Viz.Report
   build-depends:
       base                 >= 4.14 && < 5
     , bytestring           >= 0.11 && < 0.13
@@ -35,6 +43,7 @@ library
     , process              >= 1.6  && < 1.8
     , statistics           >= 0.16 && < 0.17
     , text                 >= 1.2  && < 2.2
+    , aeson                >= 2.0  && < 2.3
     , unordered-containers >= 0.2  && < 0.3
     , vector               >= 0.12 && < 0.14
 
@@ -59,6 +68,18 @@ executable glmm-demo
     , hanalyze
     , vector   >= 0.12 && < 0.14
     , hmatrix  >= 0.20 && < 0.22
+
+executable hbm-example
+  import:           warnings
+  main-is:          HBMExample.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , text       >= 1.2  && < 2.2
+    , containers >= 0.6  && < 0.8
+    , mwc-random >= 0.15 && < 0.16
 
 test-suite hanalyze-test
   import:           warnings

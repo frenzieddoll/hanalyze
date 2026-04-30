@@ -1,15 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import DataIO.CSV     (loadAuto)
-import DataFrame.Core (DataFrame, columnNames, numRows, getNumeric, getText)
-import Model.Core     (Band (..), rSquared, coeffList, fittedList)
-import Model.GLM      (Family (..), parseFamily, LinkFn (..), parseLink, canonicalLink,
-                       fitGLMWithSmooth)
-import Model.GLMM     (GLMMResult (..), fitLMEDataFrame, fitGLMMDataFrame)
-import Viz.Core       (defaultConfig, openInBrowser, OutputFormat (..), parseFormat)
-import Viz.Scatter    (scatterWithSmoothFile, scatterMultiYFile, scatterPlotFile,
-                       scatterWithGroupsFile, predictedVsActualFile)
+import DataIO.CSV        (loadAuto)
+import DataFrame.Core    (DataFrame, columnNames, numRows, getNumeric, getText)
+import Model.Core        (Band (..), rSquared, coeffList, fittedList)
+import Model.GLM         (Family (..), parseFamily, LinkFn (..), parseLink, canonicalLink,
+                          fitGLMWithSmooth)
+import Model.GLMM        (GLMMResult (..), fitLMEDataFrame, fitGLMMDataFrame)
+import Stat.Distribution (Distribution, parseDistribution)
+import Viz.Core          (defaultConfig, openInBrowser, OutputFormat (..), parseFormat)
+import Viz.Scatter       (scatterWithSmoothFile, scatterMultiYFile, scatterPlotFile,
+                          scatterWithGroupsFile, predictedVsActualFile)
+import Viz.Histogram     (histogramPlotFile, histogramWithDensityFile)
 
 import Data.Char          (isDigit)
 import Data.List          (intercalate)
@@ -32,16 +34,18 @@ data DegreeSpec
   deriving (Show)
 
 data Config = Config
-  { cfgFile    :: FilePath
-  , cfgXCols   :: [T.Text]
-  , cfgYCols   :: [T.Text]   -- one or more y columns
-  , cfgModel   :: ModelType
-  , cfgDist    :: Family
-  , cfgLink    :: LinkFn
-  , cfgDegree  :: DegreeSpec
-  , cfgBand    :: Band
-  , cfgFormat  :: OutputFormat
-  , cfgGroup   :: Maybe T.Text  -- grouping column → LME / GLMM
+  { cfgFile     :: FilePath
+  , cfgXCols    :: [T.Text]
+  , cfgYCols    :: [T.Text]   -- one or more y columns
+  , cfgModel    :: ModelType
+  , cfgDist     :: Family
+  , cfgLink     :: LinkFn
+  , cfgDegree   :: DegreeSpec
+  , cfgBand     :: Band
+  , cfgFormat   :: OutputFormat
+  , cfgGroup    :: Maybe T.Text      -- grouping column → LME / GLMM
+  , cfgHistMode :: Bool              -- --hist: draw histogram of x column
+  , cfgFitDist  :: Maybe Distribution  -- --fit DIST PARAMS
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
@@ -88,24 +92,26 @@ parseArgs (file : xColsStr : yColsStr : rest) = do
     else if null yCols
     then Left "Error: ycols must not be empty"
     else do
-      (model, rest1)                                  <- parseModelType rest
-      (mDist, mLink, degSpec, band, fmt, mGrp, rest2) <- parseOptions rest1
+      (model, rest1)                                              <- parseModelType rest
+      (mDist, mLink, degSpec, band, fmt, mGrp, hist, mFit, rest2) <- parseOptions rest1
       if not (null rest2)
         then Left ("Unexpected argument(s): " ++ unwords rest2)
         else do
           let dist = maybe Gaussian id mDist
               lnk  = maybe (canonicalLink dist) id mLink
           Right Config
-            { cfgFile   = file
-            , cfgXCols  = xCols
-            , cfgYCols  = yCols
-            , cfgModel  = model
-            , cfgDist   = dist
-            , cfgLink   = lnk
-            , cfgDegree = degSpec
-            , cfgBand   = band
-            , cfgFormat = fmt
-            , cfgGroup  = mGrp
+            { cfgFile     = file
+            , cfgXCols    = xCols
+            , cfgYCols    = yCols
+            , cfgModel    = model
+            , cfgDist     = dist
+            , cfgLink     = lnk
+            , cfgDegree   = degSpec
+            , cfgBand     = band
+            , cfgFormat   = fmt
+            , cfgGroup    = mGrp
+            , cfgHistMode = hist
+            , cfgFitDist  = mFit
             }
 parseArgs _ = Left usageMsg
 
@@ -117,20 +123,21 @@ parseModelType rest              = Right (LM,    rest)
 
 parseOptions :: [String]
              -> Either String (Maybe Family, Maybe LinkFn, DegreeSpec, Band, OutputFormat,
-                               Maybe T.Text, [String])
-parseOptions = go Nothing Nothing (AllDegree 1) NoBand HTML Nothing
+                               Maybe T.Text, Bool, Maybe Distribution, [String])
+parseOptions = go Nothing Nothing (AllDegree 1) NoBand HTML Nothing False Nothing
   where
-    go mDist mLink deg band fmt mGrp [] = Right (mDist, mLink, deg, band, fmt, mGrp, [])
+    go mDist mLink deg band fmt mGrp hist mFit [] =
+      Right (mDist, mLink, deg, band, fmt, mGrp, hist, mFit, [])
 
-    go mDist mLink deg band fmt mGrp (flag : rest)
+    go mDist mLink deg band fmt mGrp hist mFit (flag : rest)
       | flag `elem` ["-d", "--dist"] = case rest of
           (v:rest') -> do fam <- parseFamily v
-                          go (Just fam) mLink deg band fmt mGrp rest'
+                          go (Just fam) mLink deg band fmt mGrp hist mFit rest'
           []        -> Left "Error: -d/--dist requires an argument"
 
       | flag `elem` ["-l", "--link"] = case rest of
           (v:rest') -> do lnk <- parseLink v
-                          go mDist (Just lnk) deg band fmt mGrp rest'
+                          go mDist (Just lnk) deg band fmt mGrp hist mFit rest'
           []        -> Left "Error: -l/--link requires an argument"
 
       | flag == "--degree" = do
@@ -138,26 +145,43 @@ parseOptions = go Nothing Nothing (AllDegree 1) NoBand HTML Nothing
           if null degTokens
             then Left "--degree requires a specification (e.g., 2 or -1 2 -2 3)"
             else do degSpec <- parseDegreeSpec degTokens
-                    go mDist mLink degSpec band fmt mGrp remaining
+                    go mDist mLink degSpec band fmt mGrp hist mFit remaining
 
       | flag == "--ci" =
           let (level, rest') = consumeLevel 0.95 rest
-          in go mDist mLink deg (CI level) fmt mGrp rest'
+          in go mDist mLink deg (CI level) fmt mGrp hist mFit rest'
 
       | flag == "--pi" =
           let (level, rest') = consumeLevel 0.95 rest
-          in go mDist mLink deg (PI level) fmt mGrp rest'
+          in go mDist mLink deg (PI level) fmt mGrp hist mFit rest'
 
       | flag `elem` ["-f", "--format"] = case rest of
           (v:rest') -> do f <- parseFormat v
-                          go mDist mLink deg band f mGrp rest'
+                          go mDist mLink deg band f mGrp hist mFit rest'
           []        -> Left "Error: -f/--format requires an argument"
 
       | flag == "--group" = case rest of
-          (v:rest') -> go mDist mLink deg band fmt (Just (T.pack v)) rest'
+          (v:rest') -> go mDist mLink deg band fmt (Just (T.pack v)) hist mFit rest'
           []        -> Left "Error: --group requires a column name"
 
-      | otherwise = Right (mDist, mLink, deg, band, fmt, mGrp, flag : rest)
+      | flag == "--hist" =
+          go mDist mLink deg band fmt mGrp True mFit rest
+
+      | flag == "--fit" = case rest of
+          (name:rest') ->
+            let (paramStrs, rest'') = span isNumericToken rest'
+                params = map read paramStrs :: [Double]
+            in case parseDistribution name params of
+                 Left err -> Left ("--fit: " ++ err)
+                 Right d  -> go mDist mLink deg band fmt mGrp hist (Just d) rest''
+          [] -> Left "--fit requires a distribution name (e.g. --fit normal 0 1)"
+
+      | otherwise = Right (mDist, mLink, deg, band, fmt, mGrp, hist, mFit, flag : rest)
+
+isNumericToken :: String -> Bool
+isNumericToken s = case (reads s :: [(Double, String)]) of
+  [(_, "")] -> True
+  _         -> False
 
 -- Consume an optional level (0 < v < 1) after a band flag.
 consumeLevel :: Double -> [String] -> (Double, [String])
@@ -220,42 +244,13 @@ runConfig cfg = do
       putStrLn "Columns:"
       mapM_ (TIO.putStrLn . ("  - " <>)) (columnNames df)
 
-      let fmt      = cfgFormat cfg
-          xCol1    = head (cfgXCols cfg)
-          yCols    = cfgYCols cfg
-          effModel = if length yCols > 1 then NoReg else cfgModel cfg
+      let fmt   = cfgFormat cfg
+          xCol1 = head (cfgXCols cfg)
 
-      case effModel of
-        -- ── No regression: scatter plot only ──────────────────────────────
-        NoReg ->
-          case yCols of
-            [yCol] -> do
-              let scatterPath = "scatter.html"
-                  scatterCfg  = defaultConfig (xCol1 <> " vs " <> yCol)
-              scatterPlotFile fmt scatterPath scatterCfg df xCol1 yCol
-              putStrLn $ "\nScatter plot:        " ++ scatterPath
-              openInBrowser scatterPath
-
-            _ -> do
-              let scatterPath = "scatter.html"
-                  scatterCfg  = defaultConfig (xCol1 <> " vs " <> T.intercalate ", " yCols)
-              scatterMultiYFile fmt scatterPath scatterCfg df xCol1 yCols
-              putStrLn $ "\nScatter plot (multi-y): " ++ scatterPath
-              openInBrowser scatterPath
-
-        -- ── Regression (LM / GLM) ─────────────────────────────────────────
-        _ -> case yCols of
-          [yCol] ->
-            case cfgGroup cfg of
-              Just grpCol -> runMixedModel cfg df fmt xCol1 yCol grpCol
-              Nothing     -> runRegression cfg df fmt xCol1 yCol
-          _ -> do
-            putStrLn "\nNote: regression with multiple y columns not supported. Plotting scatter only."
-            let scatterPath = "scatter.html"
-                scatterCfg  = defaultConfig (xCol1 <> " vs " <> T.intercalate ", " yCols)
-            scatterMultiYFile fmt scatterPath scatterCfg df xCol1 yCols
-            putStrLn $ "Scatter plot (multi-y): " ++ scatterPath
-            openInBrowser scatterPath
+      -- ── Histogram mode ────────────────────────────────────────────────────
+      if cfgHistMode cfg
+        then runHistogram cfg df fmt xCol1
+        else runAnalysis cfg df fmt xCol1
 
 -- ---------------------------------------------------------------------------
 -- Mixed model (LME / GLMM)
@@ -379,6 +374,69 @@ runRegression cfg df fmt xCol1 yCol = do
           predictedVsActualFile fmt pvsaPath pvsaCfg (V.toList yVec) (fittedList res)
           putStrLn $ "Predicted vs Actual: " ++ pvsaPath
           openInBrowser pvsaPath
+
+-- ---------------------------------------------------------------------------
+-- Regression / scatter dispatch (non-histogram path)
+-- ---------------------------------------------------------------------------
+
+runAnalysis :: Config -> DataFrame -> OutputFormat -> T.Text -> IO ()
+runAnalysis cfg df fmt xCol1 = do
+  let yCols    = cfgYCols cfg
+      effModel = if length yCols > 1 then NoReg else cfgModel cfg
+
+  case effModel of
+    -- ── No regression: scatter plot only ──────────────────────────────────
+    NoReg ->
+      case yCols of
+        [yCol] -> do
+          let scatterPath = "scatter.html"
+              scatterCfg  = defaultConfig (xCol1 <> " vs " <> yCol)
+          scatterPlotFile fmt scatterPath scatterCfg df xCol1 yCol
+          putStrLn $ "\nScatter plot:        " ++ scatterPath
+          openInBrowser scatterPath
+
+        _ -> do
+          let scatterPath = "scatter.html"
+              scatterCfg  = defaultConfig (xCol1 <> " vs " <> T.intercalate ", " yCols)
+          scatterMultiYFile fmt scatterPath scatterCfg df xCol1 yCols
+          putStrLn $ "\nScatter plot (multi-y): " ++ scatterPath
+          openInBrowser scatterPath
+
+    -- ── Regression (LM / GLM) ─────────────────────────────────────────────
+    _ -> case yCols of
+      [yCol] ->
+        case cfgGroup cfg of
+          Just grpCol -> runMixedModel cfg df fmt xCol1 yCol grpCol
+          Nothing     -> runRegression cfg df fmt xCol1 yCol
+      _ -> do
+        putStrLn "\nNote: regression with multiple y columns not supported. Plotting scatter only."
+        let scatterPath = "scatter.html"
+            scatterCfg  = defaultConfig (xCol1 <> " vs " <> T.intercalate ", " yCols)
+        scatterMultiYFile fmt scatterPath scatterCfg df xCol1 yCols
+        putStrLn $ "Scatter plot (multi-y): " ++ scatterPath
+        openInBrowser scatterPath
+
+-- ---------------------------------------------------------------------------
+-- Histogram mode
+-- ---------------------------------------------------------------------------
+
+runHistogram :: Config -> DataFrame -> OutputFormat -> T.Text -> IO ()
+runHistogram cfg df fmt xCol =
+  case getNumeric xCol df of
+    Nothing ->
+      putStrLn $ "Error: column '" ++ T.unpack xCol ++ "' not found or not numeric"
+    Just xVec -> do
+      let vals     = V.toList xVec
+          histPath = "histogram.html"
+          histCfg  = defaultConfig ("Histogram: " <> xCol)
+      case cfgFitDist cfg of
+        Nothing   -> do
+          histogramPlotFile fmt histPath histCfg xCol vals Nothing
+          putStrLn $ "\nHistogram: " ++ histPath
+        Just dist -> do
+          histogramWithDensityFile fmt histPath histCfg xCol vals Nothing dist
+          putStrLn $ "\nHistogram + density: " ++ histPath
+      openInBrowser histPath
 
 -- ---------------------------------------------------------------------------
 -- Group-level prediction helpers
