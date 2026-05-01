@@ -18,7 +18,8 @@ import Viz.Histogram     (histogramPlotFile, histogramWithDensityFile)
 import Viz.AnalysisReport (AnalysisReportConfig (..), ModelFit (..), NamedPlot (..),
                            SmoothData (..), GPKernelFit (..), GPFitSummary (..), FitSummary (..),
                            GLMMSummary (..), HBMRegSummary (..),
-                           mkFitSummary, mkGLMMSummary, writeAnalysisReport)
+                           mkFitSummary, mkGLMMSummary,
+                           writeAnalysisReport, writeAnalysisReportPlots)
 import qualified Model.HBM as HBMod
 import qualified MCMC.NUTS as HBMnuts
 import qualified MCMC.Core as MCMCcore
@@ -35,6 +36,7 @@ import Stat.ModelSelect  (lmPosteriorLogLiks, glmPosteriorLogLiks,
 
 import Data.Char          (isDigit)
 import Data.List          (intercalate)
+import System.FilePath    (dropExtension)
 import qualified Data.Text    as T
 import qualified Data.Text.IO as TIO
 import qualified Data.Vector  as V
@@ -96,6 +98,7 @@ usageMsg = unlines
   , "  --format FORMAT    output format: html|png|svg               (default: html)"
   , "  --group COL        grouping column → LM+group: LME, GLM+group: GLMM"
   , "  --report [FILE]    generate HTML analysis report (default: report.html)"
+  , "                     --format png|svg と組み合わせるとプロット部分を画像にも出力"
   , "  --waic             compute WAIC and LOO-CV and show in report (requires --report)"
   , ""
   , "Degree specification:"
@@ -256,6 +259,17 @@ applyDegreeSpec :: DegreeSpec -> [T.Text] -> [(T.Text, Int)]
 applyDegreeSpec (AllDegree d) cols  = [(c, d) | c <- cols]
 applyDegreeSpec (PerDegree ps) cols =
   [ (c, maybe 1 id (lookup i ps)) | (i, c) <- zip [1..] cols ]
+
+-- | --format PNG/SVG が指定されていれば、AnalysisReport のプロットを
+--   個別画像として書き出す (HTML 本体に加えて補助出力)。
+maybeExportReportPlots :: Config -> FilePath -> [NamedPlot] -> IO ()
+maybeExportReportPlots cfg htmlPath plots =
+  case cfgFormat cfg of
+    HTML -> return ()
+    fmt  -> do
+      let prefix = dropExtension htmlPath
+      paths <- writeAnalysisReportPlots prefix fmt plots
+      mapM_ (\p -> putStrLn $ "Plot image:          " ++ p) paths
 
 -- ---------------------------------------------------------------------------
 -- Main
@@ -431,6 +445,7 @@ runMixedModel cfg df fmt xCol1 yCol grpCol = do
               plots = scatterPlots ++ pvsaPlots
           writeAnalysisReport path rptCfg df (cfgXCols cfg) yCol (MixFit summary) plots
           putStrLn $ "Report:              " ++ path
+          maybeExportReportPlots cfg path plots
           openInBrowser path
 
 -- ---------------------------------------------------------------------------
@@ -539,6 +554,7 @@ runRegression cfg df fmt xCol1 yCol = do
           let summary = baseSummary { fsModelSelect = mModelSelect }
           writeAnalysisReport path rptCfg df (cfgXCols cfg) yCol (RegFit summary) pvsaPlots
           putStrLn $ "Report:              " ++ path
+          maybeExportReportPlots cfg path pvsaPlots
           openInBrowser path
 
 -- ---------------------------------------------------------------------------
@@ -640,6 +656,7 @@ runGP cfg df xCol1 = do
 
       writeAnalysisReport path rptCfg df [xCol1] yCol (GPFit gfSummary) []
       putStrLn $ "Report: " ++ path
+      maybeExportReportPlots cfg path []
       openInBrowser path
 
     _ -> putStrLn "\nError: column(s) not found or not numeric"
@@ -768,6 +785,7 @@ runHBMRegression xs ys xCol yCol df cfg = do
                      { arcTitle = "HBM Linear Regression: " <> yCol <> " ~ " <> xCol }
       writeAnalysisReport path rptCfg df [xCol] yCol (HBMFit hs) [diagPlot, acfPlot]
       putStrLn $ "Report:              " ++ path
+      maybeExportReportPlots cfg path [diagPlot, acfPlot]
       openInBrowser path
   where
     -- 信用区間付き予測曲線: 各事後サンプルから μ* = α + β·x* を計算 → 分位点

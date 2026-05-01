@@ -29,6 +29,7 @@ module Viz.AnalysisReport
   , NamedPlot (..)
     -- * レポート生成
   , writeAnalysisReport
+  , writeAnalysisReportPlots
     -- * 複数モデル比較レポート
   , CompareEntry (..)
   , writeComparisonReport
@@ -55,7 +56,7 @@ import Model.GLMM   (GLMMResult (..))
 import Model.GP     (Kernel (..), GPParams (..), GPResult (..), GPPredData (..))
 import Model.HBM    (ModelGraph)
 import Viz.Assets   (vegaJS, vegaLiteJS, vegaEmbedJS)
-import Viz.Core     (PlotConfig (..))
+import Viz.Core     (PlotConfig (..), OutputFormat (..), writeSpec)
 import Viz.GP       (gpPlot)
 import Viz.ModelGraph (buildMermaid)
 
@@ -223,6 +224,32 @@ writeAnalysisReport
   -> IO ()
 writeAnalysisReport path cfg df xCols yCol fit plots =
   TIO.writeFile path (buildHtml cfg df xCols yCol fit plots)
+
+-- | レポートに含まれる Vega-Lite プロットを個別ファイルとして書き出す。
+--
+-- 各 'NamedPlot' を @<prefix>-<idx>-<name>.<ext>@ に出力する。
+-- HTML 専用要素 (DAG, 事後分布表, 対話的予測 UI, ヒストグラム JS) は
+-- vl-convert で変換できないためスキップする。
+--
+-- 戻り値: 書き出したファイルパスのリスト。
+writeAnalysisReportPlots
+  :: FilePath        -- ^ ファイル名プレフィックス (拡張子なし)
+  -> OutputFormat    -- ^ PNG / SVG (HTML は 'writeAnalysisReport' を使うこと)
+  -> [NamedPlot]
+  -> IO [FilePath]
+writeAnalysisReportPlots prefix fmt plots = do
+  let ext = case fmt of
+        PNG  -> ".png"
+        SVG  -> ".svg"
+        HTML -> ".html"
+      paths = [ prefix <> "-" <> show (i :: Int) <> "-"
+                <> sanitize (T.unpack (npName p)) <> ext
+              | (i, p) <- zip [1..] plots ]
+  mapM_ (\(path, p) -> writeSpec fmt path (npSpec p))
+        (zip paths plots)
+  return paths
+  where
+    sanitize = map (\c -> if c `elem` ("/\\: " :: String) then '_' else c)
 
 -- ---------------------------------------------------------------------------
 -- HTML builder
