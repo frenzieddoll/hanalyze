@@ -4,6 +4,9 @@
 -- Hoffman & Gelman (2014) Algorithm 3 を実装。
 -- 制約付きパラメータは unconstrained 空間で自動変換されます（HMC と同様）。
 -- 自動的に最適な軌道長を決定するため、HMC のステップ数チューニングが不要。
+--
+-- nutsAdaptStepSize = True に設定するとバーンイン中に
+-- Nesterov の dual averaging でステップ幅を自動調整します (Stan 方式)。
 module MCMC.NUTS
   ( NUTSConfig (..)
   , defaultNUTSConfig
@@ -32,19 +35,61 @@ import Stat.Distribution (Transform)
 -- ---------------------------------------------------------------------------
 
 data NUTSConfig = NUTSConfig
-  { nutsIterations :: Int
-  , nutsBurnIn     :: Int
-  , nutsStepSize   :: Double
-  , nutsMaxDepth   :: Int
+  { nutsIterations   :: Int
+  , nutsBurnIn       :: Int
+  , nutsStepSize     :: Double
+  , nutsMaxDepth     :: Int
+  , nutsAdaptStepSize :: Bool    -- ^ バーンイン中に dual averaging でステップ幅を自動調整
+  , nutsTargetAccept :: Double   -- ^ 目標受容率 (dual averaging の δ、デフォルト 0.8)
   } deriving (Show)
 
 defaultNUTSConfig :: NUTSConfig
 defaultNUTSConfig = NUTSConfig
-  { nutsIterations = 2000
-  , nutsBurnIn     = 500
-  , nutsStepSize   = 0.1
-  , nutsMaxDepth   = 10
+  { nutsIterations    = 2000
+  , nutsBurnIn        = 500
+  , nutsStepSize      = 0.1
+  , nutsMaxDepth      = 10
+  , nutsAdaptStepSize = True
+  , nutsTargetAccept  = 0.8
   }
+
+-- ---------------------------------------------------------------------------
+-- Dual averaging (Nesterov 2009, Hoffman & Gelman 2014 § 3.2)
+-- ---------------------------------------------------------------------------
+
+-- | Dual averaging の状態。バーンイン中だけ使用する。
+data DualAvgState = DualAvgState
+  { daLogEps     :: Double  -- ^ 現在の log ε
+  , daLogEpsBar  :: Double  -- ^ 指数移動平均 log ε̄  (バーンイン後に採用)
+  , daH          :: Double  -- ^ 累積 H_m
+  , daMu         :: Double  -- ^ 収縮先 μ = log(10 ε₀)
+  , daM          :: Int     -- ^ ステップカウント
+  }
+
+initDualAvg :: Double -> DualAvgState
+initDualAvg eps0 = DualAvgState
+  { daLogEps    = log eps0
+  , daLogEpsBar = log eps0   -- ε̄₀ = ε₀ (バーンイン失敗でも ε₀ に戻る)
+  , daH         = 0.0
+  , daMu        = log (10 * eps0)
+  , daM         = 0
+  }
+
+-- | 1 ステップ更新。alpha は今ステップの採択確率 min(1, exp(logAlpha))。
+updateDualAvg :: Double -> Double -> DualAvgState -> DualAvgState
+updateDualAvg delta alpha da =
+  let m      = daM da + 1
+      gamma  = 0.05   -- 収縮強度
+      t0     = 10.0
+      kappa  = 0.75   -- 指数移動平均の減衰率
+      hNew   = (1 - 1 / (fromIntegral m + t0)) * daH da
+             + (1 / (fromIntegral m + t0)) * (delta - alpha)
+      logEps = daMu da - sqrt (fromIntegral m) / gamma * hNew
+      -- ε を合理的な範囲にクリップ (爆発的な増減を防ぐ)
+      logEpsClip = max (-7) (min 5 logEps)
+      logEpsBar = (fromIntegral m ** (-kappa)) * logEpsClip
+                + (1 - fromIntegral m ** (-kappa)) * daLogEpsBar da
+  in da { daLogEps = logEpsClip, daLogEpsBar = logEpsBar, daH = hNew, daM = m }
 
 -- ---------------------------------------------------------------------------
 -- 内部: バイナリツリー
@@ -134,11 +179,16 @@ nuts model cfg initC gen = do
       transforms = getTransforms model
       initU      = toUnconstrainedParams transforms initC
       total      = nutsBurnIn cfg + nutsIterations cfg
+      doAdapt    = nutsAdaptStepSize cfg && nutsBurnIn cfg > 0
 
   samplesRef  <- newIORef []
   acceptedRef <- newIORef (0 :: Int)
+  daRef       <- newIORef (initDualAvg (nutsStepSize cfg))
 
-  let step currentU = do
+  -- 1 NUTS ステップ。dual averaging 用に単一リープフロッグの採択確率も返す。
+  -- (Stan と同様: NUTS 軌道全体でなく 1-step Hamiltonian 比を alpha に使う)
+  let gradFn = gradUU model transforms
+      step eps currentU = do
         r0 <- forM names (\_ -> standard gen)
         u0 <- uniform gen :: IO Double
         let h0   = -(logJointU model transforms currentU) + kinetic r0
@@ -156,7 +206,7 @@ nuts model cfg initC gen = do
                     (th0, r0') = if dir == -1
                       then (ntThMinus tree, ntRMinus tree)
                       else (ntThPlus  tree, ntRPlus  tree)
-                subtree <- buildTree model transforms names (nutsStepSize cfg) th0 r0' logU dir j gen
+                subtree <- buildTree model transforms names eps th0 r0' logU dir j gen
                 let n1 = ntN tree; n2 = ntN subtree
                 thPrime' <-
                   if not (ntS subtree) || n2 == 0
@@ -179,18 +229,40 @@ nuts model cfg initC gen = do
                   }
         finalTree <- foldM doubleTree tree0 [0 .. nutsMaxDepth cfg - 1]
         let proposedU = ntThPrime finalTree
+            -- dual averaging 用 alpha: 単一リープフロッグの Hamiltonian 比
+            -- (NUTS 軌道全体の平均でなく 1-step 比を使う — Stan 方式)
+            (thetaOne, rOne) = leapfrogWith gradFn names eps 1 currentU r0
+            hOne   = -(logJointU model transforms thetaOne) + kinetic rOne
+            alpha  = min 1.0 (exp (h0 - hOne))
         when (proposedU /= currentU) $ modifyIORef' acceptedRef (+1)
-        return proposedU
+        return (proposedU, alpha)
 
-  let loop 0 currentU = return currentU
-      loop i currentU = do
-        nextU <- step currentU
-        if i <= nutsIterations cfg
+  -- カウントダウンループ: i = total → 1
+  --   i > nutsIterations cfg → バーンイン (dual averaging 期)
+  --   i ≤ nutsIterations cfg → 保存期
+  let loop 0 currentU _eps = return currentU
+      loop i currentU eps = do
+        (nextU, alpha) <- step eps currentU
+        let isBurnIn = i > nutsIterations cfg
+        eps' <- if doAdapt && isBurnIn
+          then do
+            da <- readIORef daRef
+            let da' = updateDualAvg (nutsTargetAccept cfg) alpha da
+            writeIORef daRef da'
+            return (exp (daLogEps da'))
+          else do
+            -- バーンイン終了直後に ε̄ を確定
+            da <- readIORef daRef
+            let epsBar = if doAdapt && not isBurnIn && i == nutsIterations cfg
+                         then exp (daLogEpsBar da)
+                         else eps
+            return epsBar
+        if not isBurnIn
           then modifyIORef' samplesRef (fromUnconstrainedParams transforms nextU :)
           else return ()
-        loop (i - 1) nextU
+        loop (i - 1) nextU eps'
 
-  _ <- loop total initU
+  _ <- loop total initU (nutsStepSize cfg)
   samples  <- fmap reverse (readIORef samplesRef)
   accepted <- readIORef acceptedRef
   return Chain
