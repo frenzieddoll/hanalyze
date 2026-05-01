@@ -11,6 +11,9 @@ module Model.MCMC
     -- * サンプラー
   , Chain (..)
   , metropolis
+  , metropolisChains
+    -- * マルチチェーンユーティリティ
+  , chainVals
     -- * 事後統計量
     -- | 変数名が存在しない場合は 'Nothing' を返します。
   , acceptanceRate
@@ -19,12 +22,15 @@ module Model.MCMC
   , posteriorQuantile
   ) where
 
-import Control.Monad (forM)
+import Control.Concurrent.Async (mapConcurrently)
+import Control.Monad (forM, replicateM)
 import Data.IORef
 import Data.List (sort)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
-import System.Random.MWC (GenIO, uniform)
+import Data.Word (Word32)
+import qualified Data.Vector as V
+import System.Random.MWC (GenIO, uniform, initialize)
 import System.Random.MWC.Distributions (normal)
 
 import Model.HBM (Model, Params, logJoint, sampleNames)
@@ -111,8 +117,33 @@ metropolis model cfg init_ gen = do
     }
 
 -- ---------------------------------------------------------------------------
+-- マルチチェーン
+-- ---------------------------------------------------------------------------
+
+-- | 基底 GenIO から独立した子 GenIO を生成する。
+spawnGen :: GenIO -> IO GenIO
+spawnGen base = do
+  seed <- uniform base :: IO Word32
+  initialize (V.singleton seed)
+
+-- | Random Walk Metropolis を numChains 本並列実行する。
+-- 各チェーンは独立した乱数列を使い、OS スレッドで並列実行される
+-- (+RTS -N で CPU 並列になる)。
+-- 初期値は全チェーン共通。
+metropolisChains
+  :: Model a -> MCMCConfig -> Int -> Params -> GenIO -> IO [Chain]
+metropolisChains model cfg numChains initP baseGen = do
+  gens <- replicateM numChains (spawnGen baseGen)
+  mapConcurrently (\g -> metropolis model cfg initP g) gens
+
+-- ---------------------------------------------------------------------------
 -- Summary statistics
 -- ---------------------------------------------------------------------------
+
+-- | チェーンから指定パラメータのサンプル列を取り出す。
+-- rhat 等に渡す用途に使う。
+chainVals :: Text -> Chain -> [Double]
+chainVals name ch = [v | Just v <- map (Map.lookup name) (chainSamples ch)]
 
 -- | Fraction of proposals that were accepted (including burn-in).
 acceptanceRate :: Chain -> Double

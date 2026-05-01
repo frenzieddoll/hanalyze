@@ -2,7 +2,7 @@
 -- | No-U-Turn Sampler (NUTS)。
 --
 -- Hoffman & Gelman (2014) Algorithm 3 を実装。
--- リープフロッグと勾配は "Model.HMC" から再利用。
+-- 制約付きパラメータは unconstrained 空間で自動変換されます（HMC と同様）。
 -- 自動的に最適な軌道長を決定するため、HMC のステップ数チューニングが不要。
 --
 -- 使い方:
@@ -17,17 +17,25 @@ module Model.NUTS
   , defaultNUTSConfig
     -- * Sampler
   , nuts
+  , nutsChains
   ) where
 
-import Control.Monad (foldM, forM, when)
+import Control.Concurrent.Async (mapConcurrently)
+import Control.Monad (foldM, forM, replicateM, when)
 import Data.IORef
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import System.Random.MWC (GenIO, uniform)
 import System.Random.MWC.Distributions (standard)
 
-import Model.HBM (Model, Params, logJoint, sampleNames)
+import Model.HBM (Model, Params, sampleNames, getTransforms)
 import Model.MCMC (Chain (..))
-import Model.HMC (kinetic, leapfrog, paramsToVec)
+import Model.HMC
+  ( kinetic, leapfrogWith, gradUU, logJointU
+  , paramsToVec, toUnconstrainedParams, fromUnconstrainedParams
+  , spawnGen
+  )
+import Stat.Distribution (Transform)
 
 -- ---------------------------------------------------------------------------
 -- Configuration
@@ -35,13 +43,9 @@ import Model.HMC (kinetic, leapfrog, paramsToVec)
 
 data NUTSConfig = NUTSConfig
   { nutsIterations :: Int
-    -- ^ バーンイン後に保存するサンプル数
   , nutsBurnIn     :: Int
-    -- ^ 破棄するバーンインステップ数
   , nutsStepSize   :: Double
-    -- ^ リープフロッグのステップサイズ ε
   , nutsMaxDepth   :: Int
-    -- ^ 木の最大深さ (2^maxDepth 回のリープフロッグが上限)。デフォルト 10。
   } deriving (Show)
 
 defaultNUTSConfig :: NUTSConfig
@@ -57,20 +61,19 @@ defaultNUTSConfig = NUTSConfig
 -- ---------------------------------------------------------------------------
 
 data NUTSTree = NUTSTree
-  { ntThMinus :: Params    -- 木の左端 (負方向) の位置
-  , ntRMinus  :: [Double]  -- 木の左端の運動量
-  , ntThPlus  :: Params    -- 木の右端 (正方向) の位置
-  , ntRPlus   :: [Double]  -- 木の右端の運動量
-  , ntThPrime :: Params    -- 採用候補の位置
-  , ntN       :: Int       -- スライス内の有効状態数
-  , ntS       :: Bool      -- False = U-Turn 検出または発散 → 木の成長を停止
+  { ntThMinus :: Params
+  , ntRMinus  :: [Double]
+  , ntThPlus  :: Params
+  , ntRPlus   :: [Double]
+  , ntThPrime :: Params   -- unconstrained 空間での候補点
+  , ntN       :: Int
+  , ntS       :: Bool
   }
 
--- | エネルギー増加の上限。これを超えた場合は木の成長を止める。
 deltaMax :: Double
 deltaMax = 1000.0
 
--- | U-Turn 判定: (θ+ - θ-) · r- < 0 または (θ+ - θ-) · r+ < 0 なら True を返す。
+-- | U-Turn 判定 (unconstrained 空間での位置差に対して適用)
 uTurn :: [Text] -> Params -> [Double] -> Params -> [Double] -> Bool
 uTurn names thMinus rMinus thPlus rPlus =
   let delta     = zipWith (-) (paramsToVec names thPlus) (paramsToVec names thMinus)
@@ -78,30 +81,27 @@ uTurn names thMinus rMinus thPlus rPlus =
   in dot delta rMinus < 0 || dot delta rPlus < 0
 
 -- ---------------------------------------------------------------------------
--- 再帰的ツリービルダー (Algorithm 3, Hoffman & Gelman 2014)
+-- 再帰的ツリービルダー
 -- ---------------------------------------------------------------------------
 
--- | depth = 0: 1 回のリープフロッグステップ (葉ノード)。
---   depth > 0: 2 つのサブツリーを再帰的に結合。
---
--- dir =  1 → 正方向 (θ+, r+ 側を伸ばす)
--- dir = -1 → 負方向 (θ-, r- 側を伸ばす)
+-- | 全ての Params は unconstrained 空間。
 buildTree
   :: Model a
+  -> Map.Map Text Transform
   -> [Text]
-  -> Double    -- ^ ε (ステップサイズ)
-  -> Params    -- ^ 現在の位置 θ
-  -> [Double]  -- ^ 現在の運動量 r
-  -> Double    -- ^ スライス変数 (log u)
+  -> Double    -- ^ ε
+  -> Params    -- ^ 現在の位置 (unconstrained)
+  -> [Double]  -- ^ 現在の運動量
+  -> Double    -- ^ log u (スライス変数)
   -> Int       -- ^ 方向 (+1 / -1)
   -> Int       -- ^ 木の深さ
   -> GenIO
   -> IO NUTSTree
-buildTree model names eps theta r logU dir depth gen
+buildTree model transforms names eps theta r logU dir depth gen
   | depth == 0 = do
-      -- 葉: 1 ステップのリープフロッグ (dir < 0 なら逆方向)
-      let (theta', r') = leapfrog model names (fromIntegral dir * eps) 1 theta r
-          h'  = -(logJoint model theta') + kinetic r'
+      let gradFn  = gradUU model transforms
+          (theta', r') = leapfrogWith gradFn names (fromIntegral dir * eps) 1 theta r
+          h'  = -(logJointU model transforms theta') + kinetic r'
           n'  = if logU <= -h' then 1 else 0
           s'  = logU < deltaMax - h'
       return NUTSTree
@@ -110,16 +110,13 @@ buildTree model names eps theta r logU dir depth gen
         , ntThPrime = theta', ntN = n', ntS = s'
         }
   | otherwise = do
-      -- 内部ノード: サブツリー 1 を構築
-      t1 <- buildTree model names eps theta r logU dir (depth - 1) gen
+      t1 <- buildTree model transforms names eps theta r logU dir (depth - 1) gen
       if not (ntS t1) then return t1
       else do
-        -- サブツリー 2 を構築 (木の先端から伸ばす)
         let (th0, r0) = if dir == -1
               then (ntThMinus t1, ntRMinus t1)
               else (ntThPlus  t1, ntRPlus  t1)
-        t2 <- buildTree model names eps th0 r0 logU dir (depth - 1) gen
-        -- 候補点を確率 min(1, n2/n1) で更新 (Algorithm 6)
+        t2 <- buildTree model transforms names eps th0 r0 logU dir (depth - 1) gen
         let n1 = ntN t1; n2 = ntN t2
         thPrime' <-
           if n1 == 0 then return (ntThPrime t2)
@@ -129,12 +126,10 @@ buildTree model names eps theta r logU dir depth gen
             return $ if u < min 1.0 (fromIntegral n2 / fromIntegral n1)
                      then ntThPrime t2
                      else ntThPrime t1
-        -- 木の端点を更新
         let (minus', rMinus', plus', rPlus') = if dir == -1
               then (ntThMinus t2, ntRMinus t2, ntThPlus t1, ntRPlus t1)
               else (ntThMinus t1, ntRMinus t1, ntThPlus t2, ntRPlus t2)
-            s' = ntS t2
-                 && not (uTurn names minus' rMinus' plus' rPlus')
+            s' = ntS t2 && not (uTurn names minus' rMinus' plus' rPlus')
         return NUTSTree
           { ntThMinus = minus', ntRMinus = rMinus'
           , ntThPlus  = plus',  ntRPlus  = rPlus'
@@ -146,34 +141,29 @@ buildTree model names eps theta r logU dir depth gen
 -- ---------------------------------------------------------------------------
 
 -- | NUTS を実行する。
---
--- 1 ステップの手順:
---   1. 運動量 r ~ N(0, I) をサンプリング
---   2. スライス変数 log u ~ Uniform(-∞, -H(θ, r)) をサンプリング
---   3. U-Turn が発生するか最大深さに達するまで木を倍々に成長させる
---   4. 木の中からスライス条件を満たす状態を確率的に選択
+-- 制約付きパラメータは unconstrained 空間で自動処理されます。
+-- 初期値・返却サンプルはいずれも constrained 空間です。
 nuts :: Model a -> NUTSConfig -> Params -> GenIO -> IO Chain
-nuts model cfg init_ gen = do
-  let names = sampleNames model
-      total = nutsBurnIn cfg + nutsIterations cfg
+nuts model cfg initC gen = do
+  let names      = sampleNames model
+      transforms = getTransforms model
+      initU      = toUnconstrainedParams transforms initC
+      total      = nutsBurnIn cfg + nutsIterations cfg
+
 
   samplesRef  <- newIORef []
   acceptedRef <- newIORef (0 :: Int)
 
-  let step current = do
-        -- 1. 運動量をサンプリング
+  let step currentU = do
         r0 <- forM names (\_ -> standard gen)
-        -- 2. スライス変数 (対数域): log u = log(U01) - H(θ, r)
         u0 <- uniform gen :: IO Double
-        let h0   = -(logJoint model current) + kinetic r0
+        let h0   = -(logJointU model transforms currentU) + kinetic r0
             logU = log u0 - h0
-        -- 3. 初期ツリー (深さ 0; 現在点のみ)
         let tree0 = NUTSTree
-              { ntThMinus = current, ntRMinus = r0
-              , ntThPlus  = current, ntRPlus  = r0
-              , ntThPrime = current, ntN = 1, ntS = True
+              { ntThMinus = currentU, ntRMinus = r0
+              , ntThPlus  = currentU, ntRPlus  = r0
+              , ntThPrime = currentU, ntN = 1, ntS = True
               }
-        -- 4. 木を倍々に成長させる
         let doubleTree tree j =
               if not (ntS tree) then return tree
               else do
@@ -182,8 +172,7 @@ nuts model cfg init_ gen = do
                     (th0, r0') = if dir == -1
                       then (ntThMinus tree, ntRMinus tree)
                       else (ntThPlus  tree, ntRPlus  tree)
-                subtree <- buildTree model names (nutsStepSize cfg) th0 r0' logU dir j gen
-                -- s'=True のときのみ候補を更新: 確率 min(1, n2/n1) (Algorithm 3)
+                subtree <- buildTree model transforms names (nutsStepSize cfg) th0 r0' logU dir j gen
                 let n1 = ntN tree; n2 = ntN subtree
                 thPrime' <-
                   if not (ntS subtree) || n2 == 0
@@ -193,33 +182,31 @@ nuts model cfg init_ gen = do
                     return $ if u2 < min 1.0 (fromIntegral n2 / fromIntegral n1)
                              then ntThPrime subtree
                              else ntThPrime tree
-                -- 端点と停止フラグを更新
                 let (minus', rMinus', plus', rPlus') = if dir == -1
                       then (ntThMinus subtree, ntRMinus subtree,
                             ntThPlus  tree,    ntRPlus  tree)
                       else (ntThMinus tree,    ntRMinus tree,
                             ntThPlus  subtree, ntRPlus  subtree)
-                    s' = ntS subtree
-                         && not (uTurn names minus' rMinus' plus' rPlus')
+                    s' = ntS subtree && not (uTurn names minus' rMinus' plus' rPlus')
                 return NUTSTree
                   { ntThMinus = minus', ntRMinus = rMinus'
                   , ntThPlus  = plus',  ntRPlus  = rPlus'
                   , ntThPrime = thPrime', ntN = n1 + n2, ntS = s'
                   }
         finalTree <- foldM doubleTree tree0 [0 .. nutsMaxDepth cfg - 1]
-        let proposed = ntThPrime finalTree
-        when (proposed /= current) $ modifyIORef' acceptedRef (+1)
-        return proposed
+        let proposedU = ntThPrime finalTree
+        when (proposedU /= currentU) $ modifyIORef' acceptedRef (+1)
+        return proposedU
 
-  let loop 0 current = return current
-      loop i current = do
-        next <- step current
+  let loop 0 currentU = return currentU
+      loop i currentU = do
+        nextU <- step currentU
         if i <= nutsIterations cfg
-          then modifyIORef' samplesRef (next :)
+          then modifyIORef' samplesRef (fromUnconstrainedParams transforms nextU :)
           else return ()
-        loop (i - 1) next
+        loop (i - 1) nextU
 
-  _ <- loop total init_
+  _ <- loop total initU
   samples  <- fmap reverse (readIORef samplesRef)
   accepted <- readIORef acceptedRef
   return Chain
@@ -227,3 +214,11 @@ nuts model cfg init_ gen = do
     , chainAccepted = accepted
     , chainTotal    = total
     }
+
+-- | NUTS を numChains 本並列実行する。
+-- 各チェーンは独立した乱数列を使い、OS スレッドで並列実行される
+-- (+RTS -N で CPU 並列になる)。
+nutsChains :: Model a -> NUTSConfig -> Int -> Params -> GenIO -> IO [Chain]
+nutsChains model cfg numChains initC baseGen = do
+  gens <- replicateM numChains (spawnGen baseGen)
+  mapConcurrently (\g -> nuts model cfg initC g) gens

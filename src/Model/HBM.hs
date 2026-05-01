@@ -35,6 +35,7 @@ module Model.HBM
   , logPrior
   , logLikelihood
   , sampleNames
+  , getTransforms
     -- * モデルグラフ (可視化用)
   , ModelGraph (..)
   , buildModelGraph
@@ -43,7 +44,7 @@ module Model.HBM
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Map.Strict as Map
-import Stat.Distribution (Distribution, distributionName)
+import Stat.Distribution (Distribution, Transform, distributionName, distTransform)
 import qualified Stat.Distribution as Dist
 
 -- ---------------------------------------------------------------------------
@@ -205,6 +206,17 @@ sampleNames :: Model a -> [Text]
 sampleNames (Pure _)                    = []
 sampleNames (Free (Sample n _ k))       = n : sampleNames (k 0)
 sampleNames (Free (Observe _ _ _ next)) = sampleNames next
+
+-- | 各潜在変数の事前分布から制約変換を自動検出する。
+-- HMC/NUTS が内部で呼び出すため、通常ユーザーが直接使う必要はない。
+-- collectNodes は placeholder 0 を使うが Distribution の型は正しく保たれるため
+-- UnconstrainedT / PositiveT / UnitIntervalT の判定に影響しない。
+getTransforms :: Model a -> Map.Map Text Transform
+getTransforms model = Map.fromList
+  [ (nodeName ni, distTransform (nodeDist ni))
+  | ni <- collectNodes model
+  , case nodeRole ni of { Latent -> True; _ -> False }
+  ]
 
 isNegInf :: Double -> Bool
 isNegInf x = isInfinite x && x < 0
