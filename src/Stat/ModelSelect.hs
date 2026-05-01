@@ -29,6 +29,7 @@ module Stat.ModelSelect
     -- * LM / GLM 事後サンプリング (WAIC/LOO-CV 用)
   , lmPosteriorLogLiks
   , glmPosteriorLogLiks
+  , lmePosteriorLogLiks
   ) where
 
 import Control.Monad (replicateM)
@@ -243,6 +244,46 @@ glmPosteriorLogLiks family linkFn x y fisherInv fr s gen = do
         eta      = LA.toList (x LA.#> betaSamp)
         ys       = LA.toList y
     return [ glmLogDensity family linkFn yi ei | (yi, ei) <- zip ys eta ]
+
+-- | LME (Gaussian, ランダム切片) の **条件付き WAIC** 用 log-lik 行列。
+--
+-- 厳密な GLMM 周辺事後ではなく、BLUP û を点推定で固定した上で
+-- (β, σ²) を marginal LM 風に事後サンプリングする近似:
+--
+--   * y' := y − Z·û  (BLUP オフセットを差し引いた residual response)
+--   * σ² ~ InvGamma((n−p)/2, RSS_cond/2)   [RSS_cond は LME 条件付き残差]
+--   * β  ~ MVN(β̂,  σ² (X'X)⁻¹)
+--   * log p(y_i | β^s, û_{j(i)}, σ^s) = log N(y_i; X_iβ^s + û_{j(i)}, σ^s)
+--
+-- u を固定するため p_WAIC が真の値より小さく出る傾向があるが、同一データセット内で
+-- 異なる固定効果構造を比較するには有用 (Gelman, Hwang, Vehtari 2014 §3.3 参照)。
+lmePosteriorLogLiks
+  :: LA.Matrix Double  -- ^ 固定効果計画行列 X (n×p)
+  -> LA.Vector Double  -- ^ 応答 y (n)
+  -> [Double]          -- ^ 観測ごとの BLUP オフセット û_{j(i)} (n)
+  -> FitResult         -- ^ LME 固定効果フィット結果
+  -> Int               -- ^ 事後サンプル数 S
+  -> GenIO
+  -> IO [[Double]]
+lmePosteriorLogLiks x y offsets fr s gen = do
+  let n      = LA.rows x
+      p      = LA.cols x
+      df'    = n - p
+      beta0  = coefficients fr
+      rss    = LA.dot (residuals fr) (residuals fr)
+      xtxInv = LA.inv (LA.tr x LA.<> x)
+      rChol  = LA.chol (LA.trustSym xtxInv)
+      lChol  = LA.tr rChol
+  replicateM s $ do
+    chi2Vals <- replicateM df' (normal 0 1 gen)
+    let chi2    = sum (map (^(2::Int)) chi2Vals)
+        sigSamp = sqrt (rss / chi2)
+    zVec <- fmap LA.fromList (replicateM p (normal 0 1 gen))
+    let betaSamp = beta0 + LA.scale sigSamp (lChol LA.#> zVec)
+        yFix     = LA.toList (x LA.#> betaSamp)
+        yCond    = zipWith (+) yFix offsets
+        ys       = LA.toList y
+    return [ logNormDensity yi yhi sigSamp | (yi, yhi) <- zip ys yCond ]
 
 logNormDensity :: Double -> Double -> Double -> Double
 logNormDensity y mu sig

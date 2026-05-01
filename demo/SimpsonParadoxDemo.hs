@@ -27,7 +27,7 @@ import Model.LM      (fitPolyWithSmooth, SmoothFit (..), polyDesignMatrix)
 import Model.GLMM    (fitLMEDataFrame, GLMMResult (..))
 import Model.GLM     (Family (..), LinkFn (..))
 import qualified Numeric.LinearAlgebra as LA
-import Stat.ModelSelect (lmPosteriorLogLiks, waic, loo,
+import Stat.ModelSelect (lmPosteriorLogLiks, lmePosteriorLogLiks, waic, loo,
                          WAICResult (..), LOOResult (..))
 
 import MCMC.Core (Chain (..), chainVals, posteriorMean, posteriorSD,
@@ -181,6 +181,21 @@ reportGLMM = do
       mapM_ (\(g, b) -> printf "         BLUP[%s] = %+.3f\n" (T.unpack g) b)
             (zip (V.toList (glmmGroups gr)) (V.toList (glmmBLUPs gr)))
 
+      -- WAIC/LOO (条件付き: BLUP 固定で β,σ² のみ事後サンプリング)
+      gen <- createSystemRandom
+      let groupLabels = V.toList (glmmGroups gr)
+          blupsList   = V.toList (glmmBLUPs gr)
+          blupMap     = zip groupLabels blupsList
+          offsets     = [ maybe 0 id (lookup g blupMap) | g <- allGroups ]
+          dm          = polyDesignMatrix 1 (V.fromList allXs)
+          yVec        = LA.fromList allYs
+          nSamples    = 1000 :: Int
+      llMat <- lmePosteriorLogLiks dm yVec offsets (glmmFixed gr) nSamples gen
+      let wRes = waic llMat
+          lRes = loo  llMat
+      printf "         WAIC=%.2f  LOO=%.2f  p_WAIC=%.2f  (条件付き: BLUP 固定)\n"
+             (waicValue wRes) (looValue lRes) (waicPwaic wRes)
+
       -- 固定効果のみで smoothData を構築 (β_0 + β_1·x_grid)
       let xMin = minimum allXs
           xMax = maximum allXs
@@ -194,8 +209,9 @@ reportGLMM = do
             , sdUpper   = ysGrid
             , sdHasBand = False
             }
-          summary = mkGLMMSummary Gaussian Identity [("x", 1)] "group"
-                                  (Just ("x", smooth)) gr
+          baseSummary = mkGLMMSummary Gaussian Identity [("x", 1)] "group"
+                                       (Just ("x", smooth)) gr
+          summary = baseSummary { gsModelSelect = Just (wRes, lRes) }
           rptCfg = defaultAnalysisConfig
                      "Simpson Paradox — GLMM (LME, random intercept by group)"
       writeAnalysisReport "simpson_glmm.html" rptCfg df ["x"] "y"

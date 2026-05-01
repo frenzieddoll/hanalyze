@@ -17,7 +17,7 @@ import Viz.Scatter       (scatterWithSmoothFile, scatterMultiYFile, scatterPlotF
 import Viz.Histogram     (histogramPlotFile, histogramWithDensityFile)
 import Viz.AnalysisReport (AnalysisReportConfig (..), ModelFit (..), NamedPlot (..),
                            SmoothData (..), GPKernelFit (..), GPFitSummary (..), FitSummary (..),
-                           HBMRegSummary (..),
+                           GLMMSummary (..), HBMRegSummary (..),
                            mkFitSummary, mkGLMMSummary, writeAnalysisReport)
 import qualified Model.HBM as HBMod
 import qualified MCMC.NUTS as HBMnuts
@@ -29,7 +29,8 @@ import Model.GP           (Kernel (..), GPModel (..), GPParams, GPPredData,
                            initParamsFromData, optimizeGP, fitGP, logMarginalLikelihood,
                            gpPredData)
 
-import Stat.ModelSelect  (lmPosteriorLogLiks, glmPosteriorLogLiks, waic, loo,
+import Stat.ModelSelect  (lmPosteriorLogLiks, glmPosteriorLogLiks,
+                          lmePosteriorLogLiks, waic, loo,
                           WAICResult (..), LOOResult (..))
 
 import Data.Char          (isDigit)
@@ -372,11 +373,41 @@ runMixedModel cfg df fmt xCol1 yCol grpCol = do
           putStrLn $ "Predicted vs Actual: " ++ pvsaPath
           openInBrowser pvsaPath
 
-      -- ── HTML レポート生成 ──────────────���─────────────────────��─────────────
+      -- ── HTML レポート生成 ──────────────────────────────────────────────────
       case cfgReport cfg of
         Nothing   -> return ()
         Just path -> do
-          let summary = mkGLMMSummary dist lnk colDegs grpCol Nothing gr
+          -- WAIC/LOO 計算 (--waic 指定時、Gaussian/Identity の LME のみ)
+          mModelSel <-
+            if cfgWAIC cfg && dist == Gaussian && lnk == Identity
+            then case (getNumeric yCol df, getText grpCol df) of
+                   (Just yVec, Just gVec) -> do
+                     let xVecPairs = [ (xv, deg) | (xc, deg) <- colDegs
+                                     , Just xv <- [getNumeric xc df] ]
+                     case xVecPairs of
+                       [] -> return Nothing
+                       _  -> do
+                         let dm = multiPolyDesignMatrix xVecPairs
+                             y  = LA.fromList (V.toList yVec)
+                             groupLabels = V.toList (glmmGroups gr)
+                             blupsList   = V.toList (glmmBLUPs gr)
+                             blupMap     = zip groupLabels blupsList
+                             offsets     = [ maybe 0 id (lookup g blupMap)
+                                           | g <- V.toList gVec ]
+                             nSamples    = 1000
+                         gen <- createSystemRandom
+                         llMat <- lmePosteriorLogLiks
+                                    dm y offsets (glmmFixed gr) nSamples gen
+                         let w = waic llMat
+                             l = loo  llMat
+                         printf "  WAIC=%.2f  LOO=%.2f  p_WAIC=%.2f  k̂>0.7: %d件 (条件付き)\n"
+                                (waicValue w) (looValue l) (waicPwaic w) (looKHatBad l)
+                         return (Just (w, l))
+                   _ -> return Nothing
+            else return Nothing
+
+          let baseSummary = mkGLMMSummary dist lnk colDegs grpCol Nothing gr
+              summary     = baseSummary { gsModelSelect = mModelSel }
               rptCfg  = AnalysisReportConfig
                           { arcTitle = T.pack modelKind
                                      <> ": " <> yCol <> " | " <> grpCol }

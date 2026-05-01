@@ -117,21 +117,22 @@ mkFitSummary fam lnk colDegs mSmooth res = FitSummary
 
 -- | GLMM / LME のサマリー。
 data GLMMSummary = GLMMSummary
-  { gsModelType  :: Text
-  , gsFormula    :: Text
-  , gsFixed      :: [(Text, Double)]
-  , gsR2         :: Double
-  , gsR2Label    :: Text
-  , gsGroupCol   :: Text
-  , gsRandVar    :: Double
-  , gsResidVar   :: Double
-  , gsICC        :: Double
-  , gsBLUPs      :: [(Text, Double)]
-  , gsFitted     :: [Double]
-  , gsResiduals  :: [Double]
-  , gsLinkName   :: Text
-  , gsXColDegs   :: [(Text, Int)]
-  , gsSmoothData :: Maybe (Text, SmoothData)
+  { gsModelType    :: Text
+  , gsFormula      :: Text
+  , gsFixed        :: [(Text, Double)]
+  , gsR2           :: Double
+  , gsR2Label      :: Text
+  , gsGroupCol     :: Text
+  , gsRandVar      :: Double
+  , gsResidVar     :: Double
+  , gsICC          :: Double
+  , gsBLUPs        :: [(Text, Double)]
+  , gsFitted       :: [Double]
+  , gsResiduals    :: [Double]
+  , gsLinkName     :: Text
+  , gsXColDegs     :: [(Text, Int)]
+  , gsSmoothData   :: Maybe (Text, SmoothData)
+  , gsModelSelect  :: Maybe (WAICResult, LOOResult)  -- ^ 条件付き WAIC/LOO (--waic 時)
   } deriving (Show)
 
 mkGLMMSummary
@@ -143,21 +144,22 @@ mkGLMMSummary
   -> GLMMResult
   -> GLMMSummary
 mkGLMMSummary fam lnk colDegs grpCol mSmooth gr = GLMMSummary
-  { gsModelType  = glmmTypeLabel fam lnk
-  , gsFormula    = formulaText colDegs <> " | " <> grpCol
-  , gsFixed      = zip (coeffLabels colDegs) (coeffList (glmmFixed gr))
-  , gsR2         = rSquared (glmmFixed gr)
-  , gsR2Label    = r2Label fam
-  , gsGroupCol   = grpCol
-  , gsRandVar    = glmmRandVar gr
-  , gsResidVar   = glmmResidVar gr
-  , gsICC        = glmmICC gr
-  , gsBLUPs      = zip (V.toList (glmmGroups gr)) (V.toList (glmmBLUPs gr))
-  , gsFitted     = fittedList (glmmFixed gr)
-  , gsResiduals  = LA.toList (residuals (glmmFixed gr))
-  , gsLinkName   = linkName lnk
-  , gsXColDegs   = colDegs
-  , gsSmoothData = mSmooth
+  { gsModelType    = glmmTypeLabel fam lnk
+  , gsFormula      = formulaText colDegs <> " | " <> grpCol
+  , gsFixed        = zip (coeffLabels colDegs) (coeffList (glmmFixed gr))
+  , gsR2           = rSquared (glmmFixed gr)
+  , gsR2Label      = r2Label fam
+  , gsGroupCol     = grpCol
+  , gsRandVar      = glmmRandVar gr
+  , gsResidVar     = glmmResidVar gr
+  , gsICC          = glmmICC gr
+  , gsBLUPs        = zip (V.toList (glmmGroups gr)) (V.toList (glmmBLUPs gr))
+  , gsFitted       = fittedList (glmmFixed gr)
+  , gsResiduals    = LA.toList (residuals (glmmFixed gr))
+  , gsLinkName     = linkName lnk
+  , gsXColDegs     = colDegs
+  , gsSmoothData   = mSmooth
+  , gsModelSelect  = Nothing
   }
 
 -- | GP の1カーネルのフィット結果。
@@ -414,7 +416,7 @@ modelSection (HBMFit hs) =
     , "  </div>"
     , "</section>"
     ]
-modelSection (MixFit gs) = T.unlines
+modelSection (MixFit gs) = T.unlines $
   [ "<section id=\"sec-model\">"
   , "  <h2><span class=\"sec-icon\">&#9878;</span> 2. モデル概要</h2>"
   , "  <div class=\"info-grid\">"
@@ -429,7 +431,8 @@ modelSection (MixFit gs) = T.unlines
   , statBox "σ² (残差)" (fmt4 (gsResidVar gs)) False
   , statBox "ICC" (fmt4 (gsICC gs)) False
   , "  </div>"
-  , "  <h3>BLUP (グループ別ランダム切片)</h3>"
+  ] ++ waicLooSection (gsModelSelect gs) ++
+  [ "  <h3>BLUP (グループ別ランダム切片)</h3>"
   , blupTable (gsBLUPs gs)
   , "</section>"
   ]
@@ -1954,6 +1957,7 @@ compareWaicSection entries =
 waicLooOf :: ModelFit -> Maybe (WAICResult, LOOResult)
 waicLooOf (RegFit fs) = fsModelSelect fs
 waicLooOf (HBMFit hs) = fsModelSelect (hbmsFit hs)
+waicLooOf (MixFit gs) = gsModelSelect gs
 waicLooOf _           = Nothing
 
 -- | オーバーレイ用の Vega-Lite spec を組み立てる JS (data URL 経由)
