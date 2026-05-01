@@ -25,9 +25,10 @@ library
     Model.GLM
     Model.GLMM
     Model.HBM
-    Model.MCMC
-    Model.HMC
-    Model.NUTS
+    MCMC.Core
+    MCMC.MH
+    MCMC.HMC
+    MCMC.NUTS
     Stat.Distribution
     Stat.MCMC
     Viz.MCMC
@@ -35,6 +36,7 @@ library
     Viz.Report
   build-depends:
       base                 >= 4.14 && < 5
+    , async                >= 2.2  && < 2.3
     , bytestring           >= 0.11 && < 0.13
     , cassava              >= 0.5  && < 0.6
     , containers           >= 0.6  && < 0.8
@@ -94,6 +96,19 @@ executable test-hmc-nuts
     , text       >= 1.2  && < 2.2
     , containers >= 0.6  && < 0.8
     , mwc-random >= 0.15 && < 0.16
+
+executable bench-mcmc
+  import:           warnings
+  main-is:          BenchMCMC.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , text       >= 1.2  && < 2.2
+    , containers >= 0.6  && < 0.8
+    , mwc-random >= 0.15 && < 0.16
+    , time       >= 1.9  && < 1.15
 
 test-suite hanalyze-test
   import:           warnings

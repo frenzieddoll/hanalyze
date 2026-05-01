@@ -4,18 +4,9 @@
 -- Hoffman & Gelman (2014) Algorithm 3 を実装。
 -- 制約付きパラメータは unconstrained 空間で自動変換されます（HMC と同様）。
 -- 自動的に最適な軌道長を決定するため、HMC のステップ数チューニングが不要。
---
--- 使い方:
---
--- @
--- cfg   = defaultNUTSConfig { nutsStepSize = 0.05 }
--- chain <- nuts myModel cfg initParams gen
--- @
-module Model.NUTS
-  ( -- * Configuration
-    NUTSConfig (..)
+module MCMC.NUTS
+  ( NUTSConfig (..)
   , defaultNUTSConfig
-    -- * Sampler
   , nuts
   , nutsChains
   ) where
@@ -29,11 +20,10 @@ import System.Random.MWC (GenIO, uniform)
 import System.Random.MWC.Distributions (standard)
 
 import Model.HBM (Model, Params, sampleNames, getTransforms)
-import Model.MCMC (Chain (..))
-import Model.HMC
+import MCMC.Core (Chain (..), spawnGen)
+import MCMC.HMC
   ( kinetic, leapfrogWith, gradUU, logJointU
   , paramsToVec, toUnconstrainedParams, fromUnconstrainedParams
-  , spawnGen
   )
 import Stat.Distribution (Transform)
 
@@ -65,7 +55,7 @@ data NUTSTree = NUTSTree
   , ntRMinus  :: [Double]
   , ntThPlus  :: Params
   , ntRPlus   :: [Double]
-  , ntThPrime :: Params   -- unconstrained 空間での候補点
+  , ntThPrime :: Params
   , ntN       :: Int
   , ntS       :: Bool
   }
@@ -73,7 +63,6 @@ data NUTSTree = NUTSTree
 deltaMax :: Double
 deltaMax = 1000.0
 
--- | U-Turn 判定 (unconstrained 空間での位置差に対して適用)
 uTurn :: [Text] -> Params -> [Double] -> Params -> [Double] -> Bool
 uTurn names thMinus rMinus thPlus rPlus =
   let delta     = zipWith (-) (paramsToVec names thPlus) (paramsToVec names thMinus)
@@ -84,17 +73,16 @@ uTurn names thMinus rMinus thPlus rPlus =
 -- 再帰的ツリービルダー
 -- ---------------------------------------------------------------------------
 
--- | 全ての Params は unconstrained 空間。
 buildTree
   :: Model a
   -> Map.Map Text Transform
   -> [Text]
-  -> Double    -- ^ ε
-  -> Params    -- ^ 現在の位置 (unconstrained)
-  -> [Double]  -- ^ 現在の運動量
-  -> Double    -- ^ log u (スライス変数)
-  -> Int       -- ^ 方向 (+1 / -1)
-  -> Int       -- ^ 木の深さ
+  -> Double
+  -> Params
+  -> [Double]
+  -> Double
+  -> Int
+  -> Int
   -> GenIO
   -> IO NUTSTree
 buildTree model transforms names eps theta r logU dir depth gen
@@ -140,16 +128,12 @@ buildTree model transforms names eps theta r logU dir depth gen
 -- NUTS サンプラー
 -- ---------------------------------------------------------------------------
 
--- | NUTS を実行する。
--- 制約付きパラメータは unconstrained 空間で自動処理されます。
--- 初期値・返却サンプルはいずれも constrained 空間です。
 nuts :: Model a -> NUTSConfig -> Params -> GenIO -> IO Chain
 nuts model cfg initC gen = do
   let names      = sampleNames model
       transforms = getTransforms model
       initU      = toUnconstrainedParams transforms initC
       total      = nutsBurnIn cfg + nutsIterations cfg
-
 
   samplesRef  <- newIORef []
   acceptedRef <- newIORef (0 :: Int)
@@ -215,9 +199,7 @@ nuts model cfg initC gen = do
     , chainTotal    = total
     }
 
--- | NUTS を numChains 本並列実行する。
--- 各チェーンは独立した乱数列を使い、OS スレッドで並列実行される
--- (+RTS -N で CPU 並列になる)。
+-- | NUTS を numChains 本並列実行する (+RTS -N で CPU 並列)。
 nutsChains :: Model a -> NUTSConfig -> Int -> Params -> GenIO -> IO [Chain]
 nutsChains model cfg numChains initC baseGen = do
   gens <- replicateM numChains (spawnGen baseGen)

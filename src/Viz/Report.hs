@@ -26,13 +26,12 @@ import Data.Text.Encoding (decodeUtf8)
 import Graphics.Vega.VegaLite (fromVL)
 
 import Model.HBM        (ModelGraph)
-import Model.MCMC       (Chain (..), posteriorMean, posteriorSD, posteriorQuantile)
-import Stat.MCMC        (ess)
-import Viz.MCMC         (mcmcDiagnostics, autocorrPlot, pairScatter)
+import MCMC.Core        (Chain (..), chainVals, posteriorMean, posteriorSD, posteriorQuantile)
+import Stat.MCMC        (ess, rhat)
+import Viz.MCMC         (mcmcDiagnostics, mcmcDiagnosticsMulti, autocorrPlot, pairScatter)
 import Viz.ModelGraph   (buildMermaid)
 import Viz.Core         (defaultConfig)
 
-import qualified Data.Map.Strict as Map
 
 -- ---------------------------------------------------------------------------
 -- Report data type
@@ -41,7 +40,8 @@ import qualified Data.Map.Strict as Map
 data MCMCReport = MCMCReport
   { reportTitle    :: Text
   , reportGraph    :: Maybe ModelGraph
-  , reportChain    :: Chain
+  , reportChain    :: Chain        -- ^ 代表チェーン (autocorr / pair に使用)
+  , reportChains   :: [Chain]      -- ^ 並列チェーン全体 (空なら単一チェーンモード)
   , reportParams   :: [Text]
   , reportPairs    :: [(Text, Text)]
   , reportMaxLag   :: Int
@@ -52,6 +52,7 @@ defaultReport title_ chain params = MCMCReport
   { reportTitle  = title_
   , reportGraph  = Nothing
   , reportChain  = chain
+  , reportChains = []
   , reportParams = params
   , reportPairs  = []
   , reportMaxLag = 40
@@ -215,13 +216,22 @@ summarySection rpt =
 
       get f p = maybe 0.0 id (f p chain)
 
+      multiChain = length (reportChains rpt) > 1
+      allChains  = if multiChain then reportChains rpt else [chain]
+
       tableRow p =
         let mean_ = get posteriorMean p
             sd_   = get posteriorSD   p
             lo    = get (posteriorQuantile 0.025) p
             hi    = get (posteriorQuantile 0.975) p
-            ess_  = ess [ v | ps <- chainSamples chain
-                             , Just v <- [Map.lookup p ps] ]
+            ess_  = ess (chainVals p chain)
+            rhatV = rhat (map (chainVals p) allChains)
+            rhatCell
+              | multiChain = case rhatV of
+                  Nothing -> "<td>—</td>"
+                  Just r  -> "<td style=\"color:" <> (if r < 1.01 then "#2a9d2a" else "#cc2222") <> "\">"
+                             <> fmt4 r <> "</td>"
+              | otherwise  = ""
         in T.unlines
           [ "      <tr>"
           , "        <td>" <> p <> "</td>"
@@ -230,8 +240,10 @@ summarySection rpt =
           , "        <td>" <> fmt4 lo    <> "</td>"
           , "        <td>" <> fmt4 hi    <> "</td>"
           , "        <td>" <> T.pack (show (round ess_ :: Int)) <> "</td>"
+          , rhatCell
           , "      </tr>"
           ]
+      rhatHeader = if multiChain then "<th>R-hat</th>" else ""
 
   in T.unlines
     [ "<section id=\"sec-summary\">"
@@ -239,13 +251,13 @@ summarySection rpt =
     , "  <div class=\"stat-grid\">"
     , statBox "Samples"         (T.pack (show nSamp))
     , statBox "Acceptance"      (fmtD 1 (rate * 100) <> "%")
-    , statBox "Accepted"        (T.pack (show acc))
+    , statBox "Chains"          (T.pack (show (length allChains)))
     , statBox "Total Proposals" (T.pack (show total))
     , "  </div>"
     , "  <table>"
     , "    <thead><tr>"
     , "      <th>Parameter</th><th>Mean</th><th>SD</th>"
-    , "      <th>2.5%</th><th>97.5%</th><th>ESS</th>"
+    , "      <th>2.5%</th><th>97.5%</th><th>ESS</th>" <> rhatHeader
     , "    </tr></thead>"
     , "    <tbody>"
     , T.concat (map tableRow params)
@@ -275,12 +287,18 @@ showFFloat4 v
 
 diagnosticsSection :: MCMCReport -> Text
 diagnosticsSection rpt =
-  let cfg   = defaultConfig (reportTitle rpt <> " — Diagnostics")
-      spec  = mcmcDiagnostics cfg (reportParams rpt) (reportChain rpt)
-      json  = decodeUtf8 . toStrict . encode . fromVL $ spec
+  let cfg    = defaultConfig (reportTitle rpt <> " — Diagnostics")
+      chains = reportChains rpt
+      spec   = if length chains > 1
+               then mcmcDiagnosticsMulti cfg (reportParams rpt) chains
+               else mcmcDiagnostics      cfg (reportParams rpt) (reportChain rpt)
+      json   = decodeUtf8 . toStrict . encode . fromVL $ spec
+      subtitle = if length chains > 1
+                 then " (" <> T.pack (show (length chains)) <> " chains)"
+                 else ""
   in T.unlines
     [ "<section id=\"sec-diagnostics\">"
-    , "  <h2>MCMC Diagnostics (Posterior &amp; Trace)</h2>"
+    , "  <h2>MCMC Diagnostics (KDE &amp; Trace)" <> subtitle <> "</h2>"
     , "  <div class=\"vl-wrap\">"
     , "    <div id=\"vl-diagnostics\"></div>"
     , "  </div>"

@@ -7,6 +7,12 @@ module Stat.Distribution
   , supportRange
   , distributionName
   , parseDistribution
+    -- * 制約変換 (HMC/NUTS の unconstrained サンプリング用)
+  , Transform (..)
+  , distTransform
+  , toUnconstrained
+  , fromUnconstrained
+  , logJacobianAdj
   ) where
 
 import Data.Text (Text)
@@ -130,6 +136,50 @@ parseDistribution name params = case map toLowerAscii name of
     _                      -> Left "Beta requires params: alpha beta (both >0)"
   other -> Left ("Unknown distribution: " ++ other
               ++ ". Available: normal, binomial, poisson, exponential, gamma, beta")
+
+-- ---------------------------------------------------------------------------
+-- 制約変換
+-- ---------------------------------------------------------------------------
+
+-- | パラメータの定義域に対応する変換の種類。
+-- HMC/NUTS は unconstrained 空間 (ℝ) でリープフロッグを行い、
+-- サンプルを constrained 空間に戻すことで支持域外への逸脱を防ぐ。
+data Transform
+  = UnconstrainedT   -- ^ (-∞, ∞): 恒等変換 (Normal の平均など)
+  | PositiveT        -- ^ (0, ∞): 対数変換  θ = exp(u)
+  | UnitIntervalT    -- ^ (0, 1): ロジット変換 θ = sigmoid(u)
+  deriving (Show, Eq)
+
+-- | 事前分布の型から変換を自動判定する。
+distTransform :: Distribution -> Transform
+distTransform (Normal _ _)    = UnconstrainedT
+distTransform (Exponential _) = PositiveT
+distTransform (Gamma _ _)     = PositiveT
+distTransform (Beta _ _)      = UnitIntervalT
+distTransform (Binomial _ _)  = UnconstrainedT  -- 離散; HMC/NUTS 非推奨
+distTransform (Poisson _)     = UnconstrainedT  -- 離散; HMC/NUTS 非推奨
+
+-- | θ_constrained → u_unconstrained
+toUnconstrained :: Transform -> Double -> Double
+toUnconstrained UnconstrainedT x = x
+toUnconstrained PositiveT      x = log x
+toUnconstrained UnitIntervalT  x = log x - log (1 - x)  -- logit
+
+-- | u_unconstrained → θ_constrained
+fromUnconstrained :: Transform -> Double -> Double
+fromUnconstrained UnconstrainedT u = u
+fromUnconstrained PositiveT      u = exp u
+fromUnconstrained UnitIntervalT  u = 1 / (1 + exp (-u))  -- sigmoid
+
+-- | log |dθ/du|: logJoint に加算する Jacobian 補正項。
+-- PositiveT:     θ = exp(u)          → log|J| = u
+-- UnitIntervalT: θ = sigmoid(u)      → log|J| = log σ(u) + log(1-σ(u))
+logJacobianAdj :: Transform -> Double -> Double
+logJacobianAdj UnconstrainedT _ = 0
+logJacobianAdj PositiveT      u = u
+logJacobianAdj UnitIntervalT  u =
+  let s = 1 / (1 + exp (-u))
+  in log s + log (1 - s)
 
 toLowerAscii :: Char -> Char
 toLowerAscii c

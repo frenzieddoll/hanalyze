@@ -1,24 +1,30 @@
 {-# LANGUAGE OverloadedStrings #-}
+-- | MCMC 診断プロット (Vega-Lite)。
+--
+-- 単一チェーン版と多チェーン版を提供します。
+-- 事後分布は KDE (Kernel Density Estimation) で描画します。
 module Viz.MCMC
-  ( -- * Standalone plots
+  ( -- * 単一チェーン
     tracePlot,       tracePlotFile
   , posteriorPlot,   posteriorPlotFile
   , autocorrPlot,    autocorrPlotFile
   , pairScatter,     pairScatterFile
-    -- * Combined diagnostic view (PyMC-style)
   , mcmcDiagnostics, mcmcDiagnosticsFile
+    -- * 多チェーン (PyMC スタイル)
+  , multiTracePlot,        multiTracePlotFile
+  , mcmcDiagnosticsMulti,  mcmcDiagnosticsMultiFile
   ) where
 
-import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import qualified Data.Text as T
 import Graphics.Vega.VegaLite
 
-import Model.MCMC (Chain (..))
-import Stat.MCMC  (autocorr, hdi)
+import MCMC.Core  (Chain (..), chainVals)
+import Stat.MCMC  (autocorr, hdi, kde)
 import Viz.Core   (PlotConfig (..), OutputFormat, writeSpec)
 
 -- ---------------------------------------------------------------------------
--- Trace plot  (one line per parameter, stacked vertically)
+-- Trace plot (単一チェーン)
 -- ---------------------------------------------------------------------------
 
 tracePlot :: PlotConfig -> [Text] -> Chain -> VegaLite
@@ -29,7 +35,7 @@ tracePlot cfg names chain = toVegaLite
   where
     n = length (chainSamples chain)
     tracePanel pname =
-      let vals = extractVals pname chain
+      let vals = chainVals pname chain
       in asSpec
           [ dataFromColumns []
               . dataColumn "iter"  (Numbers (map fromIntegral [1 .. n]))
@@ -51,13 +57,30 @@ tracePlotFile fmt path cfg names chain =
   writeSpec fmt path (tracePlot cfg names chain)
 
 -- ---------------------------------------------------------------------------
--- Posterior histogram  (one panel per parameter, with 94% HDI rule)
+-- Multi-chain trace plot
+-- ---------------------------------------------------------------------------
+
+-- | 複数チェーンのトレースプロット。チェーンごとに色分けして重ねて表示。
+multiTracePlot :: PlotConfig -> [Text] -> [Chain] -> VegaLite
+multiTracePlot cfg names chains = toVegaLite
+  [ title (plotTitle cfg) []
+  , vConcat (map (mkMultiTracePanel' (plotWidth cfg) 90) names)
+  ]
+  where
+    mkMultiTracePanel' w h pname = mkMultiTracePanel pname w h chains
+
+multiTracePlotFile :: OutputFormat -> FilePath -> PlotConfig -> [Text] -> [Chain] -> IO ()
+multiTracePlotFile fmt path cfg names chains =
+  writeSpec fmt path (multiTracePlot cfg names chains)
+
+-- ---------------------------------------------------------------------------
+-- Posterior KDE plot (単一チェーン)
 -- ---------------------------------------------------------------------------
 
 posteriorPlot :: PlotConfig -> [Text] -> Chain -> VegaLite
 posteriorPlot cfg names chain = toVegaLite
   [ title (plotTitle cfg) []
-  , vConcat (map (\n -> mkHistPanel n (plotWidth cfg) 110 chain) names)
+  , vConcat (map (\n -> mkKdePanel n (plotWidth cfg) 110 chain) names)
   ]
 
 posteriorPlotFile :: OutputFormat -> FilePath -> PlotConfig -> [Text] -> Chain -> IO ()
@@ -65,7 +88,7 @@ posteriorPlotFile fmt path cfg names chain =
   writeSpec fmt path (posteriorPlot cfg names chain)
 
 -- ---------------------------------------------------------------------------
--- Autocorrelation plot  (bar chart per parameter, stacked vertically)
+-- Autocorrelation plot
 -- ---------------------------------------------------------------------------
 
 autocorrPlot :: PlotConfig -> Int -> [Text] -> Chain -> VegaLite
@@ -75,7 +98,7 @@ autocorrPlot cfg maxLag names chain = toVegaLite
   ]
   where
     acfPanel pname =
-      let acData         = autocorr maxLag (extractVals pname chain)
+      let acData         = autocorr maxLag (chainVals pname chain)
           (lags, acVals) = unzip acData
       in asSpec
           [ dataFromColumns []
@@ -99,15 +122,15 @@ autocorrPlotFile fmt path cfg maxLag names chain =
   writeSpec fmt path (autocorrPlot cfg maxLag names chain)
 
 -- ---------------------------------------------------------------------------
--- Pair scatter  (joint posterior of two parameters)
+-- Pair scatter
 -- ---------------------------------------------------------------------------
 
 pairScatter :: PlotConfig -> Text -> Text -> Chain -> VegaLite
 pairScatter cfg xName yName chain = toVegaLite
   [ title (plotTitle cfg) []
   , dataFromColumns []
-      . dataColumn xName (Numbers (extractVals xName chain))
-      . dataColumn yName (Numbers (extractVals yName chain))
+      . dataColumn xName (Numbers (chainVals xName chain))
+      . dataColumn yName (Numbers (chainVals yName chain))
       $ []
   , mark Point [MOpacity 0.25, MSize 15, MColor "#4C72B0"]
   , encoding
@@ -123,7 +146,7 @@ pairScatterFile fmt path cfg xName yName chain =
   writeSpec fmt path (pairScatter cfg xName yName chain)
 
 -- ---------------------------------------------------------------------------
--- Combined PyMC-style diagnostics  [posterior hist | trace] per parameter
+-- Combined PyMC-style: [KDE | trace]  (単一チェーン)
 -- ---------------------------------------------------------------------------
 
 mcmcDiagnostics :: PlotConfig -> [Text] -> Chain -> VegaLite
@@ -134,7 +157,7 @@ mcmcDiagnostics cfg names chain = toVegaLite
   where
     n = length (chainSamples chain)
     rowFor pname = asSpec
-      [ hConcat [ mkHistPanel  pname 220 80 chain
+      [ hConcat [ mkKdePanel   pname 220 80 chain
                 , mkTracePanel pname 420 80 n chain ] ]
 
 mcmcDiagnosticsFile :: OutputFormat -> FilePath -> PlotConfig -> [Text] -> Chain -> IO ()
@@ -142,34 +165,75 @@ mcmcDiagnosticsFile fmt path cfg names chain =
   writeSpec fmt path (mcmcDiagnostics cfg names chain)
 
 -- ---------------------------------------------------------------------------
--- Internal builders (return VLSpec for use in vConcat / hConcat)
+-- Combined PyMC-style: [KDE | multi-trace]  (多チェーン)
 -- ---------------------------------------------------------------------------
 
--- | Histogram with 94% HDI rule overlay.
-mkHistPanel :: Text -> Double -> Double -> Chain -> VLSpec
-mkHistPanel pname w h chain =
-  let vals     = extractVals pname chain
-      step     = binStep vals
-      (lo, hi) = hdi 0.94 vals
+-- | 複数チェーンの PyMC スタイル診断プロット。
+-- 左: 全チェーン合算の KDE。右: チェーン別色分けトレース。
+mcmcDiagnosticsMulti :: PlotConfig -> [Text] -> [Chain] -> VegaLite
+mcmcDiagnosticsMulti cfg names chains = toVegaLite
+  [ title (plotTitle cfg) []
+  , vConcat (map rowFor names)
+  ]
+  where
+    combined pname = concatMap (chainVals pname) chains
+    rowFor pname = asSpec
+      [ hConcat
+          [ mkKdePanelFrom pname 220 80 (combined pname)
+          , mkMultiTracePanel pname 420 80 chains
+          ]
+      ]
+
+mcmcDiagnosticsMultiFile :: OutputFormat -> FilePath -> PlotConfig -> [Text] -> [Chain] -> IO ()
+mcmcDiagnosticsMultiFile fmt path cfg names chains =
+  writeSpec fmt path (mcmcDiagnosticsMulti cfg names chains)
+
+-- ---------------------------------------------------------------------------
+-- 内部: KDE パネル
+-- ---------------------------------------------------------------------------
+
+-- | KDE 密度プロット + 94% HDI ルール。
+mkKdePanel :: Text -> Double -> Double -> Chain -> VLSpec
+mkKdePanel pname w h chain =
+  mkKdePanelFrom pname w h (chainVals pname chain)
+
+mkKdePanelFrom :: Text -> Double -> Double -> [Double] -> VLSpec
+mkKdePanelFrom pname w h vals =
+  let kdeData      = kde 200 vals
+      (xs, ys)     = unzip kdeData
+      (lo, hi)     = hdi 0.94 vals
   in asSpec
       [ layer
-          [ asSpec
-              [ dataFromColumns [] . dataColumn "x" (Numbers vals) $ []
-              , mark Bar [MColor "#4C72B0", MOpacity 0.7]
+          [ asSpec  -- KDE filled area
+              [ dataFromColumns []
+                  . dataColumn "x" (Numbers xs)
+                  . dataColumn "y" (Numbers ys)
+                  $ []
+              , mark Area [MColor "#4C72B0", MOpacity 0.3]
               , encoding
                   . position X [ PName "x", PmType Quantitative
-                               , PBin [Step step]
                                , PAxis [AxTitle pname] ]
-                  . position Y [ PAggregate Count, PmType Quantitative
-                               , PAxis [AxTitle ""] ]
+                  . position Y [ PName "y", PmType Quantitative
+                               , PAxis [AxTitle "Density", AxGrid False] ]
                   $ []
               ]
-          , asSpec  -- 94% HDI span
+          , asSpec  -- KDE line
+              [ dataFromColumns []
+                  . dataColumn "x" (Numbers xs)
+                  . dataColumn "y" (Numbers ys)
+                  $ []
+              , mark Line [MColor "#4C72B0", MStrokeWidth 2.0]
+              , encoding
+                  . position X [PName "x", PmType Quantitative]
+                  . position Y [PName "y", PmType Quantitative]
+                  $ []
+              ]
+          , asSpec  -- 94% HDI span (rule at bottom)
               [ dataFromColumns []
                   . dataColumn "lo" (Numbers [lo])
                   . dataColumn "hi" (Numbers [hi])
                   $ []
-              , mark Rule [MColor "#DD4444", MStrokeWidth 2.5]
+              , mark Rule [MColor "#DD4444", MStrokeWidth 3.5]
               , encoding
                   . position X  [PName "lo", PmType Quantitative]
                   . position X2 [PName "hi"]
@@ -179,10 +243,13 @@ mkHistPanel pname w h chain =
       , width w, height h
       ]
 
--- | Trace line plot for one parameter.
+-- ---------------------------------------------------------------------------
+-- 内部: トレースパネル (単一チェーン)
+-- ---------------------------------------------------------------------------
+
 mkTracePanel :: Text -> Double -> Double -> Int -> Chain -> VLSpec
 mkTracePanel pname w h n chain =
-  let vals = extractVals pname chain
+  let vals = chainVals pname chain
   in asSpec
       [ dataFromColumns []
           . dataColumn "iter"  (Numbers (map fromIntegral [1 .. n]))
@@ -199,18 +266,31 @@ mkTracePanel pname w h n chain =
       ]
 
 -- ---------------------------------------------------------------------------
--- Utilities
+-- 内部: 多チェーントレースパネル
 -- ---------------------------------------------------------------------------
 
-extractVals :: Text -> Chain -> [Double]
-extractVals pname chain =
-  [v | ps <- chainSamples chain, Just v <- [Map.lookup pname ps]]
-
--- Sturges' rule for bin step width.
-binStep :: [Double] -> Double
-binStep [] = 1.0
-binStep xs =
-  let lo   = minimum xs
-      hi   = maximum xs
-      bins = max 5 (ceiling (logBase 2 (fromIntegral (length xs) :: Double)) + 1 :: Int)
-  in (hi - lo) / fromIntegral bins
+mkMultiTracePanel :: Text -> Double -> Double -> [Chain] -> VLSpec
+mkMultiTracePanel pname w h chains =
+  let (iters, values, chainIds) = unzip3
+        [ (fromIntegral i :: Double, v, T.pack (show c))
+        | (c, ch) <- zip [1 :: Int ..] chains
+        , (i, v)  <- zip [1 :: Int ..] (chainVals pname ch)
+        ]
+  in asSpec
+      [ dataFromColumns []
+          . dataColumn "iter"  (Numbers  iters)
+          . dataColumn "value" (Numbers  values)
+          . dataColumn "chain" (Strings  chainIds)
+          $ []
+      , mark Line [MStrokeWidth 1.0, MOpacity 0.7]
+      , encoding
+          . position X [ PName "iter",  PmType Quantitative
+                       , PAxis [AxTitle "Iteration"] ]
+          . position Y [ PName "value", PmType Quantitative
+                       , PAxis [AxTitle ""] ]
+          . color [ MName "chain", MmType Nominal
+                  , MScale [SScheme "tableau10" []]
+                  , MLegend [LTitle "Chain"] ]
+          $ []
+      , width w, height h
+      ]

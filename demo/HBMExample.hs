@@ -17,7 +17,9 @@ import qualified Data.Text.IO    as TIO
 import Text.Printf (printf)
 
 import Model.HBM
-import Model.MCMC
+import MCMC.Core
+import MCMC.MH   (MCMCConfig (..), defaultMCMCConfig, metropolis)
+import MCMC.NUTS (nutsChains, NUTSConfig (..), defaultNUTSConfig)
 import Stat.Distribution
 import Stat.MCMC  (ess)
 import Viz.Core      (openInBrowser)
@@ -151,8 +153,8 @@ main = do
   mapM_ (printSummary chain) names
   putStrLn ""
 
-  -- ── 7. Single consolidated HTML report ────────────────────────────────
-  putStrLn "=== Generating consolidated report ==="
+  -- ── 7. Single-chain consolidated HTML report ─────────────────────────
+  putStrLn "=== Generating consolidated report (single chain) ==="
 
   let report = (defaultReport "School Model — MCMC Report" chain names)
                  { reportGraph  = Just graph
@@ -161,7 +163,33 @@ main = do
                  }
   renderReport "mcmc_report.html" report
   putStrLn "  mcmc_report.html  (model graph + summary + diagnostics + autocorr + pair plots)"
-  openInBrowser "mcmc_report.html"
+
+  -- ── 8. 4-chain NUTS + multi-chain report ──────────────────────────────
+  putStrLn ""
+  putStrLn "=== 4-chain NUTS (parallel) ==="
+  let nutsCfg = defaultNUTSConfig
+        { nutsIterations = 2000
+        , nutsBurnIn     = 500
+        , nutsStepSize   = 0.08
+        }
+  multiChains <- nutsChains m nutsCfg 4 trueParams gen
+  mapM_ (\(i, ch) ->
+    printf "  chain %d: accept=%.3f  mu_mean=%.2f  tau_mean=%.2f\n"
+      (i :: Int)
+      (acceptanceRate ch)
+      (maybe 0 id $ posteriorMean "mu"  ch)
+      (maybe 0 id $ posteriorMean "tau" ch)
+    ) (zip [1..] multiChains)
+
+  let multiReport = (defaultReport "School Model — 4-chain NUTS" (head multiChains) names)
+                      { reportGraph  = Just graph
+                      , reportChains = multiChains
+                      , reportPairs  = [("mu", "tau")]
+                      , reportMaxLag = 40
+                      }
+  renderReport "mcmc_report_multi.html" multiReport
+  putStrLn "  mcmc_report_multi.html  (4-chain KDE + colored traces + R-hat)"
+  openInBrowser "mcmc_report_multi.html"
 
 -- ---------------------------------------------------------------------------
 -- Helpers
@@ -187,7 +215,6 @@ printSummary chain pname =
       sd_   = get posteriorSD
       lo    = get (posteriorQuantile 0.025)
       hi    = get (posteriorQuantile 0.975)
-      ess_  = ess [v | ps <- chainSamples chain
-                      , Just v <- [Map.lookup pname ps]]
+      ess_  = ess (chainVals pname chain)
   in printf "  %-12s  %8.3f  %8.3f  %8.3f  %8.3f  %8.0f\n"
        (T.unpack pname) mean_ sd_ lo hi ess_

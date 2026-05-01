@@ -3,6 +3,8 @@ module Stat.MCMC
   ( autocorr
   , hdi
   , ess
+  , rhat
+  , kde
   ) where
 
 import Data.List (minimumBy, sort)
@@ -58,3 +60,55 @@ ess xs
     n = length xs
     pairSums (a : b : rest) = (a + b) : pairSums rest
     pairSums _              = []
+
+-- | Split-R-hat 収束診断 (Vehtari et al. 2021)。
+-- 各チェーンを前後半に分割して 2M 本のサブチェーンを作り、
+-- チェーン間分散 B とチェーン内分散 W から R-hat を計算する。
+-- R-hat < 1.01 で収束とみなすのが一般的。
+-- 引数: チェーンごとのサンプルリスト（同一パラメータ）。
+-- チェーン数 < 2 またはサンプル < 4 の場合は Nothing。
+rhat :: [[Double]] -> Maybe Double
+rhat chains
+  | m < 2 || n < 4 = Nothing
+  | w == 0         = Nothing
+  | otherwise      = Just (sqrt (varPlus / w))
+  where
+    allVals   = filter (not . null) chains
+    splitOne vs = let half = length vs `div` 2
+                  in [take half vs, drop half vs]
+    subchains = concatMap splitOne allVals
+    m         = length subchains
+    n         = minimum (map length subchains)
+    trimmed   = map (take n) subchains
+    mean_ vs  = sum vs / fromIntegral (length vs)
+    chainMeans = map mean_ trimmed
+    grandMean  = mean_ chainMeans
+    b = fromIntegral n / fromIntegral (m - 1)
+        * sum (map (\mu -> (mu - grandMean) ^ (2 :: Int)) chainMeans)
+    chainVars = map (\vs -> let mu = mean_ vs
+                            in sum (map (\x -> (x - mu) ^ (2 :: Int)) vs)
+                               / fromIntegral (n - 1)) trimmed
+    w       = mean_ chainVars
+    varPlus = fromIntegral (n - 1) / fromIntegral n * w + b / fromIntegral n
+
+-- | Kernel Density Estimation (ガウスカーネル、Silverman バンド幅)。
+-- nPoints 点の (x, 密度) ペアを返す。サンプル数 < 2 の場合は空リスト。
+-- 評価範囲: [min - 3σ, max + 3σ]
+kde :: Int -> [Double] -> [(Double, Double)]
+kde nPoints xs
+  | length xs < 2 = []
+  | sig <= 0      = []
+  | otherwise     = [(x, density x) | x <- grid]
+  where
+    n    = length xs
+    mu   = sum xs / fromIntegral n
+    var  = sum (map (\x -> (x - mu) ^ (2 :: Int)) xs) / fromIntegral (n - 1)
+    sig  = sqrt var
+    h    = 1.06 * sig * fromIntegral n ** (-0.2)   -- Silverman's rule
+    lo   = minimum xs - 3 * sig
+    hi   = maximum xs + 3 * sig
+    step = (hi - lo) / fromIntegral (nPoints - 1)
+    grid = [lo + fromIntegral i * step | i <- [0 .. nPoints - 1 :: Int]]
+    kernel u = exp (-0.5 * u * u) / sqrt (2 * pi)
+    density x = sum [kernel ((x - xi) / h) | xi <- xs]
+                / (fromIntegral n * h)

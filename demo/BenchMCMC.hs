@@ -22,10 +22,10 @@ import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
 import Model.HBM
-import Model.MCMC
-  (metropolis, Chain (..), MCMCConfig (..), acceptanceRate, posteriorMean)
-import Model.HMC  (hmc,  HMCConfig (..),  defaultHMCConfig)
-import Model.NUTS (nuts, NUTSConfig (..), defaultNUTSConfig)
+import MCMC.Core (Chain (..), chainVals, acceptanceRate, posteriorMean)
+import MCMC.MH   (metropolis, MCMCConfig (..))
+import MCMC.HMC  (hmc,  HMCConfig (..),  defaultHMCConfig)
+import MCMC.NUTS (nuts, NUTSConfig (..), defaultNUTSConfig)
 import Stat.Distribution
 import Stat.MCMC (ess)
 
@@ -129,7 +129,7 @@ nutsHard = defaultNUTSConfig
 
 getESS :: T.Text -> Chain -> Double
 getESS name ch =
-  ess [v | ps <- chainSamples ch, Just v <- [Map.lookup name ps]]
+  ess (chainVals name ch)
 
 timed :: IO a -> IO (a, Double)
 timed action = do
