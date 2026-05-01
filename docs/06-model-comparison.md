@@ -1,5 +1,11 @@
 # モデル比較 (Stat.ModelSelect)
 
+> ## ⚠️ サンプラー API 移行のお知らせ
+>
+> 本ページのコード例は旧 `MCMC.NUTS.nuts` を使っていますが、これは廃止予定です。
+> 新規コードは `MCMC.NUTSP.nutsP` (HBMP + AD 勾配) を使ってください。
+> `Stat.ModelSelect` の API 自体に変更はありません。
+
 ## 概要
 
 `Stat.ModelSelect` は MCMC チェーンを使った情報量規準によるモデル比較を提供します。

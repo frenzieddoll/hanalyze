@@ -188,3 +188,88 @@ perObsLogLiks :: Model a -> Params -> [Double]
 perObsLogLiks (schoolModel schoolData) ps
 -- [-2.1, -2.3, -1.8, -2.0, ...]  (全観測値分)
 ```
+
+---
+
+## Model.HBMP への移行 (推奨)
+
+### なぜ移行するのか
+
+旧 `Model.HBM` は継続が `Double` に固定されているため、AD 勾配や依存追跡ができません。
+`Model.HBMP` は継続を多相化することで以下を実現します:
+
+- **AD 勾配** — 数値微分 (相対誤差 ~10⁻⁹) ではなく machine epsilon 精度 (~10⁻¹⁰)
+- **依存グラフの自動抽出** — `extractDeps` で Mermaid DAG 用のノード/エッジを自動生成 (手動指定不要)
+- **多相解釈** — 同一モデルから構造検査・log joint・勾配・依存追跡を取り出せる
+
+### 構文の差分
+
+```haskell
+-- 旧 (Model.HBM)
+import Model.HBM
+import Stat.Distribution (Distribution (..))
+
+normalModel :: [Double] -> Model ()
+normalModel ys = do
+  mu    <- sample "mu"    (Normal 0 10)
+  sigma <- sample "sigma" (Exponential 1)
+  observe "y" (Normal mu sigma) ys
+
+-- 新 (Model.HBMP)
+import Model.HBMP   -- Distribution (..), sample, observe を提供
+                    -- (Stat.Distribution は不要)
+
+normalModel :: [Double] -> ModelP ()
+normalModel ys = do
+  mu    <- sample "mu"    (Normal 0 10)
+  sigma <- sample "sigma" (Exponential 1)
+  observe "y" (Normal mu sigma) ys
+```
+
+差分は **2 点だけ**:
+1. `import Model.HBM` → `import Model.HBMP` (Distribution は HBMP から取得)
+2. 型注釈 `Model ()` → `ModelP ()` (`type ModelP r = forall a. (Floating a, Ord a) => Model a r`)
+
+### サンプラーの差分
+
+| 用途 | 旧 (廃止予定) | 新 (推奨) |
+|------|--------------|----------|
+| HMC | `MCMC.HMC.hmc` | `MCMC.HMCP.hmcP` |
+| HMC 並列チェーン | `MCMC.HMC.hmcChains` | `MCMC.HMCP.hmcPChains` |
+| NUTS | `MCMC.NUTS.nuts` | `MCMC.NUTSP.nutsP` |
+| NUTS 並列チェーン | `MCMC.NUTS.nutsChains` | `MCMC.NUTSP.nutsPChains` |
+| Gibbs+MH | `MCMC.Gibbs.gibbsMH` | `MCMC.GibbsP.gibbsMHP` |
+| 共役自動検出 | `MCMC.Gibbs.gibbsFromModel` | `MCMC.GibbsP.gibbsFromModelP` |
+
+シグネチャはほぼ同じです (引数順・`HMCConfig`/`NUTSConfig`/`GibbsConfig` も共通)。
+
+### HBMP 専用機能
+
+```haskell
+-- AD 勾配 (machine epsilon 精度)
+gradAD :: ModelP r -> [Text] -> [Double] -> [Double]
+
+let g = gradAD (normalModel obs) ["mu", "sigma"] [1.5, 1.2]
+-- [-15.235, -2.41]   (∇log p(θ,y) at θ=[1.5, 1.2])
+
+-- 依存グラフの自動抽出 (Track 型による伝播)
+extractDeps :: ModelP r -> [Node]   -- Node に nodeDeps :: Set Text を含む
+
+let nodes = extractDeps (hierModel obs)
+-- [Node "tau"   LatentN ...                           {}        -- 依存なし
+-- ,Node "mu"    LatentN ...                           {"tau"}   -- tau に依存
+-- ,Node "sigma" LatentN ...                           {}
+-- ,Node "y"     (ObservedN 10) ...                    {"mu","sigma"}
+-- ]
+-- → そのまま Mermaid DAG 生成に使える (手動エッジ指定不要)
+```
+
+### 次回バージョンの統合計画
+
+次回メジャーバージョンで以下のリネームを行います:
+
+- `Model.HBM` を削除し、`Model.HBMP` を `Model.HBM` にリネーム
+- `MCMC.{HMC,NUTS,Gibbs}P` を `MCMC.{HMC,NUTS,Gibbs}` に統合 (旧 API は削除)
+
+そのため新規コードは最初から `Model.HBMP` で書くことを強く推奨します。
+リネーム時の作業は import 文 1 行と型注釈 1 箇所の置換のみになります。

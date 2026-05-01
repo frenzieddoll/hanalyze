@@ -33,7 +33,7 @@ CLI ツールとしても、Haskell ライブラリとしても使えます。
 | ページ | 内容 |
 |---|---|
 | [クイックスタート](docs/01-quickstart.md) | ビルド・最小ワークフロー・全機能早見表 |
-| [確率的プログラミング DSL](docs/02-probabilistic-model.md) | Model.HBM のパターン集 (Beta-Binomial / 階層正規 / モデルグラフ) |
+| [確率的プログラミング DSL](docs/02-probabilistic-model.md) | Model.HBM / **HBMP 移行ガイド** (Beta-Binomial / 階層正規 / モデルグラフ) |
 | [MCMC サンプラー選択ガイド](docs/03-mcmc-samplers.md) | MH / HMC / NUTS の使い分け・チューニング・R-hat |
 | [Gibbs サンプリング](docs/04-gibbs.md) | 共役アップデート・ESS/s 比較 |
 | [変分推論 (ADVI)](docs/05-variational-inference.md) | VI vs NUTS・ELBO 収束・平均場の限界 |
