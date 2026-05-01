@@ -991,11 +991,38 @@ columnDataJS df xCols yCol = T.unlines
       Just v  -> jsStr c <> ": " <> jsDoubleArray (V.toList v)
     entries = T.intercalate "," (filter (not . T.null) (map entry allCols))
 
--- ヒストグラムを動的に描画する JS
+-- ヒストグラムを動的に描画する JS。
+--
+-- ビン数は **Freedman-Diaconis 公式** で自動選択する:
+--   bin width = 2 · IQR / n^(1/3)
+--   k         = ceil((max − min) / bin width)
+-- ロバスト (外れ値に強く) かつ N に応じて適切な粒度になる。
+-- IQR=0 の場合は Sturges 公式 (k = ceil(log₂ n + 1)) にフォールバック。
+-- いずれにせよ最終的に [5, 25] にクランプして極端を避ける。
 histogramInitJS :: [Text] -> Text
 histogramInitJS cols = T.unlines $
   [ "(function() {"
+  , "  function chooseBins(vals) {"
+  , "    const n = vals.length;"
+  , "    if (n < 4) return 5;"
+  , "    const sorted = [...vals].sort((a,b) => a-b);"
+  , "    const q1   = sorted[Math.floor(n * 0.25)];"
+  , "    const q3   = sorted[Math.floor(n * 0.75)];"
+  , "    const iqr  = q3 - q1;"
+  , "    const range = sorted[n-1] - sorted[0];"
+  , "    let k;"
+  , "    if (iqr > 0 && range > 0) {"
+  , "      // Freedman-Diaconis"
+  , "      const w = 2 * iqr / Math.pow(n, 1/3);"
+  , "      k = Math.ceil(range / w);"
+  , "    } else {"
+  , "      // Sturges (フォールバック)"
+  , "      k = Math.ceil(Math.log2(Math.max(2, n)) + 1);"
+  , "    }"
+  , "    return Math.max(5, Math.min(25, k));"
+  , "  }"
   , "  function makeHistSpec(col, vals) {"
+  , "    const k = chooseBins(vals);"
   , "    return {"
   , "      '$schema': 'https://vega.github.io/schema/vega-lite/v5.json',"
   , "      width: 240, height: 130,"
@@ -1003,7 +1030,7 @@ histogramInitJS cols = T.unlines $
   , "      data: {values: vals.map(v => ({v}))},"
   , "      mark: {type:'bar',color:'#4472c4',cornerRadiusEnd:2,tooltip:true},"
   , "      encoding: {"
-  , "        x: {field:'v', bin:{maxbins:20}, type:'quantitative', axis:{title:col, labelFontSize:10}},"
+  , "        x: {field:'v', bin:{maxbins:k, nice:true}, type:'quantitative', axis:{title:col, labelFontSize:10}},"
   , "        y: {aggregate:'count', type:'quantitative', axis:{title:'度数', labelFontSize:10}}"
   , "      }"
   , "    };"
