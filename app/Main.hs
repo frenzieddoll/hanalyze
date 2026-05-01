@@ -5,28 +5,41 @@ import DataIO.CSV        (loadAuto)
 import DataFrame.Core    (DataFrame, columnNames, numRows, getNumeric, getText)
 import Model.Core        (Band (..), rSquared, coeffList, fittedList)
 import Model.GLM         (Family (..), parseFamily, LinkFn (..), parseLink, canonicalLink,
-                          fitGLMWithSmooth)
+                          fitGLMWithSmooth, fitGLMFull)
 import Model.GLMM        (GLMMResult (..), fitLMEDataFrame, fitGLMMDataFrame)
+import Model.LM          (SmoothFit (..), multiPolyDesignMatrix)
 import Stat.Distribution (Distribution, parseDistribution)
 import Viz.Core          (defaultConfig, openInBrowser, OutputFormat (..), parseFormat)
 import Viz.Scatter       (scatterWithSmoothFile, scatterMultiYFile, scatterPlotFile,
-                          scatterWithGroupsFile, predictedVsActualFile)
+                          scatterWithGroupsFile, predictedVsActualFile,
+                          predictedVsActual, scatterWithGroups)
 import Viz.Histogram     (histogramPlotFile, histogramWithDensityFile)
+import Viz.AnalysisReport (AnalysisReportConfig (..), ModelFit (..), NamedPlot (..),
+                           SmoothData (..), GPKernelFit (..), GPFitSummary (..), FitSummary (..),
+                           mkFitSummary, mkGLMMSummary, writeAnalysisReport)
+import Model.GP           (Kernel (..), GPModel (..), GPParams, GPPredData,
+                           initParamsFromData, optimizeGP, fitGP, logMarginalLikelihood,
+                           gpPredData)
+
+import Stat.ModelSelect  (lmPosteriorLogLiks, glmPosteriorLogLiks, waic, loo,
+                          WAICResult (..), LOOResult (..))
 
 import Data.Char          (isDigit)
 import Data.List          (intercalate)
 import qualified Data.Text    as T
 import qualified Data.Text.IO as TIO
 import qualified Data.Vector  as V
+import qualified Numeric.LinearAlgebra as LA
 import System.Environment (getArgs)
 import System.IO          (hPutStrLn, stderr)
+import System.Random.MWC  (createSystemRandom)
 import Text.Printf        (printf)
 
 -- ---------------------------------------------------------------------------
 -- CLI types
 -- ---------------------------------------------------------------------------
 
-data ModelType = LM | GLM | NoReg deriving (Show, Eq)
+data ModelType = LM | GLM | NoReg | GP deriving (Show, Eq)
 
 data DegreeSpec
   = AllDegree Int
@@ -46,6 +59,8 @@ data Config = Config
   , cfgGroup    :: Maybe T.Text      -- grouping column → LME / GLMM
   , cfgHistMode :: Bool              -- --hist: draw histogram of x column
   , cfgFitDist  :: Maybe Distribution  -- --fit DIST PARAMS
+  , cfgReport   :: Maybe FilePath    -- --report [FILE]: generate HTML report
+  , cfgWAIC     :: Bool              -- --waic: compute WAIC/LOO-CV
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
@@ -54,12 +69,13 @@ data Config = Config
 
 usageMsg :: String
 usageMsg = unlines
-  [ "Usage: hanalyze <file> <xcols> <ycols> [LM|GLM|NoReg] [options]"
+  [ "Usage: hanalyze <file> <xcols> <ycols> [LM|GLM|NoReg|GP] [options]"
   , ""
   , "  <file>    CSV/TSV/SSV file (auto-detected from extension)"
   , "  <xcols>   x column name(s); quote multiple: \"x1 x2\""
   , "  <ycols>   y column name(s); quote multiple: \"y1 y2\" (multi-y → scatter only)"
-  , "  LM|GLM|NoReg  model type (default: LM)"
+  , "  LM|GLM|NoReg|GP  model type (default: LM)"
+  , "    GP: Gaussian Process regression (single x/y only); compares RBF, Matérn5/2, Periodic"
   , ""
   , "Options:"
   , "  -d, --dist DIST    distribution: gaussian|binomial|poisson  (default: gaussian)"
@@ -69,6 +85,8 @@ usageMsg = unlines
   , "  --pi [LEVEL]       show prediction interval (Gaussian only; default level: 0.95)"
   , "  --format FORMAT    output format: html|png|svg               (default: html)"
   , "  --group COL        grouping column → LM+group: LME, GLM+group: GLMM"
+  , "  --report [FILE]    generate HTML analysis report (default: report.html)"
+  , "  --waic             compute WAIC and LOO-CV and show in report (requires --report)"
   , ""
   , "Degree specification:"
   , "  N                  all columns get degree N"
@@ -93,7 +111,7 @@ parseArgs (file : xColsStr : yColsStr : rest) = do
     then Left "Error: ycols must not be empty"
     else do
       (model, rest1)                                              <- parseModelType rest
-      (mDist, mLink, degSpec, band, fmt, mGrp, hist, mFit, rest2) <- parseOptions rest1
+      (mDist, mLink, degSpec, band, fmt, mGrp, hist, mFit, mRpt, waicF, rest2) <- parseOptions rest1
       if not (null rest2)
         then Left ("Unexpected argument(s): " ++ unwords rest2)
         else do
@@ -112,6 +130,8 @@ parseArgs (file : xColsStr : yColsStr : rest) = do
             , cfgGroup    = mGrp
             , cfgHistMode = hist
             , cfgFitDist  = mFit
+            , cfgReport   = mRpt
+            , cfgWAIC     = waicF
             }
 parseArgs _ = Left usageMsg
 
@@ -119,25 +139,26 @@ parseModelType :: [String] -> Either String (ModelType, [String])
 parseModelType ("LM"    : rest) = Right (LM,    rest)
 parseModelType ("GLM"   : rest) = Right (GLM,   rest)
 parseModelType ("NoReg" : rest) = Right (NoReg, rest)
+parseModelType ("GP"    : rest) = Right (GP,    rest)
 parseModelType rest              = Right (LM,    rest)
 
 parseOptions :: [String]
              -> Either String (Maybe Family, Maybe LinkFn, DegreeSpec, Band, OutputFormat,
-                               Maybe T.Text, Bool, Maybe Distribution, [String])
-parseOptions = go Nothing Nothing (AllDegree 1) NoBand HTML Nothing False Nothing
+                               Maybe T.Text, Bool, Maybe Distribution, Maybe FilePath, Bool, [String])
+parseOptions = go Nothing Nothing (AllDegree 1) NoBand HTML Nothing False Nothing Nothing False
   where
-    go mDist mLink deg band fmt mGrp hist mFit [] =
-      Right (mDist, mLink, deg, band, fmt, mGrp, hist, mFit, [])
+    go mDist mLink deg band fmt mGrp hist mFit mRpt waicF [] =
+      Right (mDist, mLink, deg, band, fmt, mGrp, hist, mFit, mRpt, waicF, [])
 
-    go mDist mLink deg band fmt mGrp hist mFit (flag : rest)
+    go mDist mLink deg band fmt mGrp hist mFit mRpt waicF (flag : rest)
       | flag `elem` ["-d", "--dist"] = case rest of
           (v:rest') -> do fam <- parseFamily v
-                          go (Just fam) mLink deg band fmt mGrp hist mFit rest'
+                          go (Just fam) mLink deg band fmt mGrp hist mFit mRpt waicF rest'
           []        -> Left "Error: -d/--dist requires an argument"
 
       | flag `elem` ["-l", "--link"] = case rest of
           (v:rest') -> do lnk <- parseLink v
-                          go mDist (Just lnk) deg band fmt mGrp hist mFit rest'
+                          go mDist (Just lnk) deg band fmt mGrp hist mFit mRpt waicF rest'
           []        -> Left "Error: -l/--link requires an argument"
 
       | flag == "--degree" = do
@@ -145,27 +166,27 @@ parseOptions = go Nothing Nothing (AllDegree 1) NoBand HTML Nothing False Nothin
           if null degTokens
             then Left "--degree requires a specification (e.g., 2 or -1 2 -2 3)"
             else do degSpec <- parseDegreeSpec degTokens
-                    go mDist mLink degSpec band fmt mGrp hist mFit remaining
+                    go mDist mLink degSpec band fmt mGrp hist mFit mRpt waicF remaining
 
       | flag == "--ci" =
           let (level, rest') = consumeLevel 0.95 rest
-          in go mDist mLink deg (CI level) fmt mGrp hist mFit rest'
+          in go mDist mLink deg (CI level) fmt mGrp hist mFit mRpt waicF rest'
 
       | flag == "--pi" =
           let (level, rest') = consumeLevel 0.95 rest
-          in go mDist mLink deg (PI level) fmt mGrp hist mFit rest'
+          in go mDist mLink deg (PI level) fmt mGrp hist mFit mRpt waicF rest'
 
       | flag `elem` ["-f", "--format"] = case rest of
           (v:rest') -> do f <- parseFormat v
-                          go mDist mLink deg band f mGrp hist mFit rest'
+                          go mDist mLink deg band f mGrp hist mFit mRpt waicF rest'
           []        -> Left "Error: -f/--format requires an argument"
 
       | flag == "--group" = case rest of
-          (v:rest') -> go mDist mLink deg band fmt (Just (T.pack v)) hist mFit rest'
+          (v:rest') -> go mDist mLink deg band fmt (Just (T.pack v)) hist mFit mRpt waicF rest'
           []        -> Left "Error: --group requires a column name"
 
       | flag == "--hist" =
-          go mDist mLink deg band fmt mGrp True mFit rest
+          go mDist mLink deg band fmt mGrp True mFit mRpt waicF rest
 
       | flag == "--fit" = case rest of
           (name:rest') ->
@@ -173,10 +194,18 @@ parseOptions = go Nothing Nothing (AllDegree 1) NoBand HTML Nothing False Nothin
                 params = map read paramStrs :: [Double]
             in case parseDistribution name params of
                  Left err -> Left ("--fit: " ++ err)
-                 Right d  -> go mDist mLink deg band fmt mGrp hist (Just d) rest''
+                 Right d  -> go mDist mLink deg band fmt mGrp hist (Just d) mRpt waicF rest''
           [] -> Left "--fit requires a distribution name (e.g. --fit normal 0 1)"
 
-      | otherwise = Right (mDist, mLink, deg, band, fmt, mGrp, hist, mFit, flag : rest)
+      | flag == "--report" = case rest of
+          (v:rest') | not (null v) && head v /= '-' ->
+                        go mDist mLink deg band fmt mGrp hist mFit (Just v) waicF rest'
+          _           -> go mDist mLink deg band fmt mGrp hist mFit (Just "report.html") waicF rest
+
+      | flag == "--waic" =
+          go mDist mLink deg band fmt mGrp hist mFit mRpt True rest
+
+      | otherwise = Right (mDist, mLink, deg, band, fmt, mGrp, hist, mFit, mRpt, waicF, flag : rest)
 
 isNumericToken :: String -> Bool
 isNumericToken s = case (reads s :: [(Double, String)]) of
@@ -235,6 +264,11 @@ runConfig cfg = do
     (PI _, fam, GLM) | fam /= Gaussian ->
       hPutStrLn stderr "Warning: PI is only exact for Gaussian. Using CI with same level."
     _ -> return ()
+  -- Warn: GP only supports single x/y
+  case cfgModel cfg of
+    GP | length (cfgXCols cfg) /= 1 || length (cfgYCols cfg) /= 1 ->
+      hPutStrLn stderr "Warning: GP requires exactly one x column and one y column."
+    _ -> return ()
 
   result <- loadAuto (cfgFile cfg)
   case result of
@@ -250,7 +284,9 @@ runConfig cfg = do
       -- ── Histogram mode ────────────────────────────────────────────────────
       if cfgHistMode cfg
         then runHistogram cfg df fmt xCol1
-        else runAnalysis cfg df fmt xCol1
+        else case cfgModel cfg of
+               GP -> runGP cfg df xCol1
+               _  -> runAnalysis cfg df fmt xCol1
 
 -- ---------------------------------------------------------------------------
 -- Mixed model (LME / GLMM)
@@ -262,12 +298,12 @@ runMixedModel cfg df fmt xCol1 yCol grpCol = do
       (dist, lnk) = case cfgModel cfg of
         LM    -> (Gaussian, Identity)
         GLM   -> (cfgDist cfg, cfgLink cfg)
-        NoReg -> (Gaussian, Identity)  -- unreachable
+        _     -> (Gaussian, Identity)  -- unreachable (NoReg/GP)
 
   let mResult = case cfgModel cfg of
         LM    -> fitLMEDataFrame  colDegs grpCol yCol df
         GLM   -> fitGLMMDataFrame dist lnk colDegs grpCol yCol df
-        NoReg -> Nothing
+        _     -> Nothing
 
   case mResult of
     Nothing -> putStrLn "\nError: column(s) not found or not numeric/text"
@@ -325,6 +361,36 @@ runMixedModel cfg df fmt xCol1 yCol grpCol = do
           putStrLn $ "Predicted vs Actual: " ++ pvsaPath
           openInBrowser pvsaPath
 
+      -- ── HTML レポート生成 ──────────────���─────────────────────��─────────────
+      case cfgReport cfg of
+        Nothing   -> return ()
+        Just path -> do
+          let summary = mkGLMMSummary dist lnk colDegs grpCol Nothing gr
+              rptCfg  = AnalysisReportConfig
+                          { arcTitle = T.pack modelKind
+                                     <> ": " <> yCol <> " | " <> grpCol }
+              -- Vega-Lite specs
+              scatterPlots =
+                case (length (cfgXCols cfg), getNumeric xCol1 df, getNumeric yCol df, getText grpCol df) of
+                  (1, Just xVec, Just yVec, Just gVec) ->
+                    let ptData  = zip3 (V.toList gVec) (V.toList xVec) (V.toList yVec)
+                        lnData  = computeGroupLines lnk cs colDegs (glmmGroups gr) (glmmBLUPs gr) xVec
+                        scCfg   = defaultConfig (xCol1 <> " vs " <> yCol <> suffix)
+                    in [NamedPlot "vl-scatter" "グループ別散布図"
+                         (scatterWithGroups scCfg xCol1 yCol ptData lnData)]
+                  _ -> []
+              pvsaPlots =
+                case getNumeric yCol df of
+                  Just yVec ->
+                    let pvCfg = defaultConfig ("Predicted vs Actual" <> suffix)
+                    in [NamedPlot "vl-pvsa" "Predicted vs Actual"
+                         (predictedVsActual pvCfg (V.toList yVec) (fittedList (glmmFixed gr)))]
+                  Nothing -> []
+              plots = scatterPlots ++ pvsaPlots
+          writeAnalysisReport path rptCfg df (cfgXCols cfg) yCol (MixFit summary) plots
+          putStrLn $ "Report:              " ++ path
+          openInBrowser path
+
 -- ---------------------------------------------------------------------------
 -- GLM regression (no random effects)
 -- ---------------------------------------------------------------------------
@@ -335,7 +401,7 @@ runRegression cfg df fmt xCol1 yCol = do
       (dist, lnk) = case cfgModel cfg of
         LM  -> (Gaussian, Identity)
         GLM -> (cfgDist cfg, cfgLink cfg)
-        NoReg -> (Gaussian, Identity)  -- unreachable
+        _   -> (Gaussian, Identity)  -- unreachable (NoReg/GP)
 
   case fitGLMWithSmooth dist lnk colDegs (cfgBand cfg) 200 df yCol of
     Nothing -> putStrLn "\nError: column(s) not found or not numeric"
@@ -375,6 +441,64 @@ runRegression cfg df fmt xCol1 yCol = do
           putStrLn $ "Predicted vs Actual: " ++ pvsaPath
           openInBrowser pvsaPath
 
+      -- ── HTML レポート生成 ──────────────────────────────────────────────────
+      case cfgReport cfg of
+        Nothing   -> return ()
+        Just path -> do
+          let -- SmoothFit → SmoothData 変換 (単回帰のみ)
+              mSmoothData = case (mSmooth, cfgXCols cfg) of
+                (Just sf, [xc]) -> Just (xc, SmoothData
+                  { sdXs      = sfX sf
+                  , sdYs      = sfFit sf
+                  , sdLower   = sfLower sf
+                  , sdUpper   = sfUpper sf
+                  , sdHasBand = sfHasBand sf })
+                _               -> Nothing
+              baseSummary = mkFitSummary dist lnk colDegs mSmoothData res
+              rptCfg  = AnalysisReportConfig
+                          { arcTitle = T.pack (modelLabel dist lnk)
+                                     <> ": " <> yCol <> " ~ "
+                                     <> T.pack (modelFormula colDegs) }
+              pvsaPlots = case getNumeric yCol df of
+                Just yVec ->
+                  let pvCfg = defaultConfig ("Predicted vs Actual" <> titleSuffix)
+                  in [NamedPlot "vl-pvsa" "Predicted vs Actual"
+                       (predictedVsActual pvCfg (V.toList yVec) (fittedList res))]
+                Nothing -> []
+
+          -- ── WAIC/LOO-CV 計算 (--waic が指定された場合) ────────────────────
+          mModelSelect <-
+            if not (cfgWAIC cfg)
+            then return Nothing
+            else case getNumeric yCol df of
+              Nothing   -> return Nothing
+              Just yVec -> do
+                let xVecPairs = [ (xv, deg)
+                                | (xc, deg) <- colDegs
+                                , Just xv   <- [getNumeric xc df] ]
+                case xVecPairs of
+                  [] -> return Nothing
+                  _  -> do
+                    let dm = multiPolyDesignMatrix xVecPairs
+                        y  = LA.fromList (V.toList yVec)
+                        nSamples = 1000 :: Int
+                    gen <- createSystemRandom
+                    llMat <- case dist of
+                      Gaussian -> lmPosteriorLogLiks dm y res nSamples gen
+                      _        -> do
+                        let (_, fisherInv) = fitGLMFull dist lnk dm y
+                        glmPosteriorLogLiks dist lnk dm y fisherInv res nSamples gen
+                    let w = waic llMat
+                        l = loo  llMat
+                    printf "  WAIC=%.2f  LOO=%.2f  p_WAIC=%.2f  k̂>0.7: %d件\n"
+                           (waicValue w) (looValue l) (waicPwaic w) (looKHatBad l)
+                    return (Just (w, l))
+
+          let summary = baseSummary { fsModelSelect = mModelSelect }
+          writeAnalysisReport path rptCfg df (cfgXCols cfg) yCol (RegFit summary) pvsaPlots
+          putStrLn $ "Report:              " ++ path
+          openInBrowser path
+
 -- ---------------------------------------------------------------------------
 -- Regression / scatter dispatch (non-histogram path)
 -- ---------------------------------------------------------------------------
@@ -382,7 +506,9 @@ runRegression cfg df fmt xCol1 yCol = do
 runAnalysis :: Config -> DataFrame -> OutputFormat -> T.Text -> IO ()
 runAnalysis cfg df fmt xCol1 = do
   let yCols    = cfgYCols cfg
-      effModel = if length yCols > 1 then NoReg else cfgModel cfg
+      effModel = if length yCols > 1 then NoReg
+                 else if cfgModel cfg == GP then NoReg  -- GP はここに来ない
+                 else cfgModel cfg
 
   case effModel of
     -- ── No regression: scatter plot only ──────────────────────────────────
@@ -415,6 +541,66 @@ runAnalysis cfg df fmt xCol1 = do
         scatterMultiYFile fmt scatterPath scatterCfg df xCol1 yCols
         putStrLn $ "Scatter plot (multi-y): " ++ scatterPath
         openInBrowser scatterPath
+
+-- ---------------------------------------------------------------------------
+-- GP regression
+-- ---------------------------------------------------------------------------
+
+runGP :: Config -> DataFrame -> T.Text -> IO ()
+runGP cfg df xCol1 = do
+  let yCol = head (cfgYCols cfg)
+  case (getNumeric xCol1 df, getNumeric yCol df) of
+    (Just xVec, Just yVec) -> do
+      let xs = V.toList xVec
+          ys = V.toList yVec
+          p0 = initParamsFromData xs ys
+
+      putStrLn "\nFitting GP kernels (this may take a moment)..."
+
+      let kernelDefs = [(RBF, "RBF"), (Matern52, "Mat\xe9rn5/2"), (Periodic, "Periodic")]
+          xMin = V.minimum xVec
+          xMax = V.maximum xVec
+          span' = max 1e-8 (xMax - xMin)
+          testXs = [ xMin + fromIntegral i * span' / 199 | i <- [0 .. 199 :: Int] ]
+
+      kfits <- mapM (\(ker, lbl) -> do
+        putStrLn $ "  Optimizing " ++ lbl ++ " ..."
+        let params = optimizeGP ker xs ys p0
+            model  = GPModel ker params
+            res    = fitGP model xs ys testXs
+            lml    = logMarginalLikelihood xs ys ker params
+            pd     = gpPredData model xs ys
+        return GPKernelFit
+          { gkLabel    = T.pack lbl
+          , gkKernel   = ker
+          , gkParams   = params
+          , gkResult   = res
+          , gkLML      = lml
+          , gkPredData = pd
+          }
+        ) kernelDefs
+
+      -- LML 降順にソート
+      let sorted = foldr insertByLML [] kfits
+          insertByLML x [] = [x]
+          insertByLML x (y:ys') = if gkLML x >= gkLML y then x:y:ys'
+                                  else y : insertByLML x ys'
+          gfSummary = GPFitSummary
+            { gfKernelFits = sorted
+            , gfXCol       = xCol1
+            , gfYCol       = yCol
+            , gfTrainXs    = xs
+            , gfTrainYs    = ys
+            }
+          path   = maybe "report.html" id (cfgReport cfg)
+          rptCfg = AnalysisReportConfig
+            { arcTitle = "GP Regression: " <> xCol1 <> " \x2192 " <> yCol }
+
+      writeAnalysisReport path rptCfg df [xCol1] yCol (GPFit gfSummary) []
+      putStrLn $ "Report: " ++ path
+      openInBrowser path
+
+    _ -> putStrLn "\nError: column(s) not found or not numeric"
 
 -- ---------------------------------------------------------------------------
 -- Histogram mode

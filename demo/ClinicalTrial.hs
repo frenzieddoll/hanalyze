@@ -25,7 +25,7 @@ import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
 import Model.HBM
-import MCMC.Core  (Chain (..), chainVals, acceptanceRate, posteriorMean, posteriorSD
+import MCMC.Core  (Chain (..), chainVals, acceptanceRate, posteriorMean
                   , posteriorQuantile)
 import MCMC.NUTS  (NUTSConfig (..), defaultNUTSConfig, nutsChains)
 import Stat.Distribution (Distribution (..))

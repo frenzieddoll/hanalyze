@@ -37,6 +37,7 @@ module Model.HBM
   , perObsLogLiks
   , sampleNames
   , getTransforms
+  , runObserveDists
     -- * モデルグラフ (可視化用)
   , ModelGraph (..)
   , buildModelGraph
@@ -231,6 +232,17 @@ getTransforms model = Map.fromList
   | ni <- collectNodes model
   , case nodeRole ni of { Latent -> True; _ -> False }
   ]
+
+-- | モデルを実行し、各 Observe ノードの (名前, 分布, データ) を収集する。
+-- 潜在変数は 'Params' マップから取得し、ない場合は 0 を使う。
+-- 分布がパラメータに依存する場合、そのパラメータ値で評価した分布が返る。
+-- Gibbs 共役検出 (MCMC.Gibbs) で使用。
+runObserveDists :: Model a -> Params -> [(Text, Distribution, [Double])]
+runObserveDists (Pure _) _ = []
+runObserveDists (Free (Sample n _ k)) ps =
+  runObserveDists (k (Map.findWithDefault 0 n ps)) ps
+runObserveDists (Free (Observe n d xs next)) ps =
+  (n, d, xs) : runObserveDists next ps
 
 isNegInf :: Double -> Bool
 isNegInf x = isInfinite x && x < 0

@@ -28,6 +28,7 @@ import Graphics.Vega.VegaLite (fromVL)
 import Model.HBM        (ModelGraph)
 import MCMC.Core        (Chain (..), chainVals, posteriorMean, posteriorSD, posteriorQuantile)
 import Stat.MCMC        (ess, rhat)
+import Viz.Assets       (vegaJS, vegaLiteJS, vegaEmbedJS)
 import Viz.MCMC         (mcmcDiagnostics, mcmcDiagnosticsMulti, autocorrPlot, pairScatter)
 import Viz.ModelGraph   (buildMermaid)
 import Viz.Core         (defaultConfig)
@@ -78,9 +79,9 @@ buildHtml rpt = T.unlines $
   , "  <meta charset=\"utf-8\">"
   , "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
   , "  <title>" <> reportTitle rpt <> "</title>"
-  , "  <script src=\"https://cdn.jsdelivr.net/npm/vega@5\"></script>"
-  , "  <script src=\"https://cdn.jsdelivr.net/npm/vega-lite@5\"></script>"
-  , "  <script src=\"https://cdn.jsdelivr.net/npm/vega-embed@6\"></script>"
+  , "  <script>" <> vegaJS      <> "</script>"
+  , "  <script>" <> vegaLiteJS  <> "</script>"
+  , "  <script>" <> vegaEmbedJS <> "</script>"
   , "  <script src=\"https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js\"></script>"
   , "  <style>"
   , css

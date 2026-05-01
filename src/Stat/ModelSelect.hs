@@ -25,12 +25,22 @@ module Stat.ModelSelect
   , chainLOO
     -- * ユーティリティ
   , chainLogLikMatrix
+    -- * LM / GLM 事後サンプリング (WAIC/LOO-CV 用)
+  , lmPosteriorLogLiks
+  , glmPosteriorLogLiks
   ) where
 
+import Control.Monad (replicateM)
 import Data.List (sort, transpose)
+import qualified Numeric.LinearAlgebra as LA
+import System.Random.MWC (GenIO)
+import System.Random.MWC.Distributions (normal)
 
+import Model.Core (FitResult (..))
+import Model.GLM  (Family (..), LinkFn (..))
 import Model.HBM  (Model, perObsLogLiks)
 import MCMC.Core  (Chain, chainSamples)
+import qualified Stat.Distribution as Dist
 
 -- ---------------------------------------------------------------------------
 -- 結果型
@@ -169,6 +179,87 @@ chainWAIC model = waic . chainLogLikMatrix model
 -- | チェーンから PSIS-LOO を直接計算する。
 chainLOO :: Model a -> Chain -> LOOResult
 chainLOO model = loo . chainLogLikMatrix model
+
+-- ---------------------------------------------------------------------------
+-- LM / GLM 事後サンプリング (WAIC/LOO-CV 用)
+-- ---------------------------------------------------------------------------
+
+-- | LM の事後分布 (flat prior) から対数尤度行列 (S × N) を生成する。
+--
+-- サンプリング手順:
+--   σ² ~ InvGamma((n−p)/2, RSS/2)  [RSS / χ²_{n-p} として実現]
+--   β  ~ MVN(β̂,  σ² (X'X)⁻¹)
+--   log p(y_i | β^s, σ^s) = log N(y_i; x_i·β^s, σ^s)
+lmPosteriorLogLiks
+  :: LA.Matrix Double  -- ^ 計画行列 X (n×p)
+  -> LA.Vector Double  -- ^ 応答変数 y (n)
+  -> FitResult         -- ^ OLS フィット結果
+  -> Int               -- ^ 事後サンプル数 S
+  -> GenIO
+  -> IO [[Double]]
+lmPosteriorLogLiks x y fr s gen = do
+  let n      = LA.rows x
+      p      = LA.cols x
+      df'    = n - p
+      beta0  = coefficients fr
+      rss    = LA.dot (residuals fr) (residuals fr)
+      xtxInv = LA.inv (LA.tr x LA.<> x)
+      rChol  = LA.chol (LA.trustSym xtxInv)
+      lChol  = LA.tr rChol
+  replicateM s $ do
+    chi2Vals <- replicateM df' (normal 0 1 gen)
+    let chi2  = sum (map (^(2::Int)) chi2Vals)
+        sigma = sqrt (rss / chi2)
+    zVec <- fmap LA.fromList (replicateM p (normal 0 1 gen))
+    let betaSamp = beta0 + LA.scale sigma (lChol LA.#> zVec)
+        yHat     = LA.toList (x LA.#> betaSamp)
+        ys       = LA.toList y
+    return [ logNormDensity yi yhi sigma | (yi, yhi) <- zip ys yHat ]
+
+-- | GLM の事後分布 (Laplace 近似) から対数尤度行列 (S × N) を生成する。
+-- Gaussian ファミリーには lmPosteriorLogLiks を使うこと。
+--
+-- β ~ MVN(β̂,  Fisher⁻¹)
+-- log p(y_i | β^s) = ファミリー別対数密度
+glmPosteriorLogLiks
+  :: Family
+  -> LinkFn
+  -> LA.Matrix Double  -- ^ 計画行列 X
+  -> LA.Vector Double  -- ^ 応答変数 y
+  -> LA.Matrix Double  -- ^ Fisher 情報行列の逆行列
+  -> FitResult
+  -> Int               -- ^ 事後サンプル数 S
+  -> GenIO
+  -> IO [[Double]]
+glmPosteriorLogLiks family linkFn x y fisherInv fr s gen = do
+  let p     = LA.rows fisherInv
+      beta0 = coefficients fr
+      rChol = LA.chol (LA.trustSym fisherInv)
+      lChol = LA.tr rChol
+  replicateM s $ do
+    zVec <- fmap LA.fromList (replicateM p (normal 0 1 gen))
+    let betaSamp = beta0 + lChol LA.#> zVec
+        eta      = LA.toList (x LA.#> betaSamp)
+        ys       = LA.toList y
+    return [ glmLogDensity family linkFn yi ei | (yi, ei) <- zip ys eta ]
+
+logNormDensity :: Double -> Double -> Double -> Double
+logNormDensity y mu sig
+  | sig <= 0  = -1/0
+  | otherwise = let d = (y - mu) / sig
+                in -0.5 * log (2 * pi) - log sig - 0.5 * d * d
+
+glmLogDensity :: Family -> LinkFn -> Double -> Double -> Double
+glmLogDensity family linkFn y eta =
+  let mu = case linkFn of
+              Identity -> eta
+              Log      -> exp eta
+              Logit    -> 1 / (1 + exp (-eta))
+              Sqrt     -> eta * eta
+  in case family of
+       Gaussian -> logNormDensity y mu 1.0
+       Poisson  -> Dist.logDensity (Dist.Poisson (max 1e-10 mu)) y
+       Binomial -> Dist.logDensity (Dist.Binomial 1 (max 1e-8 (min (1-1e-8) mu))) y
 
 -- ---------------------------------------------------------------------------
 -- 数値ユーティリティ

@@ -6,6 +6,7 @@ module Model.GLM
   , parseLink
   , canonicalLink
   , fitGLM
+  , fitGLMFull
   , fitGLMWithSmooth
   ) where
 
@@ -150,6 +151,12 @@ runIRLS family linkFn x y = (mkResult betaFinal, fisherInv betaFinal)
 fitGLM :: Family -> LA.Matrix Double -> LA.Vector Double -> FitResult
 fitGLM family x y = fst (runIRLS family (canonicalLink family) x y)
 
+-- | fitGLM に加えて Fisher 情報行列の逆行列 (Laplace 近似の共分散) を返す。
+-- WAIC/LOO-CV の事後サンプリングに使用。
+fitGLMFull :: Family -> LinkFn -> LA.Matrix Double -> LA.Vector Double
+           -> (FitResult, LA.Matrix Double)
+fitGLMFull = runIRLS
+
 -- | Fit GLM with specified distribution and link function.
 -- Accepts multiple x columns with per-column polynomial degrees.
 -- Returns SmoothFit only when there is exactly one x column (for scatter plot).
@@ -188,7 +195,10 @@ fitGLMWithSmooth family linkFn colDegs band nGrid df yCol = do
 
       makeSmoothFit xVec deg =
         let xLa    = LA.fromList (V.toList xVec)
-            xGrid  = V.fromList (linspace (LA.minElement xLa) (LA.maxElement xLa) nGrid)
+            xMin   = LA.minElement xLa
+            xMax   = LA.maxElement xLa
+            span'  = max 1e-8 (xMax - xMin)
+            xGrid  = V.fromList (linspace (xMin - 0.5*span') (xMax + 0.5*span') nGrid)
             dmG    = multiPolyDesignMatrix [(xGrid, deg)]
             etaG   = dmG LA.#> beta
             yGrid  = map gInv (LA.toList etaG)
