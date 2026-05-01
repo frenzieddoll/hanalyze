@@ -60,6 +60,8 @@ module Model.HBMP
   , logJoint
   , logPrior
   , logLikelihood
+  , runObserveDists
+  , priorList
     -- * AD 勾配
   , gradAD
   , gradADU
@@ -299,6 +301,29 @@ logLikelihood model params = go model 0
     go (Free (Observe _ d ys next)) acc =
       let ll = sum [ logDensityObs d y | y <- ys ]
       in go next (acc + ll)
+
+-- | 各 Observe ノードの「現在のパラメータ値で評価した分布」と観測値を取得する。
+-- Gibbs サンプラーが共役構造を検出する際に、潜在変数の現在値に対する
+-- 観測分布のパラメータを得るために使う (Double 特殊化版)。
+--
+-- 例: @y ~ Normal(mu, sigma)@ で @ps = {mu=2, sigma=0.5}@ を渡すと
+-- @[(\"y\", Normal 2 0.5, [...])]@ を返す。
+runObserveDists :: Model Double r
+                -> Map Text Double
+                -> [(Text, Distribution Double, [Double])]
+runObserveDists (Pure _) _ = []
+runObserveDists (Free (Sample n _ k)) ps =
+  runObserveDists (k (Map.findWithDefault 0 n ps)) ps
+runObserveDists (Free (Observe n d ys next)) ps =
+  (n, d, ys) : runObserveDists next ps
+
+-- | 各 Sample ノードの (名前, 事前分布) を Double 特殊化で取得する。
+-- Gibbs サンプラーの共役検出で「この潜在変数の事前は Gamma か Beta か」を
+-- 判定するために使う。継続値はプレースホルダ 0 を流す。
+priorList :: Model Double r -> [(Text, Distribution Double)]
+priorList (Pure _) = []
+priorList (Free (Sample n d k)) = (n, d) : priorList (k 0)
+priorList (Free (Observe _ _ _ next)) = priorList next
 
 -- ---------------------------------------------------------------------------
 -- AD 勾配
