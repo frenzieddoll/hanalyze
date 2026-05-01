@@ -74,7 +74,29 @@ density (Beta alpha beta_) x
       x ** (alpha - 1) * (1 - x) ** (beta_ - 1)
       / betaFn alpha beta_
 
+-- | ログ密度: Binomial と Poisson はオーバーフロー防止のため log-space で直接計算。
 logDensity :: Distribution -> Double -> Double
+logDensity (Binomial n p) x
+  | p <= 0 || p >= 1                = -1/0
+  | x < 0 || x > fromIntegral n    = -1/0
+  | otherwise =
+      let k = round x :: Int
+      in lgChoose n k
+       + fromIntegral k * log p
+       + fromIntegral (n - k) * log (1 - p)
+  where
+    lgChoose a b = sum [log (fromIntegral i) | i <- [a - b + 1 .. a]]
+                 - sum [log (fromIntegral i) | i <- [1 .. b]]
+
+logDensity (Poisson lam) x
+  | lam <= 0 = -1/0
+  | x < 0    = -1/0
+  | otherwise =
+      let k = round x :: Int
+      in fromIntegral k * log lam - lam - logFactorial k
+  where
+    logFactorial m = sum (map (log . fromIntegral) [1..m])
+
 logDensity d x =
   let p = density d x
   in if p <= 0 then -1/0 else log p
@@ -193,11 +215,13 @@ toLowerAscii c
 factorial :: Int -> Int
 factorial n = product [1 .. n]
 
+-- | 二項係数: 乗算公式 O(min(k, n-k))
 choose :: Int -> Int -> Int
 choose n k
   | k < 0 || k > n = 0
   | k == 0 || k == n = 1
-  | otherwise = choose (n-1) (k-1) + choose (n-1) k
+  | k > n - k = choose n (n - k)
+  | otherwise = foldl (\acc i -> acc * (n + 1 - i) `div` i) 1 [1..k]
 
 -- Lanczos approximation for Γ(z), z > 0
 gammaFn :: Double -> Double

@@ -1,0 +1,177 @@
+# 確率的プログラミング DSL (Model.HBM)
+
+## 概要
+
+`Model.HBM` は Free Monad で実装した軽量な確率的プログラミング DSL です。
+Stan や PyMC のように宣言的にモデルを書けます。
+内部では `logJoint`/`logPrior`/`logLikelihood` インタープリタが
+モデル構造を走査してサンプラーに渡す対数密度を計算します。
+
+---
+
+## 基本 API
+
+```haskell
+import Model.HBM
+import Stat.Distribution (Distribution (..))
+
+-- 潜在変数の宣言
+sample  :: Text -> Distribution -> Model Double
+
+-- 観測データへの条件付け (i.i.d. 仮定)
+observe :: Text -> Distribution -> [Double] -> Model ()
+```
+
+`sample` の返り値 `Double` は後続の `sample`/`observe` で依存関係を
+形成するために使えます (Stan の `~` 構文に相当)。
+
+---
+
+## 使用できる分布
+
+```haskell
+Normal      Double Double   -- Normal(μ, σ)    — 連続、実数全体
+Binomial    Int    Double   -- Binomial(n, p)  — 離散、[0,n]
+Poisson     Double          -- Poisson(λ)      — 離散、非負整数
+Exponential Double          -- Exponential(λ)  — 連続、正値のみ
+Gamma       Double Double   -- Gamma(α, β)     — 連続、正値のみ (rate=β)
+Beta        Double Double   -- Beta(α, β)      — 連続、(0,1)
+```
+
+HMC/NUTS は制約付き分布 (Exponential/Gamma → 正値、Beta → 単位区間) を
+自動的に unconstrained 空間に変換してサンプリングします。
+
+---
+
+## パターン 1: 単純な正規モデル
+
+```haskell
+-- μ ~ Normal(0, 10)
+-- y_i ~ Normal(μ, σ=2)  (σ 既知)
+normalMean :: [Double] -> Model ()
+normalMean ys = do
+  mu <- sample "mu" (Normal 0 10)
+  observe "y" (Normal mu 2) ys
+```
+
+---
+
+## パターン 2: 制約付きパラメータ (σ 未知)
+
+```haskell
+-- μ ~ Normal(0, 10)
+-- σ ~ Exponential(1)   ← HMC/NUTS が対数変換で正値を保証
+-- y_i ~ Normal(μ, σ)
+normalUnknownSigma :: [Double] -> Model ()
+normalUnknownSigma ys = do
+  mu    <- sample "mu"    (Normal 0 10)
+  sigma <- sample "sigma" (Exponential 1)
+  observe "y" (Normal mu sigma) ys
+```
+
+---
+
+## パターン 3: A/B テスト (Beta-Binomial)
+
+```haskell
+import Stat.Distribution (Distribution (..))
+
+-- p_ctrl ~ Beta(1,1),  y_ctrl ~ Binomial(50, p_ctrl), k_ctrl=18 回復
+-- p_trt  ~ Beta(1,1),  y_trt  ~ Binomial(50, p_trt),  k_trt =31 回復
+clinicalModel :: Model ()
+clinicalModel = do
+  pCtrl <- sample "p_ctrl" (Beta 1 1)
+  pTrt  <- sample "p_trt"  (Beta 1 1)
+  observe "y_ctrl" (Binomial 50 pCtrl) [18]
+  observe "y_trt"  (Binomial 50 pTrt)  [31]
+```
+
+---
+
+## パターン 4: 階層正規モデル (3校)
+
+do 記法の返り値を使って下位レベルの分布パラメータを上位から受け取れます。
+
+```haskell
+import Control.Monad (forM_)
+import qualified Data.Text as T
+
+-- μ ~ Normal(0, 100)
+-- τ ~ Exponential(0.1)
+-- θ_j ~ Normal(μ, τ)
+-- y_ij ~ Normal(θ_j, 5)
+schoolModel :: [[Double]] -> Model ()
+schoolModel groupData = do
+  mu  <- sample "mu"  (Normal 0 100)
+  tau <- sample "tau" (Exponential 0.1)
+  forM_ (zip [1::Int ..] groupData) $ \(j, ys) -> do
+    theta <- sample (T.pack ("theta_" ++ show j)) (Normal mu tau)
+    observe (T.pack ("y_" ++ show j)) (Normal theta 5) ys
+
+schoolData :: [[Double]]
+schoolData =
+  [ [72, 68, 75, 71]   -- 学校 1
+  , [85, 88, 82, 90]   -- 学校 2
+  , [61, 65, 58, 63]   -- 学校 3
+  ]
+```
+
+---
+
+## モデル構造の確認
+
+```haskell
+-- 潜在変数名リストの取得
+sampleNames :: Model a -> [Text]
+sampleNames (schoolModel schoolData)
+-- ["mu","tau","theta_1","theta_2","theta_3"]
+
+-- 対数密度の評価 (サンプラーのデバッグ用)
+logJoint      :: Model a -> Params -> Double  -- log p(θ, y)
+logPrior      :: Model a -> Params -> Double  -- log p(θ)
+logLikelihood :: Model a -> Params -> Double  -- log p(y | θ)
+```
+
+```haskell
+import qualified Data.Map.Strict as Map
+let ps = Map.fromList [("mu",73),("tau",10),
+                       ("theta_1",71.5),("theta_2",86.25),("theta_3",61.75)]
+logJoint (schoolModel schoolData) ps  -- ≈ -52.4
+```
+
+---
+
+## モデルグラフの生成
+
+Mermaid.js の DAG を HTML で可視化します。
+エッジ (`src → dst`) は DSL からは自動検出できないため、手動で指定します。
+
+```haskell
+import Viz.ModelGraph (buildModelGraph, modelGraphFile)
+import Viz.Core (OutputFormat (..))
+
+let graph = buildModelGraph model
+              [ ("mu",  "theta_1"), ("mu",  "theta_2"), ("mu",  "theta_3")
+              , ("tau", "theta_1"), ("tau", "theta_2"), ("tau", "theta_3")
+              , ("theta_1", "y_1"), ("theta_2", "y_2"), ("theta_3", "y_3")
+              ]
+modelGraphFile HTML "model.html" graph
+-- ブラウザで開くと DAG が表示される
+```
+
+---
+
+## 観測値ごとの対数尤度
+
+WAIC / LOO 計算 (`Stat.ModelSelect`) の内部で使われますが、
+直接呼び出してデバッグにも使えます。
+
+```haskell
+perObsLogLiks :: Model a -> Params -> [Double]
+-- 各 observe ノードの各観測値の logDensity を平坦リストで返す
+```
+
+```haskell
+perObsLogLiks (schoolModel schoolData) ps
+-- [-2.1, -2.3, -1.8, -2.0, ...]  (全観測値分)
+```

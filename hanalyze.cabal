@@ -20,6 +20,7 @@ library
     Viz.Core
     Viz.Scatter
     Viz.Histogram
+    Viz.Bar
     Model.Core
     Model.LM
     Model.GLM
@@ -29,8 +30,11 @@ library
     MCMC.MH
     MCMC.HMC
     MCMC.NUTS
+    MCMC.Gibbs
     Stat.Distribution
     Stat.MCMC
+    Stat.ModelSelect
+    Stat.VI
     Viz.MCMC
     Viz.ModelGraph
     Viz.Report
@@ -48,6 +52,8 @@ library
     , statistics           >= 0.16 && < 0.17
     , text                 >= 1.2  && < 2.2
     , aeson                >= 2.0  && < 2.3
+    , directory            >= 1.3  && < 1.4
+    , temporary            >= 1.3  && < 1.4
     , unordered-containers >= 0.2  && < 0.3
     , vector               >= 0.12 && < 0.14
 
@@ -109,6 +115,54 @@ executable bench-mcmc
     , containers >= 0.6  && < 0.8
     , mwc-random >= 0.15 && < 0.16
     , time       >= 1.9  && < 1.15
+
+executable vi-demo
+  import:           warnings
+  main-is:          VIDemo.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , text       >= 1.2  && < 2.2
+    , containers >= 0.6  && < 0.8
+    , mwc-random >= 0.15 && < 0.16
+    , time       >= 1.9  && < 1.15
+
+executable gibbs-demo
+  import:           warnings
+  main-is:          GibbsDemo.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , text       >= 1.2  && < 2.2
+    , containers >= 0.6  && < 0.8
+    , mwc-random >= 0.15 && < 0.16
+    , time       >= 1.9  && < 1.15
+
+executable bar-demo
+  import:           warnings
+  main-is:          BarDemo.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , text       >= 1.2  && < 2.2
+
+executable clinical-trial
+  import:           warnings
+  main-is:          ClinicalTrial.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , text       >= 1.2  && < 2.2
+    , containers >= 0.6  && < 0.8
+    , mwc-random >= 0.15 && < 0.16
 
 test-suite hanalyze-test
   import:           warnings

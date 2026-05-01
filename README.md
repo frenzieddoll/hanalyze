@@ -5,12 +5,28 @@ CLI ツールとしても、Haskell ライブラリとしても使えます。
 
 ---
 
+## ドキュメント (docs/)
+
+| ページ | 内容 |
+|---|---|
+| [クイックスタート](docs/01-quickstart.md) | ビルド・最小ワークフロー・全機能早見表 |
+| [確率的プログラミング DSL](docs/02-probabilistic-model.md) | Model.HBM のパターン集 (Beta-Binomial / 階層正規 / モデルグラフ) |
+| [MCMC サンプラー選択ガイド](docs/03-mcmc-samplers.md) | MH / HMC / NUTS の使い分け・チューニング・R-hat |
+| [Gibbs サンプリング](docs/04-gibbs.md) | 共役アップデート・ESS/s 比較 |
+| [変分推論 (ADVI)](docs/05-variational-inference.md) | VI vs NUTS・ELBO 収束・平均場の限界 |
+| [モデル比較 (WAIC/LOO)](docs/06-model-comparison.md) | WAIC・PSIS-LOO・Pareto k̂ 診断 |
+| [可視化](docs/07-visualization.md) | Report・Bar・Histogram・PNG/SVG 出力 |
+
+---
+
 ## ビルド
 
 ```bash
 cabal build              # ライブラリ + 全実行ファイル
 cabal test               # テスト
 cabal run hbm-example    # HBM + 4チェーン NUTS デモ → mcmc_report*.html を生成
+cabal run vi-demo        # 変分推論 (VI vs NUTS) デモ
+cabal run gibbs-demo     # Gibbs + WAIC/LOO モデル比較デモ
 cabal run bench-mcmc     # MH / HMC / NUTS パフォーマンス比較
 cabal run test-hmc-nuts  # HMC / NUTS 精度テスト
 cabal run glmm-demo      # GLMM デモ
@@ -63,6 +79,8 @@ cabal run hanalyze -- data.csv x y NoReg --hist score --fit normal
 Stat/
   Distribution.hs  -- 確率分布 (Normal / Gamma / Beta / ...)
   MCMC.hs          -- 診断統計量 (ESS / HDI / R-hat / KDE)
+  ModelSelect.hs   -- モデル比較 (WAIC / PSIS-LOO)
+  VI.hs            -- 変分推論 (ADVI / Adam)
 
 Model/
   HBM.hs           -- 確率的プログラミング DSL (Free Monad)
@@ -72,14 +90,16 @@ MCMC/
   MH.hs            -- Random Walk Metropolis-Hastings
   HMC.hs           -- Hamiltonian Monte Carlo (制約変換付き)
   NUTS.hs          -- No-U-Turn Sampler (制約変換付き)
+  Gibbs.hs         -- Gibbs サンプリング (共役アップデート)
 
 Viz/
   MCMC.hs          -- 診断プロット (KDE / トレース / 自己相関 / ペア散布図)
-  Report.hs        -- 統合 HTML レポート
+  Report.hs        -- 統合 HTML レポート (R-hat 付き多チェーン対応)
   ModelGraph.hs    -- Mermaid.js DAG
+  Bar.hs           -- 棒グラフ (縦 / 横 / 積み上げ / グループ)
   Histogram.hs     -- ヒストグラム (理論分布重ね書き対応)
   Scatter.hs       -- 散布図・回帰曲線
-  Core.hs          -- PlotConfig / OutputFormat / openInBrowser
+  Core.hs          -- PlotConfig / OutputFormat / openInBrowser (PNG/SVG via vl-convert)
 ```
 
 ---
@@ -612,6 +632,9 @@ main = do
 | `MCMC.MH` (Metropolis) | 簡単なモデルの動作確認 | 高次元・強相関で ESS が激減 |
 | `MCMC.HMC` | 連続パラメータ、中規模モデル | `stepSize` と `leapfrogSteps` の両方を調整 |
 | `MCMC.NUTS` | **ほとんどの場合の推奨** | `stepSize` だけ調整、`leapfrogSteps` 不要 |
+| `MCMC.Gibbs` | 共役モデル (超高速) | 共役でないパラメータには使えない |
+
+詳細 → [MCMC サンプラー選択ガイド](docs/03-mcmc-samplers.md) / [Gibbs サンプリング](docs/04-gibbs.md)
 
 **ステップサイズの目安:**
 - NUTS 受容率は 60〜85% が理想。低すぎる → `stepSize` を小さく
@@ -622,6 +645,120 @@ main = do
 - `Exponential` / `Gamma` → 正値制約 (`PositiveT`: 対数変換)
 - `Beta` → 単位区間制約 (`UnitIntervalT`: ロジット変換)
 - HMC / NUTS は Jacobian 補正を自動適用するため、初期値は通常の値で渡せます
+
+---
+
+### `MCMC.Gibbs` — Gibbs サンプリング
+
+共役事後分布が存在するパラメータを**直接サンプリング**します。
+棄却ステップがないため共役モデルでは NUTS より 3〜5 倍高い ESS/秒を達成します。
+
+```haskell
+import MCMC.Gibbs
+
+-- 実装済み共役アップデート
+normalNormal :: Text -> Double -> Double -> [Double] -> Double -> GibbsUpdate
+-- μ ~ Normal(μ₀,σ₀), y ~ Normal(μ,σ_lik) の条件付き事後から直接サンプリング
+
+betaBinomial :: Text -> Double -> Double -> Int -> Int -> GibbsUpdate
+-- p ~ Beta(α,β), y ~ Binomial(n,p), k 成功 → Beta(α+k, β+n-k)
+
+gammaPoisson :: Text -> Double -> Double -> [Double] -> GibbsUpdate
+-- λ ~ Gamma(α,β), y ~ Poisson(λ) → Gamma(α+Σy, β+n)
+
+gibbs       :: [GibbsUpdate] -> GibbsConfig -> Params -> GenIO -> IO Chain
+gibbsChains :: [GibbsUpdate] -> GibbsConfig -> Int    -> Params -> GenIO -> IO [Chain]
+```
+
+```haskell
+let updates = [ normalNormal "mu" 0 10 obsData 2.0 ]  -- σ_lik=2 は既知
+    cfg     = defaultGibbsConfig { gibbsIterations = 5000 }
+chain <- gibbs updates cfg (Map.fromList [("mu", 0.0)]) gen
+```
+
+詳細 → [Gibbs サンプリングガイド](docs/04-gibbs.md)
+
+---
+
+### `Stat.VI` — 変分推論 (ADVI)
+
+事後分布を正規分布族で近似し、ELBO を Adam で最大化します。
+NUTS より高速ですが、平均場近似のためパラメータ間相関を無視します。
+
+```haskell
+import Stat.VI
+
+advi :: Model a -> VIConfig -> Params -> GenIO -> IO VIResult
+
+data VIResult = VIResult
+  { viPostMeans   :: Params    -- 事後平均
+  , viPostSDs     :: Params    -- 事後 SD
+  , viElboHistory :: [Double]  -- ELBO 収束履歴
+  , viDraws       :: [Params]  -- 事後サンプル
+  }
+```
+
+```haskell
+let cfg = defaultVIConfig { viIterations = 500, viNumDraws = 5000 }
+result <- advi model cfg initP gen
+print (viPostMeans result)
+```
+
+詳細 → [変分推論ガイド](docs/05-variational-inference.md)
+
+---
+
+### `Stat.ModelSelect` — モデル比較 (WAIC / PSIS-LOO)
+
+MCMC チェーンから情報量規準を計算してモデルを比較します。値が小さいほど良いモデル。
+
+```haskell
+import Stat.ModelSelect
+
+chainWAIC :: Model a -> Chain -> WAICResult
+chainLOO  :: Model a -> Chain -> LOOResult
+
+data WAICResult = WAICResult
+  { waicValue :: Double  -- WAIC (小さいほど良い)
+  , waicLppd  :: Double  -- log pointwise predictive density
+  , waicPwaic :: Double  -- 有効パラメータ数
+  , waicSE    :: Double  -- 標準誤差
+  }
+
+data LOOResult = LOOResult
+  { looValue   :: Double    -- LOO-CV (小さいほど良い)
+  , looKHat    :: [Double]  -- 観測値ごとの Pareto k̂ (> 0.7 は要注意)
+  , looKHatBad :: Int       -- k̂ > 0.7 の観測値数
+  }
+```
+
+```haskell
+let waicA = chainWAIC modelA chainA
+    waicB = chainWAIC modelB chainB
+printf "ΔWAIC(A−B) = %.3f\n" (waicValue waicA - waicValue waicB)
+-- 負なら A が良い、|ΔWAIC| > SE が目安
+```
+
+詳細 → [モデル比較ガイド](docs/06-model-comparison.md)
+
+---
+
+### `Viz.Bar` — 棒グラフ
+
+```haskell
+import Viz.Bar
+import Viz.Core (defaultConfig, OutputFormat (..))
+
+-- 縦棒 / 横棒
+barChartFile  HTML "bar.html"  cfg "カテゴリ" "値" labels vals
+barChartHFile HTML "barh.html" cfg "値" "カテゴリ" labels vals
+
+-- 積み上げ棒 / グループ棒
+stackedBarFile HTML "stacked.html" cfg "x" "y" "group" xs ys groups
+groupedBarFile HTML "grouped.html" cfg "x" "y" "group" xs ys groups
+```
+
+詳細 → [可視化ガイド](docs/07-visualization.md)
 
 ---
 

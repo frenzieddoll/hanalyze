@@ -34,6 +34,7 @@ module Model.HBM
   , logJoint
   , logPrior
   , logLikelihood
+  , perObsLogLiks
   , sampleNames
   , getTransforms
     -- * モデルグラフ (可視化用)
@@ -199,6 +200,19 @@ logLikelihood model params = go model 0.0
     go (Free (Observe _ d xs next)) acc =
       let ll = sum (map (Dist.logDensity d) xs)
       in if isNegInf ll then -1/0 else go next (acc + ll)
+
+-- | 全 Observe ノードの観測値ごとの対数尤度 log p(y_i | params) を列挙する。
+-- WAIC・LOO-CV など観測値ごとの対数尤度が必要な計算に使用する。
+-- params が欠落している場合はプレースホルダ 0 で継続する (実用上は chain samples を渡すため問題なし)。
+perObsLogLiks :: Model a -> Params -> [Double]
+perObsLogLiks model params = go model
+  where
+    go (Pure _)                     = []
+    go (Free (Sample n _ k))        =
+      case Map.lookup n params of
+        Nothing  -> go (k 0)
+        Just val -> go (k val)
+    go (Free (Observe _ d xs next)) = map (Dist.logDensity d) xs ++ go next
 
 -- | Names of all latent variables in declaration order.
 -- Used by MCMC initialisation to construct the initial 'Params' map.
