@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 module Main where
 
 import DataIO.CSV        (loadAuto)
@@ -16,7 +17,14 @@ import Viz.Scatter       (scatterWithSmoothFile, scatterMultiYFile, scatterPlotF
 import Viz.Histogram     (histogramPlotFile, histogramWithDensityFile)
 import Viz.AnalysisReport (AnalysisReportConfig (..), ModelFit (..), NamedPlot (..),
                            SmoothData (..), GPKernelFit (..), GPFitSummary (..), FitSummary (..),
+                           HBMRegSummary (..),
                            mkFitSummary, mkGLMMSummary, writeAnalysisReport)
+import qualified Model.HBM as HBMod
+import qualified MCMC.NUTS as HBMnuts
+import qualified MCMC.Core as MCMCcore
+import qualified Data.Map.Strict as Map
+import Viz.MCMC (mcmcDiagnostics, autocorrPlot)
+import Viz.Core (PlotConfig (..))
 import Model.GP           (Kernel (..), GPModel (..), GPParams, GPPredData,
                            initParamsFromData, optimizeGP, fitGP, logMarginalLikelihood,
                            gpPredData)
@@ -39,7 +47,7 @@ import Text.Printf        (printf)
 -- CLI types
 -- ---------------------------------------------------------------------------
 
-data ModelType = LM | GLM | NoReg | GP deriving (Show, Eq)
+data ModelType = LM | GLM | NoReg | GP | HBM deriving (Show, Eq)
 
 data DegreeSpec
   = AllDegree Int
@@ -69,13 +77,14 @@ data Config = Config
 
 usageMsg :: String
 usageMsg = unlines
-  [ "Usage: hanalyze <file> <xcols> <ycols> [LM|GLM|NoReg|GP] [options]"
+  [ "Usage: hanalyze <file> <xcols> <ycols> [LM|GLM|NoReg|GP|HBM] [options]"
   , ""
   , "  <file>    CSV/TSV/SSV file (auto-detected from extension)"
   , "  <xcols>   x column name(s); quote multiple: \"x1 x2\""
   , "  <ycols>   y column name(s); quote multiple: \"y1 y2\" (multi-y → scatter only)"
-  , "  LM|GLM|NoReg|GP  model type (default: LM)"
+  , "  LM|GLM|NoReg|GP|HBM  model type (default: LM)"
   , "    GP: Gaussian Process regression (single x/y only); compares RBF, Matérn5/2, Periodic"
+  , "    HBM: Bayesian linear regression via NUTS (single x/y only); --report で AnalysisReport 生成"
   , ""
   , "Options:"
   , "  -d, --dist DIST    distribution: gaussian|binomial|poisson  (default: gaussian)"
@@ -140,6 +149,7 @@ parseModelType ("LM"    : rest) = Right (LM,    rest)
 parseModelType ("GLM"   : rest) = Right (GLM,   rest)
 parseModelType ("NoReg" : rest) = Right (NoReg, rest)
 parseModelType ("GP"    : rest) = Right (GP,    rest)
+parseModelType ("HBM"   : rest) = Right (HBM,   rest)
 parseModelType rest              = Right (LM,    rest)
 
 parseOptions :: [String]
@@ -285,8 +295,9 @@ runConfig cfg = do
       if cfgHistMode cfg
         then runHistogram cfg df fmt xCol1
         else case cfgModel cfg of
-               GP -> runGP cfg df xCol1
-               _  -> runAnalysis cfg df fmt xCol1
+               GP  -> runGP cfg df xCol1
+               HBM -> runHBM cfg df xCol1
+               _   -> runAnalysis cfg df fmt xCol1
 
 -- ---------------------------------------------------------------------------
 -- Mixed model (LME / GLMM)
@@ -601,6 +612,157 @@ runGP cfg df xCol1 = do
       openInBrowser path
 
     _ -> putStrLn "\nError: column(s) not found or not numeric"
+
+-- ---------------------------------------------------------------------------
+-- HBM (Bayesian linear regression via NUTS)
+-- ---------------------------------------------------------------------------
+
+runHBM :: Config -> DataFrame -> T.Text -> IO ()
+runHBM cfg df xCol = do
+  let yCols = cfgYCols cfg
+      xCols = cfgXCols cfg
+  case (yCols, xCols, getNumeric xCol df) of
+    ([yCol], [_], Just xVec) ->
+      case getNumeric yCol df of
+        Nothing -> putStrLn $ "Error: y column '" ++ T.unpack yCol ++ "' not numeric"
+        Just yVec -> do
+          let xs = V.toList xVec
+              ys = V.toList yVec
+          putStrLn ""
+          putStrLn "=== HBM Bayesian Linear Regression ==="
+          printf "  y = α + β·x + ε,  α,β ~ Normal(0,10),  ε ~ Normal(0,σ),  σ ~ Exp(1)\n"
+          printf "  サンプリング: NUTS (AD 勾配 + dual averaging)\n"
+          printf "  N = %d 観測, x = %s, y = %s\n\n"
+                 (length xs) (T.unpack xCol) (T.unpack yCol)
+          runHBMRegression xs ys xCol yCol df cfg
+    _ ->
+      putStrLn "Error: HBM requires exactly one x and one y column (numeric)"
+
+runHBMRegression
+  :: [Double] -> [Double] -> T.Text -> T.Text -> DataFrame -> Config -> IO ()
+runHBMRegression xs ys xCol yCol df cfg = do
+  let nutsCfg = HBMnuts.defaultNUTSConfig
+                  { HBMnuts.nutsIterations = 1500
+                  , HBMnuts.nutsBurnIn     = 500
+                  , HBMnuts.nutsStepSize   = 0.05
+                  }
+      initP   = Map.fromList
+                  [ ("alpha", 0.0), ("beta", 0.0), ("sigma", 1.0) ]
+      hbmModel :: HBMod.ModelP ()
+      hbmModel = do
+        a <- HBMod.sample "alpha" (HBMod.Normal 0 10)
+        b <- HBMod.sample "beta"  (HBMod.Normal 0 10)
+        s <- HBMod.sample "sigma" (HBMod.Exponential 1)
+        mapM_ (\(x, y) ->
+                 let xC = realToFrac x
+                 in HBMod.observe "y" (HBMod.Normal (a + b * xC) s) [y])
+              (zip xs ys)
+
+  gen <- createSystemRandom
+  chain <- HBMnuts.nuts hbmModel nutsCfg initP gen
+  let acc = MCMCcore.acceptanceRate chain
+      n   = length (MCMCcore.chainSamples chain)
+  printf "  受容率: %.1f%%, サンプル数: %d\n" (acc * 100 :: Double) n
+
+  let aMean = maybe 0 id (MCMCcore.posteriorMean "alpha" chain)
+      aSD   = maybe 0 id (MCMCcore.posteriorSD   "alpha" chain)
+      bMean = maybe 0 id (MCMCcore.posteriorMean "beta"  chain)
+      bSD   = maybe 0 id (MCMCcore.posteriorSD   "beta"  chain)
+      sMean = maybe 0 id (MCMCcore.posteriorMean "sigma" chain)
+      sSD   = maybe 0 id (MCMCcore.posteriorSD   "sigma" chain)
+  printf "  α = %+.4f ± %.4f\n" aMean aSD
+  printf "  β = %+.4f ± %.4f\n" bMean bSD
+  printf "  σ = %+.4f ± %.4f\n" sMean sSD
+
+  case cfgReport cfg of
+    Nothing   -> return ()
+    Just path -> do
+      let smooth = makeSmooth xs chain
+          fitted = [aMean + bMean * x | x <- xs]
+          resid  = zipWith (-) ys fitted
+          yBar   = sum ys / fromIntegral (length ys)
+          tss    = sum [(y - yBar) ^ (2::Int) | y <- ys]
+          rss    = sum [r ^ (2::Int) | r <- resid]
+          r2     = if tss < 1e-12 then 0 else 1 - rss / tss
+
+      mWaicLoo <-
+        if cfgWAIC cfg
+          then do
+            let llMat = [ HBMod.perObsLogLiks hbmModel ps
+                        | ps <- MCMCcore.chainSamples chain ]
+                w = waic llMat
+                l = loo  llMat
+            printf "  WAIC=%.2f  LOO=%.2f  p_WAIC=%.2f  k̂>0.7: %d件\n"
+                   (waicValue w) (looValue l) (waicPwaic w) (looKHatBad l)
+            return (Just (w, l))
+          else return Nothing
+
+      let fs = FitSummary
+                 { fsModelType    = "Bayesian Linear Regression (HBM, NUTS)"
+                 , fsFormula      = "y ~ α + β · " <> xCol
+                 , fsCoeffs       = [("α (Intercept)", aMean), ("β (" <> xCol <> ")", bMean)]
+                 , fsR2           = r2
+                 , fsR2Label      = "R²"
+                 , fsFitted       = fitted
+                 , fsResiduals    = resid
+                 , fsLinkName     = "Normal (identity link)"
+                 , fsXColDegs     = [(xCol, 1)]
+                 , fsSmoothData   = Just (xCol, smooth)
+                 , fsModelSelect  = mWaicLoo
+                 }
+          hs = HBMRegSummary
+                 { hbmsFit           = fs
+                 , hbmsModelGraph    = HBMod.buildModelGraph hbmModel
+                 , hbmsChain         = chain
+                 , hbmsParams        = ["alpha", "beta", "sigma"]
+                 , hbmsPosteriorRows =
+                     [ ("alpha", aMean, aSD
+                       , maybe 0 id (MCMCcore.posteriorQuantile 0.025 "alpha" chain)
+                       , maybe 0 id (MCMCcore.posteriorQuantile 0.975 "alpha" chain))
+                     , ("beta",  bMean, bSD
+                       , maybe 0 id (MCMCcore.posteriorQuantile 0.025 "beta"  chain)
+                       , maybe 0 id (MCMCcore.posteriorQuantile 0.975 "beta"  chain))
+                     , ("sigma", sMean, sSD
+                       , maybe 0 id (MCMCcore.posteriorQuantile 0.025 "sigma" chain)
+                       , maybe 0 id (MCMCcore.posteriorQuantile 0.975 "sigma" chain))
+                     ]
+                 }
+          diagCfg = PlotConfig "MCMC 診断 (KDE + トレース)" 760 320
+          acfCfg  = PlotConfig "自己相関 (lag 0..40)" 760 220
+          diagPlot = NamedPlot "vl-hbm-diag" "MCMC 診断"
+                       (mcmcDiagnostics diagCfg ["alpha","beta","sigma"] chain)
+          acfPlot  = NamedPlot "vl-hbm-acf"  "自己相関"
+                       (autocorrPlot acfCfg 40 ["alpha","beta","sigma"] chain)
+          rptCfg = AnalysisReportConfig
+                     { arcTitle = "HBM Linear Regression: " <> yCol <> " ~ " <> xCol }
+      writeAnalysisReport path rptCfg df [xCol] yCol (HBMFit hs) [diagPlot, acfPlot]
+      putStrLn $ "Report:              " ++ path
+      openInBrowser path
+  where
+    -- 信用区間付き予測曲線: 各事後サンプルから μ* = α + β·x* を計算 → 分位点
+    makeSmooth :: [Double] -> MCMCcore.Chain -> SmoothData
+    makeSmooth xs0 ch =
+      let alphas = MCMCcore.chainVals "alpha" ch
+          betas  = MCMCcore.chainVals "beta"  ch
+          xMin   = minimum xs0
+          xMax   = maximum xs0
+          ext    = (xMax - xMin) * 0.5
+          grid   = [xMin - ext + i * (xMax - xMin + 2 * ext) / 99 | i <- [0..99]]
+          atX x  = let ss     = sortListAsc (zipWith (\a b -> a + b * x) alphas betas)
+                       sn     = length ss
+                       qAt p  = ss !! min (sn-1) (max 0 (floor (p * fromIntegral sn) :: Int))
+                   in (qAt 0.5, qAt 0.025, qAt 0.975)
+          (yMid, yLo, yHi) = unzip3 (map atX grid)
+      in SmoothData
+           { sdXs = grid, sdYs = yMid, sdLower = yLo, sdUpper = yHi
+           , sdHasBand = True
+           }
+
+    sortListAsc :: [Double] -> [Double]
+    sortListAsc = qs
+      where
+        qs []     = []
+        qs (p:rs) = qs [x | x <- rs, x <= p] ++ [p] ++ qs [x | x <- rs, x > p]
 
 -- ---------------------------------------------------------------------------
 -- Histogram mode
