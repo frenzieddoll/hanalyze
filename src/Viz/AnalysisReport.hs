@@ -21,6 +21,8 @@ module Viz.AnalysisReport
     -- * GP フィット要約
   , GPKernelFit (..)
   , GPFitSummary (..)
+    -- * HBM (ベイズ回帰) フィット要約
+  , HBMRegSummary (..)
     -- * モデルフィット (統一型)
   , ModelFit (..)
     -- * 名前付きプロット
@@ -42,14 +44,17 @@ import qualified Data.Vector as V
 import qualified Numeric.LinearAlgebra as LA
 
 import DataFrame.Core
+import MCMC.Core    (Chain, chainSamples, chainAccepted, chainTotal)
 import Model.Core   (FitResult (..), coeffList, fittedList)
 import Model.GLM    (Family (..), LinkFn (..))
 import Stat.ModelSelect (WAICResult (..), LOOResult (..))
 import Model.GLMM   (GLMMResult (..))
 import Model.GP     (Kernel (..), GPParams (..), GPResult (..), GPPredData (..))
+import Model.HBM    (ModelGraph)
 import Viz.Assets   (vegaJS, vegaLiteJS, vegaEmbedJS)
 import Viz.Core     (PlotConfig (..))
 import Viz.GP       (gpPlot)
+import Viz.ModelGraph (buildMermaid)
 
 -- ---------------------------------------------------------------------------
 -- Public types
@@ -171,11 +176,24 @@ data GPFitSummary = GPFitSummary
   , gfTrainYs    :: [Double]
   } deriving (Show)
 
+-- | HBM (ベイズ回帰) のサマリー。
+-- 内部に LM 互換の 'FitSummary' を持ち、加えて DAG と MCMC チェーンを保持する。
+data HBMRegSummary = HBMRegSummary
+  { hbmsFit           :: FitSummary    -- ^ 回帰スタイルの基本サマリー
+                                       -- (係数 = 事後平均、smoothData = 信用区間付き予測曲線)
+  , hbmsModelGraph    :: ModelGraph    -- ^ Mermaid DAG (モデル概要に表示)
+  , hbmsChain         :: Chain         -- ^ MCMC チェーン (回帰結果に診断プロット表示)
+  , hbmsParams        :: [Text]        -- ^ 全潜在変数名 (alpha/beta/sigma 等)
+  , hbmsPosteriorRows :: [(Text, Double, Double, Double, Double)]
+                                       -- ^ (name, mean, sd, q025, q975)
+  } deriving (Show)
+
 -- | モデルフィットの統一型。
 data ModelFit
   = RegFit   FitSummary
   | MixFit   GLMMSummary
   | GPFit    GPFitSummary
+  | HBMFit   HBMRegSummary
   | NoRegFit
 
 -- | 名前付き Vega-Lite プロット。
@@ -216,6 +234,9 @@ buildHtml cfg df xCols yCol fit plots = T.unlines $
   , "  <script>" <> vegaJS      <> "</script>"
   , "  <script>" <> vegaLiteJS  <> "</script>"
   , "  <script>" <> vegaEmbedJS <> "</script>"
+  , if isHBMFit fit
+      then "  <script src=\"https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js\"></script>"
+      else ""
   , "  <style>" , reportCss , "  </style>"
   , "</head>"
   , "<body>"
@@ -229,6 +250,9 @@ buildHtml cfg df xCols yCol fit plots = T.unlines $
   [ appendixSection fit
   , "</main>"
   , "<script>"
+  , if isHBMFit fit
+      then "mermaid.initialize({ startOnLoad: true, theme: 'default' });"
+      else ""
   , embedScript plots
   , gpVegaEmbedJS fit
   , columnDataJS df xCols yCol
@@ -262,8 +286,9 @@ navBar cfg fit = T.unlines
   ]
 
 modelNavLabel :: ModelFit -> Text
-modelNavLabel (GPFit _) = "モデル比較"
-modelNavLabel _         = "モデル"
+modelNavLabel (GPFit _)  = "モデル比較"
+modelNavLabel (HBMFit _) = "モデル"
+modelNavLabel _          = "モデル"
 
 hasPrediction :: ModelFit -> Bool
 hasPrediction NoRegFit = False
@@ -272,6 +297,10 @@ hasPrediction _        = True
 isGPFit :: ModelFit -> Bool
 isGPFit (GPFit _) = True
 isGPFit _         = False
+
+isHBMFit :: ModelFit -> Bool
+isHBMFit (HBMFit _) = True
+isHBMFit _          = False
 
 -- ---------------------------------------------------------------------------
 -- Section 1: Data summary with histograms
@@ -357,6 +386,31 @@ modelSection (RegFit fs) = T.unlines $
   ] ++ waicLooSection (fsModelSelect fs) ++
   [ "</section>"
   ]
+modelSection (HBMFit hs) =
+  let fs = hbmsFit hs
+  in T.unlines $
+    [ "<section id=\"sec-model\">"
+    , "  <h2><span class=\"sec-icon\">&#9878;</span> 2. モデル概要</h2>"
+    , "  <div class=\"info-grid\">"
+    , infoBox "モデル種別" (fsModelType fs)
+    , infoBox "回帰式" (fsFormula fs)
+    , infoBox "尤度" (fsLinkName fs)
+    , "  </div>"
+    , "  <h3 style=\"margin-top:20px\">モデル DAG</h3>"
+    , "  <p class=\"sec-desc\" style=\"font-size:.85em;color:#555\">"
+    , "    依存グラフは <code>extractDeps</code> (Track 型による多相 DSL の解釈) で自動抽出。"
+    , "  </p>"
+    , "  <div class=\"mermaid-wrap\">"
+    , "    <pre class=\"mermaid\">"
+    , buildMermaid (hbmsModelGraph hs)
+    , "    </pre>"
+    , "  </div>"
+    , "  <div class=\"legend\" style=\"margin-top:8px;font-size:.82em;color:#666\">"
+    , "    <span style=\"display:inline-block;width:11px;height:11px;background:#4C72B0;border-radius:2px;margin-right:4px;vertical-align:middle\"></span>latent &nbsp;&nbsp;"
+    , "    <span style=\"display:inline-block;width:11px;height:11px;background:#DD8844;border-radius:2px;margin-right:4px;vertical-align:middle\"></span>observed"
+    , "  </div>"
+    , "</section>"
+    ]
 modelSection (MixFit gs) = T.unlines
   [ "<section id=\"sec-model\">"
   , "  <h2><span class=\"sec-icon\">&#9878;</span> 2. モデル概要</h2>"
@@ -534,6 +588,39 @@ fitTable (RegFit fs) =
   , statBox (fsR2Label fs) (fmt4 (fsR2 fs)) True
   , "  </div>"
   ]
+fitTable (HBMFit hs) =
+  let fs = hbmsFit hs
+      ch = hbmsChain hs
+      total    = chainTotalOf ch
+      accepted = chainAcceptedOf ch
+      acceptR  = if total == 0 then 0
+                 else fromIntegral accepted / fromIntegral total :: Double
+      nSamp    = chainNSamples ch
+  in [ "  <h3>事後分布サマリー</h3>"
+     , "  <p class=\"sec-desc\" style=\"font-size:.85em;color:#555\">"
+     , "    各潜在変数の事後平均・標準偏差・95% 信用区間 (2.5% / 97.5% 分位点)。"
+     , "  </p>"
+     , "  <table style=\"max-width:760px\">"
+     , "    <thead><tr><th>パラメータ</th><th>事後平均</th>"
+       <> "<th>事後 SD</th><th>2.5%</th><th>97.5%</th></tr></thead>"
+     , "    <tbody>"
+     ] ++
+     map posteriorRowHtml (hbmsPosteriorRows hs) ++
+     [ "    </tbody>"
+     , "  </table>"
+     , "  <div class=\"stat-grid\" style=\"margin-top:14px\">"
+     , statBox (fsR2Label fs) (fmt4 (fsR2 fs)) True
+     , statBox "サンプル数" (T.pack (show nSamp)) False
+     , statBox "受容率" (fmt1 (acceptR * 100) <> "%") False
+     , "  </div>"
+     ]
+  where
+    posteriorRowHtml (n, m, sd_, lo, hi) =
+      "      <tr><td>" <> n <> "</td>"
+      <> "<td>" <> fmtSigned m <> "</td>"
+      <> "<td>" <> fmt4 sd_ <> "</td>"
+      <> "<td>" <> fmtSigned lo <> "</td>"
+      <> "<td>" <> fmtSigned hi <> "</td></tr>"
 fitTable (MixFit gs) =
   [ "  <h3>固定効果係数</h3>"
   , "  <table style=\"max-width:600px\">"
@@ -550,11 +637,21 @@ fitTable (MixFit gs) =
   , "  </div>"
   ]
 
+chainNSamples :: Chain -> Int
+chainNSamples = length . chainSamples
+
+chainTotalOf :: Chain -> Int
+chainTotalOf = chainTotal
+
+chainAcceptedOf :: Chain -> Int
+chainAcceptedOf = chainAccepted
+
 residualSummary :: ModelFit -> Text
 residualSummary fit =
   let resids = case fit of
                  RegFit  fs -> fsResiduals fs
                  MixFit  gs -> gsResiduals gs
+                 HBMFit  hs -> fsResiduals (hbmsFit hs)
                  NoRegFit   -> []
       n      = fromIntegral (length resids) :: Double
       rmse   = if n == 0 then 0 else sqrt (sum (map (^(2::Int)) resids) / n)
@@ -719,6 +816,7 @@ gpPredictionSection gf =
 smoothDataFor :: ModelFit -> Maybe (Text, SmoothData)
 smoothDataFor (RegFit fs) = fsSmoothData fs
 smoothDataFor (MixFit gs) = gsSmoothData gs
+smoothDataFor (HBMFit hs) = fsSmoothData (hbmsFit hs)
 smoothDataFor NoRegFit    = Nothing
 
 -- (col, data_min, data_max, slider_min, slider_max)
@@ -770,6 +868,21 @@ appendixContent (MixFit gs) = T.unlines
   , "    <p><b>ICC</b> = σ²_u / (σ²_u + σ²) = " <> fmt4 (gsICC gs) <> "</p>"
   , "  </div>"
   , lmAppendix (gsLinkName gs)
+  ]
+appendixContent (HBMFit hs) = T.unlines
+  [ "  <div class=\"appendix-block\">"
+  , "    <h4>" <> fsModelType (hbmsFit hs) <> "</h4>"
+  , "    <p>ベイズ線形回帰では係数を点推定ではなく <b>事後分布</b> として推定します:</p>"
+  , "    <div class=\"formula\">"
+  , "      α ~ Normal(0, σ_α),&nbsp; β ~ Normal(0, σ_β),&nbsp; σ ~ Exponential(1)<br>"
+  , "      y_i ~ Normal(α + β·x_i, σ)"
+  , "    </div>"
+  , "    <p>推論は NUTS (No-U-Turn Sampler, AD 勾配) で実行。"
+  , "    各パラメータの 95% 信用区間 = 事後分布の 2.5%/97.5% 分位点。</p>"
+  , "    <p>予測曲線の <b>信用区間バンド</b> は、グリッド点 x* に対して"
+  , "    全事後サンプル (α^(s), β^(s)) で μ^(s) = α^(s) + β^(s)·x* を計算し、"
+  , "    その分布の 2.5%/97.5% 分位点を取ったものです。</p>"
+  , "  </div>"
   ]
 appendixContent (GPFit gf) = T.unlines
   [ "  <div class=\"appendix-block\">"
@@ -1328,6 +1441,8 @@ predJS fit = T.unlines $
 fitDataFor :: ModelFit -> ([(Text, Double)], [(Text, Int)], Text)
 fitDataFor (RegFit fs) = (fsCoeffs fs, fsXColDegs fs, fsLinkName fs)
 fitDataFor (MixFit gs) = (gsFixed gs,  gsXColDegs gs,  gsLinkName gs)
+fitDataFor (HBMFit hs) = let fs = hbmsFit hs
+                         in (fsCoeffs fs, fsXColDegs fs, fsLinkName fs)
 fitDataFor (GPFit _)   = ([], [], "identity")
 fitDataFor NoRegFit    = ([], [], "identity")
 
@@ -1384,6 +1499,9 @@ fmtJS v
 
 fmt4 :: Double -> Text
 fmt4 v = T.pack (showFFloat (Just 4) v "")
+
+fmt1 :: Double -> Text
+fmt1 v = T.pack (showFFloat (Just 1) v "")
 
 fmtSigned :: Double -> Text
 fmtSigned v
@@ -1484,6 +1602,10 @@ reportCss = T.unlines
   , ".stat-box.highlight { background: #e8f4e8; border-color: #4caf50; }"
   , ".stat-box.highlight .val { color: #2e7d32; }"
   -- info boxes
+  , ".mermaid-wrap { background:#f7fafc; border-radius:8px; padding:24px; margin:12px 0; text-align:center; overflow-x:auto; }"
+  , ".mermaid-wrap .mermaid { display:inline-block; min-width:320px; min-height:200px;"
+  , "   font-family:'Segoe UI',sans-serif; line-height:1.4; }"
+  , ".mermaid-wrap .mermaid svg { max-width:100%; height:auto; min-height:240px; }"
   , ".info-grid { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }"
   , ".info-box { background: #f7f9fc; border: 1px solid #e4e9f0; border-radius: 10px;"
   , "            padding: 12px 18px; min-width: 180px; }"

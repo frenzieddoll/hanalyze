@@ -367,13 +367,39 @@ data ModelGraph = ModelGraph
   } deriving (Show)
 
 -- | 多相モデルから DAG を自動構築する (Track 型による依存追跡)。
+--
+-- 同じ名前で複数登場する Observe ノード (例: 回帰モデルで観測点ごとに
+-- @observe \"y\"@ を発行する場合) は 1 つに統合される。観測数の合計と
+-- 親変数集合の和をマージし、エッジも重複排除する。
 buildModelGraph :: ModelP r -> ModelGraph
 buildModelGraph m =
-  let nodes = extractDeps m
-      edges = [ (parent, nodeName n)
-              | n <- nodes
-              , parent <- Set.toList (nodeDeps n) ]
-  in ModelGraph nodes edges
+  let rawNodes = extractDeps m
+      merged   = mergeByName rawNodes
+      edges    = Set.toList $ Set.fromList
+                   [ (parent, nodeName n)
+                   | n <- merged
+                   , parent <- Set.toList (nodeDeps n) ]
+  in ModelGraph merged edges
+  where
+    -- 同名ノードを統合: ObservedN n1 + ObservedN n2 → ObservedN (n1+n2)
+    -- LatentN は最初の出現を残す。deps は和集合。
+    mergeByName ns = mergeGo ns Map.empty []
+    mergeGo [] _ acc = reverse acc
+    mergeGo (n:ns) seen acc =
+      let nm = nodeName n
+      in case Map.lookup nm seen of
+           Nothing -> mergeGo ns (Map.insert nm n seen) (n : acc)
+           Just prev ->
+             let merged' = Node
+                   { nodeName = nm
+                   , nodeKind = case (nodeKind prev, nodeKind n) of
+                       (ObservedN a, ObservedN b) -> ObservedN (a + b)
+                       (k, _)                     -> k
+                   , nodeDist = nodeDist prev
+                   , nodeDeps = nodeDeps prev <> nodeDeps n
+                   }
+                 acc' = map (\x -> if nodeName x == nm then merged' else x) acc
+             in mergeGo ns (Map.insert nm merged' seen) acc'
 
 -- ---------------------------------------------------------------------------
 -- AD 勾配
