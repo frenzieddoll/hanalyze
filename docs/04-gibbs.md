@@ -1,13 +1,5 @@
 # Gibbs サンプリング (MCMC.Gibbs)
 
-> ## ⚠️ API 移行のお知らせ
->
-> 本ページの `MCMC.Gibbs.gibbsMH` / `gibbsFromModel` は **`Model.HBM` 用の旧 API で、廃止予定**です。
-> 新規コードは [`MCMC.GibbsP`](../src/MCMC/GibbsP.hs) の `gibbsMHP` / `gibbsFromModelP` を使ってください
-> (シグネチャは同じ、`Model.HBMP` を受け取る)。
-> 共役更新ブロック (`normalNormal` / `betaBinomial` / `gammaPoisson`) と `GibbsConfig` は両 API 共通です。
-> 詳細は [HBMP への移行](02-probabilistic-model.md#modelhbmp-への移行-推奨) を参照。
-
 ## 概要と原理
 
 Gibbs サンプリングは、各パラメータを **他の全パラメータを固定した条件付き事後分布** から

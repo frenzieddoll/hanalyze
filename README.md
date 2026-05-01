@@ -5,26 +5,29 @@ CLI ツールとしても、Haskell ライブラリとしても使えます。
 
 ---
 
-## ⚠️ 重要: API 移行のお知らせ
+## DSL の特徴
 
-**`Model.HBM` (旧版) は廃止予定です。** 新しい多相 DSL `Model.HBMP` への移行を推奨します。
+`Model.HBM` は多相 Free Monad DSL で、同一モデルから 4 通りの解釈を取り出せます:
 
-| 旧 (廃止予定) | 新 (推奨) |
-|---|---|
-| `Model.HBM` | `Model.HBMP` |
-| `MCMC.HMC.hmc` / `hmcChains` | `MCMC.HMCP.hmcP` / `hmcPChains` |
-| `MCMC.NUTS.nuts` / `nutsChains` | `MCMC.NUTSP.nutsP` / `nutsPChains` |
-| `MCMC.Gibbs.gibbsMH` / `gibbsFromModel` | `MCMC.GibbsP.gibbsMHP` / `gibbsFromModelP` |
+```haskell
+-- 一度書けば、4 通りに使える
+type ModelP r = forall a. (Floating a, Ord a) => Model a r
 
-**HBMP の優位点**:
-- AD 勾配 (`Numeric.AD`) による machine epsilon 精度の微分
-- `Track` 型による依存グラフの自動抽出 (`extractDeps`)
-- `forall a. (Floating a, Ord a) => Model a r` による多相解釈 (構造検査・log joint・AD・依存追跡)
+myModel :: ModelP ()
+myModel = do
+  mu    <- sample "mu"    (Normal 0 10)
+  sigma <- sample "sigma" (Exponential 1)
+  observe "y" (Normal mu sigma) [1.5, 2.0, 1.8]
+```
 
-**今後の予定**: 次回メジャーバージョンで `Model.HBM` を削除し、`Model.HBMP` を `Model.HBM` にリネームします。
-同様に `MCMC.HMCP` → `MCMC.HMC`、`MCMC.NUTSP` → `MCMC.NUTS`、`MCMC.GibbsP` → `MCMC.Gibbs` への統合を予定しています。
+| 解釈 | 特殊化 | 用途 |
+|---|---|---|
+| 構造検査 | `a = Double` | `collectNodes`, `describeModel` |
+| log joint | `a = Double` | `logJoint`, `logPrior`, `logLikelihood` |
+| AD 勾配 | `a = Forward Double` | `gradAD`, `gradADU` (machine epsilon 精度) |
+| 依存追跡 | `a = Track` | `extractDeps` で DAG を自動抽出 |
 
-新規モデル記述・既存モデルの段階的移行ともに `Model.HBMP` を使用してください。
+サンプラー (`MCMC.HMC`/`NUTS`/`Gibbs`/`MH`) は全て `ModelP` を受け取り、AD 勾配と自動制約変換 (PositiveT/UnitIntervalT) で動作します。
 
 ---
 
@@ -33,7 +36,7 @@ CLI ツールとしても、Haskell ライブラリとしても使えます。
 | ページ | 内容 |
 |---|---|
 | [クイックスタート](docs/01-quickstart.md) | ビルド・最小ワークフロー・全機能早見表 |
-| [確率的プログラミング DSL](docs/02-probabilistic-model.md) | Model.HBM / **HBMP 移行ガイド** (Beta-Binomial / 階層正規 / モデルグラフ) |
+| [確率的プログラミング DSL](docs/02-probabilistic-model.md) | Model.HBM のパターン集 (Beta-Binomial / 階層正規 / 多相解釈・依存自動抽出) |
 | [MCMC サンプラー選択ガイド](docs/03-mcmc-samplers.md) | MH / HMC / NUTS の使い分け・チューニング・R-hat |
 | [Gibbs サンプリング](docs/04-gibbs.md) | 共役アップデート・ESS/s 比較 |
 | [変分推論 (ADVI)](docs/05-variational-inference.md) | VI vs NUTS・ELBO 収束・平均場の限界 |
@@ -106,18 +109,14 @@ Stat/
   VI.hs            -- 変分推論 (ADVI / Adam)
 
 Model/
-  HBM.hs           -- 確率的プログラミング DSL (Double 継続) ※廃止予定
-  HBMP.hs          -- 多相版 DSL (推奨。AD 勾配・Track 依存抽出対応)
+  HBM.hs           -- 多相確率的プログラミング DSL (AD 勾配・Track 依存抽出対応)
 
 MCMC/
   Core.hs          -- Chain 型・事後統計量 (独立して使用可)
   MH.hs            -- Random Walk Metropolis-Hastings
-  HMC.hs           -- Hamiltonian Monte Carlo (HBM 用、廃止予定)
-  HMCP.hs          -- HMC (HBMP 用、AD 勾配版、推奨)
-  NUTS.hs          -- No-U-Turn Sampler (HBM 用、廃止予定)
-  NUTSP.hs         -- NUTS (HBMP 用、AD 勾配版、推奨)
-  Gibbs.hs         -- Gibbs サンプリング (HBM 用、廃止予定)
-  GibbsP.hs        -- Gibbs (HBMP 用、推奨)
+  HMC.hs           -- Hamiltonian Monte Carlo (AD 勾配)
+  NUTS.hs          -- No-U-Turn Sampler (AD 勾配 + dual averaging)
+  Gibbs.hs         -- Gibbs サンプリング + ハイブリッド Gibbs+MH (共役自動検出)
 
 Viz/
   MCMC.hs          -- 診断プロット (KDE / トレース / 自己相関 / ペア散布図)
@@ -202,122 +201,107 @@ let kdePoints = kde 200 (chainVals "mu" chain)  -- [(x, density)]
 
 ---
 
-### `Model.HBM` — 確率的プログラミング DSL ⚠️ 廃止予定
+### `Model.HBM` — 多相確率的プログラミング DSL
 
-> **このモジュールは廃止予定です。** 新規コードは [`Model.HBMP`](#modelhbmp--多相確率的プログラミング-dsl-推奨) を使用してください。
-> `Model.HBMP` は同じ DSL 構文で AD 勾配・依存抽出に加え、HMC/NUTS/Gibbs もすべてサポートしています。
+継続を `forall a. (Floating a, Ord a) => Model a r` として多相化した DSL。
+同一モデルから構造検査・log joint・AD 勾配・依存追跡の 4 通りの解釈を取り出せます。
 
 ```haskell
-import Model.HBM
-import Stat.Distribution
+import Model.HBM   -- Distribution (..), sample, observe を提供
 
-type Model a   -- Free Monad over ModelF (Double 継続固定)
+-- 多相 DSL 型
+type ModelP r = forall a. (Floating a, Ord a) => Model a r
 
--- 潜在変数の宣言 (返り値がモデル内で依存関係を形成)
-sample  :: Text -> Distribution -> Model Double
+-- 潜在変数の宣言
+sample  :: Text -> Distribution a -> Model a a
 -- 観測データの条件付け (i.i.d. 仮定)
-observe :: Text -> Distribution -> [Double] -> Model ()
+observe :: Text -> Distribution a -> [Double] -> Model a ()
 ```
 
 #### モデル定義の例
 
 ```haskell
-import Control.Monad (forM)
 import qualified Data.Text as T
 
--- 3校の正規階層モデル
+-- 3 校の正規階層モデル
 -- μ ~ Normal(0, 100),  τ ~ Exponential(0.1)
 -- θ_j ~ Normal(μ, τ)  (j=1..J)
 -- y_ij ~ Normal(θ_j, 5)
-schoolModel :: [[Double]] -> Model [Double]
+schoolModel :: [[Double]] -> ModelP ()
 schoolModel groupData = do
   mu  <- sample "mu"  (Normal 0 100)
   tau <- sample "tau" (Exponential 0.1)
-  forM (zip [1..] groupData) $ \(j, ys) -> do
+  mapM_ (\(j, ys) -> do
     theta <- sample (T.pack ("theta_" ++ show j)) (Normal mu tau)
-    observe (T.pack ("y_" ++ show j)) (Normal theta 5) ys
-    return theta
+    observe (T.pack ("y_" ++ show j)) (Normal theta 5) ys)
+    (zip [1::Int ..] groupData)
 
 -- 構造の確認
 describeModel (schoolModel dat)
 -- Model nodes:
---   [latent]   mu ~ Normal(0.0, 100.0)
---   [latent]   tau ~ Exponential(0.1)
---   [latent]   theta_1 ~ Normal(...)
---   [observed] y_1 ~ Normal(...)  (n=4)
+--   [latent]   mu ~ Normal
+--   [latent]   tau ~ Exponential
+--   [latent]   theta_1 ~ Normal
+--   [observed] y_1 ~ Normal  (n=4)
 --   ...
 ```
 
-#### 対数密度の評価
+> **注**: rank-2 型の `ModelP` は `let` で束縛できないため、`m :: ModelP () = schoolModel dat`
+> は使えません。トップレベル束縛 (`m = schoolModel dat`) を使うか、関数呼び出しで毎回インライン展開してください。
+
+#### 4 通りの解釈
+
+```haskell
+import qualified Data.Map.Strict as Map
+
+let ps = Map.fromList [("mu", 73.0), ("tau", 10.0), ...]
+
+-- 1. 構造検査 (a = Double)
+collectNodes  (schoolModel dat)              -- :: [Node]
+describeModel (schoolModel dat)              -- :: Text
+
+-- 2. log joint 数値評価 (a = Double)
+logJoint      (schoolModel dat) ps           -- log p(θ, y)
+logPrior      (schoolModel dat) ps           -- log p(θ)
+logLikelihood (schoolModel dat) ps           -- log p(y | θ)
+
+-- 3. AD 勾配 (a = Forward Double, machine epsilon 精度)
+gradAD  (schoolModel dat) ["mu","tau"] [0,1] -- :: [Double]
+gradADU (schoolModel dat) names trans us     -- 制約変換込み (HMC 用)
+
+-- 4. 依存追跡 (a = Track)
+extractDeps (schoolModel dat)                -- :: [Node] (nodeDeps 付き)
+buildModelGraph (schoolModel dat)            -- Mermaid DAG 自動生成
+```
+
+#### 主要 API
 
 ```haskell
 type Params = Map Text Double
 
-logJoint      :: Model a -> Params -> Double  -- log p(θ, y)
-logPrior      :: Model a -> Params -> Double  -- log p(θ)
-logLikelihood :: Model a -> Params -> Double  -- log p(y | θ)
-sampleNames   :: Model a -> [Text]            -- 潜在変数名リスト
-```
-
-```haskell
-import qualified Data.Map.Strict as Map
-
-let m  = schoolModel dat
-    ps = Map.fromList [("mu", 73.0), ("tau", 10.0),
-                       ("theta_1", 71.5), ("theta_2", 86.25), ("theta_3", 61.75)]
-
-logJoint      m ps  -- ≈ -52.4
-logPrior      m ps  -- ≈ -20.3
-logLikelihood m ps  -- ≈ -32.1
-```
-
----
-
-### `Model.HBMP` — 多相確率的プログラミング DSL (推奨)
-
-`Model.HBM` の継続を多相化した次世代 DSL。同じ構文で記述し、`forall a. (Floating a, Ord a) => Model a r`
-として 4 通りの解釈 (構造検査・log joint・AD 勾配・依存追跡) を取り出せます。
-
-```haskell
-import Model.HBMP   -- Distribution (..), sample, observe を提供
-import qualified Data.Map.Strict as Map
-
--- DSL 構文は HBM と完全に同じ (Distribution は Model.HBMP のものを使う)
-schoolModelP :: ModelP [Double]
-schoolModelP = do
-  mu  <- sample "mu"  (Normal 0 100)
-  tau <- sample "tau" (Exponential 0.1)
-  ...
-
--- 4 通りの解釈
-collectNodes  schoolModelP   -- 構造検査 (Double 特殊化)
-logJoint      schoolModelP ps                 -- 数値評価 (a = Double)
-gradAD        schoolModelP ["mu","tau"] [0,1] -- AD 勾配 (a = Forward Double)
-extractDeps   schoolModelP   -- 依存グラフ (a = Track) — Mermaid DAG 自動生成可能
-```
-
-**主な追加 API**:
-```haskell
--- 多相 DSL 型
-type ModelP r = forall a. (Floating a, Ord a) => Model a r
-
--- AD 勾配 (machine epsilon 精度)
-gradAD  :: ModelP r -> [Text] -> [Double] -> [Double]
-gradADU :: ModelP r -> [Text] -> [Transform] -> [Double] -> [Double]  -- 制約変換込み
-
--- 依存追跡 (Track 型)
-extractDeps :: ModelP r -> [Node]   -- Node に nodeDeps :: Set Text を含む
-
--- インタープリタ (HBM と同名・同セマンティクス)
+-- インタープリタ
 logJoint, logPrior, logLikelihood :: (Floating a, Ord a) => Model a r -> Map Text a -> a
 sampleNames    :: ModelP r -> [Text]
-getTransforms  :: ModelP r -> Map Text Transform   -- 事前分布から自動検出
+collectNodes   :: ModelP r -> [Node]
+describeModel  :: ModelP r -> Text
+perObsLogLiks  :: ModelP r -> Params -> [Double]   -- WAIC/LOO 用
+
+-- AD 勾配
+gradAD  :: ModelP r -> [Text] -> [Double] -> [Double]
+gradADU :: ModelP r -> [Text] -> [Transform] -> [Double] -> [Double]
+
+-- 依存追跡 + DAG
+extractDeps     :: ModelP r -> [Node]            -- Node に nodeDeps :: Set Text
+buildModelGraph :: ModelP r -> ModelGraph        -- 依存グラフを自動構築 (手動 edge 不要)
+
+-- 制約変換 (HMC/NUTS/VI 用)
+getTransforms        :: ModelP r -> Map Text Transform   -- 事前分布から自動検出
+logJointUnconstrained :: (Floating a, Ord a) => Model a r -> [Text] -> [Transform] -> Map Text a -> a
+
+-- 構造抽出 (Gibbs 共役検出用)
 runObserveDists :: Model Double r -> Map Text Double -> [(Text, Distribution Double, [Double])]
 priorList       :: Model Double r -> [(Text, Distribution Double)]
 ```
-
-サンプラーは `MCMC.HMCP.hmcP`、`MCMC.NUTSP.nutsP`、`MCMC.GibbsP.gibbsMHP` を使います
-(下記の `MCMC.HMC` / `MCMC.NUTS` / `MCMC.Gibbs` セクションの `*P` 版に置き換えるだけ)。
 
 ---
 
@@ -389,12 +373,9 @@ main = do
 
 ---
 
-### `MCMC.HMC` — Hamiltonian Monte Carlo ⚠️ 廃止予定
+### `MCMC.HMC` — Hamiltonian Monte Carlo
 
-> **`hmc` / `hmcChains` は廃止予定です。** 新規コードは [`MCMC.HMCP.hmcP`](#mcmchmcp-mcmcnutsp-mcmcgibbsp--hbmp-用サンプラー-推奨) を使用してください
-> (シグネチャはほぼ同じで `Model.HBMP` を受け取り、AD 勾配で精度・速度ともに優れます)。
-> 内部ユーティリティ (`leapfrogWith`, `kinetic`, `paramsToVec` 等) は引き続き共有モジュールとして残ります。
-
+`Numeric.AD.Mode.Forward` による正確な勾配で動作します。
 制約付きパラメータ (Exponential / Gamma → 正値、Beta → 単位区間) を
 対数変換・ロジット変換で unconstrained 空間にマッピングしてリープフロッグを行います。
 Jacobian 補正が自動適用されるため、初期値は通常のパラメータ値で渡せます。
@@ -443,10 +424,7 @@ main = do
 
 ---
 
-### `MCMC.NUTS` — No-U-Turn Sampler ⚠️ 廃止予定
-
-> **`nuts` / `nutsChains` は廃止予定です。** 新規コードは `MCMC.NUTSP.nutsP` / `nutsPChains` を使用してください
-> (`NUTSConfig` は共通)。`Model.HBMP` を受け取り AD 勾配で動作します。
+### `MCMC.NUTS` — No-U-Turn Sampler
 
 Hoffman & Gelman (2014) Algorithm 3 の実装。
 軌道長を U-Turn 判定で自動決定するため `hmcLeapfrogSteps` のチューニングが不要。
@@ -733,10 +711,7 @@ main = do
 
 ---
 
-### `MCMC.Gibbs` — Gibbs サンプリング ⚠️ 廃止予定
-
-> **`gibbsMH` / `gibbsFromModel` は廃止予定です。** 新規コードは `MCMC.GibbsP.gibbsMHP` / `gibbsFromModelP` を使用してください
-> (`GibbsConfig`、`GibbsUpdate`、`normalNormal`/`betaBinomial`/`gammaPoisson` は共通)。
+### `MCMC.Gibbs` — Gibbs サンプリング
 
 共役事後分布が存在するパラメータを**直接サンプリング**します。
 棄却ステップがないため共役モデルでは NUTS より 3〜5 倍高い ESS/秒を達成します。

@@ -1,22 +1,17 @@
 # MCMC サンプラー選択ガイド
 
-> ## ⚠️ API 移行のお知らせ
->
-> 本ページの `hmc` / `nuts` / `gibbsMH` は **`Model.HBM` 用の旧 API で、廃止予定**です。
-> 新規コードは AD 勾配版 (`MCMC.HMCP.hmcP` / `MCMC.NUTSP.nutsP` / `MCMC.GibbsP.gibbsMHP`) を使ってください。
-> シグネチャ・`HMCConfig`/`NUTSConfig`/`GibbsConfig` はそのままで、`Model.HBMP` のモデルを受け取るだけの違いです。
-> 詳細は [HBMP への移行](02-probabilistic-model.md#modelhbmp-への移行-推奨) を参照。
-
 ## サンプラー比較
 
-| サンプラー | 推奨モジュール | 旧 API (廃止予定) | 向いているケース | 主な調整パラメータ |
-|---|---|---|---|---|
-| Metropolis-Hastings | `MCMC.MH` | — | 動作確認・シンプルモデル | `mcmcStepSizes` (受容率 20-50%) |
-| HMC | `MCMC.HMCP` (`hmcP`) | `MCMC.HMC` (`hmc`) | 連続パラメータ・中規模 | `hmcStepSize`, `hmcLeapfrogSteps` |
-| **NUTS** | `MCMC.NUTSP` (`nutsP`) | `MCMC.NUTS` (`nuts`) | **ほぼ全ケースで推奨** | `nutsStepSize` (他は自動調整) |
-| Gibbs | `MCMC.GibbsP` (`gibbsMHP`) | `MCMC.Gibbs` (`gibbsMH`) | 共役モデル (超高速) | 不要 (直接サンプリング) |
+| サンプラー | モジュール | 向いているケース | 主な調整パラメータ |
+|---|---|---|---|
+| Metropolis-Hastings | `MCMC.MH` (`metropolis`) | 動作確認・シンプルモデル | `mcmcStepSizes` (受容率 20-50%) |
+| HMC | `MCMC.HMC` (`hmc`) | 連続パラメータ・中規模 | `hmcStepSize`, `hmcLeapfrogSteps` |
+| **NUTS** | `MCMC.NUTS` (`nuts`) | **ほぼ全ケースで推奨** | `nutsStepSize` (他は dual averaging で自動調整) |
+| Gibbs / ハイブリッド | `MCMC.Gibbs` (`gibbsMH`) | 共役モデル (超高速) | 不要 (直接サンプリング) |
 
-`*P` 版は AD 勾配 (`Numeric.AD`) を使用するため数値微分版より精度・速度ともに優れます。
+HMC/NUTS は `Numeric.AD.Mode.Forward` による正確な勾配を使うため、
+数値微分版に比べて精度・速度ともに優れます。
+全サンプラーは多相モデル `ModelP r` を受け取り、制約変換 (PositiveT/UnitIntervalT) を自動適用します。
 
 ---
 

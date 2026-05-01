@@ -1,12 +1,5 @@
 # クイックスタート
 
-> ## ⚠️ API 移行のお知らせ
->
-> 本ページの例は旧 `Model.HBM` を使っていますが、**新規コードは `Model.HBMP` を推奨**します。
-> サンプラーも `MCMC.HMCP.hmcP` / `MCMC.NUTSP.nutsP` / `MCMC.GibbsP.gibbsMHP` を使ってください。
-> 次回メジャーバージョンで `Model.HBM` は削除され、`Model.HBMP` が `Model.HBM` にリネームされます。
-> 詳細は [確率的プログラミング DSL — HBMP への移行](02-probabilistic-model.md#modelhbmp-への移行-推奨) を参照してください。
-
 ## ビルドと実行
 
 ```bash
@@ -33,16 +26,13 @@ cabal run hbm-example -- +RTS -N4   # 4スレッド
 
 5行で「モデル → NUTS → HTML レポート」まで完結する例です。
 
-### 推奨: `Model.HBMP` + `MCMC.NUTSP`
-
 ```haskell
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 import qualified Data.Map.Strict as Map
 import System.Random.MWC (createSystemRandom)
-import Model.HBMP                            -- Distribution (..), sample, observe
-import MCMC.NUTSP (nutsP)
-import MCMC.NUTS  (defaultNUTSConfig)        -- NUTSConfig は共通
+import Model.HBM                              -- Distribution (..), sample, observe
+import MCMC.NUTS  (nuts, defaultNUTSConfig)
 import MCMC.Core  (posteriorMean, posteriorSD)
 import Viz.Report (defaultReport, renderReport)
 
@@ -55,36 +45,12 @@ myModel = do
 main :: IO ()
 main = do
   gen <- createSystemRandom
-  -- 2. NUTS (AD 勾配版) でサンプリング
-  chain <- nutsP myModel defaultNUTSConfig (Map.fromList [("mu", 0.0)]) gen
+  -- 2. NUTS (AD 勾配 + dual averaging) でサンプリング
+  chain <- nuts myModel defaultNUTSConfig (Map.fromList [("mu", 0.0)]) gen
   -- 3. 事後統計
   print (posteriorMean "mu" chain)
   print (posteriorSD   "mu" chain)
-  -- 4. HTML レポート
-  renderReport "report.html" (defaultReport "My Model" chain ["mu"])
-```
-
-### 旧 API (廃止予定): `Model.HBM` + `MCMC.NUTS`
-
-```haskell
-{-# LANGUAGE OverloadedStrings #-}
-import qualified Data.Map.Strict as Map
-import System.Random.MWC (createSystemRandom)
-import Model.HBM
-import Stat.Distribution (Distribution (..))
-import MCMC.NUTS  (nuts, defaultNUTSConfig)
-import MCMC.Core  (posteriorMean, posteriorSD)
-import Viz.Report (defaultReport, renderReport)
-
-myModel :: Model ()
-myModel = do
-  mu <- sample "mu" (Normal 0 10)
-  observe "y" (Normal mu 2) [1.2, 2.3, 3.1, 2.8, 1.9]
-
-main :: IO ()
-main = do
-  gen   <- createSystemRandom
-  chain <- nuts myModel defaultNUTSConfig (Map.fromList [("mu", 0.0)]) gen
+  -- 4. HTML レポート (KDE + トレース + 自己相関)
   renderReport "report.html" (defaultReport "My Model" chain ["mu"])
 ```
 
@@ -92,16 +58,18 @@ main = do
 
 ## 何を使えばいいか — 全機能早見表
 
-| やりたいこと | 推奨モジュール | 旧 API (廃止予定) | デモファイル |
-|---|---|---|---|
-| モデル定義 (DSL) | `Model.HBMP` | `Model.HBM` | `HBMPDemo.hs` |
-| HMC サンプリング | `MCMC.HMCP` (`hmcP`) | `MCMC.HMC` (`hmc`) | `HBMComparisonDemo.hs` |
-| NUTS サンプリング | `MCMC.NUTSP` (`nutsP`) | `MCMC.NUTS` (`nuts`) | `HBMPMCMCDemo.hs` |
-| 共役モデルの高速サンプリング | `MCMC.GibbsP` (`gibbsMHP`) | `MCMC.Gibbs` (`gibbsMH`) | `GibbsPTest.hs` |
-| 変分推論 (大規模・高速近似) | `Stat.VI` | — | `VIDemo.hs` |
-| モデル比較 | `Stat.ModelSelect` | — | `GibbsDemo.hs` |
-| 診断プロット・HTML レポート | `Viz.Report` | — | `HBMExample.hs` |
-| 棒グラフ | `Viz.Bar` | — | `BarDemo.hs` |
+| やりたいこと | 使うモジュール | デモファイル |
+|---|---|---|
+| モデル定義 (多相 DSL) | `Model.HBM` | 全 demo |
+| HMC サンプリング (AD 勾配) | `MCMC.HMC` (`hmc` / `hmcChains`) | `BenchMCMC.hs` |
+| NUTS サンプリング | `MCMC.NUTS` (`nuts` / `nutsChains`) | `HBMExample.hs` |
+| 共役モデルの高速サンプリング | `MCMC.Gibbs` (`gibbsMH` / `gibbsFromModel`) | `GibbsHBMDemo.hs` |
+| Random Walk MH | `MCMC.MH` (`metropolis`) | `HBMExample.hs` |
+| 変分推論 (大規模・高速近似) | `Stat.VI` (`advi`) | `VIDemo.hs` |
+| モデル比較 (WAIC/LOO) | `Stat.ModelSelect` | `GibbsDemo.hs` |
+| 診断プロット・HTML レポート | `Viz.Report` | `HBMExample.hs` |
+| モデル DAG 可視化 | `Viz.ModelGraph` (依存自動抽出) | `HBMExample.hs` |
+| 棒グラフ | `Viz.Bar` | `BarDemo.hs` |
 
 各機能の詳細は以下のドキュメントを参照してください:
 - [確率的プログラミング DSL](02-probabilistic-model.md)
