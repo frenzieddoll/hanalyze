@@ -23,24 +23,27 @@ import System.Random.MWC (createSystemRandom)
 import DataFrame.Core (Column (..), DataFrame)
 import qualified DataFrame.Core as DF
 import Model.Core    (Band (..), coefficients)
-import Model.LM      (fitPolyWithSmooth, SmoothFit (..))
+import Model.LM      (fitPolyWithSmooth, SmoothFit (..), polyDesignMatrix)
 import Model.GLMM    (fitLMEDataFrame, GLMMResult (..))
 import Model.GLM     (Family (..), LinkFn (..))
 import qualified Numeric.LinearAlgebra as LA
+import Stat.ModelSelect (lmPosteriorLogLiks, waic, loo,
+                         WAICResult (..), LOOResult (..))
 
 import MCMC.Core (Chain (..), chainVals, posteriorMean, posteriorSD,
                   posteriorQuantile, acceptanceRate)
 import MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
 import Model.HBM (ModelP, sample, observe, Distribution (..),
-                  buildModelGraph)
+                  buildModelGraph, perObsLogLiks)
 import Stat.MCMC (ess)
 
 import Viz.AnalysisReport
   ( AnalysisReportConfig (..), defaultAnalysisConfig
   , FitSummary (..), GLMMSummary (..), HBMRegSummary (..), SmoothData (..)
   , ModelFit (..), NamedPlot (..)
+  , CompareEntry (..)
   , mkFitSummary, mkGLMMSummary
-  , writeAnalysisReport
+  , writeAnalysisReport, writeComparisonReport
   )
 import Viz.Core (PlotConfig (..))
 import Viz.MCMC (mcmcDiagnostics, autocorrPlot)
@@ -115,17 +118,28 @@ hbmModel = do
 -- レポート 1: LM (プールド回帰、グループ無視)
 -- ---------------------------------------------------------------------------
 
-reportLM :: IO ()
+reportLM :: IO (Maybe ModelFit)
 reportLM = do
   let df = mkDataFrame
   case fitPolyWithSmooth (CI 0.95) 100 df "x" "y" of
-    Nothing -> putStrLn "  LM fit failed"
+    Nothing -> do putStrLn "  LM fit failed"; return Nothing
     Just (res, sf) -> do
       let beta = coefficients res
           slope = LA.atIndex beta 1
           intercept = LA.atIndex beta 0
       printf "  LM:    intercept=%+.3f  slope=%+.3f  R²=%.3f\n"
              intercept slope (computeR2Local df res)
+
+      -- WAIC/LOO: フラット事前で β,σ² の事後を解析的にサンプリング
+      gen <- createSystemRandom
+      let yVec = LA.fromList allYs
+          dm   = polyDesignMatrix 1 (V.fromList allXs)
+          nSamples = 1000 :: Int
+      llMat <- lmPosteriorLogLiks dm yVec res nSamples gen
+      let wRes = waic llMat
+          lRes = loo  llMat
+      printf "         WAIC=%.2f  LOO=%.2f  p_WAIC=%.2f\n"
+             (waicValue wRes) (looValue lRes) (waicPwaic wRes)
 
       let smooth = SmoothData
             { sdXs      = sfX sf
@@ -135,27 +149,28 @@ reportLM = do
             , sdHasBand = sfHasBand sf
             }
           summary = mkFitSummary Gaussian Identity [("x", 1)] (Just ("x", smooth)) res
-            -- modelType を "LM (Pooled, ignores group)" に上書き
           summary' = summary
-            { fsModelType = "LM (Pooled — group 無視)"
-            , fsFormula   = "y ~ α + β · x"
-            , fsLinkName  = "Identity (Gaussian)"
+            { fsModelType    = "LM (Pooled — group 無視)"
+            , fsFormula      = "y ~ α + β · x"
+            , fsLinkName     = "Identity (Gaussian)"
+            , fsModelSelect  = Just (wRes, lRes)
             }
           rptCfg = defaultAnalysisConfig
                      "Simpson Paradox — LM (Pooled regression)"
       writeAnalysisReport "simpson_lm.html" rptCfg df ["x"] "y"
                           (RegFit summary') []
       putStrLn "  → simpson_lm.html"
+      return (Just (RegFit summary'))
 
 -- ---------------------------------------------------------------------------
 -- レポート 2: GLMM (LME, ランダム切片 by group)
 -- ---------------------------------------------------------------------------
 
-reportGLMM :: IO ()
+reportGLMM :: IO (Maybe ModelFit)
 reportGLMM = do
   let df = mkDataFrame
   case fitLMEDataFrame [("x", 1)] "group" "y" df of
-    Nothing -> putStrLn "  GLMM fit failed"
+    Nothing -> do putStrLn "  GLMM fit failed"; return Nothing
     Just gr -> do
       let beta = coefficients (glmmFixed gr)
           slope = LA.atIndex beta 1
@@ -186,12 +201,13 @@ reportGLMM = do
       writeAnalysisReport "simpson_glmm.html" rptCfg df ["x"] "y"
                           (MixFit summary) []
       putStrLn "  → simpson_glmm.html"
+      return (Just (MixFit summary))
 
 -- ---------------------------------------------------------------------------
 -- レポート 3: HBM (階層ベイズ)
 -- ---------------------------------------------------------------------------
 
-reportHBM :: IO ()
+reportHBM :: IO (Maybe ModelFit)
 reportHBM = do
   let df  = mkDataFrame
       cfg = defaultNUTSConfig
@@ -221,6 +237,11 @@ reportHBM = do
                     (fromMaybe 0 (posteriorSD   nm chain)))
         ["A", "B", "C"]
   printf "         受容率=%.1f%%\n" (acceptanceRate chain * 100)
+  let llMatPreview = [ perObsLogLiks hbmModel ps | ps <- chainSamples chain ]
+      wPrev = waic llMatPreview
+      lPrev = loo  llMatPreview
+  printf "         WAIC=%.2f  LOO=%.2f  p_WAIC=%.2f\n"
+         (waicValue wPrev) (looValue lPrev) (waicPwaic wPrev)
 
   -- Smooth: 全体曲線 (mu_alpha + beta * x) を信用区間付きで描画
   let alphas = chainVals "mu_alpha" chain
@@ -250,6 +271,11 @@ reportHBM = do
       tss    = sum [(y - yBar) ^ (2::Int) | y <- allYs]
       rss    = sum [r ^ (2::Int) | r <- resid]
       r2     = if tss < 1e-12 then 0 else 1 - rss / tss
+      -- WAIC/LOO: 各 MCMC サンプルで perObsLogLiks を評価
+      -- (HBM では log-likelihood をモデルから直接得られる)
+      llMatHBM = [ perObsLogLiks hbmModel ps | ps <- chainSamples chain ]
+      wRes = waic llMatHBM
+      lRes = loo  llMatHBM
       fs = FitSummary
              { fsModelType    = "Hierarchical Bayesian Regression (HBM)"
              , fsFormula      = "y_g ~ α_g + β · x,  α_g ~ N(μ_α, σ_α)"
@@ -261,7 +287,7 @@ reportHBM = do
              , fsLinkName     = "Normal (identity link)"
              , fsXColDegs     = [("x", 1)]
              , fsSmoothData   = Just ("x", smooth)
-             , fsModelSelect  = Nothing
+             , fsModelSelect  = Just (wRes, lRes)
              }
       hs = HBMRegSummary
              { hbmsFit           = fs
@@ -288,6 +314,7 @@ reportHBM = do
   writeAnalysisReport "simpson_hbm.html" rptCfg df ["x"] "y"
                        (HBMFit hs) [diagPlot, acfPlot]
   putStrLn "  → simpson_hbm.html"
+  return (Just (HBMFit hs))
 
 sortAsc :: [Double] -> [Double]
 sortAsc xs = let go [] = []
@@ -318,18 +345,37 @@ main = do
   putStrLn ""
 
   putStrLn "[1] LM (Pooled) — グループを無視した単回帰:"
-  reportLM
+  mLm   <- reportLM
   putStrLn ""
 
   putStrLn "[2] GLMM (LME) — グループをランダム切片として導入:"
-  reportGLMM
+  mGlmm <- reportGLMM
   putStrLn ""
 
   putStrLn "[3] HBM (Hierarchical) — α_g を階層的に推定 + 不確実性:"
-  reportHBM
+  mHbm  <- reportHBM
   putStrLn ""
+
+  -- 統合比較レポート (LM/GLMM/HBM が揃っていれば生成)
+  case (mLm, mGlmm, mHbm) of
+    (Just lm, Just glmm, Just hbm) -> do
+      putStrLn "[4] 統合比較レポート — LM/GLMM/HBM を 1 つの HTML に並べ:"
+      let entries =
+            [ CompareEntry "LM (Pooled)"       "#e41a1c" lm     -- 赤
+            , CompareEntry "GLMM (LME)"        "#377eb8" glmm   -- 青
+            , CompareEntry "HBM (Hierarchical)" "#4daf4a" hbm   -- 緑
+            ]
+          rptCfg = defaultAnalysisConfig
+                     "Simpson Paradox — LM vs GLMM vs HBM 比較レポート"
+      writeComparisonReport "simpson_compare.html" rptCfg
+                            mkDataFrame ["x"] "y" entries
+      putStrLn "  → simpson_compare.html"
+      putStrLn ""
+    _ -> putStrLn "  [統合比較レポート] 一部モデルの fit に失敗したためスキップ"
 
   putStrLn "═══════════════════════════════════════════════════════════════"
   putStrLn "  結果: LM は β > 0 (誤った正の傾き)、"
   putStrLn "        GLMM/HBM は β < 0 (正しい負の傾き) を回復する"
+  putStrLn "  比較レポート simpson_compare.html で 3 モデルの予測曲線・係数・"
+  putStrLn "  WAIC/LOO を一覧できる"
   putStrLn "═══════════════════════════════════════════════════════════════"

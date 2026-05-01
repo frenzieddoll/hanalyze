@@ -29,6 +29,9 @@ module Viz.AnalysisReport
   , NamedPlot (..)
     -- * レポート生成
   , writeAnalysisReport
+    -- * 複数モデル比較レポート
+  , CompareEntry (..)
+  , writeComparisonReport
   ) where
 
 import Data.Aeson (encode)
@@ -1698,4 +1701,352 @@ reportCss = T.unlines
   , ".appendix-block p, .appendix-block li { font-size: .88em; color: #444; margin-bottom: 4px; }"
   , ".formula { background: #f7f9fc; border: 1px solid #e4e9f0; border-radius: 8px;"
   , "           padding: 10px 14px; margin: 8px 0; font-family: monospace; font-size: .88em; color: #333; }"
+  , ".cmp-table { width: 100%; border-collapse: collapse; font-size: .88em; margin: 12px 0; }"
+  , ".cmp-table th { background: #f0f4f9; padding: 9px 12px; text-align: left;"
+  , "                font-weight: 600; color: #2c3e50; border-bottom: 2px solid #d0d7e3; }"
+  , ".cmp-table td { padding: 7px 12px; border-bottom: 1px solid #eef2f6; }"
+  , ".cmp-table td.num { text-align: right; font-variant-numeric: tabular-nums; }"
+  , ".cmp-color { display: inline-block; width: 14px; height: 14px; border-radius: 3px;"
+  , "             margin-right: 6px; vertical-align: middle; border: 1px solid rgba(0,0,0,.15); }"
+  , ".cmp-ci    { color: #555; font-size: .82em; }"
   ]
+
+-- ===========================================================================
+-- 複数モデル比較レポート
+-- ===========================================================================
+
+-- | 比較レポートに含めるモデルエントリ。
+data CompareEntry = CompareEntry
+  { ceLabel :: Text       -- ^ モデル表示名 (例: "LM (Pooled)")
+  , ceColor :: Text       -- ^ プロットの色 (CSS カラーコード, 例: "#e41a1c")
+  , ceFit   :: ModelFit
+  }
+
+-- | 複数モデルを 1 つの HTML レポートに並べた比較レポートを生成する。
+--
+-- セクション構成:
+--   1. データの特性 (1 度だけ)
+--   2. モデル概要 (各モデルの種別・式・係数を 1 行ずつ並べた表)
+--   3. 予測曲線オーバーレイ (全モデルの曲線 + 信用区間を 1 つの散布図に)
+--   4. 係数比較 (forest plot 形式の表)
+--   5. WAIC/LOO 比較 (利用可能なモデルのみ)
+writeComparisonReport
+  :: FilePath
+  -> AnalysisReportConfig
+  -> DataFrame
+  -> [Text]              -- ^ x 列名 (典型的には 1 つ)
+  -> Text                -- ^ y 列名
+  -> [CompareEntry]
+  -> IO ()
+writeComparisonReport path cfg df xCols yCol entries =
+  TIO.writeFile path (buildCompareHtml cfg df xCols yCol entries)
+
+buildCompareHtml
+  :: AnalysisReportConfig -> DataFrame -> [Text] -> Text
+  -> [CompareEntry] -> Text
+buildCompareHtml cfg df xCols yCol entries = T.unlines $
+  [ "<!DOCTYPE html>"
+  , "<html lang=\"ja\">"
+  , "<head>"
+  , "  <meta charset=\"utf-8\">"
+  , "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+  , "  <title>" <> arcTitle cfg <> "</title>"
+  , "  <script>" <> vegaJS      <> "</script>"
+  , "  <script>" <> vegaLiteJS  <> "</script>"
+  , "  <script>" <> vegaEmbedJS <> "</script>"
+  , "  <style>" , reportCss , "  </style>"
+  , "</head>"
+  , "<body>"
+  , compareNavBar cfg
+  , "<main>"
+  , dataSummarySection df xCols yCol
+  , compareModelsSection entries
+  , compareOverlaySection xCols yCol
+  , compareCoefSection entries
+  , compareWaicSection entries
+  , "</main>"
+  , "<script>"
+  , compareOverlayJS df xCols yCol entries
+  , columnDataJS df xCols yCol
+  , histogramInitJS (xCols ++ [yCol])
+  , smoothScrollScript
+  , "</script>"
+  , "</body>"
+  , "</html>"
+  ]
+
+compareNavBar :: AnalysisReportConfig -> Text
+compareNavBar cfg = T.unlines
+  [ "<nav>"
+  , "  <h1>&#128202; " <> arcTitle cfg <> "</h1>"
+  , "  <a class=\"nav-link\" href=\"#sec-data\">データ</a>"
+  , "  <a class=\"nav-link\" href=\"#sec-cmp-models\">モデル一覧</a>"
+  , "  <a class=\"nav-link\" href=\"#sec-cmp-overlay\">予測比較</a>"
+  , "  <a class=\"nav-link\" href=\"#sec-cmp-coef\">係数比較</a>"
+  , "  <a class=\"nav-link\" href=\"#sec-cmp-waic\">WAIC/LOO</a>"
+  , "</nav>"
+  ]
+
+-- | モデル一覧表
+compareModelsSection :: [CompareEntry] -> Text
+compareModelsSection entries = T.unlines $
+  [ "<section id=\"sec-cmp-models\">"
+  , "  <h2><span class=\"sec-icon\">&#9878;</span> 2. モデル一覧</h2>"
+  , "  <p class=\"sec-desc\">本レポートで比較する " <> T.pack (show (length entries))
+    <> " モデルの概要。色はオーバーレイ図と凡例で共通。</p>"
+  , "  <table class=\"cmp-table\">"
+  , "    <thead><tr>"
+  , "      <th></th><th>モデル</th><th>種別</th><th>回帰式</th>"
+  , "      <th class=\"num\">R²</th>"
+  , "    </tr></thead>"
+  , "    <tbody>"
+  ] ++
+  map modelRowHtml entries ++
+  [ "    </tbody>"
+  , "  </table>"
+  , "</section>"
+  ]
+  where
+    modelRowHtml e = T.unlines
+      [ "      <tr>"
+      , "        <td><span class=\"cmp-color\" style=\"background:" <> ceColor e <> "\"></span></td>"
+      , "        <td><b>" <> ceLabel e <> "</b></td>"
+      , "        <td>" <> modelTypeOf (ceFit e) <> "</td>"
+      , "        <td>" <> modelFormulaOf (ceFit e) <> "</td>"
+      , "        <td class=\"num\">" <> fmt4 (modelR2Of (ceFit e)) <> "</td>"
+      , "      </tr>"
+      ]
+
+modelTypeOf :: ModelFit -> Text
+modelTypeOf (RegFit fs)  = fsModelType fs
+modelTypeOf (MixFit gs)  = gsModelType gs
+modelTypeOf (HBMFit hs)  = fsModelType (hbmsFit hs)
+modelTypeOf (GPFit _)    = "Gaussian Process"
+modelTypeOf NoRegFit     = "—"
+
+modelFormulaOf :: ModelFit -> Text
+modelFormulaOf (RegFit fs)  = fsFormula fs
+modelFormulaOf (MixFit gs)  = gsFormula gs
+modelFormulaOf (HBMFit hs)  = fsFormula (hbmsFit hs)
+modelFormulaOf (GPFit _)    = "y ~ GP(m, k)"
+modelFormulaOf NoRegFit     = "—"
+
+modelR2Of :: ModelFit -> Double
+modelR2Of (RegFit fs)  = fsR2 fs
+modelR2Of (MixFit gs)  = gsR2 gs
+modelR2Of (HBMFit hs)  = fsR2 (hbmsFit hs)
+modelR2Of _            = 0
+
+-- | 予測曲線オーバーレイ (描画は JS で実装)
+compareOverlaySection :: [Text] -> Text -> Text
+compareOverlaySection xCols yCol = T.unlines
+  [ "<section id=\"sec-cmp-overlay\">"
+  , "  <h2><span class=\"sec-icon\">&#128200;</span> 3. 予測曲線比較</h2>"
+  , "  <p class=\"sec-desc\">同一データに対する各モデルの予測曲線を重ね描き。"
+  , "    HBM など信用区間を持つモデルはバンドも表示。</p>"
+  , "  <div class=\"vl-wrap\"><div id=\"cmp-overlay\"></div></div>"
+  , if length xCols /= 1
+      then "  <p style=\"font-size:.85em;color:#888\">x 列が単一でないため曲線比較は省略しました。</p>"
+      else "  <p style=\"font-size:.82em;color:#666;margin-top:12px\">x = "
+           <> head xCols <> ", y = " <> yCol <> "</p>"
+  , "</section>"
+  ]
+
+-- | 係数比較表 (HBM は CI 付き)
+compareCoefSection :: [CompareEntry] -> Text
+compareCoefSection entries = T.unlines $
+  [ "<section id=\"sec-cmp-coef\">"
+  , "  <h2><span class=\"sec-icon\">&#128300;</span> 4. 係数比較</h2>"
+  , "  <p class=\"sec-desc\">各モデルが推定したパラメータの一覧。"
+  , "    HBM は事後平均と 95% 信用区間 [2.5%, 97.5%] を表示。</p>"
+  , "  <table class=\"cmp-table\">"
+  , "    <thead><tr>"
+  , "      <th></th><th>モデル</th><th>パラメータ</th>"
+  , "      <th class=\"num\">推定値</th><th class=\"num\">95% CI</th>"
+  , "    </tr></thead>"
+  , "    <tbody>"
+  ] ++
+  concatMap coefRowsForEntry entries ++
+  [ "    </tbody>"
+  , "  </table>"
+  , "</section>"
+  ]
+  where
+    coefRowsForEntry e =
+      let coefs = extractCoefRows (ceFit e)
+          n = length coefs
+      in zipWith (mkCoefRow e n) [0 :: Int ..] coefs
+
+    mkCoefRow e n i (cname, val, mci) =
+      let firstCol = if i == 0
+                      then "<td rowspan=\"" <> T.pack (show n) <> "\">"
+                           <> "<span class=\"cmp-color\" style=\"background:" <> ceColor e <> "\"></span>"
+                           <> "</td><td rowspan=\"" <> T.pack (show n) <> "\"><b>"
+                           <> ceLabel e <> "</b></td>"
+                      else ""
+          ciCell = case mci of
+            Just (lo, hi) -> "<span class=\"cmp-ci\">[" <> fmtSigned lo
+                          <> ", " <> fmtSigned hi <> "]</span>"
+            Nothing       -> "<span class=\"cmp-ci\">—</span>"
+      in T.unlines
+           [ "      <tr>"
+           , "        " <> firstCol
+           , "        <td>" <> cname <> "</td>"
+           , "        <td class=\"num\">" <> fmtSigned val <> "</td>"
+           , "        <td class=\"num\">" <> ciCell <> "</td>"
+           , "      </tr>"
+           ]
+
+extractCoefRows :: ModelFit -> [(Text, Double, Maybe (Double, Double))]
+extractCoefRows (RegFit fs)  = [(n, v, Nothing) | (n, v) <- fsCoeffs fs]
+extractCoefRows (MixFit gs)  = [(n, v, Nothing) | (n, v) <- gsFixed gs]
+extractCoefRows (HBMFit hs)  =
+  [ (n, m, Just (lo, hi))
+  | (n, m, _, lo, hi) <- hbmsPosteriorRows hs ]
+extractCoefRows _            = []
+
+-- | WAIC / LOO 比較 (どれか 1 つでも持っていれば表示)
+compareWaicSection :: [CompareEntry] -> Text
+compareWaicSection entries =
+  let rows = [ (e, w, l) | e <- entries
+             , let mws = waicLooOf (ceFit e)
+             , Just (w, l) <- [mws] ]
+  in if null rows
+     then ""
+     else
+       let bestWaic = minimum [waicValue w | (_, w, _) <- rows]
+           bestLoo  = minimum [looValue  l | (_, _, l) <- rows]
+       in T.unlines $
+       [ "<section id=\"sec-cmp-waic\">"
+       , "  <h2><span class=\"sec-icon\">&#128202;</span> 5. WAIC / LOO 比較</h2>"
+       , "  <p class=\"sec-desc\">情報量規準が小さいほど良い。"
+         <> "ΔWAIC ≈ 0 のモデル群は実質的に同等。最良モデルを <b>★</b> で示す。</p>"
+       , "  <table class=\"cmp-table\">"
+       , "    <thead><tr>"
+       , "      <th></th><th>モデル</th><th class=\"num\">WAIC</th>"
+       , "      <th class=\"num\">ΔWAIC</th><th class=\"num\">LOO</th>"
+       , "      <th class=\"num\">ΔLOO</th>"
+       , "    </tr></thead>"
+       , "    <tbody>"
+       ] ++
+       map (waicRowHtml bestWaic bestLoo) rows ++
+       [ "    </tbody>"
+       , "  </table>"
+       , "</section>"
+       ]
+  where
+    waicRowHtml bw bl (e, w, l) =
+      let dw = waicValue w - bw
+          dl = looValue  l - bl
+          star x = if x == 0 then " ★" else ""
+      in T.unlines
+           [ "      <tr>"
+           , "        <td><span class=\"cmp-color\" style=\"background:"
+             <> ceColor e <> "\"></span></td>"
+           , "        <td><b>" <> ceLabel e <> "</b></td>"
+           , "        <td class=\"num\">" <> fmt4 (waicValue w) <> "</td>"
+           , "        <td class=\"num\">" <> fmt4 dw <> star dw <> "</td>"
+           , "        <td class=\"num\">" <> fmt4 (looValue l) <> "</td>"
+           , "        <td class=\"num\">" <> fmt4 dl <> star dl <> "</td>"
+           , "      </tr>"
+           ]
+
+waicLooOf :: ModelFit -> Maybe (WAICResult, LOOResult)
+waicLooOf (RegFit fs) = fsModelSelect fs
+waicLooOf (HBMFit hs) = fsModelSelect (hbmsFit hs)
+waicLooOf _           = Nothing
+
+-- | オーバーレイ用の Vega-Lite spec を組み立てる JS (data URL 経由)
+compareOverlayJS :: DataFrame -> [Text] -> Text -> [CompareEntry] -> Text
+compareOverlayJS df xCols yCol entries
+  | length xCols /= 1 = ""
+  | otherwise =
+      let xCol = head xCols
+          (xs, ys) = case (getNumeric xCol df, getNumeric yCol df) of
+            (Just xv, Just yv) -> (V.toList xv, V.toList yv)
+            _                  -> ([], [])
+          gs = case getText "group" df of
+                 Just gv -> map Just (V.toList gv)
+                 Nothing -> map (const Nothing) xs
+          dataPoints = T.intercalate "," $
+            zipWith3 (\x y mg ->
+              let g = maybe "" (\t -> ",\"g\":\"" <> t <> "\"") mg
+              in "{\"x\":" <> fmtJS x <> ",\"y\":" <> fmtJS y <> g <> "}")
+              xs ys gs
+          hasGroups = any ( /= Nothing) gs
+          -- 各 modelLayer は ",{band},{line}" 形式で返す (リーディングカンマあり)
+          modelLayers = T.concat (map (modelLayer xCol yCol) entries)
+          legendItems = T.intercalate "," (map legendItem entries)
+      in T.unlines
+           [ "(function() {"
+           , "  const spec = {"
+           , "    '$schema':'https://vega.github.io/schema/vega-lite/v5.json',"
+           , "    width: 720, height: 400, background:'transparent',"
+           , "    layer: ["
+           , "      {"
+           , "        data:{values:[" <> dataPoints <> "]},"
+           , "        mark:{type:'circle',size:60,opacity:0.7},"
+           , "        encoding:{"
+           , "          x:{field:'x',type:'quantitative',axis:{title:'" <> xCol <> "'}},"
+           , "          y:{field:'y',type:'quantitative',axis:{title:'" <> yCol <> "'}}"
+           , if hasGroups
+               then "          ,color:{field:'g',type:'nominal',scale:{scheme:'tableau10'},legend:{title:'group'}}"
+               else "          ,color:{value:'#888'}"
+           , "        }"
+           , "      }"
+           , modelLayers   -- 各要素はすでに先頭カンマ付き
+           , "    ]"
+           , "  };"
+           , "  vegaEmbed('#cmp-overlay', spec, {actions:false}).catch(console.error);"
+           , "  // モデル凡例 (色対応をテキストで表示)"
+           , "  const lg = [" <> legendItems <> "];"
+           , "  console.log('Model legend:', lg);"
+           , "})();"
+           ]
+  where
+    legendItem e = "{\"label\":\"" <> ceLabel e <> "\",\"color\":\"" <> ceColor e <> "\"}"
+
+-- | 1 モデルの予測曲線レイヤー (smoothData があれば線 + バンド)
+modelLayer :: Text -> Text -> CompareEntry -> Text
+modelLayer xCol yCol e =
+  case smoothDataFor (ceFit e) of
+    Nothing -> ""
+    Just (_, sd) ->
+      let pts = T.intercalate "," $
+            zipWith4 (\x y lo hi ->
+              "{\"x\":" <> fmtJS x <> ",\"y\":" <> fmtJS y
+              <> ",\"lo\":" <> fmtJS lo <> ",\"hi\":" <> fmtJS hi <> "}")
+            (sdXs sd) (sdYs sd) (sdLower sd) (sdUpper sd)
+          color = ceColor e
+          band  = if sdHasBand sd
+                  then T.unlines
+                    [ "      ,{"
+                    , "        data:{values:[" <> pts <> "]},"
+                    , "        mark:{type:'area',color:'" <> color <> "',opacity:0.18},"
+                    , "        encoding:{"
+                    , "          x:{field:'x',type:'quantitative'},"
+                    , "          y:{field:'lo',type:'quantitative'},"
+                    , "          y2:{field:'hi'}"
+                    , "        }"
+                    , "      }"
+                    ]
+                  else ""
+          line = T.unlines
+            [ "      ,{"
+            , "        data:{values:[" <> pts <> "]},"
+            , "        mark:{type:'line',color:'" <> color
+              <> "',strokeWidth:2.5,tooltip:{content:'data'}},"
+            , "        encoding:{"
+            , "          x:{field:'x',type:'quantitative'},"
+            , "          y:{field:'y',type:'quantitative'}"
+            , "        }"
+            , "      }"
+            ]
+      in band <> line
+  where
+    _ = (xCol, yCol)  -- 軸タイトルは点レイヤーで設定済み
+
+-- 4 引数 zipWith
+zipWith4 :: (a -> b -> c -> d -> e) -> [a] -> [b] -> [c] -> [d] -> [e]
+zipWith4 f (a:as) (b:bs) (c:cs) (d:ds) = f a b c d : zipWith4 f as bs cs ds
+zipWith4 _ _ _ _ _ = []
