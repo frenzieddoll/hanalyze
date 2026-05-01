@@ -5,6 +5,29 @@ CLI ツールとしても、Haskell ライブラリとしても使えます。
 
 ---
 
+## ⚠️ 重要: API 移行のお知らせ
+
+**`Model.HBM` (旧版) は廃止予定です。** 新しい多相 DSL `Model.HBMP` への移行を推奨します。
+
+| 旧 (廃止予定) | 新 (推奨) |
+|---|---|
+| `Model.HBM` | `Model.HBMP` |
+| `MCMC.HMC.hmc` / `hmcChains` | `MCMC.HMCP.hmcP` / `hmcPChains` |
+| `MCMC.NUTS.nuts` / `nutsChains` | `MCMC.NUTSP.nutsP` / `nutsPChains` |
+| `MCMC.Gibbs.gibbsMH` / `gibbsFromModel` | `MCMC.GibbsP.gibbsMHP` / `gibbsFromModelP` |
+
+**HBMP の優位点**:
+- AD 勾配 (`Numeric.AD`) による machine epsilon 精度の微分
+- `Track` 型による依存グラフの自動抽出 (`extractDeps`)
+- `forall a. (Floating a, Ord a) => Model a r` による多相解釈 (構造検査・log joint・AD・依存追跡)
+
+**今後の予定**: 次回メジャーバージョンで `Model.HBM` を削除し、`Model.HBMP` を `Model.HBM` にリネームします。
+同様に `MCMC.HMCP` → `MCMC.HMC`、`MCMC.NUTSP` → `MCMC.NUTS`、`MCMC.GibbsP` → `MCMC.Gibbs` への統合を予定しています。
+
+新規モデル記述・既存モデルの段階的移行ともに `Model.HBMP` を使用してください。
+
+---
+
 ## ドキュメント (docs/)
 
 | ページ | 内容 |
@@ -83,14 +106,18 @@ Stat/
   VI.hs            -- 変分推論 (ADVI / Adam)
 
 Model/
-  HBM.hs           -- 確率的プログラミング DSL (Free Monad)
+  HBM.hs           -- 確率的プログラミング DSL (Double 継続) ※廃止予定
+  HBMP.hs          -- 多相版 DSL (推奨。AD 勾配・Track 依存抽出対応)
 
 MCMC/
   Core.hs          -- Chain 型・事後統計量 (独立して使用可)
   MH.hs            -- Random Walk Metropolis-Hastings
-  HMC.hs           -- Hamiltonian Monte Carlo (制約変換付き)
-  NUTS.hs          -- No-U-Turn Sampler (制約変換付き)
-  Gibbs.hs         -- Gibbs サンプリング (共役アップデート)
+  HMC.hs           -- Hamiltonian Monte Carlo (HBM 用、廃止予定)
+  HMCP.hs          -- HMC (HBMP 用、AD 勾配版、推奨)
+  NUTS.hs          -- No-U-Turn Sampler (HBM 用、廃止予定)
+  NUTSP.hs         -- NUTS (HBMP 用、AD 勾配版、推奨)
+  Gibbs.hs         -- Gibbs サンプリング (HBM 用、廃止予定)
+  GibbsP.hs        -- Gibbs (HBMP 用、推奨)
 
 Viz/
   MCMC.hs          -- 診断プロット (KDE / トレース / 自己相関 / ペア散布図)
@@ -175,13 +202,16 @@ let kdePoints = kde 200 (chainVals "mu" chain)  -- [(x, density)]
 
 ---
 
-### `Model.HBM` — 確率的プログラミング DSL
+### `Model.HBM` — 確率的プログラミング DSL ⚠️ 廃止予定
+
+> **このモジュールは廃止予定です。** 新規コードは [`Model.HBMP`](#modelhbmp--多相確率的プログラミング-dsl-推奨) を使用してください。
+> `Model.HBMP` は同じ DSL 構文で AD 勾配・依存抽出に加え、HMC/NUTS/Gibbs もすべてサポートしています。
 
 ```haskell
 import Model.HBM
 import Stat.Distribution
 
-type Model a   -- Free Monad over ModelF
+type Model a   -- Free Monad over ModelF (Double 継続固定)
 
 -- 潜在変数の宣言 (返り値がモデル内で依存関係を形成)
 sample  :: Text -> Distribution -> Model Double
@@ -240,6 +270,54 @@ logJoint      m ps  -- ≈ -52.4
 logPrior      m ps  -- ≈ -20.3
 logLikelihood m ps  -- ≈ -32.1
 ```
+
+---
+
+### `Model.HBMP` — 多相確率的プログラミング DSL (推奨)
+
+`Model.HBM` の継続を多相化した次世代 DSL。同じ構文で記述し、`forall a. (Floating a, Ord a) => Model a r`
+として 4 通りの解釈 (構造検査・log joint・AD 勾配・依存追跡) を取り出せます。
+
+```haskell
+import Model.HBMP   -- Distribution (..), sample, observe を提供
+import qualified Data.Map.Strict as Map
+
+-- DSL 構文は HBM と完全に同じ (Distribution は Model.HBMP のものを使う)
+schoolModelP :: ModelP [Double]
+schoolModelP = do
+  mu  <- sample "mu"  (Normal 0 100)
+  tau <- sample "tau" (Exponential 0.1)
+  ...
+
+-- 4 通りの解釈
+collectNodes  schoolModelP   -- 構造検査 (Double 特殊化)
+logJoint      schoolModelP ps                 -- 数値評価 (a = Double)
+gradAD        schoolModelP ["mu","tau"] [0,1] -- AD 勾配 (a = Forward Double)
+extractDeps   schoolModelP   -- 依存グラフ (a = Track) — Mermaid DAG 自動生成可能
+```
+
+**主な追加 API**:
+```haskell
+-- 多相 DSL 型
+type ModelP r = forall a. (Floating a, Ord a) => Model a r
+
+-- AD 勾配 (machine epsilon 精度)
+gradAD  :: ModelP r -> [Text] -> [Double] -> [Double]
+gradADU :: ModelP r -> [Text] -> [Transform] -> [Double] -> [Double]  -- 制約変換込み
+
+-- 依存追跡 (Track 型)
+extractDeps :: ModelP r -> [Node]   -- Node に nodeDeps :: Set Text を含む
+
+-- インタープリタ (HBM と同名・同セマンティクス)
+logJoint, logPrior, logLikelihood :: (Floating a, Ord a) => Model a r -> Map Text a -> a
+sampleNames    :: ModelP r -> [Text]
+getTransforms  :: ModelP r -> Map Text Transform   -- 事前分布から自動検出
+runObserveDists :: Model Double r -> Map Text Double -> [(Text, Distribution Double, [Double])]
+priorList       :: Model Double r -> [(Text, Distribution Double)]
+```
+
+サンプラーは `MCMC.HMCP.hmcP`、`MCMC.NUTSP.nutsP`、`MCMC.GibbsP.gibbsMHP` を使います
+(下記の `MCMC.HMC` / `MCMC.NUTS` / `MCMC.Gibbs` セクションの `*P` 版に置き換えるだけ)。
 
 ---
 
@@ -311,7 +389,11 @@ main = do
 
 ---
 
-### `MCMC.HMC` — Hamiltonian Monte Carlo
+### `MCMC.HMC` — Hamiltonian Monte Carlo ⚠️ 廃止予定
+
+> **`hmc` / `hmcChains` は廃止予定です。** 新規コードは [`MCMC.HMCP.hmcP`](#mcmchmcp-mcmcnutsp-mcmcgibbsp--hbmp-用サンプラー-推奨) を使用してください
+> (シグネチャはほぼ同じで `Model.HBMP` を受け取り、AD 勾配で精度・速度ともに優れます)。
+> 内部ユーティリティ (`leapfrogWith`, `kinetic`, `paramsToVec` 等) は引き続き共有モジュールとして残ります。
 
 制約付きパラメータ (Exponential / Gamma → 正値、Beta → 単位区間) を
 対数変換・ロジット変換で unconstrained 空間にマッピングしてリープフロッグを行います。
@@ -361,7 +443,10 @@ main = do
 
 ---
 
-### `MCMC.NUTS` — No-U-Turn Sampler
+### `MCMC.NUTS` — No-U-Turn Sampler ⚠️ 廃止予定
+
+> **`nuts` / `nutsChains` は廃止予定です。** 新規コードは `MCMC.NUTSP.nutsP` / `nutsPChains` を使用してください
+> (`NUTSConfig` は共通)。`Model.HBMP` を受け取り AD 勾配で動作します。
 
 Hoffman & Gelman (2014) Algorithm 3 の実装。
 軌道長を U-Turn 判定で自動決定するため `hmcLeapfrogSteps` のチューニングが不要。
@@ -648,7 +733,10 @@ main = do
 
 ---
 
-### `MCMC.Gibbs` — Gibbs サンプリング
+### `MCMC.Gibbs` — Gibbs サンプリング ⚠️ 廃止予定
+
+> **`gibbsMH` / `gibbsFromModel` は廃止予定です。** 新規コードは `MCMC.GibbsP.gibbsMHP` / `gibbsFromModelP` を使用してください
+> (`GibbsConfig`、`GibbsUpdate`、`normalNormal`/`betaBinomial`/`gammaPoisson` は共通)。
 
 共役事後分布が存在するパラメータを**直接サンプリング**します。
 棄却ステップがないため共役モデルでは NUTS より 3〜5 倍高い ESS/秒を達成します。

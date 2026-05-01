@@ -1,11 +1,24 @@
 # 確率的プログラミング DSL (Model.HBM)
 
+> ## ⚠️ 重要: API 移行のお知らせ
+>
+> **本ページで解説している `Model.HBM` は廃止予定です。**
+> 新規コードは多相版 [`Model.HBMP`](#modelhbmp-への移行-推奨) を使用してください。
+> 構文はほぼ同じで、AD 勾配・依存抽出・多相解釈が追加されています。
+>
+> **次回メジャーバージョン**: `Model.HBM` を削除し、`Model.HBMP` を `Model.HBM` にリネームします。
+> 同じく `MCMC.{HMC,NUTS,Gibbs}P` → `MCMC.{HMC,NUTS,Gibbs}` への統合を予定しています。
+
 ## 概要
 
 `Model.HBM` は Free Monad で実装した軽量な確率的プログラミング DSL です。
 Stan や PyMC のように宣言的にモデルを書けます。
 内部では `logJoint`/`logPrior`/`logLikelihood` インタープリタが
 モデル構造を走査してサンプラーに渡す対数密度を計算します。
+
+`Model.HBMP` は同じ DSL の継続を多相化したもので、
+`forall a. (Floating a, Ord a) => Model a r` として記述すると、
+同一モデルから 4 通りの解釈 (構造検査・log joint・AD 勾配・依存抽出) を取り出せます。
 
 ---
 
