@@ -1,4 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ImpredicativeTypes #-}
 -- Phase 4 + 5: Small hierarchical model example with MCMC inference
 --
 -- Hierarchical normal model for test scores across J schools:
@@ -20,7 +22,7 @@ import Model.HBM
 import MCMC.Core
 import MCMC.MH   (MCMCConfig (..), defaultMCMCConfig, metropolis)
 import MCMC.NUTS (nutsChains, NUTSConfig (..), defaultNUTSConfig)
-import Stat.Distribution
+import Stat.Distribution ()
 import Stat.MCMC  (ess)
 import Viz.Core      (openInBrowser)
 import Viz.Report    (MCMCReport (..), defaultReport, renderReport)
@@ -34,14 +36,14 @@ sigma :: Double
 sigma = 5.0   -- known observation SD
 
 -- | Build the hierarchical model for the given group data.
-schoolModel :: [[Double]] -> Model [Double]
+schoolModel :: [[Double]] -> ModelP ()
 schoolModel groupData = do
   mu  <- sample "mu"  (Normal 0 100)
   tau <- sample "tau" (Exponential 0.1)
-  forM (zip [1 :: Int ..] groupData) $ \(j, ys) -> do
+  mapM_ (\(j, ys) -> do
     theta <- sample (T.pack ("theta_" ++ show j)) (Normal mu tau)
-    observe (T.pack ("y_" ++ show j)) (Normal theta sigma) ys
-    return theta
+    observe (T.pack ("y_" ++ show j)) (Normal theta (realToFrac sigma)) ys)
+    (zip [1 :: Int ..] groupData)
 
 -- ---------------------------------------------------------------------------
 -- Synthetic data  (3 schools, n = 4 each)
@@ -75,9 +77,11 @@ trueParams = Map.fromList $
 -- Main
 -- ---------------------------------------------------------------------------
 
+m :: ModelP ()
+m = schoolModel schoolData
+
 main :: IO ()
 main = do
-  let m = schoolModel schoolData
 
   -- ── 1. Model structure ─────────────────────────────────────────────────
   putStrLn "=== Model Structure ==="
@@ -85,13 +89,8 @@ main = do
   putStrLn $ "Latent variables: " ++ show (sampleNames m)
   putStrLn ""
 
-  -- ── 1b. Build model graph (embedded in the report later) ──────────────
-  let edges =
-        [ ("mu",  "theta_1"), ("mu",  "theta_2"), ("mu",  "theta_3")
-        , ("tau", "theta_1"), ("tau", "theta_2"), ("tau", "theta_3")
-        , ("theta_1", "y_1"), ("theta_2", "y_2"), ("theta_3", "y_3")
-        ]
-      graph = buildModelGraph m edges
+  -- ── 1b. Build model graph (HBMP の Track 型で依存を自動抽出) ──────────
+  let graph = buildModelGraph m
 
   -- ── 2. Log-joint at near-MLE parameters ────────────────────────────────
   putStrLn "=== Log-joint at near-MLE params ==="
@@ -198,12 +197,12 @@ main = do
 printParams :: Params -> IO ()
 printParams ps = mapM_ (\(k,v) -> printf "  %-12s = %.4f\n" k v) (Map.toAscList ps)
 
-checkTau :: Model [Double] -> Double -> IO ()
+checkTau :: ModelP () -> Double -> IO ()
 checkTau m tau =
   let ps = Map.insert "tau" tau trueParams
   in printf "  %-8.1f  %.4f\n" tau (logJoint m ps)
 
-checkMu :: Model [Double] -> Double -> IO ()
+checkMu :: ModelP () -> Double -> IO ()
 checkMu m mu =
   let ps = Map.insert "mu" mu trueParams
   in printf "  %-8.1f  %.4f\n" mu (logJoint m ps)

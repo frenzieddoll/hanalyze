@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 -- | MCMC によるモデル比較指標。
 --
 -- WAIC (Widely Applicable Information Criterion) と
@@ -38,7 +39,7 @@ import System.Random.MWC.Distributions (normal)
 
 import Model.Core (FitResult (..))
 import Model.GLM  (Family (..), LinkFn (..))
-import Model.HBM  (Model, perObsLogLiks)
+import Model.HBM  (ModelP, perObsLogLiks)
 import MCMC.Core  (Chain, chainSamples)
 import qualified Stat.Distribution as Dist
 
@@ -169,15 +170,15 @@ paretoKhat topM
 
 -- | モデルとチェーンから対数尤度行列を生成する。
 -- 行 = サンプル (バーンイン後)、列 = 観測値。
-chainLogLikMatrix :: Model a -> Chain -> [[Double]]
+chainLogLikMatrix :: ModelP r -> Chain -> [[Double]]
 chainLogLikMatrix model chain = map (perObsLogLiks model) (chainSamples chain)
 
 -- | チェーンから WAIC を直接計算する。
-chainWAIC :: Model a -> Chain -> WAICResult
+chainWAIC :: ModelP r -> Chain -> WAICResult
 chainWAIC model = waic . chainLogLikMatrix model
 
 -- | チェーンから PSIS-LOO を直接計算する。
-chainLOO :: Model a -> Chain -> LOOResult
+chainLOO :: ModelP r -> Chain -> LOOResult
 chainLOO model = loo . chainLogLikMatrix model
 
 -- ---------------------------------------------------------------------------

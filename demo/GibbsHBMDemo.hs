@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 -- | Gibbs サンプラー × HBM DSL 統合デモ
 --
 -- gibbsFromModel で共役ペアを自動検出し、GibbsUpdate を自動構築する。
@@ -17,7 +18,7 @@ import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
 import Model.HBM
-import Stat.Distribution (Distribution (..))
+-- import Stat.Distribution (Distribution (..)) -- now from Model.HBM
 import MCMC.Core   (Chain (..), chainVals, posteriorMean, posteriorSD)
 import MCMC.Gibbs  (GibbsConfig (..), defaultGibbsConfig,
                     gibbsFromModel, gibbsMH)
@@ -27,14 +28,14 @@ import MCMC.Gibbs  (GibbsConfig (..), defaultGibbsConfig,
 -- ---------------------------------------------------------------------------
 
 -- Model 1: Gamma-Poisson  (全共役)
-poissonModel :: [Double] -> Model ()
+poissonModel :: [Double] -> ModelP ()
 poissonModel ys = do
   lam <- sample "lambda" (Gamma 2 1)
   observe "y" (Poisson lam) ys
   return ()
 
 -- Model 2: Beta-Binomial  (全共役; 各 y は 0/1 の Bernoulli)
-binomModel :: Int -> Int -> Model ()
+binomModel :: Int -> Int -> ModelP ()
 binomModel nTrials nSucc = do
   p <- sample "p" (Beta 2 2)
   let ys = replicate nSucc 1.0 ++ replicate (nTrials - nSucc) 0.0
@@ -42,7 +43,7 @@ binomModel nTrials nSucc = do
   return ()
 
 -- Model 3: Normal 平均推定 (μ 共役, σ は非共役 → MH)
-normalModel :: [Double] -> Model ()
+normalModel :: [Double] -> ModelP ()
 normalModel ys = do
   mu    <- sample "mu"    (Normal 0 10)
   sigma <- sample "sigma" (Exponential 1)
@@ -55,6 +56,16 @@ normalModel ys = do
 
 cfg :: GibbsConfig
 cfg = defaultGibbsConfig { gibbsIterations = 3000, gibbsBurnIn = 500 }
+
+-- 各モデルを top-level で構築 (rank-2 type が let-binding に流れないため)
+pModel :: ModelP ()
+pModel = poissonModel (replicate 30 (4.0 :: Double))
+
+bModel :: ModelP ()
+bModel = binomModel 100 70
+
+nModel :: ModelP ()
+nModel = normalModel (map (* 1.5) [-1.5,-1..1.5] ++ [2.0])
 
 printResult :: Text -> Chain -> Double -> IO ()
 printResult name ch truth = do
@@ -74,8 +85,6 @@ main = do
 
   -- ── Model 1: Gamma-Poisson ──────────────────────────────────────────────
   let trueL  = 4.0 :: Double
-      poisObs = replicate 30 trueL  -- 簡易 "データ": 全観測値 = 真の平均
-      pModel  = poissonModel poisObs
       (gpUpdates, gpMH) = gibbsFromModel pModel
 
   putStrLn "\n=== Model 1: Gamma(2,1) + Poisson(λ) ==="
@@ -87,8 +96,6 @@ main = do
 
   -- ── Model 2: Beta-Binomial ──────────────────────────────────────────────
   let trueP   = 0.7 :: Double
-      nT = 100; nS = 70  -- 100 試行, 70 成功
-      bModel  = binomModel nT nS
       (bbUpdates, bbMH) = gibbsFromModel bModel
 
   putStrLn "\n=== Model 2: Beta(2,2) + Binomial(1,p) ==="
@@ -101,8 +108,6 @@ main = do
   -- ── Model 3: Normal + Exponential (混合) ────────────────────────────────
   let trueMu  = 2.0 :: Double
       trueSig = 1.5 :: Double
-      normObs = map (* trueSig) [-1.5,-1..1.5] ++ [trueMu]   -- 粗いデータ
-      nModel  = normalModel normObs
       (nnUpdates, nnMH) = gibbsFromModel nModel
 
   putStrLn "\n=== Model 3: Normal(0,10) + Exponential(1) [混合モード] ==="

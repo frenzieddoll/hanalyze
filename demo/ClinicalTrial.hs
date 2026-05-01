@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 -- | ベイズ A/B テスト (Beta-Binomial モデル)
 --
 -- 二値アウトカム（例: 新薬投与後の回復）を持つ二群比較。
@@ -28,7 +29,7 @@ import Model.HBM
 import MCMC.Core  (Chain (..), chainVals, acceptanceRate, posteriorMean
                   , posteriorQuantile)
 import MCMC.NUTS  (NUTSConfig (..), defaultNUTSConfig, nutsChains)
-import Stat.Distribution (Distribution (..))
+-- import Stat.Distribution (Distribution (..)) -- now from Model.HBM
 import Stat.MCMC  (ess, rhat)
 import Viz.Core   (openInBrowser)
 import Viz.Report (MCMCReport (..), defaultReport, renderReport)
@@ -51,7 +52,7 @@ kTrt  = 31
 -- モデル定義
 -- ---------------------------------------------------------------------------
 
-clinicalModel :: Model ()
+clinicalModel :: ModelP ()
 clinicalModel = do
   pCtrl <- sample "p_ctrl" (Beta 1 1)
   pTrt  <- sample "p_trt"  (Beta 1 1)
@@ -77,11 +78,13 @@ analyticSD k n =
 -- Main
 -- ---------------------------------------------------------------------------
 
+m :: ModelP ()
+m = clinicalModel
+
 main :: IO ()
 main = do
   gen <- createSystemRandom
-  let m     = clinicalModel
-      names = sampleNames m
+  let names = sampleNames m
 
   -- ── モデル概要 ────────────────────────────────────────────────────────
   putStrLn "=== Bayesian A/B Test: Clinical Trial ==="
@@ -168,8 +171,7 @@ main = do
 
   -- ── HTML レポート生成 ────────────────────────────────────────────────
   putStrLn "=== HTML レポート生成 ==="
-  let edges = [("p_ctrl", "y_ctrl"), ("p_trt", "y_trt")]
-      graph = buildModelGraph m edges
+  let graph = buildModelGraph m   -- HBMP: 依存グラフは Track 型で自動抽出
       report = (defaultReport "Bayesian A/B Test — Clinical Trial" (head chains) names)
                  { reportGraph  = Just graph
                  , reportChains = chains

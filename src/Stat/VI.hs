@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 -- | 変分推論 (ADVI — Automatic Differentiation Variational Inference)
 --
 -- Kucukelbir et al. (2017) の平均場正規 VI を実装。
@@ -31,7 +32,7 @@ import qualified Data.Map.Strict as Map
 import System.Random.MWC (GenIO)
 import System.Random.MWC.Distributions (standard)
 
-import Model.HBM (Model, Params, sampleNames, getTransforms)
+import Model.HBM (ModelP, Params, sampleNames, getTransforms)
 import MCMC.HMC  ( logJointU, paramsToVec, vecToParams
                  , toUnconstrainedParams, fromUnconstrainedParams )
 
@@ -83,7 +84,7 @@ data VIResult = VIResult
 --
 -- 内部では unconstrained 空間で最適化し、サンプルを constrained 空間に戻す。
 -- 制約付きパラメータ (Exponential→PositiveT など) は自動変換される。
-advi :: Model a -> VIConfig -> Params -> GenIO -> IO VIResult
+advi :: ModelP r -> VIConfig -> Params -> GenIO -> IO VIResult
 advi model cfg initP gen = do
   let names      = sampleNames model
       transforms = getTransforms model

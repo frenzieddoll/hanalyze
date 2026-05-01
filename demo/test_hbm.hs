@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 import Model.HBM
 import Stat.Distribution
 import qualified Data.Map.Strict as Map

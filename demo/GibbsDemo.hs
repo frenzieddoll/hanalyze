@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 -- | Gibbs サンプリング + モデル比較 (WAIC / LOO-CV) デモ
 --
 -- モデル: 正規分布の平均推定
@@ -25,7 +26,7 @@ import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
 import Model.HBM
-import Stat.Distribution (Distribution (..))
+-- import Stat.Distribution (Distribution (..)) -- now from Model.HBM
 import MCMC.Core (chainVals, posteriorMean, posteriorSD)
 import MCMC.Gibbs (GibbsConfig (..), defaultGibbsConfig, gibbs, normalNormal)
 import MCMC.NUTS  (NUTSConfig (..), defaultNUTSConfig, nuts)
@@ -49,16 +50,16 @@ obsData =
 -- ---------------------------------------------------------------------------
 
 -- | モデル A: μ ~ Normal(0, 10) — 弱情報事前分布
-modelA :: Model ()
+modelA :: ModelP ()
 modelA = do
   mu <- sample "mu" (Normal 0 10)
-  observe "y" (Normal mu sigLik) obsData
+  observe "y" (Normal mu (realToFrac sigLik)) obsData
 
 -- | モデル B: μ ~ Normal(5, 1) — 情報事前分布 (真値 μ=3 からずれた仮定)
-modelB :: Model ()
+modelB :: ModelP ()
 modelB = do
   mu <- sample "mu" (Normal 5 1)
-  observe "y" (Normal mu sigLik) obsData
+  observe "y" (Normal mu (realToFrac sigLik)) obsData
 
 -- ---------------------------------------------------------------------------
 -- 解析解 (Normal-Normal 共役)

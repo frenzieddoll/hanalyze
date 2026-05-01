@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 -- 1次元ガウスモデルで HMC / NUTS の動作を確認する。
 --
 -- モデル: μ ~ Normal(0, 10), y | μ ~ Normal(μ, 1), data = [1, 2, 3]
@@ -16,24 +17,22 @@ import Model.HBM
 import MCMC.Core (Chain (..), chainVals, posteriorMean, posteriorSD, acceptanceRate)
 import MCMC.HMC
 import MCMC.NUTS
-import Stat.Distribution
+import Stat.Distribution ()
 import Stat.MCMC (rhat)
 
 -- モデル1: μ のみ (unconstrained)
-gaussModel :: [Double] -> Model Double
+gaussModel :: [Double] -> ModelP ()
 gaussModel ys = do
   mu <- sample "mu" (Normal 0 10)
   observe "y" (Normal mu 1) ys
-  return mu
 
 -- モデル2: sigma ~ Exponential(1) (constrained: sigma > 0)
 -- データ: [1,2,3], 真値 sigma=1
 -- 解析解は複雑だが sigma の事後平均は 1 付近に収束するはず
-scaledModel :: [Double] -> Model Double
+scaledModel :: [Double] -> ModelP ()
 scaledModel ys = do
   sigma <- sample "sigma" (Exponential 1)
   observe "y" (Normal 0 sigma) ys
-  return sigma
 
 observed :: [Double]
 observed = [1.0, 2.0, 3.0]
@@ -44,10 +43,15 @@ initP = Map.fromList [("mu", 0.0)]
 initP2 :: Map.Map T.Text Double
 initP2 = Map.fromList [("sigma", 1.5)]
 
+m :: ModelP ()
+m = gaussModel observed
+
+m2 :: ModelP ()
+m2 = scaledModel observed
+
 main :: IO ()
 main = do
   gen <- createSystemRandom
-  let m = gaussModel observed
 
   putStrLn "=== HMC (unconstrained μ) ==="
   let hmcCfg = defaultHMCConfig
@@ -80,8 +84,7 @@ main = do
   -- 制約付きパラメータのテスト: sigma ~ Exponential (正値制約)
   putStrLn ""
   putStrLn "=== HMC (constrained σ ~ Exponential, PositiveT) ==="
-  let m2 = scaledModel observed
-      hmcCfg2 = defaultHMCConfig
+  let hmcCfg2 = defaultHMCConfig
         { hmcIterations    = 3000
         , hmcBurnIn        = 500
         , hmcStepSize      = 0.1

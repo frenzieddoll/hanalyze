@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 -- | MH / HMC / NUTS のパフォーマンス比較デモ
 --
 -- ケース 1 (易しい): 独立 2D 正規事後分布
@@ -26,7 +27,7 @@ import MCMC.Core (Chain (..), chainVals, acceptanceRate, posteriorMean)
 import MCMC.MH   (metropolis, MCMCConfig (..))
 import MCMC.HMC  (hmc,  HMCConfig (..),  defaultHMCConfig)
 import MCMC.NUTS (nuts, NUTSConfig (..), defaultNUTSConfig)
-import Stat.Distribution
+import Stat.Distribution ()
 import Stat.MCMC (ess)
 
 -- ---------------------------------------------------------------------------
@@ -34,7 +35,7 @@ import Stat.MCMC (ess)
 -- ---------------------------------------------------------------------------
 
 -- | ケース 1: 独立 2 パラメータ
-easyModel :: [Double] -> [Double] -> Model ()
+easyModel :: [Double] -> [Double] -> ModelP ()
 easyModel ys1 ys2 = do
   mu1 <- sample "mu1" (Normal 0 5)
   mu2 <- sample "mu2" (Normal 0 5)
@@ -42,7 +43,7 @@ easyModel ys1 ys2 = do
   observe "y2" (Normal mu2 1) ys2
 
 -- | ケース 2: 両パラメータが同じ観測に現れる → 事後分布に強反相関
-hardModel :: [Double] -> Model ()
+hardModel :: [Double] -> ModelP ()
 hardModel ys = do
   alpha <- sample "mu1" (Normal 0 5)
   beta  <- sample "mu2" (Normal 0 5)
@@ -154,6 +155,12 @@ report method ch secs = do
 -- Main
 -- ---------------------------------------------------------------------------
 
+mEasy :: ModelP ()
+mEasy = easyModel obsEasy1 obsEasy2
+
+mHard :: ModelP ()
+mHard = hardModel obsHard
+
 main :: IO ()
 main = do
   gen <- createSystemRandom
@@ -161,8 +168,7 @@ main = do
   let initP = Map.fromList [("mu1", 0.0 :: Double), ("mu2", 0.0)]
 
   -- ---- ケース 1: 独立 2D 正規 ----
-  let mEasy = easyModel obsEasy1 obsEasy2
-      n     = length obsEasy1
+  let n     = length obsEasy1
       sigPost = 1 / sqrt (fromIntegral n + 1/25 :: Double)
 
   putStrLn ""
@@ -179,8 +185,7 @@ main = do
   report "NUTS" ch3 t3
 
   -- ---- ケース 2: 強反相関 ----
-  let mHard    = hardModel obsHard
-      ybar     = sum obsHard / fromIntegral (length obsHard)
+  let ybar     = sum obsHard / fromIntegral (length obsHard)
       n2       = fromIntegral (length obsHard) :: Double
       -- 事後の短軸/長軸 SD を解析的に計算
       -- Λ = [[1/25+n, n],[n, 1/25+n]], Σ = Λ^{-1}

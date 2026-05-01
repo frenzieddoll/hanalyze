@@ -26,15 +26,11 @@ library
     Model.GLM
     Model.GLMM
     Model.HBM
-    Model.HBMP
     MCMC.Core
     MCMC.MH
     MCMC.HMC
-    MCMC.HMCP
     MCMC.NUTS
-    MCMC.NUTSP
     MCMC.Gibbs
-    MCMC.GibbsP
     Stat.Distribution
     Stat.MCMC
     Stat.ModelSelect
@@ -186,41 +182,6 @@ executable gp-demo
       base     >= 4.14 && < 5
     , hanalyze
 
-executable hbmp-mcmc-demo
-  import:           warnings
-  main-is:          HBMPMCMCDemo.hs
-  hs-source-dirs:   demo
-  default-language: GHC2021
-  build-depends:
-      base       >= 4.14 && < 5
-    , hanalyze
-    , text       >= 1.2  && < 2.2
-    , containers >= 0.6  && < 0.8
-    , mwc-random >= 0.15 && < 0.16
-
-executable hbmp-demo
-  import:           warnings
-  main-is:          HBMPDemo.hs
-  hs-source-dirs:   demo
-  default-language: GHC2021
-  build-depends:
-      base       >= 4.14 && < 5
-    , hanalyze
-    , text       >= 1.2  && < 2.2
-    , containers >= 0.6  && < 0.8
-
-executable ad-demo
-  import:           warnings
-  main-is:          ADDemo.hs
-  hs-source-dirs:   demo
-  default-language: GHC2021
-  build-depends:
-      base       >= 4.14 && < 5
-    , hanalyze
-    , text       >= 1.2  && < 2.2
-    , containers >= 0.6  && < 0.8
-    , mwc-random >= 0.15 && < 0.16
-
 executable gibbs-hbm-demo
   import:           warnings
   main-is:          GibbsHBMDemo.hs
@@ -232,45 +193,6 @@ executable gibbs-hbm-demo
     , text       >= 1.2  && < 2.2
     , containers >= 0.6  && < 0.8
     , mwc-random >= 0.15 && < 0.16
-
-executable hbm-comparison
-  import:           warnings
-  main-is:          HBMComparisonDemo.hs
-  hs-source-dirs:   demo
-  default-language: GHC2021
-  build-depends:
-      base       >= 4.14 && < 5
-    , hanalyze
-    , text       >= 1.2  && < 2.2
-    , containers >= 0.6  && < 0.8
-    , mwc-random >= 0.15 && < 0.16
-    , vector     >= 0.12 && < 0.14
-
-executable nutsp-test
-  import:           warnings
-  main-is:          NUTSPTest.hs
-  hs-source-dirs:   demo
-  default-language: GHC2021
-  build-depends:
-      base       >= 4.14 && < 5
-    , hanalyze
-    , text       >= 1.2  && < 2.2
-    , containers >= 0.6  && < 0.8
-    , mwc-random >= 0.15 && < 0.16
-    , vector     >= 0.12 && < 0.14
-
-executable gibbsp-test
-  import:           warnings
-  main-is:          GibbsPTest.hs
-  hs-source-dirs:   demo
-  default-language: GHC2021
-  build-depends:
-      base       >= 4.14 && < 5
-    , hanalyze
-    , text       >= 1.2  && < 2.2
-    , containers >= 0.6  && < 0.8
-    , mwc-random >= 0.15 && < 0.16
-    , vector     >= 0.12 && < 0.14
 
 test-suite hanalyze-test
   import:           warnings

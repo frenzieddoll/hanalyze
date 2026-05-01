@@ -1,4 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
+-- | モデル DAG の Mermaid.js 可視化。
+--
+-- 'Model.HBM.buildModelGraph' で多相モデルから自動構築した 'ModelGraph' を
+-- HTML に書き出します (Mermaid CDN 経由でブラウザで表示)。
 module Viz.ModelGraph
   ( renderModelGraph
   , buildMermaid
@@ -7,19 +11,16 @@ module Viz.ModelGraph
 import Data.Text (Text)
 import qualified Data.Text    as T
 import qualified Data.Text.IO as TIO
+import qualified Data.Set as Set
 
-import Model.HBM        (ModelGraph (..), NodeInfo (..), NodeRole (..))
-import Stat.Distribution (Distribution (..), distributionName)
+import Model.HBM (ModelGraph (..), Node (..), NodeKind (..))
 
 -- ---------------------------------------------------------------------------
 -- Public API
 -- ---------------------------------------------------------------------------
 
--- | Render the model graph as a self-contained HTML file (Mermaid.js DAG).
--- Open the file in any browser to see the interactive diagram.
 renderModelGraph :: FilePath -> Text -> ModelGraph -> IO ()
-renderModelGraph path title_ mg =
-  TIO.writeFile path (buildHtml title_ mg)
+renderModelGraph path title_ mg = TIO.writeFile path (buildHtml title_ mg)
 
 -- ---------------------------------------------------------------------------
 -- HTML wrapper
@@ -28,8 +29,7 @@ renderModelGraph path title_ mg =
 buildHtml :: Text -> ModelGraph -> Text
 buildHtml title_ mg = T.unlines
   [ "<!DOCTYPE html>"
-  , "<html>"
-  , "<head>"
+  , "<html><head>"
   , "  <meta charset=\"utf-8\">"
   , "  <title>" <> title_ <> "</title>"
   , "  <script src=\"https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js\"></script>"
@@ -43,8 +43,7 @@ buildHtml title_ mg = T.unlines
   , "    .legend span { display: inline-block; width: 12px; height: 12px;"
   , "                   border-radius: 2px; margin-right: 4px; vertical-align: middle; }"
   , "  </style>"
-  , "</head>"
-  , "<body>"
+  , "</head><body>"
   , "  <h1>" <> title_ <> "</h1>"
   , "  <div class=\"wrap\">"
   , "    <div class=\"mermaid\">"
@@ -56,8 +55,7 @@ buildHtml title_ mg = T.unlines
   , "    </div>"
   , "  </div>"
   , "  <script>mermaid.initialize({ startOnLoad: true, theme: 'default' });</script>"
-  , "</body>"
-  , "</html>"
+  , "</body></html>"
   ]
 
 -- ---------------------------------------------------------------------------
@@ -67,7 +65,7 @@ buildHtml title_ mg = T.unlines
 buildMermaid :: ModelGraph -> Text
 buildMermaid mg = T.unlines $
   [ "flowchart TD" ] ++
-  map (mkNodeLine mg) (mgNodes mg) ++
+  map mkNodeLine (mgNodes mg) ++
   [ "" ] ++
   map mkEdgeLine (mgEdges mg) ++
   [ "" ] ++
@@ -75,38 +73,25 @@ buildMermaid mg = T.unlines $
   [ "    classDef observed fill:#DD8844,color:#fff,stroke:#b06020,stroke-width:1.5px" ] ++
   classAssignLines mg
 
--- | One Mermaid node definition line.
-mkNodeLine :: ModelGraph -> NodeInfo -> Text
-mkNodeLine mg ni =
-  "    " <> nid <> shapeOpen <> escaped <> shapeClose
+mkNodeLine :: Node -> Text
+mkNodeLine n = "    " <> nid <> shapeOpen <> escaped <> shapeClose
   where
-    nid        = nodeId (nodeName ni)
-    hasParents = any ((== nodeName ni) . snd) (mgEdges mg)
-
-    -- Root nodes show concrete prior params; non-root nodes show family only
-    -- (because non-root params are placeholder 0s from collectNodes traversal).
-    distLabel  = if hasParents
-                 then distFamily (nodeDist ni)
-                 else distributionName (nodeDist ni)
-
-    label = case nodeRole ni of
-      Latent      -> nodeName ni <> "\\n" <> distLabel
-      Observed xs -> nodeName ni <> "\\n" <> distLabel
-                     <> "  (n=" <> T.pack (show (length xs)) <> ")"
-
-    -- Escape any double-quotes inside the label
+    nid     = nodeId (nodeName n)
+    label   = case nodeKind n of
+      LatentN     -> nodeName n <> "\\n" <> nodeDist n <>
+                     (if Set.null (nodeDeps n)
+                       then ""
+                       else " (deps: " <> T.intercalate "," (Set.toList (nodeDeps n)) <> ")")
+      ObservedN k -> nodeName n <> "\\n" <> nodeDist n
+                  <> "  (n=" <> T.pack (show k) <> ")"
     escaped = T.replace "\"" "&quot;" label
+    (shapeOpen, shapeClose) = case nodeKind n of
+      LatentN     -> ("[\"",  "\"]")
+      ObservedN _ -> ("([\"", "\"])")
 
-    -- Latent → rectangle  |  Observed → stadium (oval)
-    (shapeOpen, shapeClose) = case nodeRole ni of
-      Latent     -> ("[\"",  "\"]")
-      Observed _ -> ("([\"", "\"])")
-
--- | One Mermaid edge line.
 mkEdgeLine :: (Text, Text) -> Text
 mkEdgeLine (from, to) = "    " <> nodeId from <> " --> " <> nodeId to
 
--- | class assignment lines (one per class, skipping if empty).
 classAssignLines :: ModelGraph -> [Text]
 classAssignLines mg =
   let latentIds   = [ nodeId (nodeName n) | n <- mgNodes mg, isLatent n ]
@@ -120,19 +105,8 @@ classAssignLines mg =
 -- Helpers
 -- ---------------------------------------------------------------------------
 
--- | Sanitise a variable name for use as a Mermaid node ID.
 nodeId :: Text -> Text
 nodeId = T.map (\c -> if c `elem` (" -.+*/" :: String) then '_' else c)
 
-isLatent :: NodeInfo -> Bool
-isLatent ni = case nodeRole ni of { Latent -> True; _ -> False }
-
--- | Distribution family name (no parameters).
--- Used for non-root nodes whose parameters are symbolic (not concrete).
-distFamily :: Distribution -> Text
-distFamily (Normal _ _)      = "Normal"
-distFamily (Binomial _ _)    = "Binomial"
-distFamily (Poisson _)       = "Poisson"
-distFamily (Exponential _)   = "Exponential"
-distFamily (Gamma _ _)       = "Gamma"
-distFamily (Beta _ _)        = "Beta"
+isLatent :: Node -> Bool
+isLatent n = case nodeKind n of { LatentN -> True; _ -> False }

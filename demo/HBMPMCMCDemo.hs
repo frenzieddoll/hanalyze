@@ -5,7 +5,7 @@
 -- 4 つのモデルそれぞれについて:
 --   - 自動依存抽出 (extractDeps + Track)
 --   - Mermaid DAG 自動生成
---   - AD 勾配 HMC (hmcP) で事後推論
+--   - AD 勾配 HMC (hmc) で事後推論
 --   - 結果のターミナル表示と HTML レポート出力
 module Main where
 
@@ -20,8 +20,8 @@ import System.Random.MWC (createSystemRandom, GenIO)
 
 import MCMC.Core   (Chain (..), posteriorMean, posteriorSD, acceptanceRate)
 import MCMC.HMC    (HMCConfig (..), defaultHMCConfig)
-import MCMC.HMCP   (hmcP)
-import Model.HBMP
+import MCMC.HMC   (hmc)
+import Model.HBM
 
 -- ---------------------------------------------------------------------------
 -- モデル群: 多相 HBM DSL で書かれた 4 種のモデル
@@ -80,25 +80,25 @@ main = do
   r1 <- runOne gen cfg "Model 1: Normal-Normal"
           "y ~ Normal(μ, σ),  μ ~ Normal(0,10),  σ ~ Exp(1)"
           (extractDeps (normalModel normalObs))
-          (hmcP (normalModel normalObs) cfg
+          (hmc (normalModel normalObs) cfg
                 (Map.fromList [("mu",0.0),("sigma",1.0)]))
 
   r2 <- runOne gen cfg "Model 2: Beta-Binomial"
           "y ~ Binomial(10, p),  p ~ Beta(2, 2)"
           (extractDeps (betaBinomModel 10 binomObs))
-          (hmcP (betaBinomModel 10 binomObs) cfg
+          (hmc (betaBinomModel 10 binomObs) cfg
                 (Map.singleton "p" 0.5))
 
   r3 <- runOne gen cfg "Model 3: 階層モデル (tau → mu, σ → y)"
           "y ~ Normal(μ, σ),  μ ~ Normal(0, τ),  τ,σ ~ Exp(1)"
           (extractDeps (hierModel normalObs))
-          (hmcP (hierModel normalObs) cfg
+          (hmc (hierModel normalObs) cfg
                 (Map.fromList [("tau",1.0),("mu",0.0),("sigma",1.0)]))
 
   r4 <- runOne gen cfg "Model 4: Gamma-Poisson"
           "y ~ Poisson(λ),  λ ~ Gamma(2, 1)"
           (extractDeps (gammaPoissonModel poisObs))
-          (hmcP (gammaPoissonModel poisObs) cfg
+          (hmc (gammaPoissonModel poisObs) cfg
                 (Map.singleton "lambda" 4.0))
 
   let html = renderHTMLReport [r1, r2, r3, r4]

@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
--- | gibbsMHP の動作確認テスト。
--- HBM 版 gibbsMH と HBMP 版 gibbsMHP を 3 つの共役モデルで比較する。
+-- | gibbsMH の動作確認テスト。
+-- HBM 版 gibbsMH と HBMP 版 gibbsMH を 3 つの共役モデルで比較する。
 module Main where
 
 import qualified Data.Map.Strict as Map
@@ -13,9 +13,9 @@ import Data.Word (Word32)
 
 import MCMC.Core (Chain (..), chainVals, posteriorMean, posteriorSD, acceptanceRate)
 import MCMC.Gibbs  (GibbsConfig (..), defaultGibbsConfig, gibbsMH, gibbsFromModel)
-import MCMC.GibbsP (gibbsMHP, gibbsFromModelP)
+import MCMC.Gibbs (gibbsMH, gibbsFromModel)
 import qualified Model.HBM  as HBM
-import qualified Model.HBMP as HBMP
+import qualified Model.HBM as HBMP
 import Stat.Distribution (Distribution (..))
 import Stat.MCMC (ess)
 
@@ -85,7 +85,7 @@ main = do
 
   putStrLn "\n--- 1. Normal-Normal (μ 共役 + σ MH) ---"
   let (gibbsHBM1,  mhHBM1)  = gibbsFromModel  normalHBM
-      (gibbsHBMP1, mhHBMP1) = gibbsFromModelP normalHBMP
+      (gibbsHBMP1, mhHBMP1) = gibbsFromModel normalHBMP
   printf "  HBM:  共役検出 %d 個, MH 残り: %s\n"
          (length gibbsHBM1)  (show (map T.unpack mhHBM1))
   printf "  HBMP: 共役検出 %d 個, MH 残り: %s\n"
@@ -97,7 +97,7 @@ main = do
 
   putStrLn "\n--- 2. Beta-Binomial (全共役) ---"
   let (gibbsHBM2,  mhHBM2)  = gibbsFromModel  binomHBM
-      (gibbsHBMP2, mhHBMP2) = gibbsFromModelP binomHBMP
+      (gibbsHBMP2, mhHBMP2) = gibbsFromModel binomHBMP
   printf "  HBM:  共役検出 %d 個, MH 残り: %s\n"
          (length gibbsHBM2)  (show (map T.unpack mhHBM2))
   printf "  HBMP: 共役検出 %d 個, MH 残り: %s\n"
@@ -107,7 +107,7 @@ main = do
 
   putStrLn "\n--- 3. Gamma-Poisson (全共役) ---"
   let (gibbsHBM3,  mhHBM3)  = gibbsFromModel  poisHBM
-      (gibbsHBMP3, mhHBMP3) = gibbsFromModelP poisHBMP
+      (gibbsHBMP3, mhHBMP3) = gibbsFromModel poisHBMP
   printf "  HBM:  共役検出 %d 個, MH 残り: %s\n"
          (length gibbsHBM3)  (show (map T.unpack mhHBM3))
   printf "  HBMP: 共役検出 %d 個, MH 残り: %s\n"
@@ -126,10 +126,10 @@ runBoth mHBM mHBMP initP mhSteps names = do
   gen1 <- initialize (V.fromList [42 :: Word32, 1])
   gen2 <- initialize (V.fromList [42 :: Word32, 1])
   ch1 <- gibbsMH  mHBM  cfg mhSteps initP gen1
-  ch2 <- gibbsMHP mHBMP cfg mhSteps initP gen2
+  ch2 <- gibbsMH mHBMP cfg mhSteps initP gen2
   putStrLn "  HBM (gibbsMH):"
   printChain ch1 names
-  putStrLn "  HBMP (gibbsMHP):"
+  putStrLn "  HBMP (gibbsMH):"
   printChain ch2 names
 
 printChain :: Chain -> [T.Text] -> IO ()

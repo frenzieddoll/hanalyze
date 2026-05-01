@@ -1,4 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ImpredicativeTypes #-}
 -- | 変分推論 (ADVI) vs NUTS 比較デモ
 --
 -- 2 つのモデルで VI と NUTS を比較する。
@@ -22,7 +24,7 @@ import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
 import Model.HBM
-import Stat.Distribution (Distribution (..))
+import Stat.Distribution ()
 import MCMC.Core (chainVals, posteriorMean, posteriorSD)
 import MCMC.NUTS (NUTSConfig (..), defaultNUTSConfig, nuts)
 import Stat.VI
@@ -35,12 +37,18 @@ nCtrl, kCtrl, nTrt, kTrt :: Int
 nCtrl = 50; kCtrl = 18
 nTrt  = 50; kTrt  = 31
 
-clinicalModel :: Model ()
+clinicalModel :: ModelP ()
 clinicalModel = do
   pCtrl <- sample "p_ctrl" (Beta 1 1)
   pTrt  <- sample "p_trt"  (Beta 1 1)
   observe "y_ctrl" (Binomial nCtrl pCtrl) [fromIntegral kCtrl]
   observe "y_trt"  (Binomial nTrt  pTrt)  [fromIntegral kTrt]
+
+m1 :: ModelP ()
+m1 = clinicalModel
+
+m2 :: ModelP ()
+m2 = schoolModelI schoolData
 
 -- 解析解: Beta(1,1) + Binomial → Beta(1+k, 1+n-k)
 betaMean :: Int -> Int -> Double
@@ -58,19 +66,6 @@ betaSD k n =
 sigma :: Double
 sigma = 5.0
 
-schoolModel :: [[Double]] -> Model [Double]
-schoolModel groupData = do
-  mu  <- sample "mu"  (Normal 0 100)
-  tau <- sample "tau" (Exponential 0.1)
-  forM groupData $ \ys -> do
-    let j = show (length ys)   -- unique dummy (実際は zip で振る)
-    theta <- sample (T.pack ("theta_" ++ j)) (Normal mu tau)
-    observe (T.pack ("y_" ++ j)) (Normal theta sigma) ys
-    return theta
-  where
-    forM [] _     = return []
-    forM (x:xs) f = do { v <- f x; vs <- forM xs f; return (v:vs) }
-
 schoolData :: [[Double]]
 schoolData =
   [ [72, 68, 75, 71]
@@ -78,14 +73,14 @@ schoolData =
   , [61, 65, 58, 63]
   ]
 
--- schoolModel を添字付きで作り直す
-schoolModelI :: [[Double]] -> Model ()
+-- schoolModel を添字付きで作る
+schoolModelI :: [[Double]] -> ModelP ()
 schoolModelI groupData = do
   mu  <- sample "mu"  (Normal 0 100)
   tau <- sample "tau" (Exponential 0.1)
   forM_ (zip [1::Int ..] groupData) $ \(j, ys) -> do
     theta <- sample (T.pack ("theta_" ++ show j)) (Normal mu tau)
-    observe (T.pack ("y_" ++ show j)) (Normal theta sigma) ys
+    observe (T.pack ("y_" ++ show j)) (Normal theta (realToFrac sigma)) ys
 
 -- ---------------------------------------------------------------------------
 -- ユーティリティ
@@ -112,7 +107,6 @@ main = do
   putStrLn ""
 
   let initP1 = Map.fromList [("p_ctrl", 0.5 :: Double), ("p_trt", 0.5)]
-      m1     = clinicalModel
 
   -- VI
   let viCfg1 = defaultVIConfig
@@ -181,8 +175,7 @@ main = do
   putStrLn "    相関の強い事後分布で VI の近似誤差を確認する"
   putStrLn ""
 
-  let m2     = schoolModelI schoolData
-      initP2 = Map.fromList
+  let initP2 = Map.fromList
                  [ ("mu", 73.0), ("tau", 10.0)
                  , ("theta_1", 71.5), ("theta_2", 86.25), ("theta_3", 61.75)
                  ]

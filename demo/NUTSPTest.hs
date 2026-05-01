@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
--- | nutsP の動作確認テスト。
--- nutsP (HBMP+AD) と nuts (HBM+数値) を比較する。
+-- | nuts の動作確認テスト。
+-- nuts (HBMP+AD) と nuts (HBM+数値) を比較する。
 module Main where
 
 import qualified Data.Map.Strict as Map
@@ -13,9 +13,9 @@ import Data.Word (Word32)
 
 import MCMC.Core (Chain (..), chainVals, posteriorMean, posteriorSD, acceptanceRate)
 import MCMC.NUTS  (NUTSConfig (..), defaultNUTSConfig, nuts)
-import MCMC.NUTSP (nutsP)
+import MCMC.NUTS (nuts)
 import qualified Model.HBM  as HBM
-import qualified Model.HBMP as HBMP
+import qualified Model.HBM as HBMP
 import Stat.Distribution (Distribution (..))
 import Stat.MCMC (ess)
 
@@ -54,7 +54,7 @@ main = do
 
   putStrLn "\n[NUTS (HBMP, AD 勾配)]"
   gen2 <- initialize (V.fromList [42 :: Word32, 1])
-  ch2 <- nutsP hbmpModel cfg initC gen2
+  ch2 <- nuts hbmpModel cfg initC gen2
   printResults ch2
 
   putStrLn "\n  両者の事後平均/SDが一致 → HBMP NUTS が正常動作"

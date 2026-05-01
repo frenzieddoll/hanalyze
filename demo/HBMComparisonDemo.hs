@@ -20,10 +20,10 @@ import Text.Printf (printf)
 
 import MCMC.Core (chainVals, posteriorMean, posteriorSD, acceptanceRate)
 import MCMC.HMC  (HMCConfig (..), defaultHMCConfig, gradU, hmc)
-import MCMC.HMCP (hmcP)
+import MCMC.HMC (hmc)
 import Model.HBM  (Model)
 import qualified Model.HBM  as HBM
-import qualified Model.HBMP as HBMP
+import qualified Model.HBM as HBMP
 import Stat.Distribution (Distribution (..))
 import Stat.MCMC (ess)
 
@@ -149,7 +149,7 @@ runMCMCBoth = do
       names = ["mu", "sigma"]
 
   chainHBM  <- hmc  hbmModel  hmcCfg initC gen1
-  chainHBMP <- hmcP hbmpModel hmcCfg initC gen2
+  chainHBMP <- hmc hbmpModel hmcCfg initC gen2
 
   let mkStats nm ch = MCMCStats
         { msName   = nm
@@ -282,7 +282,7 @@ overviewSection = T.unlines
   , "  </ul>"
   , "</div>"
   , "<div class=\"card\">"
-  , "  <div class=\"card-title\">HBMP (Model.HBMP)</div>"
+  , "  <div class=\"card-title\">HBMP (Model.HBM)</div>"
   , "  <ul>"
   , "    <li>継続型多相: <code>a → next</code></li>"
   , "    <li>勾配: forward-mode AD (Numeric.AD.Mode.Forward)</li>"

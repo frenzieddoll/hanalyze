@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 -- | Random Walk Metropolis-Hastings サンプラー。
 --
 -- ステップサイズ ('mcmcStepSizes') を調整して受容率が 20〜50% になるようにしてください。
@@ -18,7 +19,7 @@ import Data.Text (Text)
 import System.Random.MWC (GenIO, uniform)
 import System.Random.MWC.Distributions (normal)
 
-import Model.HBM (Model, Params, logJoint, sampleNames)
+import Model.HBM (ModelP, Params, logJoint, sampleNames)
 import MCMC.Core (Chain (..), spawnGen)
 
 -- ---------------------------------------------------------------------------
@@ -44,7 +45,7 @@ defaultMCMCConfig names = MCMCConfig
 
 -- | Random Walk Metropolis を実行する。
 -- 全潜在変数を同時に提案する joint proposal。
-metropolis :: Model a -> MCMCConfig -> Params -> GenIO -> IO Chain
+metropolis :: ModelP r -> MCMCConfig -> Params -> GenIO -> IO Chain
 metropolis model cfg init_ gen = do
   let names = sampleNames model
       total = mcmcBurnIn cfg + mcmcIterations cfg
@@ -85,7 +86,7 @@ metropolis model cfg init_ gen = do
 
 -- | Metropolis を numChains 本並列実行する。
 -- 各チェーンは独立した乱数列を使う (+RTS -N で CPU 並列)。
-metropolisChains :: Model a -> MCMCConfig -> Int -> Params -> GenIO -> IO [Chain]
+metropolisChains :: ModelP r -> MCMCConfig -> Int -> Params -> GenIO -> IO [Chain]
 metropolisChains model cfg numChains initP baseGen = do
   gens <- replicateM numChains (spawnGen baseGen)
   mapConcurrently (\g -> metropolis model cfg initP g) gens

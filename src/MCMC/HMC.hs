@@ -1,9 +1,23 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 -- | Hamiltonian Monte Carlo (HMC) サンプラー。
 --
--- 制約付きパラメータ（正値・単位区間）は unconstrained 空間に変換してから
--- リープフロッグを行い、サンプルを constrained 空間に戻します。
--- 変換は事前分布の型から自動検出されるため、初期値は通常のパラメータ値で渡せます。
+-- 'Model.HBM' の多相モデル ('ModelP') に対して 'Numeric.AD.Mode.Forward' で
+-- 正確な勾配を計算します。制約付きパラメータ (PositiveT, UnitIntervalT) は
+-- 事前分布から自動検出します。
+--
+-- @
+-- import Model.HBM
+-- import MCMC.HMC
+--
+-- myModel :: ModelP ()
+-- myModel = do
+--   mu    <- sample "mu"    (Normal 0 10)
+--   sigma <- sample "sigma" (Exponential 1)
+--   observe "y" (Normal mu sigma) [1.5, 2.0, 1.8]
+--
+-- chain <- hmc myModel defaultHMCConfig (Map.fromList [("mu",0),("sigma",1)]) gen
+-- @
 module MCMC.HMC
   ( -- * Configuration
     HMCConfig (..)
@@ -12,11 +26,8 @@ module MCMC.HMC
   , toUnconstrainedParams
   , fromUnconstrainedParams
   , logJointU
-  , gradUU
   , leapfrogWith
     -- * 基本ユーティリティ
-  , gradU
-  , leapfrog
   , kinetic
   , paramsToVec
   , vecToParams
@@ -26,16 +37,18 @@ module MCMC.HMC
   ) where
 
 import Control.Concurrent.Async (mapConcurrently)
-import Control.Monad (forM, replicateM)
+import Control.Monad (forM, replicateM, when)
 import Data.IORef
 import qualified Data.Map.Strict as Map
+import Data.Map.Strict (Map)
 import Data.Text (Text)
 import System.Random.MWC (GenIO, uniform)
 import System.Random.MWC.Distributions (standard)
 
-import Model.HBM (Model, Params, logJoint, sampleNames, getTransforms)
+import Model.HBM (ModelP, Params, sampleNames, getTransforms,
+                  logJointUnconstrained, gradADU)
 import MCMC.Core (Chain (..), spawnGen)
-import Stat.Distribution (Transform, toUnconstrained, fromUnconstrained, logJacobianAdj)
+import Stat.Distribution (Transform, toUnconstrained, fromUnconstrained)
 
 -- ---------------------------------------------------------------------------
 -- Configuration
@@ -66,11 +79,11 @@ paramsToVec names params = map (\n -> Map.findWithDefault 0.0 n params) names
 vecToParams :: [Text] -> [Double] -> Params
 vecToParams names vals = Map.fromList (zip names vals)
 
-toUnconstrainedParams :: Map.Map Text Transform -> Params -> Params
+toUnconstrainedParams :: Map Text Transform -> Params -> Params
 toUnconstrainedParams transforms =
   Map.mapWithKey (\k v -> maybe v (`toUnconstrained` v) (Map.lookup k transforms))
 
-fromUnconstrainedParams :: Map.Map Text Transform -> Params -> Params
+fromUnconstrainedParams :: Map Text Transform -> Params -> Params
 fromUnconstrainedParams transforms =
   Map.mapWithKey (\k u -> maybe u (`fromUnconstrained` u) (Map.lookup k transforms))
 
@@ -78,39 +91,13 @@ fromUnconstrainedParams transforms =
 -- unconstrained 空間での log-joint (Jacobian 補正付き)
 -- ---------------------------------------------------------------------------
 
-logJointU :: Model a -> Map.Map Text Transform -> Params -> Double
+-- | 多相モデルの unconstrained 空間における log-joint (VI / NUTS と共有)。
+logJointU :: ModelP r -> Map Text Transform -> Params -> Double
 logJointU model transforms paramsU =
-  let paramsC = fromUnconstrainedParams transforms paramsU
-      logJ    = sum [ logJacobianAdj t u
-                    | (nm, t) <- Map.toList transforms
-                    , Just u  <- [Map.lookup nm paramsU] ]
-  in logJoint model paramsC + logJ
-
--- ---------------------------------------------------------------------------
--- 数値勾配 (中心差分)
--- ---------------------------------------------------------------------------
-
-gradU :: Model a -> [Text] -> Params -> [Double]
-gradU model names params = map df [0 .. length names - 1]
-  where
-    h = 1e-5
-    df i =
-      let nm = names !! i
-          v  = Map.findWithDefault 0.0 nm params
-          p1 = Map.insert nm (v + h) params
-          p2 = Map.insert nm (v - h) params
-      in (logJoint model p2 - logJoint model p1) / (2 * h)
-
-gradUU :: Model a -> Map.Map Text Transform -> [Text] -> Params -> [Double]
-gradUU model transforms names paramsU = map df [0 .. length names - 1]
-  where
-    h = 1e-5
-    df i =
-      let nm = names !! i
-          v  = Map.findWithDefault 0.0 nm paramsU
-          p1 = Map.insert nm (v + h) paramsU
-          p2 = Map.insert nm (v - h) paramsU
-      in (logJointU model transforms p2 - logJointU model transforms p1) / (2 * h)
+  let names     = sampleNames model
+      transList = [Map.findWithDefault errT n transforms | n <- names]
+      errT      = error "logJointU: transform missing"
+  in logJointUnconstrained model names transList paramsU
 
 -- ---------------------------------------------------------------------------
 -- リープフロッグ積分
@@ -139,20 +126,34 @@ leapfrogWith gradFn names eps steps theta0 r0 = go steps theta0 r0
           r'     = zipWith (\ri gi -> ri - (eps / 2) * gi) rHalf g'
       in go (n - 1) theta' r'
 
-leapfrog :: Model a -> [Text] -> Double -> Int -> Params -> [Double] -> (Params, [Double])
-leapfrog model names = leapfrogWith (gradU model) names
-
 -- ---------------------------------------------------------------------------
--- HMC サンプラー
+-- HMC サンプラー (AD 勾配版)
 -- ---------------------------------------------------------------------------
 
-hmc :: Model a -> HMCConfig -> Params -> GenIO -> IO Chain
-hmc model cfg initC gen = do
-  let names      = sampleNames model
-      transforms = getTransforms model
-      initU      = toUnconstrainedParams transforms initC
-      total      = hmcBurnIn cfg + hmcIterations cfg
-      gradFn     = gradUU model transforms
+-- | 多相 HBM モデル ('ModelP') に対する HMC サンプラー。
+-- AD 勾配 ('Numeric.AD.Mode.Forward') を使うため数値微分より正確で速い。
+-- 制約変換は 'getTransforms' で事前分布から自動検出する。
+hmc :: ModelP r -> HMCConfig -> Params -> GenIO -> IO Chain
+hmc m cfg initC gen = do
+  let names      = sampleNames m
+      trMap      = getTransforms m
+      transList  = [Map.findWithDefault errT n trMap | n <- names]
+      errT       = error "hmc: missing transform (should not happen)"
+
+      initU = Map.fromList
+        [ (n, toUnconstrained t v)
+        | (n, t) <- zip names transList
+        , Just v <- [Map.lookup n initC] ]
+
+      total = hmcBurnIn cfg + hmcIterations cfg
+
+      logJU :: Params -> Double
+      logJU paramsU = logJointUnconstrained m names transList paramsU
+
+      gradFn :: [Text] -> Params -> [Double]
+      gradFn ns paramsU =
+        let xs = [Map.findWithDefault 0 n paramsU | n <- ns]
+        in map negate (gradADU m names transList xs)
 
   samplesRef  <- newIORef []
   acceptedRef <- newIORef (0 :: Int)
@@ -160,21 +161,25 @@ hmc model cfg initC gen = do
   let step currentU = do
         r <- forM names (\_ -> standard gen)
         let (proposedU, rFinal) =
-              leapfrogWith gradFn names (hmcStepSize cfg) (hmcLeapfrogSteps cfg) currentU r
-            logAlpha =
-              (logJointU model transforms proposedU - kinetic rFinal)
-              - (logJointU model transforms currentU  - kinetic r)
+              leapfrogWith gradFn names
+                           (hmcStepSize cfg) (hmcLeapfrogSteps cfg)
+                           currentU r
+            logAlpha = (logJU proposedU - kinetic rFinal)
+                     - (logJU currentU  - kinetic r)
         u <- uniform gen
         if log (u :: Double) < logAlpha
           then do modifyIORef' acceptedRef (+1); return proposedU
           else return currentU
 
+  let toConstrained pu = Map.fromList
+        [ (n, fromUnconstrained t (Map.findWithDefault 0 n pu))
+        | (n, t) <- zip names transList ]
+
   let loop 0 currentU = return currentU
       loop i currentU = do
         nextU <- step currentU
-        if i <= hmcIterations cfg
-          then modifyIORef' samplesRef (fromUnconstrainedParams transforms nextU :)
-          else return ()
+        when (i <= hmcIterations cfg) $
+          modifyIORef' samplesRef (toConstrained nextU :)
         loop (i - 1) nextU
 
   _ <- loop total initU
@@ -186,8 +191,8 @@ hmc model cfg initC gen = do
     , chainTotal    = total
     }
 
--- | HMC を numChains 本並列実行する (+RTS -N で CPU 並列)。
-hmcChains :: Model a -> HMCConfig -> Int -> Params -> GenIO -> IO [Chain]
-hmcChains model cfg numChains initC baseGen = do
+-- | hmc を numChains 本並列実行する (+RTS -N で CPU 並列)。
+hmcChains :: ModelP r -> HMCConfig -> Int -> Params -> GenIO -> IO [Chain]
+hmcChains m cfg numChains initC baseGen = do
   gens <- replicateM numChains (spawnGen baseGen)
-  mapConcurrently (\g -> hmc model cfg initC g) gens
+  mapConcurrently (\g -> hmc m cfg initC g) gens
