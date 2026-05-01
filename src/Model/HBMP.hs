@@ -1,0 +1,507 @@
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+-- | 多相版 HBM DSL。
+--
+-- 現行 'Model.HBM' は @Sample Text Distribution (Double -> next)@ という形で
+-- 継続の値型が @Double@ に固定されている。これは AD ('Numeric.AD') にも
+-- 依存追跡型 ('Track') にも対応できないという根本的な制約をもたらす。
+--
+-- 'Model.HBMP' では継続を多相化:
+--
+-- @
+-- data ModelF a next
+--   = Sample  Text (Distribution a) (a -> next)
+--   | Observe Text (Distribution a) [Double] next
+--   deriving Functor
+-- @
+--
+-- ユーザーは @forall a. (Floating a, Ord a) => Model a r@ という
+-- 「型に多相なモデル」を一度だけ書き、解釈時に @a@ を選ぶことで
+-- 同じモデルから複数の解釈 (サンプリング・log joint・AD 勾配・依存抽出)
+-- を取り出せる。
+--
+-- == 使い方
+--
+-- @
+-- import Model.HBMP
+--
+-- myModel :: ModelP ()
+-- myModel = do
+--   mu    <- sample "mu"    (Normal 0 10)
+--   sigma <- sample "sigma" (Exponential 1)
+--   observe "y" (Normal mu sigma) [1.5, 2.0, 1.8]
+--
+-- -- 異なる解釈:
+-- logVal = logJoint myModel (Map.fromList [("mu",1),("sigma",2)])  -- 数値評価
+-- gVec   = gradAD myModel ["mu","sigma"] [1, 2]                    -- AD 勾配
+-- deps   = extractDeps myModel                                      -- 依存関係
+-- @
+module Model.HBMP
+  ( -- * 多相分布
+    Distribution (..)
+  , distName
+  , logDensity
+  , logDensityObs
+    -- * 多相モデル
+  , Model
+  , ModelP
+  , sample
+  , observe
+    -- * 構造検査
+  , Node (..)
+  , NodeKind (..)
+  , collectNodes
+  , sampleNames
+  , extractDeps
+    -- * インタープリタ
+  , logJoint
+  , logPrior
+  , logLikelihood
+    -- * AD 勾配
+  , gradAD
+  , gradADU
+    -- * 制約変換 (HMC 用)
+  , getTransforms
+  , logJointUnconstrained
+  , invTransformF
+  , logJacF
+    -- * 依存追跡型
+  , Track (..)
+  , trackVar
+  , trackConst
+    -- * 旧 API へのブリッジ
+  , bridgeFromHBM
+  ) where
+
+import qualified Data.Map.Strict as Map
+import Data.Map.Strict (Map)
+import qualified Data.Set as Set
+import Data.Set (Set)
+import Data.Text (Text)
+import qualified Data.Text as T
+import Numeric.AD.Mode.Forward (grad)
+
+import Stat.Distribution (Transform (..))
+
+-- ---------------------------------------------------------------------------
+-- Free monad (再実装。Model.HBM のものとは型が違うので別途定義)
+-- ---------------------------------------------------------------------------
+
+data Free f a = Pure a | Free (f (Free f a))
+
+instance Functor f => Functor (Free f) where
+  fmap g (Pure a) = Pure (g a)
+  fmap g (Free x) = Free (fmap (fmap g) x)
+
+instance Functor f => Applicative (Free f) where
+  pure = Pure
+  Pure g <*> x  = fmap g x
+  Free fg <*> x = Free (fmap (<*> x) fg)
+
+instance Functor f => Monad (Free f) where
+  return = pure
+  Pure a >>= g = g a
+  Free x >>= g = Free (fmap (>>= g) x)
+
+liftF :: Functor f => f a -> Free f a
+liftF fa = Free (fmap Pure fa)
+
+-- ---------------------------------------------------------------------------
+-- 多相分布
+-- ---------------------------------------------------------------------------
+
+-- | 値の型 @a@ に多相な確率分布。
+-- @a@ には @Double@、@Reverse s Double@ (AD)、@Track@ (依存追跡) などが入る。
+data Distribution a
+  = Normal      a a       -- ^ Normal(μ, σ)
+  | Exponential a         -- ^ Exp(rate)
+  | Gamma       a a       -- ^ Gamma(shape, rate)
+  | Beta        a a       -- ^ Beta(α, β)
+  | Poisson     a         -- ^ Poisson(λ)
+  | Binomial    Int a     -- ^ Binomial(n, p)
+  deriving (Show, Functor)
+
+distName :: Distribution a -> Text
+distName Normal{}      = "Normal"
+distName Exponential{} = "Exponential"
+distName Gamma{}       = "Gamma"
+distName Beta{}        = "Beta"
+distName Poisson{}     = "Poisson"
+distName Binomial{}    = "Binomial"
+
+-- | サンプル値 (型 @a@) に対する事前分布の対数密度。
+logDensity :: (Floating a, Ord a) => Distribution a -> a -> a
+logDensity (Normal mu sig) x
+  | sig <= 0  = negInf
+  | otherwise = -0.5 * log (2 * pi) - log sig
+              - 0.5 * ((x - mu) / sig) ^ (2::Int)
+logDensity (Exponential rate) x
+  | x < 0 || rate <= 0 = negInf
+  | otherwise          = log rate - rate * x
+logDensity (Gamma shape rate) x
+  | x <= 0 || shape <= 0 || rate <= 0 = negInf
+  | otherwise =
+      (shape - 1) * log x - rate * x
+      + shape * log rate - lgammaApprox shape
+logDensity (Beta alpha beta) x
+  | x <= 0 || x >= 1 || alpha <= 0 || beta <= 0 = negInf
+  | otherwise =
+      (alpha - 1) * log x + (beta - 1) * log (1 - x)
+      - (lgammaApprox alpha + lgammaApprox beta - lgammaApprox (alpha + beta))
+logDensity (Poisson lam) x
+  | lam <= 0 = negInf
+  | x  < 0   = negInf
+  | otherwise =
+      -- x はサンプル値なので連続として扱う (整数化はしない)
+      x * log lam - lam
+logDensity (Binomial _ p) _
+  | p <= 0 || p >= 1 = negInf
+  | otherwise        = 0  -- サンプル時は使わない (構造のみ)
+
+-- | 観測値 (Double 定数) に対する尤度の対数密度。
+-- 観測は @[Double]@ で渡されるので、@Floating a@ 制約のみで計算可能。
+logDensityObs :: forall a. (Floating a, Ord a) => Distribution a -> Double -> a
+logDensityObs (Normal mu sig) y
+  | sig <= 0  = negInf
+  | otherwise =
+      let yA = realToFrac y :: a
+      in -0.5 * log (2 * pi) - log sig - 0.5 * ((yA - mu) / sig) ^ (2::Int)
+logDensityObs (Exponential rate) y
+  | y < 0      = negInf
+  | rate <= 0  = negInf
+  | otherwise  = log rate - rate * (realToFrac y :: a)
+logDensityObs (Gamma shape rate) y
+  | y <= 0     = negInf
+  | shape <= 0 || rate <= 0 = negInf
+  | otherwise  =
+      let yA = realToFrac y :: a
+      in (shape - 1) * log yA - rate * yA
+         + shape * log rate - lgammaApprox shape
+logDensityObs (Beta alpha beta) y
+  | y <= 0 || y >= 1 || alpha <= 0 || beta <= 0 = negInf
+  | otherwise =
+      let yA = realToFrac y :: a
+      in (alpha - 1) * log yA + (beta - 1) * log (1 - yA)
+         - (lgammaApprox alpha + lgammaApprox beta - lgammaApprox (alpha + beta))
+logDensityObs (Poisson lam) y
+  | lam <= 0 = negInf
+  | y < 0    = negInf
+  | otherwise =
+      let kA   = realToFrac y :: a
+          kInt = round y :: Int
+          logFactK = realToFrac (logFactorial kInt) :: a
+      in kA * log lam - lam - logFactK
+logDensityObs (Binomial n p) y
+  | p <= 0 || p >= 1 = negInf
+  | otherwise =
+      let k    = round y :: Int
+          kA   = realToFrac y :: a
+          nA   = realToFrac (fromIntegral n :: Double) :: a
+          logC = realToFrac (logBinomCoeff n k) :: a
+      in logC + kA * log p + (nA - kA) * log (1 - p)
+
+negInf :: Floating a => a
+negInf = -1/0
+
+-- ---------------------------------------------------------------------------
+-- 多相モデル (Free monad)
+-- ---------------------------------------------------------------------------
+
+-- | DSL のプリミティブ。継続が @a -> next@ なので任意の @a@ を流せる。
+data ModelF a next
+  = Sample  Text (Distribution a) (a -> next)
+  | Observe Text (Distribution a) [Double] next
+  deriving Functor
+
+type Model a = Free (ModelF a)
+
+-- | 多相モデルの型エイリアス。
+-- @ModelP r = forall a. (Floating a, Ord a) => Model a r@
+type ModelP r = forall a. (Floating a, Ord a) => Model a r
+
+sample :: Text -> Distribution a -> Model a a
+sample n d = liftF (Sample n d id)
+
+observe :: Text -> Distribution a -> [Double] -> Model a ()
+observe n d ys = liftF (Observe n d ys ())
+
+-- ---------------------------------------------------------------------------
+-- 構造検査
+-- ---------------------------------------------------------------------------
+
+data NodeKind = LatentN | ObservedN Int  deriving (Show, Eq)
+
+data Node = Node
+  { nodeName :: Text
+  , nodeKind :: NodeKind
+  , nodeDist :: Text         -- 分布名 (e.g. "Normal")
+  , nodeDeps :: Set Text     -- 直接の親 (依存変数)
+  } deriving (Show)
+
+-- | placeholder 値 0 でモデルを走査し、ノード情報を集める。
+-- 依存関係 ('nodeDeps') は 'extractDeps' を使うこと (placeholder 走査では取れない)。
+collectNodes :: forall r. ModelP r -> [Node]
+collectNodes m = go m []
+  where
+    go :: Model Double r -> [Node] -> [Node]
+    go (Pure _) acc = reverse acc
+    go (Free (Sample n d k)) acc =
+      go (k 0) (Node n LatentN (distName d) Set.empty : acc)
+    go (Free (Observe n d ys next)) acc =
+      go next (Node n (ObservedN (length ys)) (distName d) Set.empty : acc)
+
+sampleNames :: ModelP r -> [Text]
+sampleNames m = [nodeName n | n <- collectNodes m, nodeKind n == LatentN]
+
+-- ---------------------------------------------------------------------------
+-- 評価インタープリタ
+-- ---------------------------------------------------------------------------
+
+-- | log p(θ, y) を計算する多相インタープリタ。
+-- 引数 @a@ を @Double@ にすると数値評価、@Reverse s Double@ にすると AD 評価が可能。
+logJoint :: (Floating a, Ord a) => Model a r -> Map Text a -> a
+logJoint model params = go model 0
+  where
+    go (Pure _) acc = acc
+    go (Free (Sample n d k)) acc =
+      case Map.lookup n params of
+        Nothing  -> negInf
+        Just v   ->
+          let lp = logDensity d v
+          in go (k v) (acc + lp)
+    go (Free (Observe _ d ys next)) acc =
+      let ll = sum [ logDensityObs d y | y <- ys ]
+      in go next (acc + ll)
+
+-- | log p(θ) のみ (prior 部分)。
+logPrior :: (Floating a, Ord a) => Model a r -> Map Text a -> a
+logPrior model params = go model 0
+  where
+    go (Pure _) acc = acc
+    go (Free (Sample n d k)) acc =
+      case Map.lookup n params of
+        Nothing -> negInf
+        Just v  -> go (k v) (acc + logDensity d v)
+    go (Free (Observe _ _ _ next)) acc = go next acc
+
+-- | log p(y | θ) のみ (likelihood 部分)。
+logLikelihood :: (Floating a, Ord a) => Model a r -> Map Text a -> a
+logLikelihood model params = go model 0
+  where
+    go (Pure _) acc = acc
+    go (Free (Sample n _ k)) acc =
+      case Map.lookup n params of
+        Nothing -> go (k 0) acc
+        Just v  -> go (k v) acc
+    go (Free (Observe _ d ys next)) acc =
+      let ll = sum [ logDensityObs d y | y <- ys ]
+      in go next (acc + ll)
+
+-- ---------------------------------------------------------------------------
+-- AD 勾配
+-- ---------------------------------------------------------------------------
+
+-- | AD で勾配を計算する。@names@ の順で各パラメータに対する偏微分を返す。
+gradAD :: ModelP r -> [Text] -> [Double] -> [Double]
+gradAD m names xs0 = grad f xs0
+  where
+    f xs =
+      let params = Map.fromList (zip names xs)
+      in logJoint m params
+
+-- | unconstrained 空間で AD 勾配を計算する (HMC 用)。
+-- 各パラメータに制約変換を適用し、Jacobian 補正項込みの log-joint を微分する。
+gradADU :: ModelP r -> [Text] -> [Transform] -> [Double] -> [Double]
+gradADU m names trans us0 = grad f us0
+  where
+    f us =
+      let paramsC = Map.fromList
+            [ (n, invTransformF t u)
+            | (n, t, u) <- zip3 names trans us ]
+          logJac  = sum
+            [ logJacF t u
+            | (t, u) <- zip trans us ]
+      in logJoint m paramsC + logJac
+
+-- ---------------------------------------------------------------------------
+-- 制約変換 (Floating 多相版)
+-- ---------------------------------------------------------------------------
+
+-- | unconstrained → constrained 変換 (Floating 多相)。
+--
+-- > UnconstrainedT: θ = u
+-- > PositiveT:      θ = exp(u)
+-- > UnitIntervalT:  θ = sigmoid(u) = 1/(1+exp(-u))
+invTransformF :: Floating a => Transform -> a -> a
+invTransformF UnconstrainedT u = u
+invTransformF PositiveT      u = exp u
+invTransformF UnitIntervalT  u = 1 / (1 + exp (-u))
+
+-- | log |∂θ/∂u| — Jacobian 行列式の対数 (Floating 多相)。
+logJacF :: Floating a => Transform -> a -> a
+logJacF UnconstrainedT _ = 0
+logJacF PositiveT      u = u                       -- log(exp u) = u
+logJacF UnitIntervalT  u =
+  let p = 1 / (1 + exp (-u))
+  in log p + log (1 - p)                           -- log σ(u)(1-σ(u))
+
+-- | 各 latent 変数の事前分布から制約変換を自動検出する。
+getTransforms :: ModelP r -> Map Text Transform
+getTransforms m = Map.fromList
+  [ (nodeName n, transformFor (nodeDist n))
+  | n <- collectNodes m
+  , nodeKind n == LatentN
+  ]
+  where
+    transformFor "Normal"      = UnconstrainedT
+    transformFor "Exponential" = PositiveT
+    transformFor "Gamma"       = PositiveT
+    transformFor "Beta"        = UnitIntervalT
+    transformFor _             = UnconstrainedT
+
+-- | unconstrained 空間における log-joint (Jacobian 補正込み)。
+-- Jacobian 補正で確率密度の積分を保存する。
+logJointUnconstrained :: forall a r. (Floating a, Ord a)
+                      => Model a r
+                      -> [Text]      -- ^ パラメータ順序
+                      -> [Transform] -- ^ 各パラメータの変換種別
+                      -> Map Text a  -- ^ unconstrained パラメータ値
+                      -> a
+logJointUnconstrained m names trans paramsU =
+  let paramsC = Map.fromList
+        [ (n, invTransformF t (Map.findWithDefault 0 n paramsU))
+        | (n, t) <- zip names trans ]
+      logJac  = sum
+        [ logJacF t (Map.findWithDefault 0 n paramsU)
+        | (n, t) <- zip names trans ]
+  in logJoint m paramsC + logJac
+
+-- ---------------------------------------------------------------------------
+-- 依存追跡型 Track
+-- ---------------------------------------------------------------------------
+
+-- | Floating 演算を通して「この値はどの変数に依存するか」を伝播する型。
+--
+-- @ModelP@ をこの型で特殊化することで、各 Observe ノードが
+-- どの latent 変数に依存しているか自動抽出できる。
+data Track = Track
+  { trackVal  :: !Double
+  , trackDeps :: !(Set Text)
+  } deriving (Show, Eq)
+
+-- | 変数として登場する Track (deps に自分の名前を入れる)。
+trackVar :: Text -> Double -> Track
+trackVar n v = Track v (Set.singleton n)
+
+-- | 定数として扱う Track (deps なし)。
+trackConst :: Double -> Track
+trackConst v = Track v Set.empty
+
+-- 自然な順序関係 (Double の比較を使う)
+instance Ord Track where
+  compare a b = compare (trackVal a) (trackVal b)
+
+-- Floating の階段
+instance Num Track where
+  fromInteger n = trackConst (fromInteger n)
+  Track a sa + Track b sb = Track (a + b) (sa <> sb)
+  Track a sa - Track b sb = Track (a - b) (sa <> sb)
+  Track a sa * Track b sb = Track (a * b) (sa <> sb)
+  abs    (Track a sa) = Track (abs a) sa
+  signum (Track a sa) = Track (signum a) sa
+  negate (Track a sa) = Track (negate a) sa
+
+instance Fractional Track where
+  fromRational r = trackConst (fromRational r)
+  Track a sa / Track b sb = Track (a / b) (sa <> sb)
+
+instance Floating Track where
+  pi             = trackConst pi
+  exp   (Track a sa) = Track (exp   a) sa
+  log   (Track a sa) = Track (log   a) sa
+  sin   (Track a sa) = Track (sin   a) sa
+  cos   (Track a sa) = Track (cos   a) sa
+  tan   (Track a sa) = Track (tan   a) sa
+  asin  (Track a sa) = Track (asin  a) sa
+  acos  (Track a sa) = Track (acos  a) sa
+  atan  (Track a sa) = Track (atan  a) sa
+  sinh  (Track a sa) = Track (sinh  a) sa
+  cosh  (Track a sa) = Track (cosh  a) sa
+  tanh  (Track a sa) = Track (tanh  a) sa
+  asinh (Track a sa) = Track (asinh a) sa
+  acosh (Track a sa) = Track (acosh a) sa
+  atanh (Track a sa) = Track (atanh a) sa
+  sqrt  (Track a sa) = Track (sqrt  a) sa
+  Track a sa ** Track b sb = Track (a ** b) (sa <> sb)
+  logBase (Track a sa) (Track b sb) = Track (logBase a b) (sa <> sb)
+
+instance Real Track where
+  toRational = toRational . trackVal
+
+instance RealFrac Track where
+  properFraction (Track a sa) = let (i, f) = properFraction a in (i, Track f sa)
+
+-- | モデルを Track 型で実行し、各ノードの依存関係を抽出する。
+--
+-- Sample n: その変数自体は @{n}@ に依存する (自己依存)。
+-- Observe n: 分布のパラメータに含まれる latent 変数の集合を deps とする。
+extractDeps :: forall r. ModelP r -> [Node]
+extractDeps m = go m []
+  where
+    go :: Model Track r -> [Node] -> [Node]
+    go (Pure _) acc = reverse acc
+    go (Free (Sample n d k)) acc =
+      let parentDeps = distDepsT d
+          node = Node n LatentN (distName d) parentDeps
+          v    = trackVar n 1.0  -- 1 にすると log/exp が安全
+      in go (k v) (node : acc)
+    go (Free (Observe n d ys next)) acc =
+      let parentDeps = distDepsT d
+          node = Node n (ObservedN (length ys)) (distName d) parentDeps
+      in go next (node : acc)
+
+-- | Distribution Track に含まれる依存変数集合を取り出す。
+distDepsT :: Distribution Track -> Set Text
+distDepsT (Normal mu sig)   = trackDeps mu <> trackDeps sig
+distDepsT (Exponential r)   = trackDeps r
+distDepsT (Gamma s r)       = trackDeps s <> trackDeps r
+distDepsT (Beta a b)        = trackDeps a <> trackDeps b
+distDepsT (Poisson lam)     = trackDeps lam
+distDepsT (Binomial _ p)    = trackDeps p
+
+-- | Track でモデルを評価する (log joint も依存集合付きで計算)。
+runTrack :: forall r. ModelP r -> Map Text Track -> Track
+runTrack m params = logJoint (m :: Model Track r) params
+
+-- ---------------------------------------------------------------------------
+-- 旧 Model.HBM へのブリッジ
+-- ---------------------------------------------------------------------------
+
+-- | 旧 'Model.HBM' のモデルを HBMP の Double-特殊化版に変換する。
+-- AD/Track には変換できないが、log_joint の互換評価は可能。
+-- 現在は実装なし (将来用プレースホルダ)。
+bridgeFromHBM :: a -> a
+bridgeFromHBM = id
+{-# DEPRECATED bridgeFromHBM "未実装 — 旧 HBM とは API が異なるため、HBMP では新規にモデルを書いてください" #-}
+
+-- ---------------------------------------------------------------------------
+-- 数値ユーティリティ
+-- ---------------------------------------------------------------------------
+
+-- | log Γ(z) の Stirling 近似 (z > 0)。AD でも Track でも使える多相版。
+lgammaApprox :: (Floating a, Ord a) => a -> a
+lgammaApprox z
+  | z < 12    = lgammaApprox (z + 1) - log z
+  | otherwise = (z - 0.5) * log z - z + 0.5 * log (2 * pi)
+              + 1 / (12 * z) - 1 / (360 * z ^ (3::Int))
+
+logFactorial :: Int -> Double
+logFactorial n
+  | n <= 1    = 0
+  | otherwise = sum (map log [2 .. fromIntegral n])
+
+logBinomCoeff :: Int -> Int -> Double
+logBinomCoeff n k = logFactorial n - logFactorial k - logFactorial (n - k)

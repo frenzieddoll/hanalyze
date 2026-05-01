@@ -26,14 +26,17 @@ library
     Model.GLM
     Model.GLMM
     Model.HBM
+    Model.HBMP
     MCMC.Core
     MCMC.MH
     MCMC.HMC
+    MCMC.HMCP
     MCMC.NUTS
     MCMC.Gibbs
     Stat.Distribution
     Stat.MCMC
     Stat.ModelSelect
+    Stat.AD
     Stat.VI
     Viz.MCMC
     Viz.ModelGraph
@@ -60,6 +63,7 @@ library
     , directory            >= 1.3  && < 1.4
     , temporary            >= 1.3  && < 1.4
     , unordered-containers >= 0.2  && < 0.3
+    , ad                   >= 4.4  && < 4.6
     , vector               >= 0.12 && < 0.14
 
 executable hanalyze
@@ -180,6 +184,41 @@ executable gp-demo
       base     >= 4.14 && < 5
     , hanalyze
 
+executable hbmp-mcmc-demo
+  import:           warnings
+  main-is:          HBMPMCMCDemo.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , text       >= 1.2  && < 2.2
+    , containers >= 0.6  && < 0.8
+    , mwc-random >= 0.15 && < 0.16
+
+executable hbmp-demo
+  import:           warnings
+  main-is:          HBMPDemo.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , text       >= 1.2  && < 2.2
+    , containers >= 0.6  && < 0.8
+
+executable ad-demo
+  import:           warnings
+  main-is:          ADDemo.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , text       >= 1.2  && < 2.2
+    , containers >= 0.6  && < 0.8
+    , mwc-random >= 0.15 && < 0.16
+
 executable gibbs-hbm-demo
   import:           warnings
   main-is:          GibbsHBMDemo.hs
@@ -191,6 +230,19 @@ executable gibbs-hbm-demo
     , text       >= 1.2  && < 2.2
     , containers >= 0.6  && < 0.8
     , mwc-random >= 0.15 && < 0.16
+
+executable hbm-comparison
+  import:           warnings
+  main-is:          HBMComparisonDemo.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , text       >= 1.2  && < 2.2
+    , containers >= 0.6  && < 0.8
+    , mwc-random >= 0.15 && < 0.16
+    , vector     >= 0.12 && < 0.14
 
 test-suite hanalyze-test
   import:           warnings
