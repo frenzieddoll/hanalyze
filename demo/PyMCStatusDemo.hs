@@ -17,56 +17,50 @@ import Viz.Core (PlotConfig (..), defaultConfig, OutputFormat (..), writeSpec)
 -- ---------------------------------------------------------------------------
 
 -- (カテゴリ, 実装済 ✅, 部分実装 🚧, 未実装 ❌)
+-- Phase A-J まで完了後の最新数値。
 statusByCategory :: [(Text, Int, Int, Int)]
 statusByCategory =
-  [ ("分布",          15, 1, 9 )   -- Normal..LogNormal+Bernoulli/Cat (12) + Mixture/Trunc/Censored (3) ; MvNormal 部分; Dirichlet/LKJ/MultiN/ZIP/NB/Weibull/Pareto/BetaBin/Wishart/Bound
-  , ("サンプラー",     5, 0, 4 )   -- NUTS/HMC/MH/Gibbs/ADVI ; Slice/Full-ADVI/SMC/NormFlow
-  , ("事後 Workflow",  3, 0, 3 )   -- PPC/PriorPC/Potential ; set_data/Deterministic/Multi-PPC
-  , ("可視化・診断",   7, 2, 4 )   -- trace/posterior/pair/acf/forest/energy/BFMI ; HDI部分/posterior_table部分 ; pp_check/rank/divergences/summary
-  , ("モデル比較",     3, 0, 1 )   -- WAIC/LOO/compareModels ; Bayes factor
-  , ("プリミティブ",   6, 1, 5 )   -- 階層/ランダム切片/ランダム傾き/Mixture/Trunc/Censored ; GP部分 ; AR/non-centered/ODE/BNN/state-space
+  [ -- 分布: Base12 + (Mixture, Truncated, Censored, MvNormal, Dirichlet,
+    --        LKJ, Multinomial, NegBinom, ZIP, ZIB, InvGamma, Weibull,
+    --        Pareto, BetaBinom, VonMises) - 27; 残り Wishart, MvT, Bound = 3
+    ("分布",          27, 0, 3 )
+  , -- サンプラー: NUTS/HMC/MH/Gibbs/ADVI/Slice = 6; Full-ADVI/SMC/NormFlow = 3
+    ("サンプラー",     6, 0, 3 )
+  , -- 事後 Workflow: PPC/PriorPC/Potential/set_data/Deterministic = 5
+    ("事後 Workflow",  5, 0, 1 )  -- 多PPC など 1 件残
+  , -- 可視化: trace/posterior/pair/acf/forest/energy/BFMI/HDI-trace
+    --        /rank/pp_check/summary/divergence-overlay = 12; 残 1
+    ("可視化・診断",   12, 0, 1 )
+  , -- モデル比較: WAIC/LOO/compareModels = 3; ベイズファクター 1
+    ("モデル比較",     3, 0, 1 )
+  , -- プリミティブ: 階層/ランダム切片・傾き/Mixture/Trunc/Censored/Potential
+    --              /Deterministic/non-centered/AR/MvN-latent/Dirichlet/LKJ = 12
+    ("プリミティブ",   12, 1, 3 )  -- GP部分; ODE/BNN/state-space-extended
   ]
 
--- 今回のブランチで追加されたもの (PRリリース要約に使う)
+-- 完了したフェーズ
 addedThisBranch :: [(Text, Text)]
 addedThisBranch =
-  [ ("Phase A", "pm.Potential 相当 (potential プリミティブ)")
-  , ("Phase B", "pm.Mixture (log-sum-exp、観測/サンプル両対応)")
-  , ("Phase C", "Truncated / Censored 分布 (任意分布の切り詰め)")
-  , ("Phase C+", "Beta / Gamma / Cauchy / StudentT / HalfCauchy の CDF")
-  , ("Phase D", "MvNormal 観測専用 (自前 Cholesky、AD 互換)")
-  , ("Phase E", "Energy plot / BFMI 診断 (NUTS の病的事後分布検出)")
+  [ ("Phase A", "pm.Potential プリミティブ")
+  , ("Phase B", "pm.Mixture (log-sum-exp)")
+  , ("Phase C", "Truncated / Censored")
+  , ("Phase D", "MvNormal 観測専用")
+  , ("Phase E", "Energy plot / BFMI")
+  , ("Phase F", "5 つの可視化基盤 (Summary/HDI-Trace/Rank/PPC/Divergence)")
+  , ("Phase G", "6 つの主要機能 (Deterministic/Dir/non-centered/Div/set_data/MvN-latent)")
+  , ("Phase H", "6 件の補完 (NB/Multinomial/ZIP/LKJ/withData多相/Stat.Summary 切出)")
+  , ("Phase I", "5 つの新規分布 (InvGamma/Weibull/Pareto/BetaBin/VonMises)")
+  , ("Phase J", "LKJ K=3 / AR(1) / Slice sampler")
   ]
 
--- 残課題 TODO (優先度順)
-todoHigh :: [Text]
-todoHigh =
-  [ "pm.Deterministic (派生量を Chain に保存)"
-  , "Dirichlet 分布 + シンプレックス変換"
-  , "MvNormal latent (Cholesky factor + LKJ 事前)"
-  , "Divergences の検出&可視化 (NUTS pair plot)"
-  , "非中心化パラメタ化ヘルパ"
-  , "pm.set_data (DSL に Data プレースホルダ)"
-  ]
-
-todoMid :: [Text]
-todoMid =
-  [ "NegativeBinomial / Multinomial / ZeroInflated"
-  , "Weibull / Pareto / Beta-Binomial / VonMises"
-  , "Wishart / InverseGamma (共役事前)"
-  , "事後予測プロット (pp_check)"
-  , "Posterior table (az.summary 相当の単独ヘルパ)"
-  , "Rank plot (多チェーン収束診断)"
-  , "HDI 帯付きトレースプロット"
-  ]
-
-todoLow :: [Text]
-todoLow =
-  [ "LKJCholeskyCov (相関行列の事前)"
-  , "Slice sampler / SMC / Full-rank ADVI / Normalizing flows"
-  , "AR / 状態空間モデル"
-  , "ODE 尤度 (Runge-Kutta + AD)"
-  , "ベイズ NN"
+-- 残課題 (Stretch)
+todoStretch :: [Text]
+todoStretch =
+  [ "Wishart / Multivariate-t (LKJ で代替推奨)"
+  , "Full-rank ADVI / Normalizing flows / SMC"
+  , "ODE 尤度 (Runge-Kutta + AD、研究レベル)"
+  , "ベイズ NN (隠れ層、研究レベル)"
+  , "ベイズファクター / 周辺尤度 (重要度サンプリング系)"
   ]
 
 -- ---------------------------------------------------------------------------
@@ -129,17 +123,9 @@ main = do
         addedThisBranch
   putStrLn ""
 
-  -- TODO
-  putStrLn "[3] 残課題 TODO (優先度順)"
-  putStrLn ""
-  putStrLn "  -- 高優先 (主要 PyMC 機能ギャップ) --"
-  mapM_ (\t -> putStrLn ("    [ ] " ++ T.unpack t)) todoHigh
-  putStrLn ""
-  putStrLn "  -- 中優先 (分布・診断の補完) --"
-  mapM_ (\t -> putStrLn ("    [ ] " ++ T.unpack t)) todoMid
-  putStrLn ""
-  putStrLn "  -- 低優先 (Stretch goals) --"
-  mapM_ (\t -> putStrLn ("    [ ] " ++ T.unpack t)) todoLow
+  -- TODO (Stretch のみ)
+  putStrLn "[3] 残課題 TODO (Stretch — 主要ギャップは完了)"
+  mapM_ (\t -> putStrLn ("    [ ] " ++ T.unpack t)) todoStretch
   putStrLn ""
 
   -- 可視化

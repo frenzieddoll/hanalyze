@@ -108,6 +108,19 @@ cabal test               # テスト
 | `mvnormal-demo`     | `MvNormal` 観測専用 (Cholesky 経由) | 多変量観測尤度 |
 | `energy-demo`       | NUTS の Energy plot + BFMI 診断 | 病的事後分布の検出 |
 | `pymc-status-demo`  | PyMC parity ステータスレポート (カテゴリ別件数 + TODO 一覧) | 実装状況の可視化 |
+| `summary-demo`      | Posterior summary (`az.summary` 相当) + HDI トレース + rank plot + PPC + divergence overlay | 可視化基盤 5 種 |
+| `deterministic-demo` | `pm.Deterministic` で派生量 (τ=1/σ², log σ, snr=μ/σ) を Chain に保存 | 派生量の宣言 |
+| `noncentered-demo`  | Neal's funnel で centered vs non-centered (BFMI 0.65→1.02, ESS 7.6x) | non-centered 化 + divergence 検出 |
+| `dirichlet-demo`    | Dirichlet 事前 (stick-breaking) + Categorical 観測 → 共役解と一致 | Dirichlet latent |
+| `setdata-demo`      | `withData` で訓練→テストにデータ差し替え (Rank-2 多相) | `pm.set_data` |
+| `mvnormal-latent-demo` | 2D 階層モデル `μ ~ MvN([0,0], [[1,0.8],[0.8,1]])` を NUTS で推論 | MvNormal latent |
+| `negbinom-demo`     | NegativeBinomial で過分散カウント (μ=10, α=2 を回復、Poisson との比較) | 過分散モデル |
+| `multinomial-demo`  | Multinomial 観測 + Dirichlet 事前 (T=5 試行 × N=20、共役と完全一致) | 多項観測 |
+| `zeroinflated-demo` | ZIP で構造的ゼロ (ψ=0.4) を分離回復 | ゼロ過剰 |
+| `lkj-demo` / `lkj3d-demo` | LKJ(η=1) 事前で 2D / 3D の相関行列を回復 | 相関行列の事前 |
+| `newdistribs-demo`  | InverseGamma / Weibull / Pareto / BetaBinomial / VonMises を一括検証 | 5 つの新規分布 |
+| `ar1-demo`          | AR(1) 状態空間モデル (ϕ=0.7 を 30 ステップ系列から推定) | 時系列 |
+| `slice-demo`        | Slice sampler を MH/NUTS と比較 (調整不要、勾配不要、高 ESS) | Slice 法 |
 
 > 📊 **PyMC 機能比較とロードマップ**: 詳細は [docs/08-pymc-comparison.ja.md](docs/08-pymc-comparison.ja.md) を参照。
 > 全カテゴリの実装状況の棒グラフは `cabal run pymc-status-demo` で `pymc-status.html` として出力できる。
