@@ -117,7 +117,7 @@ executable hanalyze
 executable glmm-demo
   import:           warnings
   main-is:          Demo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base     >= 4.14 && < 5
@@ -128,7 +128,7 @@ executable glmm-demo
 executable hbm-example
   import:           warnings
   main-is:          HBMExample.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -140,7 +140,7 @@ executable hbm-example
 executable test-hmc-nuts
   import:           warnings
   main-is:          TestHMCNUTS.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -152,7 +152,7 @@ executable test-hmc-nuts
 executable bench-mcmc
   import:           warnings
   main-is:          BenchMCMC.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -165,7 +165,7 @@ executable bench-mcmc
 executable vi-demo
   import:           warnings
   main-is:          VIDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -178,7 +178,7 @@ executable vi-demo
 executable gibbs-demo
   import:           warnings
   main-is:          GibbsDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -191,7 +191,7 @@ executable gibbs-demo
 executable bar-demo
   import:           warnings
   main-is:          BarDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -201,7 +201,7 @@ executable bar-demo
 executable clinical-trial
   import:           warnings
   main-is:          ClinicalTrial.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -213,7 +213,7 @@ executable clinical-trial
 executable gp-demo
   import:           warnings
   main-is:          GPDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base     >= 4.14 && < 5
@@ -222,7 +222,7 @@ executable gp-demo
 executable preprocess-demo
   import:           warnings
   main-is:          PreprocessDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -234,7 +234,7 @@ executable preprocess-demo
 executable external-io-demo
   import:           warnings
   main-is:          ExternalIODemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -245,7 +245,7 @@ executable external-io-demo
 executable robust-gp-demo
   import:           warnings
   main-is:          RobustGPDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -254,7 +254,7 @@ executable robust-gp-demo
 executable rff-demo
   import:           warnings
   main-is:          RFFDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -267,7 +267,7 @@ executable rff-demo
 executable gibbs-hbm-demo
   import:           warnings
   main-is:          GibbsHBMDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -279,7 +279,7 @@ executable gibbs-hbm-demo
 executable newdistribs-demo
   import:           warnings
   main-is:          NewDistribsDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -291,7 +291,7 @@ executable newdistribs-demo
 executable regularized-demo
   import:           warnings
   main-is:          RegularizedDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -303,7 +303,7 @@ executable regularized-demo
 executable optimaldoe-demo
   import:           warnings
   main-is:          OptimalDOEDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -313,7 +313,7 @@ executable optimaldoe-demo
 executable pareto-smoke
   import:           warnings
   main-is:          ParetoSmokeDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -322,7 +322,7 @@ executable pareto-smoke
 executable materials-moo-demo
   import:           warnings
   main-is:          MaterialsMOODemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -334,7 +334,7 @@ executable materials-moo-demo
 executable bayesopt-demo
   import:           warnings
   main-is:          BayesOptDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -344,7 +344,7 @@ executable bayesopt-demo
 executable multirsm-demo
   import:           warnings
   main-is:          MultiRSMDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -354,7 +354,7 @@ executable multirsm-demo
 executable multivariate-demo
   import:           warnings
   main-is:          MultivariateDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -365,7 +365,7 @@ executable multivariate-demo
 executable multilm-demo
   import:           warnings
   main-is:          MultiLMDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -376,7 +376,7 @@ executable multilm-demo
 executable nsga-demo
   import:           warnings
   main-is:          NSGADemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -386,7 +386,7 @@ executable nsga-demo
 executable nsga-smoke
   import:           warnings
   main-is:          NSGASmokeDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -396,7 +396,7 @@ executable nsga-smoke
 executable rsm-demo
   import:           warnings
   main-is:          RSMDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -408,7 +408,7 @@ executable rsm-demo
 executable doe-demo
   import:           warnings
   main-is:          DOEDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -418,7 +418,7 @@ executable doe-demo
 executable kernel-demo
   import:           warnings
   main-is:          KernelDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -430,7 +430,7 @@ executable kernel-demo
 executable spline-demo
   import:           warnings
   main-is:          SplineDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -443,7 +443,7 @@ executable spline-demo
 executable integrated-demo
   import:           warnings
   main-is:          IntegratedDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -455,7 +455,7 @@ executable integrated-demo
 executable slice-demo
   import:           warnings
   main-is:          SliceDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -467,7 +467,7 @@ executable slice-demo
 executable ar1-demo
   import:           warnings
   main-is:          AR1Demo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -479,7 +479,7 @@ executable ar1-demo
 executable lkj3d-demo
   import:           warnings
   main-is:          LKJ3DDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -491,7 +491,7 @@ executable lkj3d-demo
 executable lkj-demo
   import:           warnings
   main-is:          LKJDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -503,7 +503,7 @@ executable lkj-demo
 executable zeroinflated-demo
   import:           warnings
   main-is:          ZeroInflatedDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -515,7 +515,7 @@ executable zeroinflated-demo
 executable multinomial-demo
   import:           warnings
   main-is:          MultinomialDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -527,7 +527,7 @@ executable multinomial-demo
 executable negbinom-demo
   import:           warnings
   main-is:          NegBinomDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -539,7 +539,7 @@ executable negbinom-demo
 executable mvnormal-latent-demo
   import:           warnings
   main-is:          MvNormalLatentDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -551,7 +551,7 @@ executable mvnormal-latent-demo
 executable setdata-demo
   import:           warnings
   main-is:          SetDataDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -563,7 +563,7 @@ executable setdata-demo
 executable dirichlet-demo
   import:           warnings
   main-is:          DirichletDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -575,7 +575,7 @@ executable dirichlet-demo
 executable noncentered-demo
   import:           warnings
   main-is:          NonCenteredDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -587,7 +587,7 @@ executable noncentered-demo
 executable deterministic-demo
   import:           warnings
   main-is:          DeterministicDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -599,7 +599,7 @@ executable deterministic-demo
 executable summary-demo
   import:           warnings
   main-is:          SummaryDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -611,7 +611,7 @@ executable summary-demo
 executable pymc-status-demo
   import:           warnings
   main-is:          PyMCStatusDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -621,7 +621,7 @@ executable pymc-status-demo
 executable energy-demo
   import:           warnings
   main-is:          EnergyDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -633,7 +633,7 @@ executable energy-demo
 executable mvnormal-demo
   import:           warnings
   main-is:          MvNormalDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -645,7 +645,7 @@ executable mvnormal-demo
 executable cdf-test
   import:           warnings
   main-is:          CDFTestDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -654,7 +654,7 @@ executable cdf-test
 executable trunc-censor-demo
   import:           warnings
   main-is:          TruncCensorDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -666,7 +666,7 @@ executable trunc-censor-demo
 executable mixture-demo
   import:           warnings
   main-is:          MixtureDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -678,7 +678,7 @@ executable mixture-demo
 executable potential-demo
   import:           warnings
   main-is:          PotentialDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -690,7 +690,7 @@ executable potential-demo
 executable forest-compare
   import:           warnings
   main-is:          ForestCompareDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -702,7 +702,7 @@ executable forest-compare
 executable ppc-demo
   import:           warnings
   main-is:          PPCDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -714,7 +714,7 @@ executable ppc-demo
 executable discrete-obs-demo
   import:           warnings
   main-is:          DiscreteObsDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -726,7 +726,7 @@ executable discrete-obs-demo
 executable new-distrib-demo
   import:           warnings
   main-is:          NewDistribDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -738,7 +738,7 @@ executable new-distrib-demo
 executable hbm-random-slope
   import:           warnings
   main-is:          HBMRandomSlopeDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -751,7 +751,7 @@ executable hbm-random-slope
 executable simpson-paradox
   import:           warnings
   main-is:          SimpsonParadoxDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
@@ -765,7 +765,7 @@ executable simpson-paradox
 executable hbm-regression
   import:           warnings
   main-is:          HBMRegressionDemo.hs
-  hs-source-dirs:   demo
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
