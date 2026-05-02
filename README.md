@@ -228,10 +228,10 @@ cabal run hanalyze -- <file> <xcols> <ycols> [LM|GLM|...] [opts]   # legacy = re
 | `regress`    | Classical / Bayesian regression (LM/GLM/GLMM/GP/HBM) | ✅ implemented |
 | `info`       | Per-column type and basic statistics | ✅ implemented |
 | `hist`       | Standalone histogram (with optional density overlay) | ✅ implemented |
+| `doe`        | Orthogonal arrays Lₙ (L4/L8/L9/L12/L16/L18) | ✅ implemented (Phase E1) |
 | `ridge`      | Ridge / Lasso / Elastic Net | planned (Phase A) |
 | `kernel`     | Kernel regression / RFF approximation | planned (Phase A) |
 | `spline`     | B-spline / natural cubic | planned |
-| `doe`        | Design of Experiments (factorial / OA Lₙ / RSM / D-opt) | planned (Phase E1) |
 | `taguchi`    | Taguchi method (OA + SN ratio + inner/outer arrays) | planned (Phase E2) |
 | `help`       | List subcommands | ✅ |
 
@@ -305,6 +305,48 @@ cabal run hanalyze -- hist data.csv score --fit normal 0 1
 # Compare against Poisson and export as PNG
 cabal run hanalyze -- hist data.csv counts --fit poisson 3 --format png --out hist.png
 ```
+
+### `doe` — generate experimental designs from orthogonal arrays Lₙ
+
+```
+hanalyze doe list                                          # list available arrays
+hanalyze doe ortho <NAME>                                  # raw table (column names F1, F2, ...)
+hanalyze doe ortho <NAME> -f NAME=v1,v2,... [-f ...]       # with factor assignment
+hanalyze doe ortho <NAME> [-f ...] [--csv|--tsv|--pretty] [--out FILE]
+```
+
+Available standard arrays (`hanalyze doe list`):
+
+| Array | Runs | Max factors | Levels |
+|---|---|---|---|
+| L4(2³)        | 4  | 3  | 2 levels |
+| L8(2⁷)        | 8  | 7  | 2 levels |
+| L9(3⁴)        | 9  | 4  | 3 levels |
+| L12(2¹¹)      | 12 | 11 | 2 levels (Plackett-Burman) |
+| L16(2¹⁵)      | 16 | 15 | 2 levels |
+| L18(2¹×3⁷)    | 18 | 8  | 1 factor at 2 levels + 7 factors at 3 levels (Taguchi-recommended) |
+
+```bash
+# Raw L9 table (4 three-level columns, 9 runs)
+cabal run hanalyze -- doe ortho L9
+
+# Assign factors with mixed integer / decimal / text levels
+cabal run hanalyze -- doe ortho L9 -f temp=150,180,210 -f rate=0.1,0.2,0.5 -f catalyst=A,B,C --csv
+
+# L18 with mixed-level factors (material at 2 levels + temperature/speed at 3 levels), to CSV file
+cabal run hanalyze -- doe ortho L18 \
+    -f material=steel,alu \
+    -f temp=150,180,210 \
+    -f speed=low,med,high \
+    --csv --out design.csv
+```
+
+**Orthogonal arrays vs. the Taguchi method** — orthogonal arrays are a
+mathematical construct (orthogonal evaluation of main effects with the
+fewest runs); the Taguchi method is a methodology that uses those arrays
+for **robust design that minimizes variability** (= orthogonal arrays + the
+SN ratio + inner/outer arrays for control vs. noise factors). SN-ratio
+analysis and inner/outer arrays are planned for Phase E2.
 
 ---
 

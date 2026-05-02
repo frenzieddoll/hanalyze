@@ -15,6 +15,7 @@
 | `Design.Quality`   | 直交度、D/A 効率、条件数、VIF |
 | `Design.RSM`       | CCD (rotatable/face-centered) + Box-Behnken + 二次回帰 |
 | `Design.Optimal`   | D-optimal / A-optimal (Fedorov 交換) |
+| `Design.Orthogonal` | 直交表 Lₙ (L4/L8/L9/L12/L16/L18) |
 
 ---
 
@@ -200,6 +201,71 @@ let fit = fitQuadratic design ys
     (xStar, yStar, eigs) = optimumPoint fit
 -- eigs 全部 < 0 → x* は極大点
 ```
+
+---
+
+## 6.5 直交表 Lₙ (`Design.Orthogonal`)
+
+タグチ流の標準直交表を定数として実装。Lₙ の **n** は試行数、**括弧内** が
+水準構成 (例: L18(2¹×3⁷) は 1 因子 × 2 水準 + 7 因子 × 3 水準)。
+
+```haskell
+import qualified Design.Orthogonal as OA
+
+-- 標準表
+OA.l4    -- L4(2^3)        4 試行 × 3 列 (2 水準)
+OA.l8    -- L8(2^7)        8 試行 × 7 列
+OA.l9    -- L9(3^4)        9 試行 × 4 列 (3 水準)
+OA.l12   -- L12(2^11)      12 試行 × 11 列 (Plackett-Burman)
+OA.l16   -- L16(2^15)      16 試行 × 15 列
+OA.l18   -- L18(2^1*3^7)   18 試行 × 8 列 (混合水準、タグチ推奨)
+
+-- 名前で取得
+OA.lookupOA "L9" :: Maybe OA.OA
+```
+
+### 因子割当
+
+```haskell
+let specs =
+      [ OA.FactorSpec "temp"     [OA.LNumeric 150, OA.LNumeric 180, OA.LNumeric 210]
+      , OA.FactorSpec "time"     [OA.LNumeric 10, OA.LNumeric 20, OA.LNumeric 30]
+      , OA.FactorSpec "catalyst" [OA.LText "A", OA.LText "B", OA.LText "C"]
+      ]
+case OA.assignFactors OA.l9 specs of
+  Right ad -> putStrLn (T.unpack (OA.renderPretty ad))
+  Left err -> putStrLn (T.unpack err)
+```
+
+### CLI から (`hanalyze doe`)
+
+```bash
+# 一覧
+hanalyze doe list
+
+# 生表 (列名 F1, F2, ...)
+hanalyze doe ortho L9 --pretty
+
+# 因子割当 + CSV ファイル出力
+hanalyze doe ortho L9 \
+  -f temp=150,180,210 \
+  -f time=10,20,30 \
+  -f catalyst=A,B,C \
+  --csv --out design.csv
+```
+
+### 直交表とタグチメソッドの違い
+
+| | 直交表 | タグチメソッド |
+|---|---|---|
+| 何か | 数学的構造 | 工学的方法論 |
+| 目的 | 主効果を最小試行で直交評価 | 品質ばらつきの最小化 (ロバスト設計) |
+| 道具 | Lₙ 表 | Lₙ 表 + **SN 比** + 損失関数 + 内側/外側配置 |
+| 因子 | 制御因子のみ | 制御因子 (内側) + **誤差/雑音因子** (外側) |
+| 評価 | 主効果の分散分析 | **SN 比** η = -10 log MSD を最大化 |
+
+直交表は道具、タグチメソッドはその道具を「ばらつき最小化」のために体系化した使い方。
+Phase E2 で SN 比解析と内外配置を `Design.Orthogonal` 上に追加予定。
 
 ---
 

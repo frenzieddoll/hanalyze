@@ -228,10 +228,10 @@ cabal run hanalyze -- <file> <xcols> <ycols> [LM|GLM|...] [opts]   # legacy = re
 | `regress`    | 古典/ベイズ回帰 (LM/GLM/GLMM/GP/HBM) | ✅ 実装 |
 | `info`       | 列ごとの型と基本統計量を表示 | ✅ 実装 |
 | `hist`       | ヒストグラム単体生成 | ✅ 実装 |
+| `doe`        | 直交表 Lₙ (L4/L8/L9/L12/L16/L18) | ✅ 実装 (Phase E1) |
 | `ridge`      | Ridge / Lasso / Elastic Net | 計画中 (Phase A) |
 | `kernel`     | カーネル回帰 / RFF 近似 | 計画中 (Phase A) |
 | `spline`     | B-spline / Natural cubic | 計画中 |
-| `doe`        | 実験計画 (factorial / OA Lₙ / RSM / D-opt) | 計画中 (Phase E1) |
 | `taguchi`    | タグチメソッド (OA + SN 比 + 内/外配置) | 計画中 (Phase E2) |
 | `help`       | サブコマンド一覧表示 | ✅ |
 
@@ -305,6 +305,43 @@ cabal run hanalyze -- hist data.csv score --fit normal 0 1
 # Poisson と比較しつつ PNG で出力
 cabal run hanalyze -- hist data.csv counts --fit poisson 3 --format png --out hist.png
 ```
+
+### `doe` — 直交表 Lₙ で実験計画を生成
+
+```
+hanalyze doe list                                          # 標準表の一覧
+hanalyze doe ortho <NAME>                                  # 生の表 (列名 F1, F2, ...)
+hanalyze doe ortho <NAME> -f NAME=v1,v2,... [-f ...]       # 因子割当
+hanalyze doe ortho <NAME> [-f ...] [--csv|--tsv|--pretty] [--out FILE]
+```
+
+利用可能な標準表 (`hanalyze doe list`):
+
+| 表 | 試行数 | 最大因子数 | 水準構成 |
+|---|---|---|---|
+| L4(2³)        | 4  | 3  | 2 水準 |
+| L8(2⁷)        | 8  | 7  | 2 水準 |
+| L9(3⁴)        | 9  | 4  | 3 水準 |
+| L12(2¹¹)      | 12 | 11 | 2 水準 (Plackett-Burman) |
+| L16(2¹⁵)      | 16 | 15 | 2 水準 |
+| L18(2¹×3⁷)    | 18 | 8  | 1 因子 2 水準 + 7 因子 3 水準 (タグチ推奨) |
+
+```bash
+# L9 の生表 (3 水準 4 列、9 試行)
+cabal run hanalyze -- doe ortho L9
+
+# 因子を割り当てて整数/小数/テキスト混在で出力
+cabal run hanalyze -- doe ortho L9 -f temp=150,180,210 -f rate=0.1,0.2,0.5 -f catalyst=A,B,C --csv
+
+# L18 で混合水準 (材料 2 水準 + 温度・速度 3 水準) を CSV ファイル出力
+cabal run hanalyze -- doe ortho L18 \
+    -f material=steel,alu \
+    -f temp=150,180,210 \
+    -f speed=low,med,high \
+    --csv --out design.csv
+```
+
+**直交表とタグチメソッドの違い** — 直交表は数学的構造 (主効果を最小試行で直交評価)、タグチメソッドはその直交表を「**ばらつき最小化のロバスト設計**」のために使う方法論 (= 直交表 + SN 比 + 制御因子内側/雑音因子外側配置)。Phase E2 で SN 比解析と内外配置を追加予定。
 
 ---
 

@@ -40,9 +40,9 @@ cabal run hanalyze -- regress data.csv x y LM --report    # 既存の回帰 (= b
 | `regress` / bare | ✅ | LM/GLM/GLMM/GP/HBM 回帰 |
 | `info` | ✅ | 列ごとの型・基本統計 (n / min / max / mean / median / sd / unique) |
 | `hist` | ✅ | ヒストグラム単体 (`--fit`/`--format`/`--out`) |
+| `doe` | ✅ | 直交表 Lₙ (L4/L8/L9/L12/L16/L18) (Phase E1) |
 | `ridge` / `kernel` | 計画中 | 正則化・カーネル回帰 (Phase A: RFF) |
 | `spline` | 計画中 | スプライン回帰 |
-| `doe` | 計画中 | 直交表 Lₙ / RSM / D-optimal (Phase E1) |
 | `taguchi` | 計画中 | タグチメソッド (OA + SN 比 + 内/外配置) (Phase E2) |
 
 ---

@@ -42,9 +42,9 @@ cabal run hanalyze -- regress data.csv x y LM --report    # regression (= bare f
 | `regress` / bare | ✅ | LM/GLM/GLMM/GP/HBM regression |
 | `info` | ✅ | Per-column type / stats (n / min / max / mean / median / sd / unique) |
 | `hist` | ✅ | Standalone histogram (`--fit`/`--format`/`--out`) |
+| `doe` | ✅ | Orthogonal arrays Lₙ (L4/L8/L9/L12/L16/L18) (Phase E1) |
 | `ridge` / `kernel` | planned | Regularized / kernel regression (Phase A: RFF) |
 | `spline` | planned | Spline regression |
-| `doe` | planned | Orthogonal arrays Lₙ / RSM / D-optimal (Phase E1) |
 | `taguchi` | planned | Taguchi method (OA + SN ratio + inner/outer arrays) (Phase E2) |
 
 ---

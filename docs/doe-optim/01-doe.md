@@ -16,6 +16,7 @@
 | `Design.Quality`   | Orthogonality, D/A efficiency, condition number, VIF |
 | `Design.RSM`       | CCD (rotatable / face-centered) + Box-Behnken + quadratic regression |
 | `Design.Optimal`   | D-optimal / A-optimal (Fedorov exchange) |
+| `Design.Orthogonal` | Orthogonal arrays Lₙ (L4/L8/L9/L12/L16/L18) |
 
 ---
 
@@ -201,6 +202,73 @@ let fit = fitQuadratic design ys
     (xStar, yStar, eigs) = optimumPoint fit
 -- All eigs < 0 → x* is a local maximum
 ```
+
+---
+
+## 6.5 Orthogonal arrays Lₙ (`Design.Orthogonal`)
+
+Standard Taguchi-style orthogonal arrays as constants. The Lₙ **n** is the
+number of runs; the **parenthesized expression** describes the level
+structure (e.g. L18(2¹×3⁷) = 1 factor × 2 levels + 7 factors × 3 levels).
+
+```haskell
+import qualified Design.Orthogonal as OA
+
+-- Standard arrays
+OA.l4    -- L4(2^3)        4 runs × 3 columns (2 levels)
+OA.l8    -- L8(2^7)        8 runs × 7 columns
+OA.l9    -- L9(3^4)        9 runs × 4 columns (3 levels)
+OA.l12   -- L12(2^11)      12 runs × 11 columns (Plackett-Burman)
+OA.l16   -- L16(2^15)      16 runs × 15 columns
+OA.l18   -- L18(2^1*3^7)   18 runs × 8 columns (mixed levels, Taguchi-recommended)
+
+-- Lookup by name
+OA.lookupOA "L9" :: Maybe OA.OA
+```
+
+### Factor assignment
+
+```haskell
+let specs =
+      [ OA.FactorSpec "temp"     [OA.LNumeric 150, OA.LNumeric 180, OA.LNumeric 210]
+      , OA.FactorSpec "time"     [OA.LNumeric 10, OA.LNumeric 20, OA.LNumeric 30]
+      , OA.FactorSpec "catalyst" [OA.LText "A", OA.LText "B", OA.LText "C"]
+      ]
+case OA.assignFactors OA.l9 specs of
+  Right ad -> putStrLn (T.unpack (OA.renderPretty ad))
+  Left err -> putStrLn (T.unpack err)
+```
+
+### From the CLI (`hanalyze doe`)
+
+```bash
+# List
+hanalyze doe list
+
+# Raw table (columns F1, F2, ...)
+hanalyze doe ortho L9 --pretty
+
+# Factor assignment + CSV file output
+hanalyze doe ortho L9 \
+  -f temp=150,180,210 \
+  -f time=10,20,30 \
+  -f catalyst=A,B,C \
+  --csv --out design.csv
+```
+
+### Orthogonal arrays vs. the Taguchi method
+
+| | Orthogonal array | Taguchi method |
+|---|---|---|
+| Nature | Mathematical construct | Engineering methodology |
+| Purpose | Orthogonal main-effect estimation with minimum runs | **Robust design** (variability minimization) |
+| Tools | Lₙ tables | Lₙ tables + **SN ratio** + loss function + inner/outer arrays |
+| Factors | Control factors only | Control factors (inner) + **error/noise factors** (outer) |
+| Evaluation | ANOVA on main effects | Maximize **SN ratio** η = -10 log MSD |
+
+Orthogonal arrays are the tool; the Taguchi method is the systematic use of
+that tool for variability minimization. SN-ratio analysis and inner/outer
+arrays are planned for Phase E2 on top of `Design.Orthogonal`.
 
 ---
 
