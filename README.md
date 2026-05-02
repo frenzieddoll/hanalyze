@@ -516,7 +516,8 @@ Viz/
   MCMC.hs          -- diagnostic plots (KDE / trace / autocorr / pair scatter)
   Report.hs        -- integrated HTML report (multi-chain with R-hat)
   Taguchi.hs       -- Taguchi-analysis HTML report (factor-effect bar charts + optimum table)
-  ReportBuilder.hs -- compositional reports (ReportSection + Reportable typeclass)
+  ReportBuilder.hs -- compositional reports (ReportSection + Reportable typeclass,
+                                              with interactive prediction + MCMC sections)
   ReportInstances.hs -- Reportable RegFit/SplineFit/KernelRidgeFit/RFFRidgeFit/RobustGPFit
   ModelGraph.hs    -- Mermaid.js DAG
   Bar.hs           -- bar charts (vertical / horizontal / stacked / grouped)

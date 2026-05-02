@@ -155,6 +155,36 @@ class Reportable a where
 | `RFFRidgeFit`    | `Model.RFF`         | DataOverview / ModelOverview / KeyValue (D/ℓ/σ_f/λ) / FitScatter / Residuals |
 | `RobustGPFit`    | `Model.GPRobust`    | DataOverview / ModelOverview / KeyValue (kernel/likelihood/IRLS iter) |
 
+### MCMC / 事後分布関連セクション
+
+| 関数 | 内容 |
+|---|---|
+| `secMCMCDiagnostics title params chain`           | KDE + トレース (`Viz.MCMC.mcmcDiagnostics` 経由) |
+| `secMCMCDiagnosticsMulti title params chains`     | 多チェーン版 (チェーン色分け) |
+| `secMCMCAutocorr title maxLag params chain`       | 自己相関バーチャート |
+| `secMCMCPair title pa pb chain`                   | 2 パラメータのペアスキャッター |
+| `secPosteriorSummary title rows`                  | mean/SD/2.5%/97.5%/ESS/R-hat テーブル |
+
+### 対話的予測
+
+| 関数 | 内容 |
+|---|---|
+| `secInteractiveLM title xc yc xs ys smooth (xMin, xMax)` | スライダーで x を変えるとリアルタイム予測値 + 信頼帯を表示 (LM/GLM/GP/HBM の単変数で利用可能)。グリッドからの線形補間で予測値を計算する JS が埋め込まれる。 |
+
+### LM/GLM/GLMM/GP/HBM の比較デモ
+
+`cabal run analysis-compare-demo` で各モデルについて 既存 AnalysisReport と
+新 ReportBuilder の両方の HTML を `trash/cmp_<model>_{AR,RB}.html` として生成。
+サイドバイサイドで内容を比較できる。
+
+| モデル | AR 版サイズ | RB 版サイズ | 主な違い |
+|---|---|---|---|
+| LM       | ~866 KB | ~870 KB | RB は対話的予測 + Markdown 説明追加 |
+| GLM (Poisson) | ~862 KB | ~875 KB | 同上 |
+| GLMM (LME)    | ~849 KB | ~833 KB | RB は BLUPs 表 + 分散成分 KeyValue |
+| GP (RBF) | ~914 KB | ~866 KB | RB はシンプル化 (kernel switcher なし) |
+| HBM      | ~867 KB | **~1.1 MB** | RB は MCMC 診断 + 自己相関 + ペア + 事後要約を全部含む |
+
 ### 利用例
 
 ```haskell
@@ -479,6 +509,25 @@ renderReport path cfg augmented
   直接組み立てている (instance なし)。ライブラリから使う場合は CLI コードを
   参考に手動で section を構築する必要がある。
 - 将来的に instance を追加予定 (タスクとしてバックログ)。
+
+### LM/GLM/GLMM/GP/HBM の Reportable instance
+
+これらは現状 `Viz.AnalysisReport` 専用 (sum-type ベース)。比較デモ
+`AnalysisCompareDemo.hs` では各モデルから section を直接構築する例を
+示しているので、Reportable instance 化したい場合はそれを参考にできる。
+
+例: HBM 用の section パターン:
+```haskell
+RB.secDataOverview df xCols yCol
+RB.secModelOverview "Bayesian Linear Regression (HBM, NUTS)" formula Nothing
+RB.secCoefficients [(α posterior mean), (β posterior mean), (σ posterior mean)] Nothing
+RB.secPosteriorSummary "Posterior summary" rows  -- mean/SD/quantile/ESS/R-hat
+RB.secMCMCDiagnostics "MCMC diagnostics" params chain
+RB.secMCMCAutocorr "Autocorrelation" 40 params chain
+RB.secMCMCPair "Pair scatter (α, β)" "alpha" "beta" chain
+RB.secFitScatter xc yc xs ys (Just credibleBand)
+RB.secInteractiveLM "Interactive prediction" xc yc xs ys credibleBand range
+```
 
 ---
 

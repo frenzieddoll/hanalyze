@@ -509,7 +509,8 @@ Viz/
   MCMC.hs          -- 診断プロット (KDE / トレース / 自己相関 / ペア散布図)
   Report.hs        -- 統合 HTML レポート (R-hat 付き多チェーン対応)
   Taguchi.hs       -- タグチ分析 HTML レポート (要因効果バーチャート + 最良水準テーブル)
-  ReportBuilder.hs -- コンポジション型レポート (ReportSection + Reportable typeclass)
+  ReportBuilder.hs -- コンポジション型レポート (ReportSection + Reportable typeclass、
+                                                  対話的予測 + MCMC 診断対応)
   ReportInstances.hs -- Reportable RegFit/SplineFit/KernelRidgeFit/RFFRidgeFit/RobustGPFit
   ModelGraph.hs    -- Mermaid.js DAG
   Bar.hs           -- 棒グラフ (縦 / 横 / 積み上げ / グループ)
