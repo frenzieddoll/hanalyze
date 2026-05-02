@@ -129,19 +129,32 @@ writeRBLM df xVec yVec = do
           xMinO = V.minimum xVec
           xMaxO = V.maximum xVec
           ext   = (xMaxO - xMinO) * 0.5
+          sd_   = sqrt (sum [ r ^ (2::Int) | r <- resid ]
+                        / fromIntegral (max 1 (length resid - 2)))
+          im = RB.InteractiveModel
+                 { RB.imXCols     = ["x"]
+                 , RB.imYCol      = "y"
+                 , RB.imXValues   = [[x] | x <- xs]
+                 , RB.imYValues   = ys
+                 , RB.imIntercept = head beta
+                 , RB.imBetas     = drop 1 beta
+                 , RB.imLink      = "identity"
+                 , RB.imSlider    = [(xMinO - ext, (xMinO + xMaxO)/2, xMaxO + ext)]
+                 , RB.imCISigma   = Just sd_
+                 }
           cfg   = RB.defaultReportConfig "LM (ReportBuilder)"
           sections =
             [ RB.secDataOverview df ["x"] "y"
             , RB.secModelOverview "Linear Model (LM)"
                 "y = β₀ + β₁·x  (Gaussian family, identity link)"
                 Nothing
-            , RB.secInteractiveLM "Interactive prediction" "x" "y"
-                xs ys smooth (xMinO - ext, xMaxO + ext)
+            , RB.secInteractiveMulti "Interactive prediction" im
             , RB.secCollapsible "Regression results" False
                 [ RB.secCoefficients coeffs (Just ("R²", rSquared1 fit))
                 , RB.secKeyValue "Fit summary"
                     [ ("R²",     T.pack (printf "%.4f" (rSquared1 fit)))
                     , ("Method", "OLS via QR decomposition")
+                    , ("σ_hat",  T.pack (printf "%.4f" sd_))
                     ]
                 , RB.secFitScatter "x" "y" xs ys (Just smooth)
                 , RB.secResiduals fitted resid
@@ -213,6 +226,17 @@ writeRBGLM df xVec yVec xCol yCol = do
           xMinO = V.minimum xVec
           xMaxO = V.maximum xVec
           ext   = (xMaxO - xMinO) * 0.5
+          im = RB.InteractiveModel
+                 { RB.imXCols     = [xCol]
+                 , RB.imYCol      = yCol
+                 , RB.imXValues   = [[x] | x <- xs]
+                 , RB.imYValues   = ys
+                 , RB.imIntercept = head beta
+                 , RB.imBetas     = drop 1 beta
+                 , RB.imLink      = "log"
+                 , RB.imSlider    = [(xMinO - ext, (xMinO + xMaxO)/2, xMaxO + ext)]
+                 , RB.imCISigma   = Nothing
+                 }
           cfg   = RB.defaultReportConfig "GLM Poisson (ReportBuilder)"
           sections =
             [ RB.secDataOverview df [xCol] yCol
@@ -220,8 +244,7 @@ writeRBGLM df xVec yVec xCol yCol = do
                 ("log(E[" <> yCol <> "]) = β₀ + β₁·" <> xCol
                  <> "  (Poisson family, log link)")
                 Nothing
-            , RB.secInteractiveLM "Interactive prediction" xCol yCol
-                xs ys smooth (xMinO - ext, xMaxO + ext)
+            , RB.secInteractiveMulti "Interactive prediction" im
             , RB.secCollapsible "Regression results" False
                 [ RB.secCoefficients
                     [(T.pack k, v) | (k, v) <- coeffs]

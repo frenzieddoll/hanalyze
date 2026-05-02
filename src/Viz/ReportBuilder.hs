@@ -52,6 +52,8 @@ module Viz.ReportBuilder
   , secPosteriorSummary
     -- * 対話的予測 (LM/GLM 用)
   , secInteractiveLM
+  , secInteractiveMulti
+  , InteractiveModel (..)
     -- * レンダリング
   , renderReport
     -- * Reportable typeclass
@@ -102,6 +104,25 @@ data SmoothCurve = SmoothCurve
   , scUpper :: [Double]
   } deriving (Show, Eq)
 
+-- | 多変量対話的予測のモデル情報。
+--
+-- LM/GLM の線形予測子を JS で評価するための情報を保持:
+--   y = invLink(β₀ + β₁ x_1 + β₂ x_2 + ... + β_p x_p)
+--
+-- 信頼帯は副軸を slider 値に固定したときの平均応答 CI (現状は 95% 等幅近似)。
+data InteractiveModel = InteractiveModel
+  { imXCols     :: [Text]                  -- ^ 説明変数名 (length = p)
+  , imYCol      :: Text                    -- ^ 応答名
+  , imXValues   :: [[Double]]              -- ^ 各列の観測値 (n samples × p)
+  , imYValues   :: [Double]                -- ^ 観測 y
+  , imIntercept :: Double                  -- ^ β₀
+  , imBetas     :: [Double]                -- ^ [β₁, ..., β_p]
+  , imLink      :: Text                    -- ^ "identity" | "log" | "logit" | "sqrt"
+  , imSlider    :: [(Double, Double, Double)]
+                                           -- ^ 各列の (min, mid, max) スライダー範囲
+  , imCISigma   :: Maybe Double            -- ^ 残差 σ_hat (CI 計算用; Nothing なら CI なし)
+  } deriving (Show)
+
 -- | レポート 1 セクション。
 data ReportSection
   = -- | データ概要: 列ごとの型/N/min/max/mean/SD + ヒストグラム
@@ -131,6 +152,8 @@ data ReportSection
     -- | 単変数 LM/GLM の対話的予測 (スライダー + リアルタイム scatter)。
     --   フィールド: title / xCol / yCol / xs / ys / smooth / (xSliderMin, xSliderMax)
   | SecInteractiveLM Text Text Text [Double] [Double] SmoothCurve (Double, Double)
+    -- | 多変量対話的予測。主軸選択 dropdown + 各副軸 slider + 散布図。
+  | SecInteractiveMulti Text InteractiveModel
     -- | 折りたたみ可能なグループ。子セクションを 1 つの details で囲む。
     --   フィールド: title / openByDefault / 子セクション
   | SecCollapsible Text Bool [ReportSection]
@@ -251,6 +274,10 @@ secInteractiveLM
   -> ReportSection
 secInteractiveLM = SecInteractiveLM
 
+-- | 多変量対話的予測 (主軸 dropdown + 副軸 slider + 散布図)。
+secInteractiveMulti :: Text -> InteractiveModel -> ReportSection
+secInteractiveMulti = SecInteractiveMulti
+
 -- ---------------------------------------------------------------------------
 -- Reportable typeclass
 -- ---------------------------------------------------------------------------
@@ -326,6 +353,7 @@ renderSection sid sec = case sec of
   SecMarkdown t txt           -> renderMarkdown sid t txt
   SecHtml _ html              -> wrapSection sid "" html
   SecInteractiveLM t xc yc xs ys sc rng -> renderInteractiveLM sid t xc yc xs ys sc rng
+  SecInteractiveMulti t im   -> renderInteractiveMulti sid t im
   SecCollapsible t open children ->
     renderCollapsible sid t open children
 
@@ -559,6 +587,181 @@ renderMarkdown :: Text -> Text -> Text -> Text
 renderMarkdown sid title txt =
   wrapSection sid title $ "<p>" <> txt <> "</p>"
 
+-- Interactive Multi (multivariate) -----------------------------------------
+
+renderInteractiveMulti :: Text -> Text -> InteractiveModel -> Text
+renderInteractiveMulti sid title im =
+  let xCols  = imXCols im
+      sliders = imSlider im
+      xCount = length xCols
+      sliderHtml = T.intercalate "\n"
+        [ T.unlines
+            [ "<div class=\"slider-row\">"
+            , "  <label>" <> col <> ":"
+            , "    <input type=\"range\" id=\"i-" <> sid <> "-s" <> T.pack (show i) <> "\""
+            , "      min=\"" <> showD4 mn <> "\""
+            , "      max=\"" <> showD4 mx <> "\""
+            , "      step=\"" <> showD4 ((mx - mn) / 200) <> "\""
+            , "      value=\"" <> showD4 mid <> "\""
+            , "      oninput=\"window.__updMulti_" <> sid <> "()\">"
+            , "    <span id=\"i-" <> sid <> "-s" <> T.pack (show i)
+              <> "-val\">" <> showD4 mid <> "</span>"
+            , "  </label>"
+            , "</div>"
+            ]
+        | (i, col, (mn, mid, mx)) <- zip3 [0::Int ..] xCols sliders ]
+      primaryDropdown = T.unlines
+        [ "<div class=\"slider-row\">"
+        , "  <label>Primary axis (chart x):"
+        , "    <select id=\"i-" <> sid <> "-primary\""
+        , "            onchange=\"window.__updMulti_" <> sid <> "()\">"
+        , T.intercalate "\n"
+            [ "      <option value=\"" <> T.pack (show i)
+              <> "\">" <> col <> "</option>"
+            | (i, col) <- zip [0::Int ..] xCols ]
+        , "    </select>"
+        , "  </label>"
+        , "</div>"
+        ]
+      _ = xCount
+  in wrapSection sid (if T.null title then "Interactive prediction" else title) $
+       T.unlines
+         [ "<div class=\"interactive-multi\">"
+         , "  <div class=\"i-controls\">"
+         , primaryDropdown
+         , sliderHtml
+         , "    <div class=\"pred-output\">"
+         , "      <div><strong>Predicted " <> imYCol im <> ":</strong>"
+         , "        <span id=\"i-" <> sid <> "-yhat\">—</span></div>"
+         , "      <div class=\"band-readout\">95% CI:"
+         , "        <span id=\"i-" <> sid <> "-ci\">—</span></div>"
+         , "    </div>"
+         , "  </div>"
+         , "  <div class=\"i-chart\">"
+         , "    <div class=\"vl-wrap\"><div id=\"vl-" <> sid <> "\"></div></div>"
+         , "  </div>"
+         , "</div>"
+         ]
+
+interactiveMultiScript :: Text -> InteractiveModel -> Text
+interactiveMultiScript sid im =
+  let xCols   = imXCols im
+      yCol    = imYCol im
+      betas   = imBetas im
+      icpt    = imIntercept im
+      link    = imLink im
+      xVals   = imXValues im
+      yVals   = imYValues im
+      ciSigma = maybe 0 id (imCISigma im)
+      hasCI   = case imCISigma im of { Just s -> s > 0; _ -> False }
+      arrD xs = "[" <> T.intercalate "," (map showD4 xs) <> "]"
+      arrS xs = "[" <> T.intercalate "," (map (\s -> "\"" <> s <> "\"") xs) <> "]"
+      xMatJson =
+        "[" <> T.intercalate ","
+                  [ arrD row | row <- xVals ] <> "]"
+      yArrJson = arrD yVals
+      betasArr = arrD betas
+  in T.unlines
+       [ "(() => {"
+       , "  const xCols = " <> arrS xCols <> ";"
+       , "  const yCol  = \"" <> yCol <> "\";"
+       , "  const xMat  = " <> xMatJson <> ";"
+       , "  const yArr  = " <> yArrJson <> ";"
+       , "  const beta0 = " <> showD4 icpt <> ";"
+       , "  const betas = " <> betasArr <> ";"
+       , "  const link  = \"" <> link <> "\";"
+       , "  const sigma = " <> showD4 ciSigma <> ";"
+       , "  const hasCI = " <> (if hasCI then "true" else "false") <> ";"
+       , "  const invLink = (eta) => {"
+       , "    if (link === 'log')   return Math.exp(eta);"
+       , "    if (link === 'logit') return 1.0/(1.0+Math.exp(-eta));"
+       , "    if (link === 'sqrt')  return eta * eta;"
+       , "    return eta;"
+       , "  };"
+       , "  const predEta = (xs) => {"
+       , "    let e = beta0;"
+       , "    for (let i = 0; i < betas.length; i++) e += betas[i] * xs[i];"
+       , "    return e;"
+       , "  };"
+       , "  const sliderVals = () => xCols.map((_, i) =>"
+       , "    parseFloat(document.getElementById('i-" <> sid <> "-s' + i).value));"
+       , "  const primaryIdx = () =>"
+       , "    parseInt(document.getElementById('i-" <> sid <> "-primary').value);"
+       , "  let chartView = null;"
+       , "  const baseSpec = (pIdx, sliderXs) => {"
+       , "    const pCol = xCols[pIdx];"
+       , "    // primary 軸の min/max"
+       , "    let pMin = Infinity, pMax = -Infinity;"
+       , "    for (const row of xMat) {"
+       , "      if (row[pIdx] < pMin) pMin = row[pIdx];"
+       , "      if (row[pIdx] > pMax) pMax = row[pIdx];"
+       , "    }"
+       , "    const ext = (pMax - pMin) * 0.5;"
+       , "    pMin -= ext; pMax += ext;"
+       , "    const N = 100;"
+       , "    const grid = [];"
+       , "    for (let i = 0; i < N; i++)"
+       , "      grid.push(pMin + i * (pMax - pMin) / (N - 1));"
+       , "    // 予測曲線: 副軸を slider 値で固定、primary を grid で動かす"
+       , "    const curve = grid.map(p => {"
+       , "      const xs = sliderXs.slice();"
+       , "      xs[pIdx] = p;"
+       , "      const eta = predEta(xs);"
+       , "      const y = invLink(eta);"
+       , "      return { gx: p, gy: y, lo: y - 1.96 * sigma, hi: y + 1.96 * sigma };"
+       , "    });"
+       , "    const obs = xMat.map((row, i) => ({ x: row[pIdx], y: yArr[i] }));"
+       , "    const layers = ["
+       , "      { data: { values: obs },"
+       , "        mark: { type: 'point', opacity: 0.7, size: 50, color: '#4C72B0' },"
+       , "        encoding: {"
+       , "          x: { field: 'x', type: 'quantitative', axis: { title: pCol } },"
+       , "          y: { field: 'y', type: 'quantitative', axis: { title: yCol } } } }"
+       , "    ];"
+       , "    if (hasCI) {"
+       , "      layers.push({"
+       , "        data: { values: curve },"
+       , "        mark: { type: 'area', opacity: 0.2, color: '#DD5566' },"
+       , "        encoding: {"
+       , "          x: { field: 'gx', type: 'quantitative' },"
+       , "          y: { field: 'lo', type: 'quantitative' },"
+       , "          y2:{ field: 'hi' } } });"
+       , "    }"
+       , "    layers.push({"
+       , "      data: { values: curve },"
+       , "      mark: { type: 'line', color: '#DD5566', strokeWidth: 2.5 },"
+       , "      encoding: {"
+       , "        x: { field: 'gx', type: 'quantitative' },"
+       , "        y: { field: 'gy', type: 'quantitative' } } });"
+       , "    return { '$schema': 'https://vega.github.io/schema/vega-lite/v4.json',"
+       , "             layer: layers, width: 600, height: 320 };"
+       , "  };"
+       , "  window.__updMulti_" <> sid <> " = function() {"
+       , "    const xs = sliderVals();"
+       , "    xCols.forEach((_, i) => {"
+       , "      document.getElementById('i-" <> sid <> "-s' + i + '-val')"
+       , "        .textContent = xs[i].toFixed(3);"
+       , "    });"
+       , "    const eta = predEta(xs);"
+       , "    const yhat = invLink(eta);"
+       , "    document.getElementById('i-" <> sid <> "-yhat').textContent = yhat.toFixed(4);"
+       , "    if (hasCI) {"
+       , "      const lo = yhat - 1.96 * sigma;"
+       , "      const hi = yhat + 1.96 * sigma;"
+       , "      document.getElementById('i-" <> sid <> "-ci').textContent ="
+       , "        '[' + lo.toFixed(3) + ', ' + hi.toFixed(3) + ']';"
+       , "    } else {"
+       , "      document.getElementById('i-" <> sid <> "-ci').textContent = '—';"
+       , "    }"
+       , "    const pIdx = primaryIdx();"
+       , "    vegaEmbed('#vl-" <> sid <> "', baseSpec(pIdx, xs),"
+       , "              {actions:false}).then(r => { chartView = r.view; });"
+       , "  };"
+       , "  // 初期描画"
+       , "  window.__updMulti_" <> sid <> "();"
+       , "})();"
+       ]
+
 -- Collapsible group ---------------------------------------------------------
 
 childId :: Text -> Int -> Text
@@ -624,6 +827,8 @@ sectionScript sid sec = case sec of
     embed sid spec
   SecInteractiveLM _ xc yc xs ys sc _ ->
     interactiveLMScript sid xc yc xs ys sc
+  SecInteractiveMulti _ im ->
+    interactiveMultiScript sid im
   SecCollapsible _ _ children ->
     T.intercalate "\n"
       [ sectionScript (childId sid i) child
@@ -883,4 +1088,18 @@ css = T.unlines
   , ".table-scroll { overflow-x: auto; }"
   , ".stats-table { font-size: .85em; }"
   , ".stats-table th, .stats-table td { padding: 5px 10px; }"
+  , ".interactive-multi { display: grid; grid-template-columns: 280px 1fr;"
+  , "                     gap: 20px; align-items: start; }"
+  , ".interactive-multi .i-controls { background: #f8f9fa;"
+  , "                                  border-radius: 8px; padding: 14px; }"
+  , ".interactive-multi .slider-row { margin-bottom: 10px; }"
+  , ".interactive-multi .slider-row label { display: block; font-size: .9em; }"
+  , ".interactive-multi input[type='range'] { width: 100%; vertical-align: middle; }"
+  , ".interactive-multi select { width: 100%; padding: 4px; }"
+  , ".interactive-multi .pred-output { margin-top: 14px; padding-top: 12px;"
+  , "                                  border-top: 1px solid #ddd; font-size: .95em; }"
+  , ".interactive-multi .pred-output strong { color: #2c3e50; }"
+  , "@media (max-width: 700px) {"
+  , "  .interactive-multi { grid-template-columns: 1fr; }"
+  , "}"
   ]
