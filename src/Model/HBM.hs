@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ImpredicativeTypes #-}
 -- | 多相版 HBM DSL。
 --
 -- 現行 'Model.HBM' は @Sample Text Distribution (Double -> next)@ という形で
@@ -61,6 +62,8 @@ module Model.HBM
   , augmentChainWithDeterministic
   , nonCenteredNormal
   , dirichlet
+  , dataNamed
+  , withData
   , mvNormalLogDensity
     -- * 構造検査
   , Node (..)
@@ -842,6 +845,11 @@ data ModelF a next
     -- ^ 名前付きの派生量 (PyMC `pm.Deterministic`)。log-joint には寄与せず、
     --   サンプルごとに値を保存する。継続には値そのものを通すので、その後の
     --   モデル中でも参照可能。
+  | Data Text [Double] ([Double] -> next)
+    -- ^ 名前付き観測データプレースホルダ (PyMC `pm.Data`)。
+    --   モデル内でデータを保持し、`withData` で外部から差し替え可能。
+    --   観測値を直接 `observe` に渡す代わりに、`dataNamed` で受け取って
+    --   `observe` に渡すと、後でデータ差し替えができる。
   deriving Functor
 
 type Model a = Free (ModelF a)
@@ -885,6 +893,36 @@ potential nm v = liftF (Potential nm v ())
 -- > tau <- deterministic "tau" (1 / (sigma * sigma))
 deterministic :: Text -> a -> Model a a
 deterministic nm v = liftF (Deterministic nm v id)
+
+-- | 名前付きデータプレースホルダを宣言する (PyMC `pm.Data` 相当)。
+-- 既定値 @ys@ を持ち、後で 'withData' により差し替え可能。
+--
+-- 典型的な使い方:
+--
+-- > model = do
+-- >   y <- dataNamed "y" trainData
+-- >   mu <- sample "mu" (Normal 0 5)
+-- >   observe "y" (Normal mu 1) y
+--
+-- そして @withData \"y\" testData model@ で同じ構造で別データを使う。
+dataNamed :: Text -> [Double] -> Model a [Double]
+dataNamed n ys = liftF (Data n ys id)
+
+-- | モデル中の名前付きデータを差し替える。マッチしない場合はそのまま。
+-- 同じ名前が複数回出現する場合は全箇所で差し替わる。
+--
+-- 型シグネチャは @Model a r@ なので、ユーザーが @ModelP r@ から呼ぶ場合
+-- そのまま多相的に使える (各 @a@ で個別に適用される)。
+withData :: Text -> [Double] -> Model a r -> Model a r
+withData _ _   (Pure r) = Pure r
+withData n new (Free f) = Free (case f of
+  Data n' ys k
+    | n == n'   -> Data n' new (\d -> withData n new (k d))
+    | otherwise -> Data n' ys  (\d -> withData n new (k d))
+  Sample nm d k         -> Sample nm d (\v -> withData n new (k v))
+  Observe nm d ys nx    -> Observe nm d ys (withData n new nx)
+  Potential nm v nx     -> Potential nm v (withData n new nx)
+  Deterministic nm v k  -> Deterministic nm v (\v' -> withData n new (k v')))
 
 -- | 非中心化 (non-centered) 正規分布。
 --
@@ -971,6 +1009,7 @@ collectNodes m = go m []
       go next (Node n (ObservedN (length ys)) (distName d) Set.empty : acc)
     go (Free (Potential _ _ next)) acc = go next acc   -- Node 表示には含めない
     go (Free (Deterministic _ v k)) acc = go (k v) acc
+    go (Free (Data _ ys k)) acc = go (k ys) acc
 
 sampleNames :: ModelP r -> [Text]
 sampleNames m = [nodeName n | n <- collectNodes m, nodeKind n == LatentN]
@@ -996,6 +1035,7 @@ logJoint model params = go model 0
       in go next (acc + ll)
     go (Free (Potential _ v next)) acc = go next (acc + v)
     go (Free (Deterministic _ v k)) acc = go (k v) acc
+    go (Free (Data _ ys k)) acc = go (k ys) acc
 
 -- | log p(θ) のみ (prior 部分)。
 logPrior :: (Floating a, Ord a) => Model a r -> Map Text a -> a
@@ -1009,6 +1049,7 @@ logPrior model params = go model 0
     go (Free (Observe _ _ _ next)) acc = go next acc
     go (Free (Potential _ v next)) acc = go next (acc + v)
     go (Free (Deterministic _ v k)) acc = go (k v) acc
+    go (Free (Data _ ys k)) acc = go (k ys) acc
 
 -- | log p(y | θ) のみ (likelihood 部分)。
 logLikelihood :: (Floating a, Ord a) => Model a r -> Map Text a -> a
@@ -1024,6 +1065,7 @@ logLikelihood model params = go model 0
       in go next (acc + ll)
     go (Free (Potential _ _ next)) acc = go next acc   -- Potential は事前項とみなす
     go (Free (Deterministic _ v k)) acc = go (k v) acc
+    go (Free (Data _ ys k)) acc = go (k ys) acc
 
 -- | 各 Observe ノードの「現在のパラメータ値で評価した分布」と観測値を取得する。
 -- Gibbs サンプラーが共役構造を検出する際に、潜在変数の現在値に対する
@@ -1043,6 +1085,8 @@ runObserveDists (Free (Potential _ _ next)) ps =
   runObserveDists next ps
 runObserveDists (Free (Deterministic _ v k)) ps =
   runObserveDists (k v) ps
+runObserveDists (Free (Data _ ys k)) ps =
+  runObserveDists (k ys) ps
 
 -- | 各 Sample ノードの (名前, 事前分布) を Double 特殊化で取得する。
 -- Gibbs サンプラーの共役検出で「この潜在変数の事前は Gamma か Beta か」を
@@ -1053,6 +1097,7 @@ priorList (Free (Sample n d k)) = (n, d) : priorList (k 0)
 priorList (Free (Observe _ _ _ next)) = priorList next
 priorList (Free (Potential _ _ next)) = priorList next
 priorList (Free (Deterministic _ v k)) = priorList (k v)
+priorList (Free (Data _ ys k)) = priorList (k ys)
 
 -- ---------------------------------------------------------------------------
 -- 互換 API
@@ -1080,6 +1125,7 @@ perObsLogLiks m params = go m []
       in go next (reverse lls ++ acc)
     go (Free (Potential _ _ next)) acc = go next acc
     go (Free (Deterministic _ v k)) acc = go (k v) acc
+    go (Free (Data _ ys k)) acc = go (k ys) acc
 
 -- | モデルの 'Deterministic' ノードを評価し、派生量の Map を返す。
 --
@@ -1096,6 +1142,7 @@ runDeterministics m params = go m Map.empty
     go (Free (Potential _ _ next)) acc = go next acc
     go (Free (Deterministic n v k)) acc =
       go (k v) (Map.insert n v acc)
+    go (Free (Data _ ys k)) acc = go (k ys) acc
 
 -- | 各 posterior サンプルに対して 'runDeterministics' を計算し、
 -- 結果を 'chainSamples' の Map にマージした新しい Chain を返す。
@@ -1341,6 +1388,9 @@ extractDeps m = go m []
       let parentDeps = trackDeps v
           node = Node nm LatentN "Deterministic" parentDeps
       in go (k v) (node : acc)
+    go (Free (Data _ ys k)) acc =
+      -- Data はデータプレースホルダ。継続には [Double] をそのまま渡す。
+      go (k ys) acc
 
 -- | Distribution Track に含まれる依存変数集合を取り出す。
 distDepsT :: Distribution Track -> Set Text
