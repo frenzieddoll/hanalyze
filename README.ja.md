@@ -50,6 +50,7 @@ myModel = do
 | [学習資料 2 — ベイズ統計の基礎](docs/learn/02-bayesian-basics.ja.md) | 事前/尤度/事後、共役、HBM、事後予測、ワークフロー |
 | [学習資料 3 — MCMC の原理](docs/learn/03-mcmc-foundations.ja.md) | マルコフ連鎖、エルゴード性、MH、Gibbs、Slice、収束診断 |
 | [学習資料 4 — HMC / NUTS](docs/learn/04-hmc-nuts.ja.md) | Hamiltonian、leapfrog、制約変換、NUTS、dual averaging、BFMI、divergence、非中心化 |
+| [学習資料 5 — VI / モデル選択 / 高度トピック](docs/learn/05-vi-modelselect-advanced.ja.md) | ELBO、ADVI、WAIC、PSIS-LOO、Mixture、LKJ、AR、Censored 等の理論と使い分け |
 
 ---
 
