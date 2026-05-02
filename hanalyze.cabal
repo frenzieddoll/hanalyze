@@ -60,6 +60,8 @@ library
     Optim.Numeric
     Optim.NSGA
     Optim.Pareto
+    Optim.Acquisition
+    Optim.BayesOpt
     Viz.MCMC
     Viz.ModelGraph
     Viz.Report
@@ -263,6 +265,16 @@ executable pareto-smoke
   build-depends:
       base       >= 4.14 && < 5
     , hanalyze
+
+executable bayesopt-demo
+  import:           warnings
+  main-is:          BayesOptDemo.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , mwc-random >= 0.15 && < 0.16
 
 executable multirsm-demo
   import:           warnings
