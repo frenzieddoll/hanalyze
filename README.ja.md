@@ -55,6 +55,11 @@ myModel = do
 | [実験計画法 (DOE)](docs/11-design-of-experiments.ja.md) | 完全/部分要因 / ラテン方格 / 乱塊 / RSM / D-optimal / ANOVA / Power 解析 |
 | [学習資料 6 — 回帰拡張の理論](docs/learn/06-regression-extensions.ja.md) | スプライン基底、カーネルメソッド、L1/L2 正則化、bias-variance tradeoff |
 | [学習資料 7 — 実験計画法の理論](docs/learn/07-doe-foundations.ja.md) | 直交性、効率指標、RSM、検出力、サンプルサイズ、DOE の実務手順 |
+| [多次元出力モデル](docs/12-multivariate-models.ja.md) | MultiLM / RRR / PLS / CCA / MultiGP の使い方 |
+| [多目的最適化](docs/13-multi-objective-optimization.ja.md) | NSGA-II / Pareto / Bayesian MOO の使い方 |
+| [学習資料 8 — 多変量回帰の理論](docs/learn/08-multivariate-theory.ja.md) | OLS / RRR / PLS / CCA / Multi-GP の数学的背景 |
+| [学習資料 9 — Pareto 効率と MOO](docs/learn/09-pareto-and-moo.ja.md) | NSGA-II アルゴリズム、HV/IGD、scalarization、ZDT |
+| [学習資料 10 — Bayesian Optimization](docs/learn/10-bayesian-optimization.ja.md) | EI / UCB / PI / EHVI / ParEGO / q-EHVI |
 
 ---
 
