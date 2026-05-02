@@ -155,7 +155,7 @@ writeRBLM df xVec yVec = do
                 ("$y_i = \\beta_0 + \\beta_1 x_i + \\varepsilon_i$<br>"
                  <> "$\\varepsilon_i \\sim \\text{Normal}(0, \\sigma^2)$")
                 Nothing
-            , RB.secCollapsible "回帰結果" True
+            , RB.secCollapsible "<span class=\"sec-icon\">&#128200;</span> 回帰結果" True
                 [ RB.secStatRow
                     [ ("R²",         T.pack (printf "%.4f" (rSquared1 fit)))
                     , ("方法",       "OLS (QR)")
@@ -261,7 +261,7 @@ writeRBGLM df xVec yVec xCol yCol = do
                  <> "$\\log \\lambda_i = \\beta_0 + \\beta_1 " <> xCol <> "_i$")
                 "log (Poisson の標準リンク)"
                 Nothing
-            , RB.secCollapsible "回帰結果" True
+            , RB.secCollapsible "<span class=\"sec-icon\">&#128200;</span> 回帰結果" True
                 [ RB.secStatRow
                     [ ("McFadden R²", T.pack (printf "%.4f" (rSquared1 fit)))
                     , ("方法",        "IRLS")
@@ -355,7 +355,7 @@ writeRBGLMM df gr = do
              <> "$\\varepsilon_{ij} \\sim \\text{Normal}(0, \\sigma^2)$")
             "identity (Gaussian の標準リンク)"
             Nothing
-        , RB.secCollapsible "回帰結果" True
+        , RB.secCollapsible "<span class=\"sec-icon\">&#128200;</span> 回帰結果" True
             [ RB.secStatRow
                 [ ("周辺 R²", T.pack (printf "%.4f" (rSquared1 (GLMM.glmmFixed gr))))
                 , ("σ²_u",     T.pack (printf "%.4f" (GLMM.glmmRandVar gr)))
@@ -448,12 +448,13 @@ writeRBGP df xs ys gridX res params = do
       maxAbsR = maximum (0 : map abs resid)
       sections =
         [ RB.secDataOverview df ["x"] "y"
-        , RB.secModelOverview "GP(RBF)"
+        , RB.secModelOverviewExtras "GP"
             ("$f \\sim \\text{GP}(0, k(x, x'))$<br>"
              <> "$k(x, x') = \\sigma_f^2 \\exp\\!\\left(-(x-x')^2 / (2\\ell^2)\\right)$<br>"
              <> "$y_i = f_i + \\varepsilon_i, \\quad \\varepsilon_i \\sim \\text{Normal}(0, \\sigma_n^2)$")
+            [("カーネル", "RBF (二乗指数)")]
             Nothing
-        , RB.secCollapsible "回帰結果" True
+        , RB.secCollapsible "<span class=\"sec-icon\">&#128200;</span> 回帰結果" True
             [ RB.secStatRow
                 [ ("ℓ",   T.pack (printf "%.4f" (GP.gpLengthScale params)))
                 , ("σ_f²", T.pack (printf "%.4f" (GP.gpSignalVar params)))
@@ -611,12 +612,13 @@ writeRBHBM df xs ys chain = do
       nSamp   = length (MCMCcore.chainSamples chain)
       sections =
         [ RB.secDataOverview df ["x"] "y"
-        , RB.secModelOverview "HBM(NUTS)"
+        , RB.secModelOverviewExtras "HBM"
             ("$y_i \\sim \\text{Normal}(\\alpha + \\beta x_i, \\sigma)$<br>"
              <> "$\\alpha, \\beta \\sim \\text{Normal}(0, 10)$<br>"
              <> "$\\sigma \\sim \\text{Exponential}(1)$")
+            [("サンプラー", "NUTS (No-U-Turn Sampler)")]
             (Just mgDag)
-        , RB.secCollapsible "回帰結果" True
+        , RB.secCollapsible "<span class=\"sec-icon\">&#128200;</span> 回帰結果" True
             [ RB.secStatRow
                 [ ("R²",         T.pack (printf "%.4f" r2))
                 , ("サンプル数", T.pack (show nSamp))

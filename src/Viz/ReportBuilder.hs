@@ -34,6 +34,7 @@ module Viz.ReportBuilder
   , secDataOverview
   , secModelOverview
   , secModelOverviewLink
+  , secModelOverviewExtras
   , secKeyValue
   , secCoefficients
   , secFitScatter
@@ -133,8 +134,8 @@ data InteractiveModel = InteractiveModel
 data ReportSection
   = -- | データ概要: 列ごとの型/N/min/max/mean/SD + ヒストグラム
     SecDataOverview DataFrame [Text] Text
-    -- | モデル概要: タイトル / 数式 / リンク関数 (オプション) / Mermaid DAG (オプション)
-  | SecModelOverview Text Text (Maybe Text) (Maybe Text)
+    -- | モデル概要: タイトル / 数式 / 任意の追加 info-box [(label,value)] / Mermaid DAG
+  | SecModelOverview Text Text [(Text, Text)] (Maybe Text)
     -- | 係数表: ラベル/値 + オプションの (R² ラベル, 値)
   | SecCoefficients [(Text, Double)] (Maybe (Text, Double))
     -- | 散布図 + 滑らか曲線 (信頼帯あれば描画)
@@ -177,9 +178,9 @@ data ReportSection
 secDataOverview :: DataFrame -> [Text] -> Text -> ReportSection
 secDataOverview = SecDataOverview
 
--- | モデル概要 (リンク関数なし)。LM / HBM / GP 用。
+-- | モデル概要 (追加 box なし)。LM 等。
 secModelOverview :: Text -> Text -> Maybe Text -> ReportSection
-secModelOverview ty fm mer = SecModelOverview ty fm Nothing mer
+secModelOverview ty fm mer = SecModelOverview ty fm [] mer
 
 -- | モデル概要 + リンク関数。GLM / GLMM 等で使用。
 secModelOverviewLink :: Text       -- ^ モデル種別
@@ -187,7 +188,17 @@ secModelOverviewLink :: Text       -- ^ モデル種別
                      -> Text       -- ^ リンク関数 (例: "log" / "logit" / "identity")
                      -> Maybe Text -- ^ Mermaid DAG
                      -> ReportSection
-secModelOverviewLink ty fm link mer = SecModelOverview ty fm (Just link) mer
+secModelOverviewLink ty fm link mer =
+  SecModelOverview ty fm [("リンク関数", link)] mer
+
+-- | モデル概要 + 任意の追加 info-box (label, value)。
+--   HBM のサンプラー種類や GP のカーネル種類を表示する場合などに使用。
+secModelOverviewExtras :: Text             -- ^ モデル種別
+                       -> Text             -- ^ 数式 (HTML 可)
+                       -> [(Text, Text)]   -- ^ 追加 info-box (label, value) の列
+                       -> Maybe Text       -- ^ Mermaid DAG
+                       -> ReportSection
+secModelOverviewExtras = SecModelOverview
 
 secKeyValue :: Text -> [(Text, Text)] -> ReportSection
 secKeyValue = SecKeyValue
@@ -557,7 +568,7 @@ sectionId i = "sec_" <> T.pack (show i)
 renderSection :: Text -> ReportSection -> Text
 renderSection sid sec = case sec of
   SecDataOverview df xs y     -> renderDataOverview sid df xs y
-  SecModelOverview ty fm mLk mer -> renderModelOverview sid ty fm mLk mer
+  SecModelOverview ty fm extras mer -> renderModelOverview sid ty fm extras mer
   SecCoefficients cs mr2      -> renderCoefficients sid cs mr2
   SecFitScatter xc yc xs ys s -> renderFitScatter sid xc yc xs ys s
   SecResiduals fit res        -> renderResiduals sid fit res
@@ -721,8 +732,8 @@ histogramSpec col vals =
 
 -- モデル概要 -----------------------------------------------------------------
 
-renderModelOverview :: Text -> Text -> Text -> Maybe Text -> Maybe Text -> Text
-renderModelOverview sid ty formula mLink mer =
+renderModelOverview :: Text -> Text -> Text -> [(Text, Text)] -> Maybe Text -> Text
+renderModelOverview sid ty formula extras mer =
   let merBlock = case mer of
         Nothing -> ""
         Just m  ->
@@ -732,14 +743,13 @@ renderModelOverview sid ty formula mLink mer =
             , m
             , "</div></div>"
             ]
-      linkBox = case mLink of
-        Nothing -> ""
-        Just l  -> T.unlines
-          [ "  <div class=\"info-box\">"
-          , "    <div class=\"lbl\">リンク関数</div>"
-          , "    <div class=\"ival\">" <> l <> "</div>"
-          , "  </div>"
-          ]
+      extraBox (lbl, val) = T.unlines
+        [ "  <div class=\"info-box\">"
+        , "    <div class=\"lbl\">" <> lbl <> "</div>"
+        , "    <div class=\"ival\">" <> val <> "</div>"
+        , "  </div>"
+        ]
+      extraBoxes = T.concat (map extraBox extras)
   in collapsibleSection sid "<span class=\"sec-icon\">&#9878;</span> モデル概要" True $
        T.unlines
          [ "<div class=\"info-grid\">"
@@ -747,7 +757,7 @@ renderModelOverview sid ty formula mLink mer =
          , "    <div class=\"lbl\">モデル種別</div>"
          , "    <div class=\"ival\">" <> ty <> "</div>"
          , "  </div>"
-         , linkBox
+         , extraBoxes
          , "  <div class=\"info-box\" style=\"flex: 2\">"
          , "    <div class=\"lbl\">数式</div>"
          , "    <div class=\"ival\">" <> formula <> "</div>"
