@@ -48,6 +48,7 @@ myModel = do
 | [確率分布の関係図](docs/09-distribution-relationships.ja.md) | Mermaid 図で「Bin→Poi/Normal、Beta-Bin、Gamma-Poi 共役」等を可視化 |
 | [学習資料 1 — 確率分布の基礎](docs/learn/01-probability-distributions.ja.md) | 全実装分布の数式・直観・用途 |
 | [学習資料 2 — ベイズ統計の基礎](docs/learn/02-bayesian-basics.ja.md) | 事前/尤度/事後、共役、HBM、事後予測、ワークフロー |
+| [学習資料 3 — MCMC の原理](docs/learn/03-mcmc-foundations.ja.md) | マルコフ連鎖、エルゴード性、MH、Gibbs、Slice、収束診断 |
 
 ---
 
