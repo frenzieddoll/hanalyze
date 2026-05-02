@@ -53,6 +53,8 @@ library
     Optim.Adam
     Optim.GradAscent
     Optim.Numeric
+    Optim.NSGA
+    Optim.Pareto
     Viz.MCMC
     Viz.ModelGraph
     Viz.Report
