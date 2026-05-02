@@ -27,10 +27,12 @@
 module Viz.ReportInstances
   ( LMReport (..)
   , GLMReport (..)
+  , RFReport (..)
   ) where
 
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.List (sortBy)
 import qualified Data.Vector as V
 import qualified Numeric.LinearAlgebra as LA
 import Text.Printf (printf)
@@ -46,6 +48,9 @@ import Model.RFF        (RFFRidgeFit (..), predictRFFRidge, rffrFeatures,
                          rffSigmaF, rffLengthScale, rffOmegas)
 import Model.GP         (GPParams (..))
 import Model.GPRobust   (RobustGPFit (..), RobustLikelihood (..))
+import Model.Quantile   (QRFit (..))
+import Model.GAM        (GAMFit (..), predictGAMComponent)
+import Model.RandomForest (RandomForest (..), featureImportance)
 import Viz.ReportBuilder
 
 -- ---------------------------------------------------------------------------
@@ -470,3 +475,172 @@ instance Reportable GLMReport where
        , secModelOverviewLink modelType formula linkTxt Nothing
        , resultSec
        ] ++ interactiveSec
+
+-- ---------------------------------------------------------------------------
+-- Quantile Regression (axis-1 B)
+-- ---------------------------------------------------------------------------
+
+instance Reportable QRFit where
+  toReport _cfg df xCols yCol fit =
+    let beta    = LA.toList (qfBeta fit)
+        coefLabels = "intercept"
+                   : [ "β" <> T.pack (show (i :: Int)) <> " (" <> x <> ")"
+                     | (i, x) <- zip [1 ..] xCols ]
+        coeffs   = zip coefLabels beta
+        fitted   = LA.toList (qfYHat fit)
+        resid    = LA.toList (qfResid fit)
+        p        = length beta
+        (_sigmaH, rmse, maxAbs) = residStats resid p
+        tau      = qfTau fit
+        formula  = "$Q_{\\tau=" <> T.pack (printf "%.2f" tau)
+                   <> "}(" <> yCol <> " | x) = "
+                   <> T.intercalate " + "
+                        ("\\beta_0" : [ "\\beta_" <> T.pack (show (i :: Int))
+                                          <> " " <> x
+                                       | (i, x) <- zip [1 ..] xCols ])
+                   <> "$"
+        statRow =
+          secStatRow
+            [ ("τ",            T.pack (printf "%.2f" tau))
+            , ("Pseudo R¹",    T.pack (printf "%.4f" (qfR1 fit)))
+            , ("Pinball loss", T.pack (printf "%.4f" (qfPinball fit)))
+            , ("反復",         T.pack (show (qfIters fit)))
+            , ("RMSE",         T.pack (printf "%.4f" rmse))
+            , ("最大絶対残差", T.pack (printf "%.4f" maxAbs))
+            ]
+        scatterCard = case (xCols, firstNumericVec xCols df, getNumeric yCol df) of
+          ([xc], Just xv, Just yv) ->
+            -- 単変数: yHat を x ソート順で線として描く
+            let pairs = zip (V.toList xv) fitted
+                sorted = sortByFst pairs
+                smooth = SmoothCurve (map fst sorted) (map snd sorted) [] []
+            in [ secCard "散布図 + 推定 τ-分位点線"
+                   [ secFitScatter xc yCol (V.toList xv) (V.toList yv)
+                       (Just smooth) ] ]
+          _ -> []
+        resultSec =
+          secCollapsible "<span class=\"sec-icon\">&#128200;</span> 回帰結果" True
+            ([ statRow
+             , secCard "係数" [secCoefficients coeffs (Just ("Pseudo R¹", qfR1 fit))]
+             ]
+             ++ scatterCard
+             ++ [ secCard "残差プロット" [secResiduals fitted resid] ])
+    in [ secDataOverview df xCols yCol
+       , secModelOverview "Quantile Regression" formula Nothing
+       , resultSec
+       ]
+
+sortByFst :: Ord a => [(a, b)] -> [(a, b)]
+sortByFst = sortBy (\(a, _) (b, _) -> compare a b)
+
+-- ---------------------------------------------------------------------------
+-- GAM (axis-1 B)
+-- ---------------------------------------------------------------------------
+
+instance Reportable GAMFit where
+  toReport _cfg df xCols yCol fit =
+    let fitted = LA.toList (gamYHat fit)
+        resid  = LA.toList (gamResid fit)
+        n      = length fitted
+        p      = sum [ LA.size b | b <- gamBetas fit ]
+        (_sigmaH, rmse, maxAbs) = residStats resid p
+        statRow =
+          secStatRow
+            [ ("R²",        T.pack (printf "%.4f" (gamR2 fit)))
+            , ("Degree",    T.pack (show (gamDegree fit)))
+            , ("Knots",     T.pack (show (length (head (gamKnots fit ++ [[]])))))
+            , ("λ (Ridge)", T.pack (printf "%g" (gamLambda fit)))
+            , ("RMSE",      T.pack (printf "%.4f" rmse))
+            , ("最大絶対残差", T.pack (printf "%.4f" maxAbs))
+            ]
+        formula = "$" <> yCol <> "_i = \\beta_0 + \\sum_j s_j("
+                  <> T.intercalate ", " xCols <> ")_i + \\varepsilon_i$"
+
+        -- 各特徴の partial effect: s_j(x_j) を smooth として可視化
+        partialCards =
+          [ let mxVec = getNumeric x df
+            in case mxVec of
+                 Just xv ->
+                   let xsRaw = V.toList xv
+                       sorted = sortByFst (zip xsRaw [0 :: Int ..])
+                       xsS    = map fst sorted
+                       grid   = V.fromList xsS
+                       sjV    = predictGAMComponent fit (j - 1) grid
+                       sjList = V.toList sjV
+                       partRes = [ resid !! i + (sjList !! k)
+                                 | (k, (_, i)) <- zip [0 ..] sorted ]
+                       smooth = SmoothCurve xsS sjList [] []
+                   in secCard ("Partial effect: s(" <> x <> ")")
+                        [ secFitScatter x ("s(" <> x <> ")")
+                            xsS partRes (Just smooth) ]
+                 Nothing -> secMarkdown ("Partial effect: " <> x)
+                              ("(列 " <> x <> " が DataFrame に見つかりません)")
+          | (j, x) <- zip [1 :: Int ..] xCols, n > 0 ]
+
+        resultSec =
+          secCollapsible "<span class=\"sec-icon\">&#128200;</span> 回帰結果" True
+            ([ statRow ]
+             ++ partialCards
+             ++ [ secCard "残差プロット" [secResiduals fitted resid] ])
+    in [ secDataOverview df xCols yCol
+       , secModelOverview "GAM" formula Nothing
+       , resultSec
+       ]
+
+-- ---------------------------------------------------------------------------
+-- Random Forest (axis-1 B)
+-- ---------------------------------------------------------------------------
+
+-- | Random Forest レポート用ラッパ。
+--
+-- `RandomForest` 自体は yHat を保持しないため、ユーザーが学習データに対する
+-- 予測値と R² を別途計算して渡す。
+data RFReport = RFReport
+  { rfrModel :: RandomForest
+  , rfrYHat  :: V.Vector Double   -- ^ 学習データに対する予測値
+  , rfrYObs  :: V.Vector Double   -- ^ 学習データの観測値 (R² 計算用)
+  } deriving Show
+
+instance Reportable RFReport where
+  toReport _cfg df xCols yCol (RFReport rf yHatV yObsV) =
+    let yHat   = V.toList yHatV
+        yObs   = V.toList yObsV
+        resid  = zipWith (-) yObs yHat
+        n      = length yObs
+        meanY  = if n == 0 then 0 else sum yObs / fromIntegral n
+        ssTot  = sum [ (y - meanY) ^ (2 :: Int) | y <- yObs ]
+        ssRes  = sum [ r * r | r <- resid ]
+        r2     = if ssTot > 0 then 1 - ssRes / ssTot else 0
+        (_sigmaH, rmse, maxAbs) = residStats resid 1
+
+        importVec = featureImportance rf
+        importPairs =
+          [ (lbl, importVec V.! (i - 1))
+          | (i, lbl) <- zip [1 ..] xCols
+          , i - 1 < V.length importVec ]
+
+        formula = "$\\hat{y}(x) = \\frac{1}{T} \\sum_{t=1}^{T} \\text{Tree}_t(x)$ "
+                  <> "(T = bagged regression trees)"
+
+        statRow =
+          secStatRow
+            [ ("R² (train)",  T.pack (printf "%.4f" r2))
+            , ("Trees",       T.pack (show (length (rfTreesV rf))))
+            , ("Features",    T.pack (show (rfNFeatures rf)))
+            , ("RMSE",        T.pack (printf "%.4f" rmse))
+            , ("最大絶対残差", T.pack (printf "%.4f" maxAbs))
+            ]
+
+        importanceCard =
+          secCard "Feature importance" [ secFeatureImportance "" importPairs ]
+
+        resultSec =
+          secCollapsible "<span class=\"sec-icon\">&#128200;</span> 回帰結果" True
+            [ statRow
+            , importanceCard
+            , secCard "残差プロット" [secResiduals yHat resid]
+            ]
+    in [ secDataOverview df xCols yCol
+       , secModelOverview "Random Forest (regression)" formula Nothing
+       , resultSec
+       ]

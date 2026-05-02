@@ -153,6 +153,9 @@ class Reportable a where
 |---|---|---|
 | `LMReport`       | `Viz.ReportInstances` | DataOverview / ModelOverview / Collapsible(回帰結果: StatRow + 係数 + 散布図 + 残差) / InteractiveMulti |
 | `GLMReport`      | `Viz.ReportInstances` | DataOverview / ModelOverviewLink / Collapsible(回帰結果: StatRow + 係数 + 散布図 + 残差) / InteractiveMulti |
+| `QRFit`          | `Model.Quantile`    | DataOverview / ModelOverview / Collapsible(τ-分位点 + Pseudo R¹ + Pinball + 係数 + 散布図 + 残差) |
+| `GAMFit`         | `Model.GAM`         | DataOverview / ModelOverview / Collapsible(R²/degree/knots + **特徴ごとの partial effect カード** + 残差) |
+| `RFReport`       | `Viz.ReportInstances` | DataOverview / ModelOverview / Collapsible(R² + Trees/Features + **Feature importance** + 残差) |
 | `RegFit`         | `Model.Regularized` | DataOverview / ModelOverview / Coefficients (β + R²) / KeyValue (penalty/λ/sparsity) / FitScatter / Residuals |
 | `SplineFit`      | `Model.Spline`      | DataOverview / ModelOverview / KeyValue (kind/knots) / FitScatter / Residuals |
 | `KernelRidgeFit` | `Model.Kernel`      | DataOverview / ModelOverview / KeyValue (kernel/h/λ) / FitScatter / Residuals |
@@ -369,8 +372,7 @@ renderReport "rff.html" cfg (toReport cfg df ["x"] "y" rffFit)
 
 ### Quantile / GAM / Random Forest
 
-これらは現在 CLI 専用で `--report` を提供 (Reportable instance はまだなし)。
-CLI から呼び出すと、それぞれ専用のレポートが生成される:
+CLI から `--report` で生成される他、ライブラリからも `Reportable` instance 経由で同等のレポートを構築可能 (Cycle 3 で追加):
 
 ```bash
 hanalyze quantile data.csv x y --taus 0.1,0.5,0.9 --report
@@ -386,7 +388,30 @@ hanalyze rf       data.csv "x1 x2 x3" y --trees 200 --report
 | `gam`      | 各特徴の Partial effect (s_j(x_j) を partial residual と重ねる) |
 | `rf`       | Feature importance (バーチャート) |
 
-将来 `Reportable` instance を追加すればライブラリからも同じセクション構成を組める。
+ライブラリから直接構築する例:
+
+```haskell
+import qualified Model.Quantile      as Q
+import qualified Model.GAM           as GAM
+import qualified Model.RandomForest  as RF
+import qualified Viz.ReportBuilder   as RB
+import qualified Viz.ReportInstances as RI
+
+-- Quantile (τ = 0.5 で中央値回帰)
+let qfit = Q.fitQuantile 0.5 xMat yVec
+RB.renderReport "qr.html" cfg (RB.toReport cfg df ["x"] "y" qfit)
+
+-- GAM
+let gfit = GAM.fitGAM 3 5 0.01 [xVec1, xVec2] yVec
+RB.renderReport "gam.html" cfg (RB.toReport cfg df ["x1","x2"] "y" gfit)
+
+-- Random Forest (yHat/yObs を別途渡す)
+gen <- createSystemRandom
+rf <- RF.fitRF RF.defaultRFConfig rows ys gen
+let yHat = V.fromList [ RF.predictRF rf row | row <- rows ]
+    rep  = RI.RFReport rf yHat (V.fromList ys)
+RB.renderReport "rf.html" cfg (RB.toReport cfg df ["x1","x2"] "y" rep)
+```
 
 ### Robust GP
 
