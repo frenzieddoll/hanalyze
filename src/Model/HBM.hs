@@ -46,6 +46,9 @@ module Model.HBM
   , logDensity
   , logDensityObs
   , sampleDist
+  , distCDF
+  , logCDF
+  , logSF
     -- * 多相モデル
   , Model
   , ModelP
@@ -449,7 +452,32 @@ distCDF (HalfNormal sig) x
   | sig <= 0 = Nothing
   | x <= 0   = Just 0
   | otherwise = Just (erfA (x / (sig * sqrt 2)))
-distCDF _ _ = Nothing  -- 他の分布は未対応
+distCDF (HalfCauchy sc) x
+  | sc <= 0 = Nothing
+  | x <= 0  = Just 0
+  | otherwise = Just (2 * atan (x / sc) / pi)
+distCDF (Cauchy loc sc) x
+  | sc <= 0   = Nothing
+  | otherwise = Just (0.5 + atan ((x - loc) / sc) / pi)
+distCDF (Gamma shape rate) x
+  | shape <= 0 || rate <= 0 = Nothing
+  | x <= 0                  = Just 0
+  | otherwise               = Just (incGammaPA shape (rate * x))
+distCDF (Beta a b) x
+  | a <= 0 || b <= 0 = Nothing
+  | x <= 0           = Just 0
+  | x >= 1           = Just 1
+  | otherwise        = Just (incBetaA x a b)
+distCDF (StudentT df mu sig) x
+  | df <= 0 || sig <= 0 = Nothing
+  | otherwise =
+      let z     = (x - mu) / sig
+          -- F_t(z; df) = 1 - 0.5 * I(df/(df+z²); df/2, 1/2)   (z >= 0)
+          --            =     0.5 * I(df/(df+z²); df/2, 1/2)   (z <  0)
+          ratio = df / (df + z * z)
+          ix    = incBetaA ratio (df / 2) 0.5
+      in Just (if z >= 0 then 1 - 0.5 * ix else 0.5 * ix)
+distCDF _ _ = Nothing  -- 他の分布 (離散・Mixture・Truncated 内の Truncated 等) は未対応
 
 -- | log F(x) (CDF の対数) — 端では値が 0 や 1 に近づくため log(F) で計算。
 logCDF :: (Floating a, Ord a) => Distribution a -> a -> a
@@ -466,6 +494,121 @@ logSF d x = case distCDF d x of
   Just c | c <= 0    -> 0
          | c >= 1    -> negInf
          | otherwise -> log (1 - c)
+
+-- ---------------------------------------------------------------------------
+-- 不完全ガンマ関数 P(a, x) = γ(a, x) / Γ(a)  (Numerical Recipes 6.2)
+-- ---------------------------------------------------------------------------
+
+-- | 正則化された下側不完全ガンマ関数 P(a, x) = γ(a, x) / Γ(a) ∈ [0, 1]。
+-- これは Gamma(shape=a, rate=1) の CDF F(x)。
+incGammaPA :: (Floating a, Ord a) => a -> a -> a
+incGammaPA a x
+  | x <= 0 || a <= 0 = 0
+  | x < a + 1        = igammSer a x          -- 級数展開で P(a,x)
+  | otherwise        = 1 - igammCF a x        -- 連分数で Q(a,x)、P = 1 - Q
+
+-- 級数展開: P(a, x) = e^{-x} x^a / Γ(a) * Σ x^n / (a(a+1)...(a+n))
+igammSer :: forall a. (Floating a, Ord a) => a -> a -> a
+igammSer a x = sumSer * exp (-x + a * log x - lgammaApprox a)
+  where
+    -- 反復: term_{n+1} = term_n * x / (a + n + 1)
+    sumSer = go (0 :: Int) (1 / a) (1 / a)
+    eps :: a
+    eps    = 1e-13
+    maxIt  = 200 :: Int
+    go n term acc
+      | n >= maxIt           = acc
+      | abs term < abs acc * eps = acc
+      | otherwise =
+          let n'    = n + 1
+              term' = term * x / (a + fromIntegral n')
+              acc'  = acc + term'
+          in go n' term' acc'
+
+-- 連分数 (Lentz 法): Q(a, x) = e^{-x} x^a / Γ(a) * CF
+-- CF = 1/(x+1-a - 1·(1-a)/(x+3-a - 2·(2-a)/(...))
+igammCF :: forall a. (Floating a, Ord a) => a -> a -> a
+igammCF a x = exp (-x + a * log x - lgammaApprox a) * h
+  where
+    fpmin, eps :: a
+    fpmin = 1e-300
+    eps   = 1e-13
+    maxIt = 200 :: Int
+    -- modified Lentz's method
+    b0    = x + 1 - a
+    c0    = 1 / fpmin
+    d0    = 1 / b0
+    h     = goCF (1 :: Int) b0 c0 d0 d0
+    goCF i b c d hh
+      | i > maxIt              = hh
+      | abs (del - 1) < eps    = hh'
+      | otherwise              = goCF (i + 1) b' c'' d''' hh'
+      where
+        an   = -fromIntegral i * (fromIntegral i - a)
+        b'   = b + 2
+        d'   = b' + an * d
+        d''  = if abs d' < fpmin then fpmin else d'
+        c'   = b' + an / c
+        c''  = if abs c' < fpmin then fpmin else c'
+        d''' = 1 / d''
+        del  = d''' * c''
+        hh'  = hh * del
+    _ = c0  -- 未使用ダミー (修正された Lentz 法の起動値: 別経路)
+
+-- ---------------------------------------------------------------------------
+-- 正則化された不完全ベータ関数 I_x(a, b) = B(x; a, b) / B(a, b)
+-- ---------------------------------------------------------------------------
+
+-- | 正則化された不完全ベータ関数 I_x(a, b) ∈ [0, 1]。
+-- これは Beta(a, b) の CDF F(x)。
+-- StudentT の CDF にも内部で使用。
+incBetaA :: (Floating a, Ord a) => a -> a -> a -> a
+incBetaA x a b
+  | x <= 0    = 0
+  | x >= 1    = 1
+  | otherwise =
+      -- 対数ベータ正規化定数
+      let bt = exp ( lgammaApprox (a + b)
+                   - lgammaApprox a
+                   - lgammaApprox b
+                   + a * log x
+                   + b * log (1 - x))
+      in if x < (a + 1) / (a + b + 2)
+           then bt * betaCFA x a b / a
+           else 1 - bt * betaCFA (1 - x) b a / b
+
+-- 連分数 (modified Lentz, Numerical Recipes §6.4)
+betaCFA :: forall a. (Floating a, Ord a) => a -> a -> a -> a
+betaCFA x a b = iterate' (1 :: Int) 1 d0 h0
+  where
+    fpmin, eps :: a
+    fpmin = 1e-300
+    eps   = 1e-13
+    maxIt = 200 :: Int
+    qab = a + b
+    qap = a + 1
+    qam = a - 1
+    capLent v = if abs v < fpmin then fpmin else v
+    d0 = 1 / capLent (1 - qab * x / qap)
+    h0 = d0
+
+    iterate' m c d h
+      | m > maxIt          = h
+      | abs (del - 1) < eps = hO
+      | otherwise          = iterate' (m + 1) cO dO hO
+      where
+        mD  = fromIntegral m :: a
+        -- 偶数項: aa_2m = m(b-m)x / ((qam+2m)(a+2m))
+        aaE = mD * (b - mD) * x / ((qam + 2 * mD) * (a + 2 * mD))
+        dE  = 1 / capLent (1 + aaE * d)
+        cE  = capLent (1 + aaE / c)
+        hE  = h * dE * cE
+        -- 奇数項: aa_2m+1 = -(a+m)(qab+m)x / ((a+2m)(qap+2m))
+        aaO = -(a + mD) * (qab + mD) * x / ((a + 2 * mD) * (qap + 2 * mD))
+        dO  = 1 / capLent (1 + aaO * dE)
+        cO  = capLent (1 + aaO / cE)
+        del = dO * cO
+        hO  = hE * del
 
 -- | log(F(hi) − F(lo)) — Truncated の正規化定数。
 logCDFInterval :: (Floating a, Ord a) => Distribution a -> Maybe a -> Maybe a -> a

@@ -197,6 +197,15 @@ executable gibbs-hbm-demo
     , containers >= 0.6  && < 0.8
     , mwc-random >= 0.15 && < 0.16
 
+executable cdf-test
+  import:           warnings
+  main-is:          CDFTestDemo.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+
 executable trunc-censor-demo
   import:           warnings
   main-is:          TruncCensorDemo.hs
