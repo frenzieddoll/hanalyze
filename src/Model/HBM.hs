@@ -173,6 +173,10 @@ data Distribution a
     --   μ は長さ k の平均ベクトル、Σ は k×k の共分散行列 (対称正定値)。
     --   'observeMV' で k 次元観測ベクトル列を渡す。Cholesky 分解で評価。
     --   注: @sample@ 経由で latent として使うのは非対応 (logDensity = 0)。
+  | NegativeBinomial a a
+    -- ^ NegativeBinomial(μ, α) parameterization (PyMC 互換)。
+    --   mean = μ,  var = μ + μ²/α  (α → ∞ で Poisson に収束)。
+    --   過分散カウントデータの観測尤度に使う。観測値は非負整数。
   deriving (Show, Functor)
 
 distName :: Distribution a -> Text
@@ -194,6 +198,7 @@ distName Mixture{}     = "Mixture"
 distName Truncated{}   = "Truncated"
 distName Censored{}    = "Censored"
 distName MvNormal{}    = "MvNormal"
+distName NegativeBinomial{} = "NegativeBinomial"
 
 -- | サンプル値 (型 @a@) に対する事前分布の対数密度。
 logDensity :: (Floating a, Ord a) => Distribution a -> a -> a
@@ -284,6 +289,15 @@ logDensity (Censored d _ _) x =
   -- prior 評価では通常の密度を使う (打ち切りは観測時のみ意味を持つ)
   logDensity d x
 logDensity MvNormal{} _ = 0  -- observation-only: latent としては使わない
+logDensity (NegativeBinomial mu alpha) x
+  | mu <= 0 || alpha <= 0 || x < 0 = negInf
+  | otherwise =
+      let p = alpha / (alpha + mu)        -- success prob
+      in lgammaApprox (x + alpha)
+       - lgammaApprox alpha
+       - lgammaApprox (x + 1)
+       + alpha * log p
+       + x * log (1 - p)
 
 -- | 観測値 (Double 定数) に対する尤度の対数密度。
 -- 観測は @[Double]@ で渡されるので、@Floating a@ 制約のみで計算可能。
@@ -415,6 +429,16 @@ logDensityObs (Censored d mLo mHi) y =
        _                                     -> logDensityObs d y          -- 通常観測
 logDensityObs MvNormal{} _ = 0
   -- スカラー観測経路では使わない (chunk して 'mvNormalLogDensity' を呼ぶ obsLogSum 経由)
+logDensityObs (NegativeBinomial mu alpha) y
+  | mu <= 0 || alpha <= 0 || y < 0 = negInf
+  | otherwise =
+      let kA = realToFrac y :: a
+          p  = alpha / (alpha + mu)
+      in lgammaApprox (kA + alpha)
+       - lgammaApprox alpha
+       - lgammaApprox (kA + 1)
+       + alpha * log p
+       + kA * log (1 - p)
 
 -- | 観測リストに対する尤度の総和。通常分布は 1 観測 = 1 スカラーで sum。
 -- MvNormal は k 次元なので flatten された @[Double]@ を chunk して評価する。
@@ -813,6 +837,10 @@ sampleDist (Truncated d mLo mHi) gen =
   in tryOnce (10000 :: Int)
 sampleDist MvNormal{} _ =
   error "MvNormal: observation-only — 'sample' 経由でのドローは未対応"
+sampleDist (NegativeBinomial mu alpha) gen = do
+  -- Gamma-Poisson mixture: λ ~ Gamma(α, β=α/μ); X ~ Poisson(λ)
+  lam <- MWC.gamma alpha (mu / alpha) gen
+  samplePoissonKnuth lam gen
 sampleDist (Censored d _ _) gen =
   -- 元分布から普通にサンプリング (打ち切りは「観測過程」の話で生成側ではない)
   sampleDist d gen
@@ -1449,6 +1477,7 @@ distDepsT (Censored  d mLo mHi) =
 distDepsT (MvNormal mus covRows) =
   mconcat (map trackDeps mus)
     <> mconcat (concatMap (map trackDeps) covRows)
+distDepsT (NegativeBinomial mu alpha) = trackDeps mu <> trackDeps alpha
 
 -- | Track でモデルを評価する (log joint も依存集合付きで計算)。
 runTrack :: forall r. ModelP r -> Map Text Track -> Track
