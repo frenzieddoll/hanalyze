@@ -17,6 +17,7 @@
 | `Design.RSM`       | CCD (rotatable / face-centered) + Box-Behnken + quadratic regression |
 | `Design.Optimal`   | D-optimal / A-optimal (Fedorov exchange) |
 | `Design.Orthogonal` | Orthogonal arrays Lₙ (L4/L8/L9/L12/L16/L18) |
+| `Design.Taguchi`    | Taguchi method (SN ratio + factor effects + inner/outer arrays) |
 
 ---
 
@@ -267,8 +268,61 @@ hanalyze doe ortho L9 \
 | Evaluation | ANOVA on main effects | Maximize **SN ratio** η = -10 log MSD |
 
 Orthogonal arrays are the tool; the Taguchi method is the systematic use of
-that tool for variability minimization. SN-ratio analysis and inner/outer
-arrays are planned for Phase E2 on top of `Design.Orthogonal`.
+that tool for variability minimization.
+
+---
+
+## 6.6 Taguchi method (`Design.Taguchi`)
+
+A robust-design analysis layer built on top of `Design.Orthogonal`.
+
+### Four SN ratios
+
+```haskell
+import qualified Design.Taguchi as TG
+
+TG.snRatio TG.SmallerBetter        ys   -- η = -10 log10(Σ y²/n)
+TG.snRatio TG.LargerBetter         ys   -- η = -10 log10(Σ (1/y²)/n)
+TG.snRatio TG.NominalBest          ys   -- η = 10 log10(μ²/σ²)
+TG.snRatio (TG.NominalBestTarget m) ys  -- η = -10 log10(Σ (y-m)²/n)
+```
+
+### Factor effects and optimal levels
+
+```haskell
+let sns      = TG.snRatioRows TG.SmallerBetter yMatrix
+    effects  = TG.analyzeSN ad sns           -- [FactorEffect] (per-factor / per-level mean SN)
+    bestLvls = TG.optimalLevels effects      -- [(factor, best level, SN)]
+    predEta  = TG.predictSN effects sns      -- predicted SN under additive main-effects model
+```
+
+### Inner × outer cross design
+
+```haskell
+let inner = ... -- AssignedDesign (control factors)
+    outer = ... -- AssignedDesign (noise factors)
+    io    = TG.makeInnerOuter inner outer
+csv = TG.renderInnerOuterCSV io
+TIO.writeFile "cross.csv" csv
+```
+
+### From the CLI (`hanalyze taguchi`)
+
+```bash
+# Single SN ratio
+hanalyze taguchi sn smaller 1.2 1.5 0.9 1.1
+
+# Analyze an observation CSV (factor effects + optimal levels + predicted SN)
+hanalyze taguchi analyze L9 \
+    -f temp=150,180,210 -f time=10,20,30 -f catalyst=A,B,C \
+    --csv runs.csv --sntype smaller
+
+# Generate an inner-L9 × outer-L4 cross-design template
+hanalyze taguchi cross L9 L4 \
+    -f temp=150,180,210 -f time=10,20,30 -f catalyst=A,B,C \
+    --noise humidity=low,high --noise vibration=on,off \
+    --out cross.csv
+```
 
 ---
 

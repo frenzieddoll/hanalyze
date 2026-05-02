@@ -41,9 +41,9 @@ cabal run hanalyze -- regress data.csv x y LM --report    # 既存の回帰 (= b
 | `info` | ✅ | 列ごとの型・基本統計 (n / min / max / mean / median / sd / unique) |
 | `hist` | ✅ | ヒストグラム単体 (`--fit`/`--format`/`--out`) |
 | `doe` | ✅ | 直交表 Lₙ (L4/L8/L9/L12/L16/L18) (Phase E1) |
-| `ridge` / `kernel` | 計画中 | 正則化・カーネル回帰 (Phase A: RFF) |
+| `taguchi` | ✅ | タグチメソッド (SN 比 + 要因効果 + 内/外配置) (Phase E2) |
+| `ridge` / `kernel` | 計画中 | 正則化・カーネル回帰 |
 | `spline` | 計画中 | スプライン回帰 |
-| `taguchi` | 計画中 | タグチメソッド (OA + SN 比 + 内/外配置) (Phase E2) |
 
 ---
 
@@ -212,6 +212,7 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | RSM (CCD / Box-Behnken) | `Design.RSM` | `centralComposite`, `boxBehnken` |
 | D-/A-optimal | `Design.Optimal` | `dOptimal`, `aOptimal` |
 | **直交表 Lₙ (L4/L8/L9/L12/L16/L18)** | `Design.Orthogonal` | `lookupOA`, `assignFactors`, `renderCSV` |
+| **タグチメソッド (SN 比・要因効果・内外配置)** | `Design.Taguchi` | `snRatio`, `analyzeSN`, `optimalLevels`, `makeInnerOuter` |
 
 ### 最適化
 | 用途 | モジュール | 主要関数 |

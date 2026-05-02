@@ -16,6 +16,7 @@
 | `Design.RSM`       | CCD (rotatable/face-centered) + Box-Behnken + 二次回帰 |
 | `Design.Optimal`   | D-optimal / A-optimal (Fedorov 交換) |
 | `Design.Orthogonal` | 直交表 Lₙ (L4/L8/L9/L12/L16/L18) |
+| `Design.Taguchi`    | タグチメソッド (SN 比 + 要因効果 + 内/外配置) |
 
 ---
 
@@ -265,7 +266,60 @@ hanalyze doe ortho L9 \
 | 評価 | 主効果の分散分析 | **SN 比** η = -10 log MSD を最大化 |
 
 直交表は道具、タグチメソッドはその道具を「ばらつき最小化」のために体系化した使い方。
-Phase E2 で SN 比解析と内外配置を `Design.Orthogonal` 上に追加予定。
+
+---
+
+## 6.6 タグチメソッド (`Design.Taguchi`)
+
+`Design.Orthogonal` 上にロバスト設計の解析層を追加するモジュール。
+
+### SN 比 4 種
+
+```haskell
+import qualified Design.Taguchi as TG
+
+TG.snRatio TG.SmallerBetter        ys   -- η = -10 log10(Σ y²/n)
+TG.snRatio TG.LargerBetter         ys   -- η = -10 log10(Σ (1/y²)/n)
+TG.snRatio TG.NominalBest          ys   -- η = 10 log10(μ²/σ²)
+TG.snRatio (TG.NominalBestTarget m) ys  -- η = -10 log10(Σ (y-m)²/n)
+```
+
+### 要因効果と最良水準
+
+```haskell
+let sns      = TG.snRatioRows TG.SmallerBetter yMatrix
+    effects  = TG.analyzeSN ad sns           -- [FactorEffect] (因子×水準別 SN)
+    bestLvls = TG.optimalLevels effects      -- [(因子名, 最良水準, SN)]
+    predEta  = TG.predictSN effects sns      -- 主効果加法モデル予測 SN
+```
+
+### 内側 × 外側のクロス設計
+
+```haskell
+let inner = ... -- AssignedDesign (制御因子)
+    outer = ... -- AssignedDesign (雑音因子)
+    io    = TG.makeInnerOuter inner outer
+csv = TG.renderInnerOuterCSV io
+TIO.writeFile "cross.csv" csv
+```
+
+### CLI から (`hanalyze taguchi`)
+
+```bash
+# SN 比 1 件
+hanalyze taguchi sn smaller 1.2 1.5 0.9 1.1
+
+# 観測 CSV を解析 (要因効果 + 最良水準 + 予測 SN を表示)
+hanalyze taguchi analyze L9 \
+    -f temp=150,180,210 -f time=10,20,30 -f catalyst=A,B,C \
+    --csv runs.csv --sntype smaller
+
+# 内側 L9 × 外側 L4 のクロス設計テンプレ生成
+hanalyze taguchi cross L9 L4 \
+    -f temp=150,180,210 -f time=10,20,30 -f catalyst=A,B,C \
+    --noise humidity=low,high --noise vibration=on,off \
+    --out cross.csv
+```
 
 ---
 

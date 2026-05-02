@@ -43,9 +43,9 @@ cabal run hanalyze -- regress data.csv x y LM --report    # regression (= bare f
 | `info` | ✅ | Per-column type / stats (n / min / max / mean / median / sd / unique) |
 | `hist` | ✅ | Standalone histogram (`--fit`/`--format`/`--out`) |
 | `doe` | ✅ | Orthogonal arrays Lₙ (L4/L8/L9/L12/L16/L18) (Phase E1) |
-| `ridge` / `kernel` | planned | Regularized / kernel regression (Phase A: RFF) |
+| `taguchi` | ✅ | Taguchi method (SN ratio + factor effects + inner/outer) (Phase E2) |
+| `ridge` / `kernel` | planned | Regularized / kernel regression |
 | `spline` | planned | Spline regression |
-| `taguchi` | planned | Taguchi method (OA + SN ratio + inner/outer arrays) (Phase E2) |
 
 ---
 
@@ -214,6 +214,7 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | RSM (CCD / Box-Behnken) | `Design.RSM` | `centralComposite`, `boxBehnken` |
 | D-/A-optimal | `Design.Optimal` | `dOptimal`, `aOptimal` |
 | **Orthogonal arrays Lₙ (L4/L8/L9/L12/L16/L18)** | `Design.Orthogonal` | `lookupOA`, `assignFactors`, `renderCSV` |
+| **Taguchi method (SN ratio, factor effects, inner/outer)** | `Design.Taguchi` | `snRatio`, `analyzeSN`, `optimalLevels`, `makeInnerOuter` |
 
 ### Optimization
 | Use case | Module | Key functions |

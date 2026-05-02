@@ -14,7 +14,7 @@ CLI ツールとしても Haskell ライブラリとしても使えます。
 | **多次元出力モデル** | Multivariate LM / RRR / PLS / CCA / Multi-output GP |
 | **時系列** | AR(1) / Gaussian Process |
 | **ロバスト回帰** | **Robust GP (StudentT / Cauchy 観測 + IRLS)** |
-| **実験計画法 (DOE)** | 完全/部分要因 / ラテン方格 / 乱塊 / RSM (CCD/Box-Behnken) / D-optimal / ANOVA / 検出力解析 |
+| **実験計画法 (DOE)** | 完全/部分要因 / ラテン方格 / 乱塊 / RSM (CCD/Box-Behnken) / D-optimal / **直交表 Lₙ** / **タグチメソッド** / ANOVA / 検出力解析 |
 | **多目的最適化** | NSGA-II / Pareto front / HV/IGD / Desirability / Bayesian MOO |
 | **ベイズ統計 / HBM** | Free monad DSL / 多相解釈 / 27 種類の確率分布 / 共役自動検出 |
 | **MCMC サンプラー** | MH / HMC / NUTS (dual averaging + AD 勾配) / Slice / Gibbs |
@@ -260,10 +260,10 @@ cabal run hanalyze -- <file> <xcols> <ycols> [LM|GLM|...] [opts]   # legacy = re
 | `info`       | 列ごとの型と基本統計量を表示 | ✅ 実装 |
 | `hist`       | ヒストグラム単体生成 | ✅ 実装 |
 | `doe`        | 直交表 Lₙ (L4/L8/L9/L12/L16/L18) | ✅ 実装 (Phase E1) |
-| `ridge`      | Ridge / Lasso / Elastic Net | 計画中 (Phase A) |
-| `kernel`     | カーネル回帰 / RFF 近似 | 計画中 (Phase A) |
+| `taguchi`    | タグチメソッド (SN 比 + 要因効果 + 内/外配置) | ✅ 実装 (Phase E2) |
+| `ridge`      | Ridge / Lasso / Elastic Net | 計画中 |
+| `kernel`     | カーネル回帰 / RFF 近似 | 計画中 |
 | `spline`     | B-spline / Natural cubic | 計画中 |
-| `taguchi`    | タグチメソッド (OA + SN 比 + 内/外配置) | 計画中 (Phase E2) |
 | `help`       | サブコマンド一覧表示 | ✅ |
 
 ### `regress` (= bare 呼び出し)
@@ -374,7 +374,42 @@ cabal run hanalyze -- doe ortho L18 \
     --csv --out design.csv
 ```
 
-**直交表とタグチメソッドの違い** — 直交表は数学的構造 (主効果を最小試行で直交評価)、タグチメソッドはその直交表を「**ばらつき最小化のロバスト設計**」のために使う方法論 (= 直交表 + SN 比 + 制御因子内側/雑音因子外側配置)。Phase E2 で SN 比解析と内外配置を追加予定。
+**直交表とタグチメソッドの違い** — 直交表は数学的構造 (主効果を最小試行で直交評価)、タグチメソッドはその直交表を「**ばらつき最小化のロバスト設計**」のために使う方法論 (= 直交表 + SN 比 + 制御因子内側/雑音因子外側配置)。
+
+### `taguchi` — タグチメソッド (SN 比 + 要因効果 + 内/外配置)
+
+```
+hanalyze taguchi sn <type> <values...>             # SN 比を 1 件計算
+hanalyze taguchi analyze <ARRAY> -f F=v1,...        # 内側試行の観測 CSV を解析
+                  --csv FILE [--sntype TYPE]
+hanalyze taguchi cross <INNER> <OUTER>              # 内側 × 外側のクロス設計
+                  -f Fc=... -fn Fn=... [--out FILE]
+```
+
+| SN タイプ | 用途 | 計算式 |
+|---|---|---|
+| `smaller`             | 望小 (不良率、誤差、騒音) | η = -10 log₁₀(Σy²/n) |
+| `larger`              | 望大 (強度、寿命、効率)   | η = -10 log₁₀(Σ(1/y²)/n) |
+| `nominal`             | 望目 (mean²/variance)    | η = 10 log₁₀(μ²/σ²) |
+| `nominal-target=M`    | 望目 (目標値 M)           | η = -10 log₁₀(Σ(y-M)²/n) |
+
+```bash
+# SN 比を 1 件計算
+cabal run hanalyze -- taguchi sn smaller 1.2 1.5 0.9 1.1
+
+# L9 で 9 試行 × 3 反復の観測 CSV を解析
+# (CSV 列: Run,temp,time,catalyst,y1,y2,y3 — 観測列は y* で始まる任意名)
+cabal run hanalyze -- taguchi analyze L9 \
+    -f temp=150,180,210 -f time=10,20,30 -f catalyst=A,B,C \
+    --csv runs.csv --sntype smaller
+# → 各試行の SN 比、要因効果 (因子×水準の平均 SN)、最良水準、予測 SN を表示
+
+# 内側 L9 × 外側 L4 のクロス設計テンプレを生成 (各セル空欄、観測後に埋める)
+cabal run hanalyze -- taguchi cross L9 L4 \
+    -f temp=150,180,210 -f time=10,20,30 -f catalyst=A,B,C \
+    --noise humidity=low,high --noise vibration=on,off \
+    --out cross.csv
+```
 
 ---
 
@@ -412,6 +447,7 @@ MCMC/
 
 Design/
   Orthogonal.hs    -- 直交表 L_n (L4/L8/L9/L12/L16/L18 + 因子割当)
+  Taguchi.hs       -- タグチメソッド (SN 比 4 種 + 要因効果 + 内/外クロス設計)
 
 Viz/
   MCMC.hs          -- 診断プロット (KDE / トレース / 自己相関 / ペア散布図)

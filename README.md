@@ -14,7 +14,7 @@ Usable both as a CLI tool and as a Haskell library.
 | **Multi-output models** | Multivariate LM / RRR / PLS / CCA / Multi-output GP |
 | **Time series** | AR(1) / Gaussian Process |
 | **Robust regression** | **Robust GP (StudentT / Cauchy likelihoods + IRLS)** |
-| **Design of Experiments (DOE)** | Full/fractional factorial / Latin square / RCBD / RSM (CCD/Box-Behnken) / D-optimal / ANOVA / power analysis |
+| **Design of Experiments (DOE)** | Full/fractional factorial / Latin square / RCBD / RSM (CCD/Box-Behnken) / D-optimal / **orthogonal arrays Lₙ** / **Taguchi method** / ANOVA / power analysis |
 | **Multi-objective optimization** | NSGA-II / Pareto front / HV/IGD / Desirability / Bayesian MOO |
 | **Bayesian / HBM** | Free monad DSL / polymorphic interpretation / 27 distributions / automatic conjugacy detection |
 | **MCMC samplers** | MH / HMC / NUTS (dual averaging + AD gradients) / Slice / Gibbs |
@@ -261,10 +261,10 @@ cabal run hanalyze -- <file> <xcols> <ycols> [LM|GLM|...] [opts]   # legacy = re
 | `info`       | Per-column type and basic statistics | ✅ implemented |
 | `hist`       | Standalone histogram (with optional density overlay) | ✅ implemented |
 | `doe`        | Orthogonal arrays Lₙ (L4/L8/L9/L12/L16/L18) | ✅ implemented (Phase E1) |
-| `ridge`      | Ridge / Lasso / Elastic Net | planned (Phase A) |
-| `kernel`     | Kernel regression / RFF approximation | planned (Phase A) |
+| `taguchi`    | Taguchi method (SN ratio + factor effects + inner/outer) | ✅ implemented (Phase E2) |
+| `ridge`      | Ridge / Lasso / Elastic Net | planned |
+| `kernel`     | Kernel regression / RFF approximation | planned |
 | `spline`     | B-spline / natural cubic | planned |
-| `taguchi`    | Taguchi method (OA + SN ratio + inner/outer arrays) | planned (Phase E2) |
 | `help`       | List subcommands | ✅ |
 
 ### `regress` (= bare form)
@@ -379,8 +379,43 @@ cabal run hanalyze -- doe ortho L18 \
 mathematical construct (orthogonal evaluation of main effects with the
 fewest runs); the Taguchi method is a methodology that uses those arrays
 for **robust design that minimizes variability** (= orthogonal arrays + the
-SN ratio + inner/outer arrays for control vs. noise factors). SN-ratio
-analysis and inner/outer arrays are planned for Phase E2.
+SN ratio + inner/outer arrays for control vs. noise factors).
+
+### `taguchi` — Taguchi method (SN ratio + factor effects + inner/outer)
+
+```
+hanalyze taguchi sn <type> <values...>             # compute one SN ratio
+hanalyze taguchi analyze <ARRAY> -f F=v1,...        # analyze observations CSV
+                  --csv FILE [--sntype TYPE]
+hanalyze taguchi cross <INNER> <OUTER>              # inner × outer cross design
+                  -f Fc=... -fn Fn=... [--out FILE]
+```
+
+| SN type | Use case | Formula |
+|---|---|---|
+| `smaller`             | smaller-the-better (defect rate, error, noise) | η = -10 log₁₀(Σy²/n) |
+| `larger`              | larger-the-better (strength, life, efficiency) | η = -10 log₁₀(Σ(1/y²)/n) |
+| `nominal`             | nominal-the-best (mean²/variance) | η = 10 log₁₀(μ²/σ²) |
+| `nominal-target=M`    | nominal-the-best (target value M) | η = -10 log₁₀(Σ(y-M)²/n) |
+
+```bash
+# Compute one SN ratio
+cabal run hanalyze -- taguchi sn smaller 1.2 1.5 0.9 1.1
+
+# Analyze a CSV with 9 inner runs × 3 repetitions (L9 design)
+# (CSV columns: Run,temp,time,catalyst,y1,y2,y3 — observation columns can have any name starting with y)
+cabal run hanalyze -- taguchi analyze L9 \
+    -f temp=150,180,210 -f time=10,20,30 -f catalyst=A,B,C \
+    --csv runs.csv --sntype smaller
+# → prints per-run SN ratios, factor effects (mean SN per level),
+#   optimal levels, and predicted SN
+
+# Generate an inner-L9 × outer-L4 cross-design template (cells empty, fill in after measurement)
+cabal run hanalyze -- taguchi cross L9 L4 \
+    -f temp=150,180,210 -f time=10,20,30 -f catalyst=A,B,C \
+    --noise humidity=low,high --noise vibration=on,off \
+    --out cross.csv
+```
 
 ---
 
@@ -418,6 +453,7 @@ MCMC/
 
 Design/
   Orthogonal.hs    -- orthogonal arrays Lₙ (L4/L8/L9/L12/L16/L18 + factor assignment)
+  Taguchi.hs       -- Taguchi method (4 SN ratios + factor effects + inner/outer cross design)
 
 Viz/
   MCMC.hs          -- diagnostic plots (KDE / trace / autocorr / pair scatter)
