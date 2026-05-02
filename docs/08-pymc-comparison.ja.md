@@ -2,6 +2,10 @@
 
 > 🌐 [English](08-pymc-comparison.md) | **日本語**
 
+hanalyze の **ベイズ統計部分** (`Model.HBM` / MCMC / VI) を PyMC と
+比較した機能対応表。古典的回帰・実験計画・多目的最適化など hanalyze
+独自領域はここでは比較対象外。
+
 PyMC にあって hanalyze にない機能を一覧化し、実装ロードマップとして使う。
 
 ## ステータス凡例

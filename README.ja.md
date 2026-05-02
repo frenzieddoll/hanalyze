@@ -2,64 +2,115 @@
 
 > 🌐 [English](README.md) | **日本語**
 
-Haskell による統計解析・可視化ライブラリ。
-CLI ツールとしても、Haskell ライブラリとしても使えます。
+**Haskell による汎用統計分析・最適化・可視化ツールキット**。
+CLI ツールとしても Haskell ライブラリとしても使えます。
+
+## カバー領域
+
+| カテゴリ | 主要な内容 |
+|---|---|
+| **古典的回帰** | LM (OLS) / GLM (IRLS) / GLMM / 多項式 / 信頼帯 |
+| **非線形・正則化** | B-spline / Natural cubic / Kernel Ridge / Ridge / Lasso / Elastic Net |
+| **多次元出力モデル** | Multivariate LM / RRR / PLS / CCA / Multi-output GP |
+| **時系列** | AR(1) / Gaussian Process |
+| **実験計画法 (DOE)** | 完全/部分要因 / ラテン方格 / 乱塊 / RSM (CCD/Box-Behnken) / D-optimal / ANOVA / 検出力解析 |
+| **多目的最適化** | NSGA-II / Pareto front / HV/IGD / Desirability / Bayesian MOO |
+| **ベイズ統計 / HBM** | Free monad DSL / 多相解釈 / 27 種類の確率分布 / 共役自動検出 |
+| **MCMC サンプラー** | MH / HMC / NUTS (dual averaging + AD 勾配) / Slice / Gibbs |
+| **変分推論** | ADVI (mean-field) |
+| **モデル比較** | WAIC / PSIS-LOO / Pseudo-BMA |
+| **可視化** | Vega-Lite ベース、HTML/PNG/SVG 出力、診断プロット 15 種以上 |
 
 ---
 
-## DSL の特徴
+## 機能ハイライト
 
-`Model.HBM` は多相 Free Monad DSL で、同一モデルから 4 通りの解釈を取り出せます:
-
-```haskell
--- 一度書けば、4 通りに使える
-type ModelP r = forall a. (Floating a, Ord a) => Model a r
-
-myModel :: ModelP ()
-myModel = do
-  mu    <- sample "mu"    (Normal 0 10)
-  sigma <- sample "sigma" (Exponential 1)
-  observe "y" (Normal mu sigma) [1.5, 2.0, 1.8]
+### 古典的回帰 (CLI 一発)
+```bash
+hanalyze data.csv x y LM --ci 0.95 --report
+hanalyze data.csv x y GLM -d binomial -l logit --report
+hanalyze data.csv "x1 x2" y LM --degree -1 2 -2 3 --waic
 ```
 
-| 解釈 | 特殊化 | 用途 |
-|---|---|---|
-| 構造検査 | `a = Double` | `collectNodes`, `describeModel` |
-| log joint | `a = Double` | `logJoint`, `logPrior`, `logLikelihood` |
-| AD 勾配 | `a = Forward Double` | `gradAD`, `gradADU` (machine epsilon 精度) |
-| 依存追跡 | `a = Track` | `extractDeps` で DAG を自動抽出 |
+### 多目的最適化 (NSGA-II)
+```haskell
+import Optim.NSGA (nsga2, defaultNSGAConfig)
+front <- nsga2 defaultNSGAConfig objFn bounds gen   -- Pareto front
+```
 
-サンプラー (`MCMC.HMC`/`NUTS`/`Gibbs`/`MH`) は全て `ModelP` を受け取り、AD 勾配と自動制約変換 (PositiveT/UnitIntervalT) で動作します。
+### 実験計画法
+```haskell
+import Design.Factorial (twoLevelFactorial)
+import Design.RSM       (centralCompositeRotatable)
+import Design.Power     (sampleSizeTTest)
+
+let design = centralCompositeRotatable 2 3   -- CCD k=2, 11 試行
+let n = sampleSizeTTest 0.5 0.8 0.05         -- d=0.5 で n = 64
+```
+
+### ベイズ階層モデル (多相 DSL)
+
+```haskell
+myModel :: ModelP ()
+myModel = do
+  mu  <- sample "mu"    (Normal 0 10)
+  sig <- sample "sigma" (HalfNormal 1)
+  observe "y" (Normal mu sig) [1.5, 2.0, 1.8]
+```
+
+同一モデル定義から **4 通りの解釈** (構造検査 / log joint / AD 勾配 / 依存追跡) を取り出せる Free Monad DSL。NUTS / HMC / Gibbs / VI に共通で渡せます。
 
 ---
 
 ## ドキュメント (docs/)
 
+### 入門・全体像
+
 | ページ | 内容 |
 |---|---|
-| [クイックスタート](docs/01-quickstart.ja.md) | ビルド・最小ワークフロー・**やりたい事 → どのデモ**早見表 |
+| [クイックスタート](docs/01-quickstart.ja.md) | ビルド・最小ワークフロー・**やりたい事 → どのデモ** 早見表 |
+| [確率分布の関係図](docs/09-distribution-relationships.ja.md) | 27 分布の極限・共役・特殊化を Mermaid で可視化 |
+| [PyMC 比較 & ロードマップ](docs/08-pymc-comparison.ja.md) | PyMC との機能差・実装計画 (78 機能中 65 完了) |
+
+### 1. 回帰分析と統計モデル
+
+| ページ | 内容 |
+|---|---|
+| [回帰拡張 (Spline / Kernel / Regularized)](docs/10-regression-extensions.ja.md) | B-spline / Natural cubic / Kernel Ridge / Ridge / Lasso / ElasticNet |
+| [多次元出力モデル](docs/12-multivariate-models.ja.md) | MultiLM / RRR / PLS / CCA / MultiGP |
+| [学習資料 6 — 回帰拡張の理論](docs/learn/06-regression-extensions.ja.md) | スプライン基底、カーネルメソッド、L1/L2 正則化、bias-variance tradeoff |
+| [学習資料 8 — 多変量回帰の理論](docs/learn/08-multivariate-theory.ja.md) | OLS / RRR / PLS / CCA / Multi-GP の数学的背景 |
+
+### 2. 実験計画と最適化
+
+| ページ | 内容 |
+|---|---|
+| [実験計画法 (DOE)](docs/11-design-of-experiments.ja.md) | 完全/部分要因 / ラテン方格 / 乱塊 / RSM / D-optimal / ANOVA / Power 解析 |
+| [多目的最適化](docs/13-multi-objective-optimization.ja.md) | NSGA-II / Pareto / Bayesian MOO |
+| [学習資料 7 — 実験計画法の理論](docs/learn/07-doe-foundations.ja.md) | 直交性、効率指標、RSM、検出力、サンプルサイズ |
+| [学習資料 9 — Pareto 効率と MOO](docs/learn/09-pareto-and-moo.ja.md) | NSGA-II アルゴリズム、HV/IGD、scalarization、ZDT |
+| [学習資料 10 — Bayesian Optimization](docs/learn/10-bayesian-optimization.ja.md) | EI / UCB / PI / EHVI / ParEGO / q-EHVI |
+
+### 3. ベイズ統計と確率モデリング
+
+| ページ | 内容 |
+|---|---|
 | [確率的プログラミング DSL](docs/02-probabilistic-model.ja.md) | Model.HBM のパターン集 (Beta-Binomial / 階層正規 / 多相解釈・依存自動抽出) |
 | [MCMC サンプラー選択ガイド](docs/03-mcmc-samplers.ja.md) | MH / HMC / NUTS の使い分け・チューニング・R-hat |
 | [Gibbs サンプリング](docs/04-gibbs.ja.md) | 共役アップデート・ESS/s 比較 |
 | [変分推論 (ADVI)](docs/05-variational-inference.ja.md) | VI vs NUTS・ELBO 収束・平均場の限界 |
 | [モデル比較 (WAIC/LOO)](docs/06-model-comparison.ja.md) | WAIC・PSIS-LOO・Pareto k̂ 診断 |
-| [可視化](docs/07-visualization.ja.md) | Report・Bar・Histogram・PNG/SVG 出力 |
-| [PyMC 比較 & ロードマップ](docs/08-pymc-comparison.ja.md) | PyMC との機能差・実装計画 |
-| [確率分布の関係図](docs/09-distribution-relationships.ja.md) | Mermaid 図で「Bin→Poi/Normal、Beta-Bin、Gamma-Poi 共役」等を可視化 |
-| [学習資料 1 — 確率分布の基礎](docs/learn/01-probability-distributions.ja.md) | 全実装分布の数式・直観・用途 |
+| [学習資料 1 — 確率分布の基礎](docs/learn/01-probability-distributions.ja.md) | 全 27 分布の数式・直観・用途 |
 | [学習資料 2 — ベイズ統計の基礎](docs/learn/02-bayesian-basics.ja.md) | 事前/尤度/事後、共役、HBM、事後予測、ワークフロー |
 | [学習資料 3 — MCMC の原理](docs/learn/03-mcmc-foundations.ja.md) | マルコフ連鎖、エルゴード性、MH、Gibbs、Slice、収束診断 |
-| [学習資料 4 — HMC / NUTS](docs/learn/04-hmc-nuts.ja.md) | Hamiltonian、leapfrog、制約変換、NUTS、dual averaging、BFMI、divergence、非中心化 |
-| [学習資料 5 — VI / モデル選択 / 高度トピック](docs/learn/05-vi-modelselect-advanced.ja.md) | ELBO、ADVI、WAIC、PSIS-LOO、Mixture、LKJ、AR、Censored 等の理論と使い分け |
-| [回帰拡張 (Spline / Kernel / Regularized)](docs/10-regression-extensions.ja.md) | B-spline / Natural cubic / Kernel Ridge / Ridge / Lasso / ElasticNet の使い方 |
-| [実験計画法 (DOE)](docs/11-design-of-experiments.ja.md) | 完全/部分要因 / ラテン方格 / 乱塊 / RSM / D-optimal / ANOVA / Power 解析 |
-| [学習資料 6 — 回帰拡張の理論](docs/learn/06-regression-extensions.ja.md) | スプライン基底、カーネルメソッド、L1/L2 正則化、bias-variance tradeoff |
-| [学習資料 7 — 実験計画法の理論](docs/learn/07-doe-foundations.ja.md) | 直交性、効率指標、RSM、検出力、サンプルサイズ、DOE の実務手順 |
-| [多次元出力モデル](docs/12-multivariate-models.ja.md) | MultiLM / RRR / PLS / CCA / MultiGP の使い方 |
-| [多目的最適化](docs/13-multi-objective-optimization.ja.md) | NSGA-II / Pareto / Bayesian MOO の使い方 |
-| [学習資料 8 — 多変量回帰の理論](docs/learn/08-multivariate-theory.ja.md) | OLS / RRR / PLS / CCA / Multi-GP の数学的背景 |
-| [学習資料 9 — Pareto 効率と MOO](docs/learn/09-pareto-and-moo.ja.md) | NSGA-II アルゴリズム、HV/IGD、scalarization、ZDT |
-| [学習資料 10 — Bayesian Optimization](docs/learn/10-bayesian-optimization.ja.md) | EI / UCB / PI / EHVI / ParEGO / q-EHVI |
+| [学習資料 4 — HMC / NUTS](docs/learn/04-hmc-nuts.ja.md) | Hamiltonian、leapfrog、制約変換、NUTS、dual averaging、BFMI、divergence |
+| [学習資料 5 — VI / モデル選択 / 高度トピック](docs/learn/05-vi-modelselect-advanced.ja.md) | ELBO、ADVI、WAIC、PSIS-LOO、Mixture、LKJ、AR、Censored 等 |
+
+### 4. 可視化
+
+| ページ | 内容 |
+|---|---|
+| [可視化全般](docs/07-visualization.ja.md) | Report / Bar / Histogram / PNG/SVG 出力 |
 
 ---
 
