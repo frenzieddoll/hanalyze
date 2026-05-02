@@ -24,6 +24,7 @@ import Viz.AnalysisReport (AnalysisReportConfig (..), ModelFit (..), NamedPlot (
                            writeAnalysisReport, writeAnalysisReportPlots)
 import qualified Design.Orthogonal as OA
 import qualified Design.Taguchi as TG
+import qualified Viz.Taguchi as VTG
 import qualified Model.Kernel as Kern
 import qualified Model.Regularized as Reg
 import qualified Model.RFF as RFF
@@ -1283,10 +1284,11 @@ taguchiUsage = unlines
   , "  sn <type> <values...>             Compute a single SN ratio (dB)"
   , "                                    type: smaller | larger | nominal | nominal-target=M"
   , ""
-  , "  analyze <ARRAY> -f F=v1,v2,... [-f ...] --csv FILE [--sntype TYPE]"
+  , "  analyze <ARRAY> -f F=v1,v2,... [-f ...] --csv FILE [--sntype TYPE] [--report [FILE]]"
   , "                                    Analyze observations from a CSV file:"
   , "                                    rows = inner runs, cols (after factor cols) = repetitions/outer."
   , "                                    Computes per-row SN ratio, factor effects, and optimum levels."
+  , "                                    --report writes an interactive HTML report (default: taguchi.html)."
   , ""
   , "  cross <INNER> <OUTER>"
   , "    -f Fc=v1,v2,...   [-f ...]      Inner control factors"
@@ -1363,10 +1365,11 @@ data TgAnalyzeOpts = TgAnalyzeOpts
   { toFactors :: [(T.Text, [T.Text])]
   , toCSV     :: Maybe FilePath
   , toSN      :: TG.SNType
+  , toReport  :: Maybe FilePath
   } deriving (Show)
 
 defaultTgAnalyzeOpts :: TgAnalyzeOpts
-defaultTgAnalyzeOpts = TgAnalyzeOpts [] Nothing TG.SmallerBetter
+defaultTgAnalyzeOpts = TgAnalyzeOpts [] Nothing TG.SmallerBetter Nothing
 
 runTaguchiAnalyze :: [String] -> IO ()
 runTaguchiAnalyze [] = hPutStrLn stderr "taguchi analyze: missing array name"
@@ -1397,6 +1400,10 @@ parseTgAnalyzeOpts (flag : rest) acc
         Left err  -> Left err
         Right t   -> parseTgAnalyzeOpts rs (acc { toSN = t })
       [] -> Left "--sntype requires an argument"
+  | flag == "--report" = case rest of
+      (v : rs) | not (null v) && head v /= '-' ->
+        parseTgAnalyzeOpts rs (acc { toReport = Just v })
+      _ -> parseTgAnalyzeOpts rest (acc { toReport = Just "taguchi.html" })
   | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
 
 doTaguchiAnalyze :: OA.OA -> TgAnalyzeOpts -> FilePath -> IO ()
@@ -1459,6 +1466,26 @@ runAnalyzeWith ad opts df = do
                (T.unpack f) (T.unpack (lvText lvl)) eta) opts'
       putStrLn ""
       printf "Predicted SN at optimum (additive model): %.3f dB\n" predEta
+
+      -- ── HTML レポート出力 (--report 指定時) ─────────────────────────────
+      case toReport opts of
+        Nothing -> return ()
+        Just path -> do
+          let tr = VTG.TaguchiReport
+                     { VTG.trTitle     = "Taguchi Analysis: "
+                                         <> OA.oaName (OA.adArray ad)
+                                         <> " — "
+                                         <> TG.snTypeName (toSN opts)
+                     , VTG.trArrayName = OA.oaName (OA.adArray ad)
+                     , VTG.trSNType    = toSN opts
+                     , VTG.trPerRunSN  = sns
+                     , VTG.trEffects   = fes
+                     , VTG.trOptimal   = opts'
+                     , VTG.trPredicted = predEta
+                     }
+          VTG.renderTaguchiReport path tr
+          putStrLn ("Report: " ++ path)
+          openInBrowser path
   where
     lvText (OA.LText t)    = t
     lvText (OA.LNumeric d)
