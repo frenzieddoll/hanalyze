@@ -31,6 +31,7 @@ library
     Model.Kernel
     Model.Regularized
     Model.RFF
+    Model.GPRobust
     Model.MultiLM
     Model.Multivariate
     Model.MultiGP
@@ -238,6 +239,15 @@ executable external-io-demo
     , hanalyze
     , text       >= 1.2  && < 2.2
     , vector     >= 0.12 && < 0.14
+
+executable robust-gp-demo
+  import:           warnings
+  main-is:          RobustGPDemo.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
 
 executable rff-demo
   import:           warnings
