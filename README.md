@@ -44,6 +44,7 @@ Samplers (`MCMC.HMC`/`NUTS`/`Gibbs`/`MH`) all accept `ModelP`, with AD gradients
 | [Variational Inference (ADVI)](docs/05-variational-inference.md) | VI vs NUTS, ELBO convergence, mean-field limitations |
 | [Model Comparison (WAIC/LOO)](docs/06-model-comparison.md) | WAIC, PSIS-LOO, Pareto k̂ diagnostic |
 | [Visualization](docs/07-visualization.md) | Report, Bar, Histogram, PNG/SVG export |
+| [PyMC Comparison & Roadmap](docs/08-pymc-comparison.md) | Feature gap vs PyMC, implementation plan |
 
 ---
 

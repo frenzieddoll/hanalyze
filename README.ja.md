@@ -44,6 +44,7 @@ myModel = do
 | [変分推論 (ADVI)](docs/05-variational-inference.ja.md) | VI vs NUTS・ELBO 収束・平均場の限界 |
 | [モデル比較 (WAIC/LOO)](docs/06-model-comparison.ja.md) | WAIC・PSIS-LOO・Pareto k̂ 診断 |
 | [可視化](docs/07-visualization.ja.md) | Report・Bar・Histogram・PNG/SVG 出力 |
+| [PyMC 比較 & ロードマップ](docs/08-pymc-comparison.ja.md) | PyMC との機能差・実装計画 |
 
 ---
 
