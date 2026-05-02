@@ -66,6 +66,7 @@ module Model.HBM
   , withData
   , mvNormalLatent
   , mvNormalLogDensity
+  , multinomialLogDensity
     -- * 構造検査
   , Node (..)
   , NodeKind (..)
@@ -177,6 +178,10 @@ data Distribution a
     -- ^ NegativeBinomial(μ, α) parameterization (PyMC 互換)。
     --   mean = μ,  var = μ + μ²/α  (α → ∞ で Poisson に収束)。
     --   過分散カウントデータの観測尤度に使う。観測値は非負整数。
+  | Multinomial Int [a]
+    -- ^ Multinomial(n, [p_0,…,p_{K-1}]) (観測専用)。
+    --   試行数 n と確率ベクトル p を持つ。観測は K 次元のカウントベクトル
+    --   (合計 n)。'observeMV' で観測列をベクトルとして渡す。
   deriving (Show, Functor)
 
 distName :: Distribution a -> Text
@@ -199,6 +204,7 @@ distName Truncated{}   = "Truncated"
 distName Censored{}    = "Censored"
 distName MvNormal{}    = "MvNormal"
 distName NegativeBinomial{} = "NegativeBinomial"
+distName Multinomial{}      = "Multinomial"
 
 -- | サンプル値 (型 @a@) に対する事前分布の対数密度。
 logDensity :: (Floating a, Ord a) => Distribution a -> a -> a
@@ -289,6 +295,7 @@ logDensity (Censored d _ _) x =
   -- prior 評価では通常の密度を使う (打ち切りは観測時のみ意味を持つ)
   logDensity d x
 logDensity MvNormal{} _ = 0  -- observation-only: latent としては使わない
+logDensity Multinomial{} _ = 0  -- observation-only
 logDensity (NegativeBinomial mu alpha) x
   | mu <= 0 || alpha <= 0 || x < 0 = negInf
   | otherwise =
@@ -429,6 +436,8 @@ logDensityObs (Censored d mLo mHi) y =
        _                                     -> logDensityObs d y          -- 通常観測
 logDensityObs MvNormal{} _ = 0
   -- スカラー観測経路では使わない (chunk して 'mvNormalLogDensity' を呼ぶ obsLogSum 経由)
+logDensityObs Multinomial{} _ = 0
+  -- スカラー観測経路では使わない (k 次元 chunk で multinomialLogDensity を呼ぶ)
 logDensityObs (NegativeBinomial mu alpha) y
   | mu <= 0 || alpha <= 0 || y < 0 = negInf
   | otherwise =
@@ -448,7 +457,27 @@ obsLogSum (MvNormal mu cov) ys =
       chunks  = chunksOf k ys
   in sum [ mvNormalLogDensity mu cov (map realToFrac yv :: [a])
          | yv <- chunks ]
+obsLogSum (Multinomial n probs) ys =
+  let k      = length probs
+      chunks = chunksOf k ys
+  in sum [ multinomialLogDensity n probs yv | yv <- chunks ]
 obsLogSum d ys = sum [ logDensityObs d y | y <- ys ]
+
+-- | 多項観測 1 件 (K 次元カウントベクトル) に対する対数密度。
+--   log P(k_1, …, k_K) = log n!/Π k_i! + Σ k_i log p_i
+multinomialLogDensity :: forall a. (Floating a, Ord a)
+                      => Int -> [a] -> [Double] -> a
+multinomialLogDensity n probs counts
+  | length probs /= length counts = negInf
+  | sum (map round counts :: [Int]) /= n = negInf
+  | any (< 0) counts                = negInf
+  | any (\p -> p <= 0) probs        = negInf
+  | otherwise =
+      let logFactN = realToFrac (logFactorial n) :: a
+          logFactSum = sum [ realToFrac (logFactorial (round c :: Int)) :: a
+                           | c <- counts ]
+          dotPart = sum (zipWith (\c p -> realToFrac c * log p) counts probs)
+      in logFactN - logFactSum + dotPart
 
 -- | 観測 1 件 (k 次元ベクトル) に対する MvNormal 対数密度。
 --   log p(y) = -k/2 log(2π) - 0.5 log|Σ| - 0.5 (y-μ)ᵀ Σ⁻¹ (y-μ)
@@ -837,6 +866,8 @@ sampleDist (Truncated d mLo mHi) gen =
   in tryOnce (10000 :: Int)
 sampleDist MvNormal{} _ =
   error "MvNormal: observation-only — 'sample' 経由でのドローは未対応"
+sampleDist Multinomial{} _ =
+  error "Multinomial: observation-only — 'sample' 経由でのドローは未対応"
 sampleDist (NegativeBinomial mu alpha) gen = do
   -- Gamma-Poisson mixture: λ ~ Gamma(α, β=α/μ); X ~ Poisson(λ)
   lam <- MWC.gamma alpha (mu / alpha) gen
@@ -1182,6 +1213,9 @@ perObsLogLiks m params = go m []
               let k = length mu
               in [ mvNormalLogDensity mu cov (map realToFrac yv :: [Double])
                  | yv <- chunksOf k ys ]
+            Multinomial nn pp ->
+              let k = length pp
+              in [ multinomialLogDensity nn pp yv | yv <- chunksOf k ys ]
             _ -> [ logDensityObs d y | y <- ys ]
       in go next (reverse lls ++ acc)
     go (Free (Potential _ _ next)) acc = go next acc
@@ -1478,6 +1512,7 @@ distDepsT (MvNormal mus covRows) =
   mconcat (map trackDeps mus)
     <> mconcat (concatMap (map trackDeps) covRows)
 distDepsT (NegativeBinomial mu alpha) = trackDeps mu <> trackDeps alpha
+distDepsT (Multinomial _ ps) = mconcat (map trackDeps ps)
 
 -- | Track でモデルを評価する (log joint も依存集合付きで計算)。
 runTrack :: forall r. ModelP r -> Map Text Track -> Track
