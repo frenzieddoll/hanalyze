@@ -239,10 +239,20 @@ secStatRow = SecStatRow
 secAppendixFromMd :: Text -> FilePath -> IO ReportSection
 secAppendixFromMd title path = do
   contents <- TIO.readFile path
-  let html = renderSimpleMarkdown contents
-  return (SecHtml title $ "<section class=\"appendix-md\"><h2>" <> title
-                          <> "</h2><div class=\"md-body\">" <> html
-                          <> "</div></section>")
+  let html  = renderSimpleMarkdown contents
+      icon  = "<span class=\"sec-icon\">&#128218;</span>"
+      tFull = icon <> " " <> title
+  -- 折りたたみ可能 section として返す (default open)
+  return (SecHtml title $ T.unlines
+    [ "<section class=\"collapsible-wrap appendix-md\">"
+    , "  <details open>"
+    , "    <summary><h2>" <> tFull <> "</h2></summary>"
+    , "    <div class=\"collapsible-body md-body\">"
+    , html
+    , "    </div>"
+    , "  </details>"
+    , "</section>"
+    ])
 
 -- | 簡易 markdown → HTML 変換。フル機能ではない。
 renderSimpleMarkdown :: Text -> Text
@@ -547,7 +557,10 @@ renderSection sid sec = case sec of
   SecTable t hs rs            -> renderTable sid t hs rs
   SecKeyValue t kvs           -> renderKeyValue sid t kvs
   SecMarkdown t txt           -> renderMarkdown sid t txt
-  SecHtml _ html              -> wrapSection sid "" html
+  -- SecHtml は <section> ラッパを付けず、生 HTML を <div id> で囲むのみ。
+  -- 利用側で <section> を含む完全な HTML を渡すことを想定 (secAppendixFromMd 等)。
+  SecHtml _ html              ->
+    "<div id=\"" <> sid <> "\" class=\"raw-section\">" <> html <> "</div>"
   SecInteractiveLM t xc yc xs ys sc rng -> renderInteractiveLM sid t xc yc xs ys sc rng
   SecInteractiveMulti t im   -> renderInteractiveMulti sid t im
   SecCollapsible t open children ->
@@ -851,7 +864,9 @@ renderInteractiveMulti sid title im =
         , "</div>"
         ]
       _ = xCount
-  in wrapSection sid (if T.null title then "Interactive prediction" else title) $
+      tFull = "<span class=\"sec-icon\">&#127919;</span> "
+              <> (if T.null title then "対話的予測" else title)
+  in collapsibleSection sid tFull True $
        T.unlines
          [ "<div class=\"interactive-multi\">"
          , "  <div class=\"i-controls\">"
@@ -1065,7 +1080,9 @@ renderInteractiveLM :: Text -> Text -> Text -> Text
 renderInteractiveLM sid title xc yc _xs _ys _sc (xMin, xMax) =
   let mid  = (xMin + xMax) / 2
       step = (xMax - xMin) / 200
-  in wrapSection sid (if T.null title then "Interactive prediction" else title) $
+      tFull = "<span class=\"sec-icon\">&#127919;</span> "
+              <> (if T.null title then "対話的予測" else title)
+  in collapsibleSection sid tFull True $
        T.unlines
          [ "<div class=\"interactive-controls\">"
          , "  <label>" <> xc <> ": "
@@ -1480,7 +1497,8 @@ css = T.unlines
   , "@media (max-width: 700px) {"
   , "  .interactive-multi { grid-template-columns: 1fr; }"
   , "}"
-  , ".appendix-md { background: #fafbfc; }"
+  , ".raw-section { margin-bottom: 28px; }"
+  , ".appendix-md.collapsible-wrap { background: white; }"
   , ".md-body h3 { font-size: 1em; color: #2c3e50; margin: 12px 0 6px; }"
   , ".md-body h4 { font-size: .95em; color: #34495e; margin: 10px 0 4px; }"
   , ".md-body h5 { font-size: .9em; color: #555; margin: 8px 0 4px; }"
