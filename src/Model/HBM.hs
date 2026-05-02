@@ -51,6 +51,7 @@ module Model.HBM
   , ModelP
   , sample
   , observe
+  , potential
     -- * 構造検査
   , Node (..)
   , NodeKind (..)
@@ -412,9 +413,14 @@ samplePoissonKnuth lam gen = do
 -- ---------------------------------------------------------------------------
 
 -- | DSL のプリミティブ。継続が @a -> next@ なので任意の @a@ を流せる。
+--
+-- 'Potential' は PyMC の @pm.Potential@ 相当で、任意の log-prob 項を
+-- log-joint に加える。ソフト制約・カスタム尤度・正則化項などに使える。
 data ModelF a next
   = Sample  Text (Distribution a) (a -> next)
   | Observe Text (Distribution a) [Double] next
+  | Potential Text a next
+    -- ^ 名前付きの ad-hoc な log-prob 項。値 @a@ がそのまま log-joint に加算される。
   deriving Functor
 
 type Model a = Free (ModelF a)
@@ -428,6 +434,20 @@ sample n d = liftF (Sample n d id)
 
 observe :: Text -> Distribution a -> [Double] -> Model a ()
 observe n d ys = liftF (Observe n d ys ())
+
+-- | 任意の log-prob 項をモデルに加える (PyMC `pm.Potential` 相当)。
+--
+-- 通常のサンプリング/観測では表せない log-density 寄与を入れるのに使う。
+-- 典型用途:
+--
+--   * **ソフト制約**: @potential \"order\" (if mu1 < mu2 then 0 else (-1e10))@
+--   * **カスタム尤度**: 既存 'Distribution' で表せない尤度項
+--   * **正則化**: ベイズ的な正則化 (e.g. ridge: @-0.5 * lambda * sum (map (^2) betas)@)
+--
+-- @Potential@ の値は 'logJoint' と 'logPrior' に加算される
+-- ('logLikelihood' には含まれない — これらは @observe@ 専用)。
+potential :: Text -> a -> Model a ()
+potential nm v = liftF (Potential nm v ())
 
 -- ---------------------------------------------------------------------------
 -- 構造検査
@@ -453,6 +473,7 @@ collectNodes m = go m []
       go (k 0) (Node n LatentN (distName d) Set.empty : acc)
     go (Free (Observe n d ys next)) acc =
       go next (Node n (ObservedN (length ys)) (distName d) Set.empty : acc)
+    go (Free (Potential _ _ next)) acc = go next acc   -- Node 表示には含めない
 
 sampleNames :: ModelP r -> [Text]
 sampleNames m = [nodeName n | n <- collectNodes m, nodeKind n == LatentN]
@@ -476,6 +497,7 @@ logJoint model params = go model 0
     go (Free (Observe _ d ys next)) acc =
       let ll = sum [ logDensityObs d y | y <- ys ]
       in go next (acc + ll)
+    go (Free (Potential _ v next)) acc = go next (acc + v)
 
 -- | log p(θ) のみ (prior 部分)。
 logPrior :: (Floating a, Ord a) => Model a r -> Map Text a -> a
@@ -487,6 +509,7 @@ logPrior model params = go model 0
         Nothing -> negInf
         Just v  -> go (k v) (acc + logDensity d v)
     go (Free (Observe _ _ _ next)) acc = go next acc
+    go (Free (Potential _ v next)) acc = go next (acc + v)
 
 -- | log p(y | θ) のみ (likelihood 部分)。
 logLikelihood :: (Floating a, Ord a) => Model a r -> Map Text a -> a
@@ -500,6 +523,7 @@ logLikelihood model params = go model 0
     go (Free (Observe _ d ys next)) acc =
       let ll = sum [ logDensityObs d y | y <- ys ]
       in go next (acc + ll)
+    go (Free (Potential _ _ next)) acc = go next acc   -- Potential は事前項とみなす
 
 -- | 各 Observe ノードの「現在のパラメータ値で評価した分布」と観測値を取得する。
 -- Gibbs サンプラーが共役構造を検出する際に、潜在変数の現在値に対する
@@ -515,6 +539,8 @@ runObserveDists (Free (Sample n _ k)) ps =
   runObserveDists (k (Map.findWithDefault 0 n ps)) ps
 runObserveDists (Free (Observe n d ys next)) ps =
   (n, d, ys) : runObserveDists next ps
+runObserveDists (Free (Potential _ _ next)) ps =
+  runObserveDists next ps
 
 -- | 各 Sample ノードの (名前, 事前分布) を Double 特殊化で取得する。
 -- Gibbs サンプラーの共役検出で「この潜在変数の事前は Gamma か Beta か」を
@@ -523,6 +549,7 @@ priorList :: Model Double r -> [(Text, Distribution Double)]
 priorList (Pure _) = []
 priorList (Free (Sample n d k)) = (n, d) : priorList (k 0)
 priorList (Free (Observe _ _ _ next)) = priorList next
+priorList (Free (Potential _ _ next)) = priorList next
 
 -- ---------------------------------------------------------------------------
 -- 互換 API
@@ -543,6 +570,7 @@ perObsLogLiks m params = go m []
     go (Free (Observe _ d ys next)) acc =
       let lls = [ logDensityObs d y | y <- ys ]
       in go next (reverse lls ++ acc)
+    go (Free (Potential _ _ next)) acc = go next acc
 
 -- | モデル構造の人間向け要約 (推論は実行しない)。
 describeModel :: ModelP r -> Text
@@ -764,6 +792,11 @@ extractDeps m = go m []
     go (Free (Observe n d ys next)) acc =
       let parentDeps = distDepsT d
           node = Node n (ObservedN (length ys)) (distName d) parentDeps
+      in go next (node : acc)
+    go (Free (Potential nm v next)) acc =
+      -- Potential も DAG 上は「依存を持つ無形ノード」として可視化
+      let parentDeps = trackDeps v
+          node = Node nm LatentN "Potential" parentDeps
       in go next (node : acc)
 
 -- | Distribution Track に含まれる依存変数集合を取り出す。
