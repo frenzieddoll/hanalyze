@@ -45,6 +45,7 @@ myModel = do
 | [モデル比較 (WAIC/LOO)](docs/06-model-comparison.ja.md) | WAIC・PSIS-LOO・Pareto k̂ 診断 |
 | [可視化](docs/07-visualization.ja.md) | Report・Bar・Histogram・PNG/SVG 出力 |
 | [PyMC 比較 & ロードマップ](docs/08-pymc-comparison.ja.md) | PyMC との機能差・実装計画 |
+| [確率分布の関係図](docs/09-distribution-relationships.ja.md) | Mermaid 図で「Bin→Poi/Normal、Beta-Bin、Gamma-Poi 共役」等を可視化 |
 
 ---
 
