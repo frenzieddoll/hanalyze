@@ -93,6 +93,15 @@ For task-based usage, see [docs/01-quickstart.md](docs/01-quickstart.md).
 | `glmm-demo`     | LME / GLMM (random intercept) | Mixed-effects models |
 | `bar-demo`      | Viz.Bar (bar / stacked / grouped) + PNG/SVG export | Visualization, image export |
 
+### PyMC-parity additions (this branch)
+
+| Demo | Content | What you'll learn |
+|---|---|---|
+| `new-distrib-demo`  | 6 new distributions (Uniform, StudentT, Cauchy, HalfNormal, HalfCauchy, LogNormal) | Robust priors, observation distributions |
+| `discrete-obs-demo` | Bernoulli / Categorical observations | Discrete observation likelihoods |
+| `ppc-demo`          | Prior / posterior predictive sampling + Bayesian p-value | PPC workflow |
+| `forest-compare`    | Forest plot + Pseudo-BMA model comparison | Multi-model summary, ArviZ-style outputs |
+
 ---
 
 ## CLI Usage

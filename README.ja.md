@@ -93,6 +93,15 @@ cabal test               # テスト
 | `glmm-demo`     | LME / GLMM (ランダム切片) | 混合効果モデル |
 | `bar-demo`      | Viz.Bar (棒グラフ・積み上げ) + PNG/SVG 出力 | 可視化、画像エクスポート |
 
+### PyMC 互換機能の追加 (このブランチ)
+
+| デモ | 内容 | 主に学べること |
+|---|---|---|
+| `new-distrib-demo`  | 連続分布 6 種 (Uniform / StudentT / Cauchy / HalfNormal / HalfCauchy / LogNormal) | ロバスト事前・観測分布 |
+| `discrete-obs-demo` | Bernoulli / Categorical 観測 | 離散観測尤度 |
+| `ppc-demo`          | 事前/事後予測サンプリング + ベイズ p 値 | PPC ワークフロー |
+| `forest-compare`    | Forest plot + Pseudo-BMA モデル比較 | 複数モデル要約、ArviZ 風出力 |
+
 ---
 
 ## CLI ツールとして使う

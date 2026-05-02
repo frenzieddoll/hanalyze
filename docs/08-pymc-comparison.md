@@ -22,14 +22,14 @@ and serves as the implementation roadmap.
 | `Beta` | ✅ `Beta` | |
 | `Poisson` | ✅ `Poisson` | |
 | `Binomial` | ✅ `Binomial` | |
-| `Uniform` | ❌ | Phase 2.1 |
-| `StudentT` | ❌ | Phase 2.1 — df / loc / scale |
-| `Cauchy` | ❌ | Phase 2.1 |
-| `HalfNormal` | ❌ | Phase 2.1 — common variance prior |
-| `HalfCauchy` | ❌ | Phase 2.1 — heavy-tail variance prior |
-| `LogNormal` | ❌ | Phase 2.1 |
-| `Bernoulli` | ❌ | Phase 2.2 — discrete |
-| `Categorical` | ❌ | Phase 2.2 — discrete |
+| `Uniform` | ✅ `Uniform` | Phase 2.1 done |
+| `StudentT` | ✅ `StudentT` | Phase 2.1 — df / loc / scale |
+| `Cauchy` | ✅ `Cauchy` | Phase 2.1 |
+| `HalfNormal` | ✅ `HalfNormal` | Phase 2.1 |
+| `HalfCauchy` | ✅ `HalfCauchy` | Phase 2.1 |
+| `LogNormal` | ✅ `LogNormal` | Phase 2.1 |
+| `Bernoulli` | ✅ `Bernoulli` | Phase 2.2 — observation only |
+| `Categorical` | ✅ `Categorical` | Phase 2.2 — observation only |
 | `MvNormal` | ❌ | Phase 2.4 — multivariate |
 | `Dirichlet` | ❌ | Phase 2.4 |
 | `LKJCholeskyCov` | ❌ | Stretch — covariance prior |
@@ -56,8 +56,8 @@ and serves as the implementation roadmap.
 
 | PyMC | hanalyze | Notes |
 |---|---|---|
-| `pm.sample_posterior_predictive` | ❌ | Phase 2.3 |
-| `pm.sample_prior_predictive` | ❌ | Phase 2.3 (cheap) |
+| `pm.sample_posterior_predictive` | ✅ `Stat.PosteriorPredictive.posteriorPredictive` | Phase 2.3 done |
+| `pm.sample_prior_predictive` | ✅ `Stat.PosteriorPredictive.priorPredictive` | Phase 2.3 done |
 | `pm.set_data` (replace data without rebuild) | ❌ | Stretch (DSL would need a `Data` primitive) |
 | `pm.Deterministic` (named transformations) | ❌ | Stretch |
 | `pm.Potential` (custom log-prob terms) | ❌ | Stretch |
@@ -70,7 +70,7 @@ and serves as the implementation roadmap.
 | Posterior KDE | ✅ `Viz.MCMC.posteriorPlot` | |
 | Pair plot | ✅ `Viz.MCMC.pairScatter` | |
 | Autocorrelation | ✅ `Viz.MCMC.autocorrPlot` | |
-| Forest plot | ❌ | Phase 3.1 |
+| Forest plot | ✅ `Viz.MCMC.forestPlot` | Phase 3.1 done |
 | Energy plot (NUTS) | ❌ | Phase 3.2 |
 | ESS / R-hat tables | ✅ `Viz.Report` | |
 | Posterior predictive plot | ❌ | depends on Phase 2.3 |
@@ -82,7 +82,7 @@ and serves as the implementation roadmap.
 |---|---|---|
 | `pm.waic` | ✅ `Stat.ModelSelect.waic` | |
 | `pm.loo` (PSIS-LOO) | ✅ `Stat.ModelSelect.loo` | with k̂ diagnostic |
-| `pm.compare` (model weights) | ❌ | Phase 3.3 |
+| `pm.compare` (model weights) | ✅ `Stat.ModelSelect.compareModels` | Phase 3.3 done — Pseudo-BMA |
 | Bayes factor / marginal likelihood | ❌ | Stretch |
 
 ## Modeling primitives
@@ -102,16 +102,24 @@ and serves as the implementation roadmap.
 
 The work is ordered easiest-first. Each phase is a self-contained commit.
 
-1. **Phase 2.1 — Continuous distributions** (this commit set)
+1. ✅ **Phase 2.1 — Continuous distributions**
    `Uniform`, `StudentT`, `Cauchy`, `HalfNormal`, `HalfCauchy`, `LogNormal`
-2. **Phase 2.2 — Discrete latent variables**
-   `Bernoulli`, `Categorical` (Gibbs / MH only — HMC/NUTS need gradients)
-3. **Phase 2.3 — Posterior / prior predictive sampling**
-   Sample new outcomes from chain + per-observation predictive density
-4. **Phase 2.4 — Multivariate distributions**
-   `MvNormal` (Cholesky-friendly), `Dirichlet`
-5. **Phase 2.5 — Mixture distributions**
+   → demo: `new-distrib-demo`
+2. ✅ **Phase 2.2 — Discrete observations**
+   `Bernoulli`, `Categorical` (observation distributions only;
+   they cannot serve as latents because the DSL is `Floating a`-polymorphic)
+   → demo: `discrete-obs-demo`
+3. ✅ **Phase 2.3 — Posterior / prior predictive sampling**
+   `posteriorPredictive`, `priorPredictive`, `samplePrior`,
+   `posteriorPredictiveSummary` in `Stat.PosteriorPredictive`
+   → demo: `ppc-demo`
+4. ❌ **Phase 2.4 — Multivariate distributions**
+   `MvNormal` (Cholesky-friendly), `Dirichlet` — requires DSL extension
+5. ❌ **Phase 2.5 — Mixture distributions**
    log-sum-exp weighted likelihood
-6. **Phase 3.1 — Forest plot** (visualization)
-7. **Phase 3.2 — Energy plot** (NUTS diagnostic)
-8. **Phase 3.3 — `compare` (model weights)** via stacking / pseudo-BMA
+6. ✅ **Phase 3.1 — Forest plot** (`Viz.MCMC.forestPlot`)
+   → demo: `forest-compare`
+7. ❌ **Phase 3.2 — Energy plot** (NUTS BFMI; requires exposing per-step energy)
+8. ✅ **Phase 3.3 — `compare` model weights** (`Stat.ModelSelect.compareModels`)
+   Pseudo-BMA based on elpd_loo
+   → demo: `forest-compare`
