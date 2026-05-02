@@ -25,6 +25,7 @@ import Viz.AnalysisReport (AnalysisReportConfig (..), ModelFit (..), NamedPlot (
 import qualified Design.Orthogonal as OA
 import qualified Design.Taguchi as TG
 import qualified Viz.Taguchi as VTG
+import qualified Viz.ReportBuilder as RB
 import qualified Model.Kernel as Kern
 import qualified Model.Regularized as Reg
 import qualified Model.RFF as RFF
@@ -1620,6 +1621,7 @@ ridgeUsage = unlines
   , "  --alpha A        ElasticNet L1 mixing in [0,1] (default: 0.5; only with --penalty elasticnet)"
   , "  --format FMT     html|png|svg (default: html)"
   , "  --out FILE       scatter+fit output path (default: ridge.html; single x only)"
+  , "  --report [FILE]  build composite HTML report (default: ridge.html)"
   , ""
   , "Examples:"
   , "  hanalyze ridge data.csv x y --lambda 0.1"
@@ -1633,10 +1635,11 @@ data RidgeOpts = RidgeOpts
   , roAlpha   :: Double
   , roFormat  :: OutputFormat
   , roOut     :: FilePath
+  , roReport  :: Maybe FilePath
   }
 
 defaultRidgeOpts :: RidgeOpts
-defaultRidgeOpts = RidgeOpts "ridge" 0.1 0.5 HTML "ridge.html"
+defaultRidgeOpts = RidgeOpts "ridge" 0.1 0.5 HTML "ridge.html" Nothing
 
 runRidgeCmd :: [String] -> IO ()
 runRidgeCmd (file : xColsStr : yColStr : rest) =
@@ -1671,6 +1674,10 @@ parseRidgeOpts (flag : rest) acc
   | flag == "--out" = case rest of
       (v:rs) -> parseRidgeOpts rs (acc { roOut = v })
       []     -> Left "--out requires a file path"
+  | flag == "--report" = case rest of
+      (v:rs) | not (null v) && head v /= '-' ->
+        parseRidgeOpts rs (acc { roReport = Just v })
+      _ -> parseRidgeOpts rest (acc { roReport = Just "ridge.html" })
   | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
 
 doRidge :: FilePath -> String -> String -> RidgeOpts -> IO ()
@@ -1715,6 +1722,10 @@ doRidge file xColsStr yColStr opts = do
              (Reg.rfNonZero fit) (length beta)
       printf "RMSE (in-sample) = %.4f\n" rmseVal
       -- 単純散布図 + 予測曲線 (1 変数のみ)
+      let coeffPairs = zip ("intercept" : xCols)
+                           (map T.pack (map (printf "%.4f") beta) :: [T.Text])
+          coeffNumPairs = zip ("intercept" : xCols) beta
+          residuals = LA.toList (Reg.rfResid fit)
       case xCols of
         [xc1] -> do
           let xs = V.toList (head xVecs)
@@ -1731,12 +1742,69 @@ doRidge file xColsStr yColStr opts = do
                      , sfHasBand = False
                      }
               _ = xs
+              _ = coeffPairs
           writeSmoothPlot (roFormat opts) (roOut opts)
             (T.pack ("Regularized: " ++ T.unpack (roPenalty opts)))
             df xc1 yCol sf
           putStrLn ("Plot: " ++ roOut opts)
           openInBrowser (roOut opts)
-        _ -> putStrLn "(scatter plot skipped for multiple x columns)"
+          -- HTML レポート
+          case roReport opts of
+            Nothing -> return ()
+            Just rpath -> do
+              let smooth = RB.SmoothCurve grid gridY [] []
+                  modelLbl = "Regularized regression (" <> roPenalty opts <> ")"
+                  formula = T.pack (T.unpack yCol ++ " ~ "
+                                    ++ intercalate " + " (map T.unpack xCols)
+                                    ++ "  (lambda=" ++ show (roLambda opts) ++ ")")
+                  cfg = RB.defaultReportConfig
+                          ("Regularized regression — "
+                           <> yCol <> " ~ " <> T.intercalate " + " xCols)
+                  sections =
+                    [ RB.secDataOverview df xCols yCol
+                    , RB.secModelOverview modelLbl formula Nothing
+                    , RB.secCoefficients coeffNumPairs (Just ("R²", Reg.rfR2 fit))
+                    , RB.secKeyValue "Fit summary"
+                        [ ("RMSE (in-sample)", T.pack (printf "%.4f" rmseVal))
+                        , ("|β| > 1e-8", T.pack (show (Reg.rfNonZero fit) <> " / "
+                                                  <> show (length beta)))
+                        , ("Penalty", roPenalty opts)
+                        , ("Lambda", T.pack (printf "%g" (roLambda opts)))
+                        ]
+                    , RB.secFitScatter xc1 yCol xs ys (Just smooth)
+                    , RB.secResiduals yhat residuals
+                    ]
+              RB.renderReport rpath cfg sections
+              putStrLn ("Report: " ++ rpath)
+              openInBrowser rpath
+        _ -> do
+          putStrLn "(scatter plot skipped for multiple x columns)"
+          case roReport opts of
+            Nothing -> return ()
+            Just rpath -> do
+              let modelLbl = "Regularized regression (" <> roPenalty opts <> ")"
+                  formula = T.pack (T.unpack yCol ++ " ~ "
+                                    ++ intercalate " + " (map T.unpack xCols)
+                                    ++ "  (lambda=" ++ show (roLambda opts) ++ ")")
+                  cfg = RB.defaultReportConfig
+                          ("Regularized regression — "
+                           <> yCol <> " ~ " <> T.intercalate " + " xCols)
+                  sections =
+                    [ RB.secDataOverview df xCols yCol
+                    , RB.secModelOverview modelLbl formula Nothing
+                    , RB.secCoefficients coeffNumPairs (Just ("R²", Reg.rfR2 fit))
+                    , RB.secKeyValue "Fit summary"
+                        [ ("RMSE (in-sample)", T.pack (printf "%.4f" rmseVal))
+                        , ("|β| > 1e-8", T.pack (show (Reg.rfNonZero fit) <> " / "
+                                                  <> show (length beta)))
+                        , ("Penalty", roPenalty opts)
+                        , ("Lambda", T.pack (printf "%g" (roLambda opts)))
+                        ]
+                    , RB.secResiduals yhat residuals
+                    ]
+              RB.renderReport rpath cfg sections
+              putStrLn ("Report: " ++ rpath)
+              openInBrowser rpath
 
 -- ---------------------------------------------------------------------------
 -- kernel subcommand (Nadaraya-Watson / Kernel Ridge / RFF)
@@ -1758,6 +1826,7 @@ kernelUsage = unlines
   , "  --features D      RFF feature dimension (default: 200; --method rff only)"
   , "  --format FMT      html|png|svg (default: html)"
   , "  --out FILE        scatter+fit output path (default: kernel.html)"
+  , "  --report [FILE]   build composite HTML report (default: kernel.html)"
   , ""
   , "Examples:"
   , "  hanalyze kernel data.csv x y --method kr --bandwidth 0.5"
@@ -1773,6 +1842,7 @@ data KernelOpts = KernelOpts
   , koFeatures  :: Int
   , koFormat    :: OutputFormat
   , koOut       :: FilePath
+  , koReport    :: Maybe FilePath
   }
 
 defaultKernelOpts :: KernelOpts
@@ -1784,6 +1854,7 @@ defaultKernelOpts = KernelOpts
   , koFeatures  = 200
   , koFormat    = HTML
   , koOut       = "kernel.html"
+  , koReport    = Nothing
   }
 
 parseKernelKind :: String -> Either String Kern.Kernel
@@ -1838,6 +1909,10 @@ parseKernelOpts (flag : rest) acc
   | flag == "--out" = case rest of
       (v:rs) -> parseKernelOpts rs (acc { koOut = v })
       []     -> Left "--out requires a file path"
+  | flag == "--report" = case rest of
+      (v:rs) | not (null v) && head v /= '-' ->
+        parseKernelOpts rs (acc { koReport = Just v })
+      _ -> parseKernelOpts rest (acc { koReport = Just "kernel.html" })
   | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
 
 doKernel :: FilePath -> String -> String -> KernelOpts -> IO ()
@@ -1925,6 +2000,37 @@ runKernelOn df xCol yCol xVec yVec opts = do
   putStrLn ("Plot: " ++ koOut opts)
   openInBrowser (koOut opts)
 
+  -- HTML レポート (--report)
+  case koReport opts of
+    Nothing -> return ()
+    Just rpath -> do
+      let xs = V.toList xVec
+          ys = V.toList yVec
+          smooth = RB.SmoothCurve grid gridY [] []
+          modelLbl = "Kernel regression (" <> method <> ")"
+          formula = T.pack (T.unpack yCol ++ " ~ f(" ++ T.unpack xCol ++ ")")
+          cfg = RB.defaultReportConfig
+                  ("Kernel regression — " <> yCol <> " ~ " <> xCol)
+          baseKVs =
+            [ ("Method",    method)
+            , ("Kernel",    T.pack (show ker))
+            , ("Bandwidth", T.pack (printf "%.4f" h))
+            ]
+          extraKVs = case method of
+            "kr"  -> [("Lambda", T.pack (printf "%g" (koLambda opts)))]
+            "rff" -> [("Features", T.pack (show (koFeatures opts)))
+                     ,("Lambda",   T.pack (printf "%g" (koLambda opts)))]
+            _     -> []
+          sections =
+            [ RB.secDataOverview df [xCol] yCol
+            , RB.secModelOverview modelLbl formula Nothing
+            , RB.secKeyValue "Fit summary" (baseKVs ++ extraKVs)
+            , RB.secFitScatter xCol yCol xs ys (Just smooth)
+            ]
+      RB.renderReport rpath cfg sections
+      putStrLn ("Report: " ++ rpath)
+      openInBrowser rpath
+
 -- ---------------------------------------------------------------------------
 -- spline subcommand
 -- ---------------------------------------------------------------------------
@@ -1939,6 +2045,7 @@ splineUsage = unlines
   , "  --degree D        B-spline degree (default: 3 = cubic)"
   , "  --format FMT      html|png|svg (default: html)"
   , "  --out FILE        scatter+fit output path (default: spline.html)"
+  , "  --report [FILE]   build composite HTML report (default: spline.html)"
   , ""
   , "Examples:"
   , "  hanalyze spline data.csv x y --knots 8"
@@ -1952,10 +2059,11 @@ data SplineOpts = SplineOpts
   , soDegree :: Int
   , soFormat :: OutputFormat
   , soOut    :: FilePath
+  , soReport :: Maybe FilePath
   }
 
 defaultSplineOpts :: SplineOpts
-defaultSplineOpts = SplineOpts "bspline" 5 3 HTML "spline.html"
+defaultSplineOpts = SplineOpts "bspline" 5 3 HTML "spline.html" Nothing
 
 runSplineCmd :: [String] -> IO ()
 runSplineCmd (file : xColStr : yColStr : rest) =
@@ -1990,6 +2098,10 @@ parseSplineOpts (flag : rest) acc
   | flag == "--out" = case rest of
       (v:rs) -> parseSplineOpts rs (acc { soOut = v })
       []     -> Left "--out requires a file path"
+  | flag == "--report" = case rest of
+      (v:rs) | not (null v) && head v /= '-' ->
+        parseSplineOpts rs (acc { soReport = Just v })
+      _ -> parseSplineOpts rest (acc { soReport = Just "spline.html" })
   | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
 
 doSpline :: FilePath -> String -> String -> SplineOpts -> IO ()
@@ -2032,4 +2144,31 @@ doSpline file xColStr yColStr opts = do
         (T.pack ("Spline: " ++ T.unpack (soType opts))) df xCol yCol sf
       putStrLn ("Plot: " ++ soOut opts)
       openInBrowser (soOut opts)
+      -- HTML レポート (--report)
+      case soReport opts of
+        Nothing -> return ()
+        Just rpath -> do
+          let smooth = RB.SmoothCurve grid gridY [] []
+              modelLbl = "Spline regression (" <> soType opts <> ")"
+              formula = T.pack (T.unpack yCol ++ " ~ s("
+                                ++ T.unpack xCol ++ "; knots="
+                                ++ show k ++ ")")
+              cfg = RB.defaultReportConfig
+                      ("Spline regression — " <> yCol <> " ~ " <> xCol)
+              sections =
+                [ RB.secDataOverview df [xCol] yCol
+                , RB.secModelOverview modelLbl formula Nothing
+                , RB.secKeyValue "Fit summary"
+                    [ ("Type",      soType opts)
+                    , ("Knots",     T.pack (show k))
+                    , ("Degree",    T.pack (show (soDegree opts)))
+                    , ("RMSE (in-sample)", T.pack (printf "%.4f" rmseVal))
+                    ]
+                , RB.secFitScatter xCol yCol (V.toList xVec) ys
+                    (Just smooth)
+                , RB.secResiduals yhatIn (zipWith (-) ys yhatIn)
+                ]
+          RB.renderReport rpath cfg sections
+          putStrLn ("Report: " ++ rpath)
+          openInBrowser rpath
     Right _ -> hPutStrLn stderr "spline: expected single x column"
