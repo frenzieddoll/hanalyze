@@ -2,49 +2,118 @@
 
 > 🌐 **English** | [日本語](README.ja.md)
 
-Statistical analysis and visualization library in Haskell.
+**A general-purpose statistical analysis, optimization, and visualization toolkit written in Haskell.**
 Usable both as a CLI tool and as a Haskell library.
+
+## Coverage
+
+| Category | Highlights |
+|---|---|
+| **Classical regression** | LM (OLS) / GLM (IRLS) / GLMM / polynomial / confidence bands |
+| **Nonlinear & regularized** | B-spline / Natural cubic / Kernel Ridge / Ridge / Lasso / Elastic Net |
+| **Multi-output models** | Multivariate LM / RRR / PLS / CCA / Multi-output GP |
+| **Time series** | AR(1) / Gaussian Process |
+| **Design of Experiments (DOE)** | Full/fractional factorial / Latin square / RCBD / RSM (CCD/Box-Behnken) / D-optimal / ANOVA / power analysis |
+| **Multi-objective optimization** | NSGA-II / Pareto front / HV/IGD / Desirability / Bayesian MOO |
+| **Bayesian / HBM** | Free monad DSL / polymorphic interpretation / 27 distributions / automatic conjugacy detection |
+| **MCMC samplers** | MH / HMC / NUTS (dual averaging + AD gradients) / Slice / Gibbs |
+| **Variational inference** | ADVI (mean-field) |
+| **Model comparison** | WAIC / PSIS-LOO / Pseudo-BMA |
+| **Visualization** | Vega-Lite based, HTML/PNG/SVG output, 15+ diagnostic plots |
 
 ---
 
-## DSL Highlights
+## Feature highlights
 
-`Model.HBM` is a polymorphic free-monad DSL — write a model once, get four interpretations:
-
-```haskell
--- Write once, use four ways
-type ModelP r = forall a. (Floating a, Ord a) => Model a r
-
-myModel :: ModelP ()
-myModel = do
-  mu    <- sample "mu"    (Normal 0 10)
-  sigma <- sample "sigma" (Exponential 1)
-  observe "y" (Normal mu sigma) [1.5, 2.0, 1.8]
+### Classical regression (one-shot CLI)
+```bash
+hanalyze data.csv x y LM --ci 0.95 --report
+hanalyze data.csv x y GLM -d binomial -l logit --report
+hanalyze data.csv "x1 x2" y LM --degree -1 2 -2 3 --waic
 ```
 
-| Interpretation | Specialization | Use |
-|---|---|---|
-| Structure inspection | `a = Double` | `collectNodes`, `describeModel` |
-| Log joint | `a = Double` | `logJoint`, `logPrior`, `logLikelihood` |
-| AD gradient | `a = Forward Double` | `gradAD`, `gradADU` (machine-epsilon precision) |
-| Dependency tracking | `a = Track` | `extractDeps` for automatic DAG extraction |
+### Multi-objective optimization (NSGA-II)
+```haskell
+import Optim.NSGA (nsga2, defaultNSGAConfig)
+front <- nsga2 defaultNSGAConfig objFn bounds gen   -- Pareto front
+```
 
-Samplers (`MCMC.HMC`/`NUTS`/`Gibbs`/`MH`) all accept `ModelP`, with AD gradients and automatic constraint transformation (PositiveT/UnitIntervalT).
+### Design of Experiments
+```haskell
+import Design.Factorial (twoLevelFactorial)
+import Design.RSM       (centralCompositeRotatable)
+import Design.Power     (sampleSizeTTest)
+
+let design = centralCompositeRotatable 2 3   -- CCD k=2, 11 runs
+let n = sampleSizeTTest 0.5 0.8 0.05         -- d=0.5 → n = 64
+```
+
+### Bayesian hierarchical model (polymorphic DSL)
+
+```haskell
+myModel :: ModelP ()
+myModel = do
+  mu  <- sample "mu"    (Normal 0 10)
+  sig <- sample "sigma" (HalfNormal 1)
+  observe "y" (Normal mu sig) [1.5, 2.0, 1.8]
+```
+
+A free-monad DSL from which **four interpretations** (structural inspection / log joint / AD gradient / dependency tracking) can be extracted from a single model definition. The same model is consumable by NUTS / HMC / Gibbs / VI.
 
 ---
 
 ## Documentation (docs/)
 
-| Page | Content |
+### Getting started & overview
+
+| Page | Contents |
 |---|---|
-| [Quickstart](docs/01-quickstart.md) | Build, minimal workflow, **"what to do" → which demo** lookup |
-| [Probabilistic Programming DSL](docs/02-probabilistic-model.md) | Model.HBM patterns (Beta-Binomial / hierarchical normal / polymorphic interpretations) |
-| [MCMC Sampler Guide](docs/03-mcmc-samplers.md) | MH / HMC / NUTS selection, tuning, R-hat |
-| [Gibbs Sampling](docs/04-gibbs.md) | Conjugate updates, ESS/s comparison |
-| [Variational Inference (ADVI)](docs/05-variational-inference.md) | VI vs NUTS, ELBO convergence, mean-field limitations |
-| [Model Comparison (WAIC/LOO)](docs/06-model-comparison.md) | WAIC, PSIS-LOO, Pareto k̂ diagnostic |
-| [Visualization](docs/07-visualization.md) | Report, Bar, Histogram, PNG/SVG export |
-| [PyMC Comparison & Roadmap](docs/08-pymc-comparison.md) | Feature gap vs PyMC, implementation plan |
+| [Quick start](docs/01-quickstart.md) | Build, minimal workflow, **goal → which demo** lookup table |
+| [PyMC comparison & roadmap](docs/02-pymc-comparison.md) | Feature parity with PyMC and implementation plan |
+
+### 1. Regression and statistical models — `docs/regression/`
+
+| Page | Contents |
+|---|---|
+| [LM (linear regression)](docs/regression/01-lm.md) | OLS, confidence bands, diagnostics, assumption checks (★ in-depth) |
+| [GLM](docs/regression/02-glm.md) | All exponential family members + IRLS + link functions |
+| [GLMM (mixed-effects models)](docs/regression/03-glmm.md) | LME/GLMM, mixture distributions, derivation of the negative binomial |
+| [Splines / kernels / regularization](docs/regression/04-spline-kernel-regularized.md) | B-spline / Natural cubic / Kernel Ridge / Ridge / Lasso / ElasticNet |
+| [Multi-output models](docs/regression/05-multivariate.md) | MultiLM / RRR / PLS / CCA / MultiGP |
+| [Theory — regression extensions](docs/regression/theory-regression-extensions.md) | Spline bases, kernel methods, L1/L2 regularization, bias-variance |
+| [Theory — multivariate regression](docs/regression/theory-multivariate.md) | Mathematical background of OLS / RRR / PLS / CCA / Multi-GP |
+
+### 2. Design of Experiments and optimization — `docs/doe-optim/`
+
+| Page | Contents |
+|---|---|
+| [Design of Experiments (DOE)](docs/doe-optim/01-doe.md) | Full/fractional factorial / Latin square / RCBD / RSM / D-optimal / ANOVA / power analysis |
+| [Multi-objective optimization](docs/doe-optim/02-multi-objective.md) | NSGA-II / Pareto / Bayesian MOO |
+| [Theory — Design of Experiments](docs/doe-optim/theory-doe.md) | Orthogonality, efficiency criteria, RSM, power, sample size |
+| [Theory — Pareto efficiency and MOO](docs/doe-optim/theory-pareto-moo.md) | NSGA-II algorithm, HV/IGD, scalarization, ZDT |
+| [Theory — Bayesian Optimization](docs/doe-optim/theory-bayesopt.md) | EI / UCB / PI / EHVI / ParEGO / q-EHVI |
+
+### 3. Bayesian statistics and probabilistic modeling — `docs/bayesian/`
+
+| Page | Contents |
+|---|---|
+| [Distribution relationship map](docs/bayesian/01-distributions.md) | Limits / conjugacy / specializations of 27 distributions visualized in Mermaid |
+| [Probabilistic programming DSL](docs/bayesian/02-probabilistic-model.md) | Patterns for Model.HBM (Beta-Binomial / hierarchical normal / polymorphic interpretation) |
+| [MCMC sampler selection guide](docs/bayesian/03-mcmc-samplers.md) | When to use MH / HMC / NUTS, tuning, R-hat |
+| [Gibbs sampling](docs/bayesian/04-gibbs.md) | Conjugate updates, ESS/s comparison |
+| [Variational inference (ADVI)](docs/bayesian/05-vi.md) | VI vs NUTS, ELBO convergence, mean-field limitations |
+| [Model comparison (WAIC/LOO)](docs/bayesian/06-model-comparison.md) | WAIC, PSIS-LOO, Pareto k̂ diagnostics |
+| [Theory — distribution fundamentals](docs/bayesian/theory-distributions.md) | Formulas, intuition, and use cases for all 27 distributions |
+| [Theory — Bayesian fundamentals](docs/bayesian/theory-bayesian-basics.md) | Prior / likelihood / posterior, conjugacy, HBM, posterior predictive, workflow |
+| [Theory — MCMC fundamentals](docs/bayesian/theory-mcmc.md) | Markov chains, ergodicity, MH, Gibbs, Slice, convergence diagnostics |
+| [Theory — HMC / NUTS](docs/bayesian/theory-hmc-nuts.md) | Hamiltonians, leapfrog, constraint transforms, NUTS, dual averaging, BFMI |
+| [Theory — VI / model selection / advanced topics](docs/bayesian/theory-advanced.md) | ELBO, ADVI, WAIC, PSIS-LOO, Mixture, LKJ, AR, **Truncated/Censored in detail** |
+
+### 4. Visualization — `docs/visualization/`
+
+| Page | Contents |
+|---|---|
+| [Visualization overview](docs/visualization/01-visualization.md) | Report / Bar / Histogram / PNG/SVG output |
 
 ---
 
@@ -52,59 +121,98 @@ Samplers (`MCMC.HMC`/`NUTS`/`Gibbs`/`MH`) all accept `ModelP`, with AD gradients
 
 ```bash
 cabal build              # library + all executables
-cabal test               # test suite
+cabal test               # tests
 ```
 
-## Demos
+## Demo catalog
 
-Run with `cabal run <demo-name>` (HTML/PNG output to current directory).
-For task-based usage, see [docs/01-quickstart.md](docs/01-quickstart.md).
+Run with `cabal run <demo-name>` (HTML/PNG output is written to the current directory).
+For task-oriented guidance, see [docs/01-quickstart.md](docs/01-quickstart.md).
 
-### Getting Started
+### Getting started (start here)
 
-| Demo | Content | What you'll learn |
+| Demo | Contents | What you learn |
 |---|---|---|
-| `hbm-example`     | Hierarchical normal model + 4-chain NUTS → `mcmc_report*.html` | HBM DSL syntax, MCMC reports |
-| `hbm-regression`  | Bayesian linear regression + AnalysisReport (DAG / MCMC / credible bands) | HBM regression integration with AnalysisReport |
-| `gp-demo`         | GP regression (RBF / Matérn / Periodic) + LML comparison | Kernel selection, GP usage |
+| `hbm-example`     | Hierarchical normal model + 4-chain NUTS → `mcmc_report*.html` | How to write the HBM DSL, MCMC reports |
+| `hbm-regression`  | Bayesian simple regression + AnalysisReport (DAG / MCMC / credible intervals) | AnalysisReport integration for HBM regression |
+| `gp-demo`         | GP regression (RBF/Matérn/Periodic) + LML comparison | Kernel selection, how to use GPs |
 
-### Model Comparison & Paradoxes
+### Model comparison and paradoxes
 
-| Demo | Content | What you'll learn |
+| Demo | Contents | What you learn |
 |---|---|---|
-| `simpson-paradox` | LM/GLMM/HBM compared on Simpson's-paradox data → 4 HTML reports | Importance of hierarchy, model selection |
-| `hbm-random-slope`| Random intercept vs random intercept + random slope (M1 vs M2) compared via WAIC | Hierarchical extensions, WAIC-based selection |
-| `clinical-trial`  | Bayesian A/B test (clinical Beta-Binomial) | Two-group comparison, decision theory |
+| `simpson-paradox` | LM/GLMM/HBM compared on Simpson's paradox → 4 HTML files | Importance of hierarchical structure, model selection |
+| `hbm-random-slope`| Random intercept vs. random intercept + random slope (M1 vs M2) compared via WAIC | Hierarchical model extension, WAIC-based model selection |
+| `clinical-trial`  | Bayesian A/B test (clinical trial Beta-Binomial) | Two-group comparison, decision theory |
 
-### Sampler Deep-dive
+### Sampler deep dive
 
-| Demo | Content | What you'll learn |
+| Demo | Contents | What you learn |
 |---|---|---|
-| `bench-mcmc`     | MH / HMC / NUTS performance comparison | Sampler selection, ESS/s |
-| `test-hmc-nuts`  | HMC/NUTS accuracy test (1D Gaussian sanity check) | Sampler verification |
-| `gibbs-demo`     | Gibbs + WAIC/LOO model comparison | Conjugate updates, model selection |
-| `gibbs-hbm-demo` | Gibbs × HBM DSL integration (auto-conjugate detection) | Hybrid Gibbs+MH |
-| `vi-demo`        | Variational Inference (ADVI) vs NUTS | VI speed and limitations |
+| `bench-mcmc`     | Performance comparison of MH / HMC / NUTS | Sampler selection, ESS/s |
+| `test-hmc-nuts`  | HMC/NUTS accuracy test (sanity check on 1D Gaussian) | Sampler validation |
+| `gibbs-demo`     | Gibbs + WAIC/LOO model comparison | Conjugate updates, model comparison |
+| `gibbs-hbm-demo` | Gibbs × HBM DSL integration (automatic conjugacy detection) | Conjugacy detection, hybrid Gibbs+MH |
+| `vi-demo`        | Variational inference (ADVI) vs NUTS | Speed and limitations of VI |
 
-### Classical Regression & Plotting
+### Classical regression and visualization
 
-| Demo | Content | What you'll learn |
+| Demo | Contents | What you learn |
 |---|---|---|
 | `glmm-demo`     | LME / GLMM (random intercept) | Mixed-effects models |
-| `bar-demo`      | Viz.Bar (bar / stacked / grouped) + PNG/SVG export | Visualization, image export |
+| `bar-demo`      | Viz.Bar (bar / stacked) + PNG/SVG export | Visualization, image export |
 
-### PyMC-parity additions (this branch)
+### PyMC parity additions (this branch)
 
-| Demo | Content | What you'll learn |
+| Demo | Contents | What you learn |
 |---|---|---|
-| `new-distrib-demo`  | 6 new distributions (Uniform, StudentT, Cauchy, HalfNormal, HalfCauchy, LogNormal) | Robust priors, observation distributions |
+| `new-distrib-demo`  | Six continuous distributions (Uniform / StudentT / Cauchy / HalfNormal / HalfCauchy / LogNormal) | Robust priors and observation distributions |
 | `discrete-obs-demo` | Bernoulli / Categorical observations | Discrete observation likelihoods |
-| `ppc-demo`          | Prior / posterior predictive sampling + Bayesian p-value | PPC workflow |
-| `forest-compare`    | Forest plot + Pseudo-BMA model comparison | Multi-model summary, ArviZ-style outputs |
+| `ppc-demo`          | Prior/posterior predictive sampling + Bayesian p-value | PPC workflow |
+| `forest-compare`    | Forest plot + Pseudo-BMA model comparison | Multi-model summary, ArviZ-style output |
+| `potential-demo`    | `pm.Potential` equivalent (soft constraints / custom likelihoods / regularization) | Adding arbitrary log terms |
+| `mixture-demo`      | `pm.Mixture` (2-component Gaussian mixture) | log-sum-exp, latent clusters |
+| `trunc-censor-demo` | `Truncated` / `Censored` distributions (survival analysis, Tobit) | Observation models using CDFs |
+| `cdf-test`          | CDF validation for Beta/Gamma/Cauchy/StudentT/HalfCauchy | Incomplete gamma / incomplete beta |
+| `mvnormal-demo`     | `MvNormal` for observations (via Cholesky) | Multivariate observation likelihoods |
+| `energy-demo`       | NUTS energy plot + BFMI diagnostic | Detection of pathological posteriors |
+| `pymc-status-demo`  | PyMC parity status report (counts per category + TODO list) | Implementation status visualization |
+| `summary-demo`      | Posterior summary (`az.summary` equivalent) + HDI trace + rank plot + PPC + divergence overlay | 5 visualization primitives |
+| `deterministic-demo` | Save derived quantities (τ=1/σ², log σ, snr=μ/σ) into a Chain via `pm.Deterministic` | Declaring deterministic quantities |
+| `noncentered-demo`  | Centered vs non-centered on Neal's funnel (BFMI 0.65→1.02, ESS 7.6×) | Non-centered reparameterization + divergence detection |
+| `dirichlet-demo`    | Dirichlet prior (stick-breaking) + Categorical observations → matches the conjugate solution | Dirichlet latent variables |
+| `setdata-demo`      | Swap from training to test data via `withData` (Rank-2 polymorphism) | `pm.set_data` |
+| `mvnormal-latent-demo` | NUTS inference of a 2D hierarchical model `μ ~ MvN([0,0], [[1,0.8],[0.8,1]])` | MvNormal latent |
+| `negbinom-demo`     | NegativeBinomial for over-dispersed counts (recover μ=10, α=2; comparison with Poisson) | Over-dispersion modeling |
+| `multinomial-demo`  | Multinomial observations + Dirichlet prior (T=5 trials × N=20, exact match with conjugate) | Multinomial observations |
+| `zeroinflated-demo` | ZIP recovers structural zeros (ψ=0.4) | Zero-inflation |
+| `lkj-demo` / `lkj3d-demo` | Recover 2D / 3D correlation matrices under an LKJ(η=1) prior | Priors over correlation matrices |
+| `newdistribs-demo`  | Joint validation of InverseGamma / Weibull / Pareto / BetaBinomial / VonMises | Five new distributions |
+| `ar1-demo`          | AR(1) state-space model (estimate ϕ=0.7 from a 30-step series) | Time series |
+| `slice-demo`        | Slice sampler compared with MH/NUTS (tuning-free, gradient-free, high ESS) | Slice sampling |
+
+### Regression extensions (LM derivatives)
+
+| Demo | Contents | What you learn |
+|---|---|---|
+| `spline-demo`       | Fit B-spline (k=3, 10 coefficients) and natural cubic spline to sin + noise (RMSE 0.05) | Nonlinear smoothing |
+| `kernel-demo`       | Nadaraya-Watson + Kernel Ridge, bandwidth selection by LOO-CV | Nonparametric regression |
+| `regularized-demo`  | OLS / Ridge / Lasso / Elastic Net compared on sparse β=[3,-2,0,0,1.5,0,…] | Regularization and variable selection |
+
+### Design of Experiments (DOE)
+
+| Demo | Contents | What you learn |
+|---|---|---|
+| `doe-demo`          | Full/fractional factorial / Latin square / RCBD / ANOVA / power analysis / quality criteria, all together | DOE basics |
+| `rsm-demo`          | CCD (rotatable / face-centered) + Box-Behnken + quadratic regression, optimum estimation (0.975, -0.517, 5.06 ≈ true 1, -0.5, 5) | Response Surface Methodology |
+| `optimaldoe-demo`   | Build D-optimal designs via Fedorov exchange (D-eff=1.0, 1.7× improvement over random) | Optimal design |
+
+> 📊 **PyMC feature comparison and roadmap**: see [docs/02-pymc-comparison.md](docs/02-pymc-comparison.md).
+> A bar chart of implementation status across categories is produced as `pymc-status.html` by `cabal run pymc-status-demo`.
 
 ---
 
-## CLI Usage
+## Using as a CLI tool
 
 ```
 cabal run hanalyze -- <file> <xcols> <ycols> [LM|GLM|NoReg|GP|HBM] [options]
@@ -114,33 +222,33 @@ cabal run hanalyze -- <file> <xcols> <ycols> [LM|GLM|NoReg|GP|HBM] [options]
 |---|---|
 | `-d DIST` | Distribution: `gaussian` / `binomial` / `poisson` |
 | `-l LINK` | Link function: `identity` / `log` / `logit` / `sqrt` |
-| `--degree SPEC` | Polynomial degree. `N` for all columns, or `-1 N1 -2 N2` per column |
+| `--degree SPEC` | Polynomial degree. `N` for all columns; `-1 N1 -2 N2` per column |
 | `--ci [LEVEL]` | Confidence interval (default 0.95) |
 | `--pi [LEVEL]` | Prediction interval (Gaussian only) |
 | `--group COL` | Mixed-effects model (LME / GLMM) |
-| `--hist COL` | Histogram display |
+| `--hist COL` | Histogram view |
 | `--fit DIST` | Overlay theoretical density |
 | `--report [FILE]` | Generate HTML analysis report (default: `report.html`) |
-| `--waic` | Compute WAIC / LOO-CV and embed in report |
-| `--format FMT` | `html` / `png` / `svg`. With `png/svg`, plots in the report are also exported as images |
+| `--waic` | Compute WAIC / LOO-CV and include in the report |
+| `--format FMT` | `html` / `png` / `svg`; for `png/svg` plots inside the report are rendered as images |
 
 ```bash
-# Linear regression with confidence band + AnalysisReport
+# Linear regression + confidence interval + AnalysisReport
 cabal run hanalyze -- data.tsv x y LM --ci 0.95 --report
 
-# Poisson GLM (per-column polynomial degrees) + WAIC
+# Poisson GLM (per-column polynomial degree) + WAIC
 cabal run hanalyze -- data.tsv "x1 x2" y GLM -d poisson -l log --degree -1 2 -2 3 --waic --report
 
 # Mixed-effects model (LME) + WAIC
 cabal run hanalyze -- data.tsv x y LM --group school --waic --report
 
-# Bayesian linear regression (HBM): NUTS for α/β/σ posteriors → AnalysisReport
+# Bayesian linear regression (HBM): NUTS posteriors for α/β/σ → AnalysisReport
 cabal run hanalyze -- data.csv x y HBM --report --waic
 
-# Gaussian Process regression (RBF/Matérn/Periodic comparison)
+# Gaussian process regression (RBF/Matérn/Periodic comparison)
 cabal run hanalyze -- data.csv x y GP --report
 
-# Histogram with theoretical normal density overlay
+# Histogram + normal fit
 cabal run hanalyze -- data.csv x y NoReg --hist score --fit normal
 
 # Report + plot PNG export
@@ -149,48 +257,46 @@ cabal run hanalyze -- data.csv x y LM --report --format png
 
 ---
 
-## Library Usage
+## Using as a library
 
-Add `hanalyze` to your `build-depends` in `hanalyze.cabal`.
+Add `hanalyze` to the `build-depends` field of `hanalyze.cabal`.
 
 ---
 
-## Module Layout
+## Module layout
 
 ```
 Stat/
-  Distribution.hs  -- Probability distributions (Normal / Gamma / Beta / ...)
-  MCMC.hs          -- Diagnostic statistics (ESS / HDI / R-hat / KDE)
-  ModelSelect.hs   -- Model comparison (WAIC / PSIS-LOO)
-  VI.hs            -- Variational Inference (ADVI / Adam)
+  Distribution.hs  -- probability distributions (Normal / Gamma / Beta / ...)
+  MCMC.hs          -- diagnostics (ESS / HDI / R-hat / KDE)
+  ModelSelect.hs   -- model comparison (WAIC / PSIS-LOO)
+  VI.hs            -- variational inference (ADVI / Adam)
 
 Model/
-  HBM.hs           -- Polymorphic probabilistic-programming DSL
-                   --   (AD gradients, Track-based dependency extraction)
+  HBM.hs           -- polymorphic probabilistic programming DSL (AD gradients, Track-based dependency extraction)
 
 MCMC/
-  Core.hs          -- Chain type, posterior statistics (independently usable)
+  Core.hs          -- Chain type and posterior statistics (usable standalone)
   MH.hs            -- Random Walk Metropolis-Hastings
   HMC.hs           -- Hamiltonian Monte Carlo (AD gradients)
   NUTS.hs          -- No-U-Turn Sampler (AD gradients + dual averaging)
-  Gibbs.hs         -- Gibbs sampling + hybrid Gibbs+MH (auto-conjugate detection)
+  Gibbs.hs         -- Gibbs sampling + hybrid Gibbs+MH (automatic conjugacy detection)
 
 Viz/
-  MCMC.hs          -- Diagnostic plots (KDE / trace / autocorr / pair scatter)
-  Report.hs        -- Integrated HTML report (R-hat for multi-chain)
-  AnalysisReport.hs -- Multi-section report for LM/GLM/GLMM/GP/HBM, with comparison view
+  MCMC.hs          -- diagnostic plots (KDE / trace / autocorr / pair scatter)
+  Report.hs        -- integrated HTML report (multi-chain with R-hat)
   ModelGraph.hs    -- Mermaid.js DAG
-  Bar.hs           -- Bar charts (vertical / horizontal / stacked / grouped)
-  Histogram.hs     -- Histograms (with theoretical density overlay)
-  Scatter.hs       -- Scatter plots, regression curves
+  Bar.hs           -- bar charts (vertical / horizontal / stacked / grouped)
+  Histogram.hs     -- histograms (with optional theoretical-density overlay)
+  Scatter.hs       -- scatter and regression curves
   Core.hs          -- PlotConfig / OutputFormat / openInBrowser (PNG/SVG via vl-convert)
 ```
 
 ---
 
-## API Reference
+## API reference
 
-### `Stat.Distribution` — Probability distributions
+### `Stat.Distribution` — probability distributions
 
 ```haskell
 import Stat.Distribution
@@ -219,7 +325,7 @@ supportRange (Beta 2 5)        -- (0.0, 1.0)
 
 ---
 
-### `Stat.MCMC` — MCMC diagnostic statistics
+### `Stat.MCMC` — MCMC diagnostics
 
 ```haskell
 import Stat.MCMC
@@ -227,15 +333,15 @@ import Stat.MCMC
 -- Autocorrelation (lag 0..maxLag)
 autocorr :: Int -> [Double] -> [(Int, Double)]
 
--- Highest density interval (shortest interval containing the given probability mass)
+-- Highest-density interval
 hdi :: Double -> [Double] -> (Double, Double)
 -- hdi 0.94 samples → (lower, upper)
 
--- Effective Sample Size (Geyer's initial monotone sequence estimator)
+-- Effective sample size (Geyer's initial monotone sequence estimator)
 ess :: [Double] -> Double
 
--- Split-R-hat convergence diagnostic (Vehtari et al. 2021)
--- Input: list of per-chain sample sequences for the same parameter
+-- Split R-hat convergence diagnostic (Vehtari et al. 2021)
+-- Input: a list of per-chain sample lists for one parameter
 -- R-hat < 1.01 indicates convergence
 rhat :: [[Double]] -> Maybe Double
 
@@ -248,39 +354,40 @@ kde :: Int -> [Double] -> [(Double, Double)]
 import Stat.MCMC
 import MCMC.Core (chainVals)
 
+-- ESS and R-hat
 let muSamples = map (chainVals "mu") chains   -- chains :: [Chain]
     essVal    = ess (head muSamples)
     rhatVal   = rhat muSamples                -- R-hat < 1.01 = converged
 
+-- KDE data for density plots
 let kdePoints = kde 200 (chainVals "mu" chain)  -- [(x, density)]
 ```
 
 ---
 
-### `Model.HBM` — Polymorphic probabilistic programming DSL
+### `Model.HBM` — polymorphic probabilistic programming DSL
 
-A DSL whose continuations are polymorphic in `forall a. (Floating a, Ord a) => Model a r`,
-allowing four interpretations of the same model: structure inspection, log-joint evaluation,
-AD gradients, and dependency tracking.
+A DSL whose continuation is polymorphic as `forall a. (Floating a, Ord a) => Model a r`.
+A single model definition admits four interpretations: structural inspection, log joint, AD gradient, and dependency tracking.
 
 ```haskell
 import Model.HBM   -- exports Distribution (..), sample, observe
 
--- Polymorphic DSL type alias
+-- Polymorphic DSL type
 type ModelP r = forall a. (Floating a, Ord a) => Model a r
 
--- Latent variable
+-- Declare a latent variable
 sample  :: Text -> Distribution a -> Model a a
--- Condition on observed data (i.i.d. assumption)
+-- Condition on observed data (assumed i.i.d.)
 observe :: Text -> Distribution a -> [Double] -> Model a ()
 ```
 
-#### Example
+#### Example model
 
 ```haskell
 import qualified Data.Text as T
 
--- Hierarchical normal model for J schools:
+-- Hierarchical normal model with 3 schools
 -- μ ~ Normal(0, 100),  τ ~ Exponential(0.1)
 -- θ_j ~ Normal(μ, τ)  (j=1..J)
 -- y_ij ~ Normal(θ_j, 5)
@@ -293,6 +400,7 @@ schoolModel groupData = do
     observe (T.pack ("y_" ++ show j)) (Normal theta 5) ys)
     (zip [1::Int ..] groupData)
 
+-- Inspect the structure
 describeModel (schoolModel dat)
 -- Model nodes:
 --   [latent]   mu ~ Normal
@@ -302,8 +410,8 @@ describeModel (schoolModel dat)
 --   ...
 ```
 
-> **Note**: `ModelP` has rank-2 type, so it can't be `let`-bound (e.g. `m :: ModelP () = schoolModel dat`).
-> Use top-level binding (`m = schoolModel dat`) or inline the call at each use site.
+> **Note**: a rank-2 type like `ModelP` cannot be `let`-bound, so `m :: ModelP () = schoolModel dat`
+> does not work. Use a top-level binding (`m = schoolModel dat`) or inline the call site.
 
 #### Four interpretations
 
@@ -312,22 +420,22 @@ import qualified Data.Map.Strict as Map
 
 let ps = Map.fromList [("mu", 73.0), ("tau", 10.0), ...]
 
--- 1. Structure inspection (a = Double)
+-- 1. Structural inspection (a = Double)
 collectNodes  (schoolModel dat)              -- :: [Node]
 describeModel (schoolModel dat)              -- :: Text
 
--- 2. Log-joint numerical evaluation (a = Double)
+-- 2. Numeric log joint (a = Double)
 logJoint      (schoolModel dat) ps           -- log p(θ, y)
 logPrior      (schoolModel dat) ps           -- log p(θ)
 logLikelihood (schoolModel dat) ps           -- log p(y | θ)
 
 -- 3. AD gradient (a = Forward Double, machine-epsilon precision)
 gradAD  (schoolModel dat) ["mu","tau"] [0,1] -- :: [Double]
-gradADU (schoolModel dat) names trans us     -- with constraint transforms (HMC)
+gradADU (schoolModel dat) names trans us     -- with constraint transforms (for HMC)
 
 -- 4. Dependency tracking (a = Track)
-extractDeps (schoolModel dat)                -- :: [Node] (with nodeDeps)
-buildModelGraph (schoolModel dat)            -- Mermaid DAG auto-built
+extractDeps (schoolModel dat)                -- :: [Node] (carrying nodeDeps)
+buildModelGraph (schoolModel dat)            -- auto-built Mermaid DAG
 ```
 
 #### Key API
@@ -347,14 +455,14 @@ gradAD  :: ModelP r -> [Text] -> [Double] -> [Double]
 gradADU :: ModelP r -> [Text] -> [Transform] -> [Double] -> [Double]
 
 -- Dependency tracking + DAG
-extractDeps     :: ModelP r -> [Node]            -- Node has nodeDeps :: Set Text
-buildModelGraph :: ModelP r -> ModelGraph        -- auto-built (no manual edges needed)
+extractDeps     :: ModelP r -> [Node]            -- Node carries nodeDeps :: Set Text
+buildModelGraph :: ModelP r -> ModelGraph        -- builds the DAG automatically (no manual edges)
 
--- Constraint transforms (used by HMC/NUTS/VI)
-getTransforms        :: ModelP r -> Map Text Transform   -- auto-detected from priors
+-- Constraint transforms (for HMC/NUTS/VI)
+getTransforms        :: ModelP r -> Map Text Transform   -- inferred from priors
 logJointUnconstrained :: (Floating a, Ord a) => Model a r -> [Text] -> [Transform] -> Map Text a -> a
 
--- Structure extraction (for Gibbs conjugate detection)
+-- Structural extraction (for Gibbs conjugacy detection)
 runObserveDists :: Model Double r -> Map Text Double -> [(Text, Distribution Double, [Double])]
 priorList       :: Model Double r -> [(Text, Distribution Double)]
 ```
@@ -363,7 +471,7 @@ priorList       :: Model Double r -> [(Text, Distribution Double)]
 
 ### `MCMC.Core` — Chain type and posterior statistics
 
-Common types independent of the sampling algorithm. Importable on its own.
+Common types not tied to any MCMC algorithm. Importable on its own.
 
 ```haskell
 import MCMC.Core
@@ -374,16 +482,16 @@ data Chain = Chain
   , chainTotal    :: Int
   }
 
-acceptanceRate    :: Chain -> Double
-posteriorMean     :: Text -> Chain -> Maybe Double
-posteriorSD       :: Text -> Chain -> Maybe Double
+acceptanceRate   :: Chain -> Double
+posteriorMean    :: Text -> Chain -> Maybe Double
+posteriorSD      :: Text -> Chain -> Maybe Double
 posteriorQuantile :: Double -> Text -> Chain -> Maybe Double
--- e.g. posteriorQuantile 0.025 "mu" chain  → lower 2.5% quantile
+-- posteriorQuantile 0.025 "mu" chain  → lower 2.5%
 
--- Sample sequence for a single parameter (used by R-hat etc.)
+-- Sample series usable for R-hat etc.
 chainVals :: Text -> Chain -> [Double]
 
--- For parallel chains: spawn an independent child GenIO from a base GenIO
+-- For parallel chains: spawn a child GenIO independent of the base GenIO
 spawnGen :: GenIO -> IO GenIO
 ```
 
@@ -398,28 +506,32 @@ import System.Random.MWC (createSystemRandom)
 data MCMCConfig = MCMCConfig
   { mcmcIterations :: Int              -- post-burn-in samples
   , mcmcBurnIn     :: Int              -- burn-in steps to discard
-  , mcmcStepSizes  :: Map Text Double  -- proposal SD per parameter
+  , mcmcStepSizes  :: Map Text Double  -- per-parameter proposal SD
   }
 
 defaultMCMCConfig :: [Text] -> MCMCConfig
--- iterations=2000, burnIn=500, stepSize=1.0
+-- mcmcIterations=2000, mcmcBurnIn=500, stepSize=1.0
 
-metropolis       :: ModelP r -> MCMCConfig -> Params -> GenIO -> IO Chain
-metropolisChains :: ModelP r -> MCMCConfig -> Int    -> Params -> GenIO -> IO [Chain]
--- metropolisChains m cfg 4 init gen  -- 4 chains in parallel (CPU parallel via +RTS -N)
+metropolis       :: Model a -> MCMCConfig -> Params -> GenIO -> IO Chain
+metropolisChains :: Model a -> MCMCConfig -> Int    -> Params -> GenIO -> IO [Chain]
+-- metropolisChains m cfg 4 init_ gen  -- 4 chains in parallel (use +RTS -N for CPU parallelism)
 ```
 
 ```haskell
 main :: IO ()
 main = do
-  let cfg = (defaultMCMCConfig (sampleNames m))
+  let m   = schoolModel dat
+      cfg = (defaultMCMCConfig (sampleNames m))
               { mcmcIterations = 5000
               , mcmcBurnIn     = 1000
               , mcmcStepSizes  = Map.fromList
-                  [("mu", 5.0), ("tau", 2.0), ("theta_1", 3.0), ...]
+                  [("mu", 5.0), ("tau", 2.0),
+                   ("theta_1", 3.0), ("theta_2", 3.0), ("theta_3", 3.0)]
               }
+      init_ = Map.fromList [("mu",73),("tau",10),
+                            ("theta_1",71.5),("theta_2",86.25),("theta_3",61.75)]
   gen   <- createSystemRandom
-  chain <- metropolis (schoolModel dat) cfg initParams gen
+  chain <- metropolis m cfg init_ gen
   -- Target acceptance rate: 0.20 ~ 0.50
 ```
 
@@ -427,13 +539,15 @@ main = do
 
 ### `MCMC.HMC` — Hamiltonian Monte Carlo
 
-Uses precise gradients via `Numeric.AD.Mode.Forward`. Constrained parameters
-(Exponential / Gamma → positive, Beta → unit interval) are mapped into unconstrained
-space by log / logit transforms, leapfrogged, then mapped back. Jacobian corrections
-are applied automatically — pass initial values as ordinary parameter values.
+Powered by exact gradients via `Numeric.AD.Mode.Forward`.
+Constrained parameters (Exponential / Gamma → positive, Beta → unit interval) are
+mapped into the unconstrained space (log / logit transforms) before the leapfrog.
+Jacobian corrections are applied automatically, so initial values are passed in the
+ordinary parameter space.
 
 ```haskell
 import MCMC.HMC
+import System.Random.MWC (createSystemRandom)
 
 data HMCConfig = HMCConfig
   { hmcIterations    :: Int
@@ -443,75 +557,118 @@ data HMCConfig = HMCConfig
   }
 
 defaultHMCConfig :: HMCConfig
--- iterations=2000, burnIn=500, stepSize=0.1, leapfrogSteps=10
+-- hmcIterations=2000, hmcBurnIn=500, hmcStepSize=0.1, hmcLeapfrogSteps=10
 
-hmc       :: ModelP r -> HMCConfig -> Params -> GenIO -> IO Chain
-hmcChains :: ModelP r -> HMCConfig -> Int    -> Params -> GenIO -> IO [Chain]
+hmc       :: Model a -> HMCConfig -> Params -> GenIO -> IO Chain
+hmcChains :: Model a -> HMCConfig -> Int    -> Params -> GenIO -> IO [Chain]
 ```
 
-**Tuning:**
-- Adjust `hmcStepSize` so acceptance rate is 60–80%.
-- For hierarchical models or strong correlations, increase `hmcLeapfrogSteps` to 20–50.
+```haskell
+main :: IO ()
+main = do
+  let m   = gaussianModel observed   -- μ ~ Normal(0,10), σ ~ Exponential(1)
+      cfg = defaultHMCConfig
+              { hmcIterations    = 3000
+              , hmcBurnIn        = 500
+              , hmcStepSize      = 0.1
+              , hmcLeapfrogSteps = 10
+              }
+      init_ = Map.fromList [("mu", 0.0), ("sigma", 1.0)]
+  gen   <- createSystemRandom
+  chain <- hmc m cfg init_ gen
+  -- σ samples are guaranteed > 0 (log transform never escapes the support)
+  print (posteriorMean "sigma" chain)
+
+  -- 4 chains in parallel
+  chains <- hmcChains m cfg 4 init_ gen
+```
+
+**Tuning guidelines:**
+- Tune `hmcStepSize` so the acceptance rate is in 60–80%.
+- For hierarchical models or strongly correlated parameters, increasing `hmcLeapfrogSteps` to 20–50 typically improves efficiency.
 
 ---
 
 ### `MCMC.NUTS` — No-U-Turn Sampler
 
 Implements Hoffman & Gelman (2014) Algorithm 3.
-Tree depth is determined adaptively via U-turn detection, so no `leapfrogSteps` tuning.
-Uses the same constraint transforms as HMC.
+The trajectory length is determined automatically by the U-turn criterion, so
+`hmcLeapfrogSteps` does not need tuning. Constraint transforms are applied
+automatically as in HMC.
 
 ```haskell
 import MCMC.NUTS
+import System.Random.MWC (createSystemRandom)
 
 data NUTSConfig = NUTSConfig
   { nutsIterations    :: Int
   , nutsBurnIn        :: Int
-  , nutsStepSize      :: Double  -- initial ε₀
-  , nutsMaxDepth      :: Int     -- max tree depth (default 10)
-  , nutsAdaptStepSize :: Bool    -- dual averaging during burn-in (default True)
+  , nutsStepSize      :: Double  -- initial step size ε₀
+  , nutsMaxDepth      :: Int     -- maximum tree depth (default 10)
+  , nutsAdaptStepSize :: Bool    -- adapt ε via dual averaging during burn-in (default True)
   , nutsTargetAccept  :: Double  -- target acceptance δ (default 0.8)
   }
 
-nuts       :: ModelP r -> NUTSConfig -> Params -> GenIO -> IO Chain
-nutsChains :: ModelP r -> NUTSConfig -> Int    -> Params -> GenIO -> IO [Chain]
+defaultNUTSConfig :: NUTSConfig
+-- nutsIterations=2000, nutsBurnIn=500, nutsStepSize=0.1,
+-- nutsMaxDepth=10, nutsAdaptStepSize=True, nutsTargetAccept=0.8
+
+nuts       :: Model a -> NUTSConfig -> Params -> GenIO -> IO Chain
+nutsChains :: Model a -> NUTSConfig -> Int    -> Params -> GenIO -> IO [Chain]
 ```
 
 ```haskell
-chains <- nutsChains model cfg 4 initParams gen
-let rhatMu = rhat (map (chainVals "mu") chains)
-print rhatMu  -- Just 1.001 → converged
+main :: IO ()
+main = do
+  let m   = schoolModel dat
+      -- nutsAdaptStepSize=True (default) adapts ε during burn-in
+      cfg = defaultNUTSConfig { nutsStepSize = 0.1 }
+      -- Disable adaptation and use a fixed ε:
+      -- cfg = defaultNUTSConfig { nutsStepSize = 0.08, nutsAdaptStepSize = False }
+      init_ = Map.fromList [("mu",73),("tau",10),
+                            ("theta_1",71.5),("theta_2",86.25),("theta_3",61.75)]
+  gen <- createSystemRandom
+
+  -- Single chain
+  chain <- nuts m cfg init_ gen
+
+  -- 4 chains in parallel (check convergence with R-hat)
+  chains <- nutsChains m cfg 4 init_ gen
+  let rhatMu = rhat (map (chainVals "mu") chains)
+  print rhatMu  -- Just 1.001 → converged
 ```
 
 ---
 
-### Multi-chain & R-hat convergence diagnostic
+### Multi-chain runs and R-hat convergence diagnostics
 
 ```haskell
 import MCMC.NUTS  (nutsChains, defaultNUTSConfig, NUTSConfig (..))
 import MCMC.Core  (chainVals)
 import Stat.MCMC  (rhat, ess)
+import System.Random.MWC (createSystemRandom)
 
 main :: IO ()
 main = do
   gen <- createSystemRandom
-  let cfg = defaultNUTSConfig { nutsIterations = 2000 }
+  let cfg = defaultNUTSConfig { nutsIterations = 2000, nutsStepSize = 0.1 }
 
-  -- 4 chains in parallel (use +RTS -N for OS-thread parallelism)
+  -- Run 4 chains in parallel (use +RTS -N to control CPU parallelism)
   chains <- nutsChains model cfg 4 initParams gen
 
-  -- Check R-hat for each parameter
+  -- R-hat per parameter
+  let params = sampleNames model
   mapM_ (\p -> do
     let r = rhat (map (chainVals p) chains)
     putStrLn $ show p ++ ": R-hat = " ++ show r
-    ) (sampleNames model)
+    ) params
   -- "mu":    R-hat = Just 1.001  (< 1.01 = converged)
   -- "sigma": R-hat = Just 1.003
 ```
 
 ---
 
-### `Viz.Report` — Integrated MCMC HTML report (recommended)
+### `Viz.Report` — integrated MCMC HTML report (recommended)
 
 ```haskell
 import Viz.Report
@@ -520,153 +677,217 @@ import Model.HBM (ModelGraph)
 
 data MCMCReport = MCMCReport
   { reportTitle    :: Text
-  , reportGraph    :: Maybe ModelGraph  -- Nothing to omit DAG
-  , reportChain    :: Chain             -- main chain (used for autocorr / pair plots)
+  , reportGraph    :: Maybe ModelGraph  -- Nothing to omit the model graph
+  , reportChain    :: Chain             -- representative chain (used for autocorr / pair)
   , reportChains   :: [Chain]           -- all parallel chains (empty = single-chain mode)
   , reportParams   :: [Text]
-  , reportPairs    :: [(Text, Text)]    -- pair scatter plots
-  , reportMaxLag   :: Int               -- max autocorr lag
+  , reportPairs    :: [(Text, Text)]    -- pair scatter
+  , reportMaxLag   :: Int               -- max lag for autocorr
   }
 
 defaultReport :: Text -> Chain -> [Text] -> MCMCReport
-renderReport  :: FilePath -> MCMCReport -> IO ()
+-- reportGraph=Nothing, reportChains=[], reportPairs=[], reportMaxLag=40
+
+renderReport :: FilePath -> MCMCReport -> IO ()
 ```
 
 **Single-chain report:**
+
 ```haskell
 let report = (defaultReport "My Model" chain names)
-               { reportGraph = Just graph, reportPairs = [("mu", "tau")] }
+               { reportGraph = Just graph
+               , reportPairs = [("mu", "tau")]
+               }
 renderReport "report.html" report
 ```
 
 **Multi-chain report (with R-hat column):**
+
 ```haskell
 chains <- nutsChains model cfg 4 initParams gen
+
 let report = (defaultReport "My Model" (head chains) names)
                { reportGraph  = Just graph
-               , reportChains = chains   -- enables multi-chain mode
+               , reportChains = chains   -- setting this enables multi-chain mode
                , reportPairs  = [("mu", "tau")]
                }
 renderReport "report_multi.html" report
 ```
 
-The multi-chain HTML contains:
+Multi-chain HTML layout:
 - **Model Graph** — Mermaid.js DAG
-- **Posterior Summary** — stat boxes + Mean/SD/2.5%/97.5%/ESS/**R-hat** table (R-hat < 1.01 green, ≥ 1.01 red)
-- **MCMC Diagnostics** — KDE density (94% HDI) + per-chain colored traces
-- **Autocorrelation** — for the main chain
-- **Pair Scatter** — joint posterior
+- **Posterior Summary** — stat-box + Mean/SD/2.5%/97.5%/ESS/**R-hat** table (R-hat < 1.01 in green, ≥ 1.01 in red)
+- **MCMC Diagnostics** — KDE density (94% HDI) + per-chain colored trace
+- **Autocorrelation** — autocorrelation of the representative chain
+- **Pair Scatter** — joint posterior scatter
 
 ---
 
-### `Viz.AnalysisReport` — Multi-section analysis report
+### `Viz.MCMC` — individual MCMC plots
 
-For LM / GLM / GLMM / GP / HBM, generates a single HTML containing data summary, model
-overview, regression results, interactive prediction, and appendix sections.
-
-```haskell
-writeAnalysisReport
-  :: FilePath -> AnalysisReportConfig -> DataFrame -> [Text] -> Text
-  -> ModelFit -> [NamedPlot] -> IO ()
-
--- ModelFit type covers all model kinds
-data ModelFit
-  = RegFit FitSummary       -- LM / GLM
-  | MixFit GLMMSummary      -- LME / GLMM
-  | GPFit  GPFitSummary     -- Gaussian Process
-  | HBMFit HBMRegSummary    -- Hierarchical Bayes (NUTS posterior)
-  | NoRegFit
-```
-
-For comparing multiple models on one HTML page (predictions overlay + coefficients +
-WAIC/LOO table):
+For when you want fine-grained control over plots without going through `Viz.Report`.
 
 ```haskell
-data CompareEntry = CompareEntry
-  { ceLabel :: Text   -- e.g. "LM (Pooled)"
-  , ceColor :: Text   -- CSS color for plot
-  , ceFit   :: ModelFit
-  }
+import Viz.MCMC
+import Viz.Core (defaultConfig, OutputFormat (..))
 
-writeComparisonReport
-  :: FilePath -> AnalysisReportConfig -> DataFrame -> [Text] -> Text
-  -> [CompareEntry] -> IO ()
+-- Single chain: [KDE | trace] stacked vertically (PyMC style)
+mcmcDiagnostics     :: PlotConfig -> [Text] -> Chain  -> VegaLite
+mcmcDiagnosticsFile :: OutputFormat -> FilePath -> PlotConfig -> [Text] -> Chain  -> IO ()
+
+-- Multi chain: [merged KDE | colored trace] stacked vertically
+mcmcDiagnosticsMulti     :: PlotConfig -> [Text] -> [Chain] -> VegaLite
+mcmcDiagnosticsMultiFile :: OutputFormat -> FilePath -> PlotConfig -> [Text] -> [Chain] -> IO ()
+
+-- Multi-chain trace only
+multiTracePlot     :: PlotConfig -> [Text] -> [Chain] -> VegaLite
+multiTracePlotFile :: OutputFormat -> FilePath -> PlotConfig -> [Text] -> [Chain] -> IO ()
+
+-- Autocorrelation bar chart
+autocorrPlot     :: PlotConfig -> Int -> [Text] -> Chain -> VegaLite
+autocorrPlotFile :: OutputFormat -> FilePath -> PlotConfig -> Int -> [Text] -> Chain -> IO ()
+
+-- Pair scatter (joint posterior)
+pairScatter     :: PlotConfig -> Text -> Text -> Chain -> VegaLite
+pairScatterFile :: OutputFormat -> FilePath -> PlotConfig -> Text -> Text -> Chain -> IO ()
+
+-- KDE only / trace only
+posteriorPlot     :: PlotConfig -> [Text] -> Chain -> VegaLite
+tracePlot         :: PlotConfig -> [Text] -> Chain -> VegaLite
 ```
 
-See [`SimpsonParadoxDemo.hs`](demo/SimpsonParadoxDemo.hs) for an end-to-end example
-producing four reports (LM, GLMM, HBM, and a side-by-side comparison).
+```haskell
+let cfg = defaultConfig "School Model"
+
+-- Single-chain diagnostics
+mcmcDiagnosticsFile HTML "diag.html" cfg names chain
+
+-- Multi-chain diagnostics
+mcmcDiagnosticsMultiFile HTML "diag_multi.html" cfg names chains
+
+-- Individual plots
+autocorrPlotFile HTML "acf.html"  cfg 40 names chain
+pairScatterFile  HTML "pair.html" (defaultConfig "μ vs τ") "mu" "tau" chain
+```
 
 ---
 
-### `Viz.MCMC` — Standalone MCMC plots
-
-For finer control without `Viz.Report`.
-
-```haskell
-mcmcDiagnostics      :: PlotConfig -> [Text] -> Chain  -> VegaLite
-mcmcDiagnosticsMulti :: PlotConfig -> [Text] -> [Chain] -> VegaLite
-multiTracePlot       :: PlotConfig -> [Text] -> [Chain] -> VegaLite
-autocorrPlot         :: PlotConfig -> Int -> [Text] -> Chain -> VegaLite
-pairScatter          :: PlotConfig -> Text -> Text -> Chain -> VegaLite
-posteriorPlot        :: PlotConfig -> [Text] -> Chain -> VegaLite
-tracePlot            :: PlotConfig -> [Text] -> Chain -> VegaLite
-```
-
-Each `*Plot` has a corresponding `*PlotFile :: OutputFormat -> FilePath -> ... -> IO ()`
-for direct file output (HTML / PNG / SVG via `vl-convert`).
-
----
-
-### `Viz.Histogram` — Histograms
+### `Viz.Histogram` — histograms
 
 ```haskell
 import Viz.Histogram
+import Viz.Core (defaultConfig, OutputFormat (..))
 
-histogramPlot         :: PlotConfig -> Text -> [Double] -> Maybe Int -> VegaLite
-histogramWithDensity  :: PlotConfig -> Text -> [Double] -> Maybe Int -> Distribution -> VegaLite
+-- Plain histogram
+histogramPlot     :: PlotConfig -> Text -> [Double] -> Maybe Int -> VegaLite
+histogramPlotFile :: OutputFormat -> FilePath -> PlotConfig -> Text -> [Double] -> Maybe Int -> IO ()
+
+-- Overlay theoretical density
+histogramWithDensity     :: PlotConfig -> Text -> [Double] -> Maybe Int -> Distribution -> VegaLite
+histogramWithDensityFile :: OutputFormat -> FilePath -> PlotConfig -> Text -> [Double] -> Maybe Int -> Distribution -> IO ()
 ```
 
 ```haskell
+let vals = [1.2, 3.4, 2.1, ...]
 histogramWithDensityFile HTML "hist.html"
   (defaultConfig "Score Distribution") "score" vals Nothing (Normal 2.5 1.0)
 ```
 
 ---
 
+## Full workflow example (NUTS, 4 chains)
+
+```haskell
+{-# LANGUAGE OverloadedStrings #-}
+import Control.Monad (forM)
+import qualified Data.Map.Strict as Map
+import qualified Data.Text as T
+import System.Random.MWC (createSystemRandom)
+
+import Model.HBM
+import MCMC.Core  (chainVals, posteriorMean, posteriorSD)
+import MCMC.NUTS  (nutsChains, defaultNUTSConfig, NUTSConfig (..))
+import Stat.Distribution
+import Stat.MCMC  (rhat, ess)
+import Viz.Core   (openInBrowser)
+import Viz.Report (MCMCReport (..), defaultReport, renderReport)
+
+-- 1. Model definition (σ has an Exponential prior → positivity is handled automatically)
+myModel :: [Double] -> Model Double
+myModel ys = do
+  mu    <- sample "mu"    (Normal 0 10)
+  sigma <- sample "sigma" (Exponential 1)
+  observe "y" (Normal mu sigma) ys
+  return mu
+
+main :: IO ()
+main = do
+  let dat   = [1.2, 2.3, 3.1, 2.8, 1.9]
+      m     = myModel dat
+      names = sampleNames m
+      cfg   = defaultNUTSConfig { nutsIterations = 3000, nutsStepSize = 0.1 }
+      init_ = Map.fromList [("mu", 0.0), ("sigma", 1.0)]
+
+  gen <- createSystemRandom
+
+  -- 2. 4 chains of NUTS in parallel
+  chains <- nutsChains m cfg 4 init_ gen
+
+  -- 3. Convergence check via R-hat
+  mapM_ (\p -> do
+    let r = rhat (map (chainVals p) chains)
+    putStrLn $ T.unpack p ++ ": R-hat = " ++ show r
+    ) names
+
+  -- 4. Build the model graph
+  let graph = buildModelGraph m [("mu", "y"), ("sigma", "y")]
+
+  -- 5. Multi-chain integrated report
+  let report = (defaultReport "Gaussian Model" (head chains) names)
+                 { reportGraph  = Just graph
+                 , reportChains = chains   -- multi-chain mode: R-hat column + colored trace
+                 , reportPairs  = []
+                 }
+  renderReport "report.html" report
+  openInBrowser "report.html"
+```
+
+---
+
 ## Sampler selection guide
 
-| Sampler | Best for | Caveats |
+| Sampler | When to use | Notes |
 |---|---|---|
-| `MCMC.MH` (Metropolis) | Quick model sanity checks | ESS collapses in high-dim / high-correlation cases |
-| `MCMC.HMC` | Continuous parameters, medium-sized models | Tune both `stepSize` and `leapfrogSteps` |
-| `MCMC.NUTS` | **Recommended default** | Tune only `stepSize`; `leapfrogSteps` not needed |
-| `MCMC.Gibbs` | Conjugate models (very fast) | Cannot handle non-conjugate parameters |
+| `MCMC.MH` (Metropolis) | Simple sanity-check models | ESS collapses on high-dim or strongly correlated targets |
+| `MCMC.HMC` | Continuous parameters, moderate-size models | Both `stepSize` and `leapfrogSteps` need tuning |
+| `MCMC.NUTS` | **Recommended default** | Only `stepSize` to tune; `leapfrogSteps` not needed |
+| `MCMC.Gibbs` | Conjugate models (very fast) | Cannot be used for non-conjugate parameters |
 
-See [MCMC Sampler Guide](docs/03-mcmc-samplers.md) and [Gibbs Guide](docs/04-gibbs.md) for details.
+Details → [MCMC sampler selection guide](docs/bayesian/03-mcmc-samplers.md) / [Gibbs sampling](docs/bayesian/04-gibbs.md)
 
 **Step-size guidelines:**
-- NUTS: ideal acceptance is 60–85%. Too low → reduce `stepSize`.
-- HMC: same target. If low, also lower `leapfrogSteps`.
-- MH: 20–50% target; tune `mcmcStepSizes` per parameter.
+- NUTS: target acceptance 60–85%. Too low → reduce `stepSize`.
+- HMC: same. If acceptance is low, also reduce `leapfrogSteps`.
+- MH: target 20–50%. Tune `mcmcStepSizes` per parameter.
 
 **Constrained parameters:**
-- `Exponential` / `Gamma` → positive constraint (`PositiveT`: log transform)
-- `Beta` → unit interval constraint (`UnitIntervalT`: logit transform)
-- HMC / NUTS apply Jacobian correction automatically; pass initial values in the natural (unconstrained) scale.
+- `Exponential` / `Gamma` → positivity (`PositiveT`: log transform)
+- `Beta` → unit interval (`UnitIntervalT`: logit transform)
+- HMC / NUTS apply Jacobian corrections automatically; pass initial values in the natural parameterization.
 
 ---
 
 ### `MCMC.Gibbs` — Gibbs sampling
 
-Directly samples from the conjugate full-conditional distribution where one is available.
-No rejection step → typically 3–5× higher ESS/sec than NUTS for fully conjugate models.
+Samples directly from a parameter's conjugate full conditional.
+With no rejection step, conjugate models reach 3–5× higher ESS/sec than NUTS.
 
 ```haskell
 import MCMC.Gibbs
 
--- Built-in conjugate updates
+-- Pre-built conjugate updates
 normalNormal :: Text -> Double -> Double -> [Double] -> Double -> GibbsUpdate
--- μ ~ Normal(μ₀,σ₀), y ~ Normal(μ,σ_lik) → directly sample from conditional posterior
+-- Direct sampling from the conditional posterior of μ ~ Normal(μ₀,σ₀), y ~ Normal(μ,σ_lik)
 
 betaBinomial :: Text -> Double -> Double -> Int -> Int -> GibbsUpdate
 -- p ~ Beta(α,β), y ~ Binomial(n,p), k successes → Beta(α+k, β+n-k)
@@ -676,90 +897,105 @@ gammaPoisson :: Text -> Double -> Double -> [Double] -> GibbsUpdate
 
 gibbs       :: [GibbsUpdate] -> GibbsConfig -> Params -> GenIO -> IO Chain
 gibbsChains :: [GibbsUpdate] -> GibbsConfig -> Int    -> Params -> GenIO -> IO [Chain]
-
--- Auto-detect conjugates from a HBM model + hybrid Gibbs+MH for non-conjugate parameters
-gibbsFromModel :: ModelP r -> ([GibbsUpdate], [Text])
-gibbsMH        :: ModelP r -> GibbsConfig -> Map Text Double -> Params -> GenIO -> IO Chain
 ```
 
-See [Gibbs Sampling Guide](docs/04-gibbs.md) for details.
+```haskell
+let updates = [ normalNormal "mu" 0 10 obsData 2.0 ]  -- σ_lik=2 known
+    cfg     = defaultGibbsConfig { gibbsIterations = 5000 }
+chain <- gibbs updates cfg (Map.fromList [("mu", 0.0)]) gen
+```
+
+Details → [Gibbs sampling guide](docs/bayesian/04-gibbs.md)
 
 ---
 
-### `Stat.VI` — Variational Inference (ADVI)
+### `Stat.VI` — variational inference (ADVI)
 
-Approximates the posterior with a Gaussian family and maximises the ELBO via Adam.
-Faster than NUTS but ignores parameter correlations (mean-field).
+Approximates the posterior with a normal family and maximizes the ELBO with Adam.
+Faster than NUTS, but the mean-field assumption ignores cross-parameter correlations.
 
 ```haskell
 import Stat.VI
 
-advi :: ModelP r -> VIConfig -> Params -> GenIO -> IO VIResult
+advi :: Model a -> VIConfig -> Params -> GenIO -> IO VIResult
 
 data VIResult = VIResult
   { viPostMeans   :: Params    -- posterior means
   , viPostSDs     :: Params    -- posterior SDs
-  , viElboHistory :: [Double]  -- ELBO trajectory
-  , viDraws       :: [Params]  -- posterior samples
+  , viElboHistory :: [Double]  -- ELBO convergence trace
+  , viDraws       :: [Params]  -- posterior draws
   }
 ```
 
-See [Variational Inference Guide](docs/05-variational-inference.md).
+```haskell
+let cfg = defaultVIConfig { viIterations = 500, viNumDraws = 5000 }
+result <- advi model cfg initP gen
+print (viPostMeans result)
+```
+
+Details → [Variational inference guide](docs/bayesian/05-vi.md)
 
 ---
 
-### `Stat.ModelSelect` — Model comparison (WAIC / PSIS-LOO)
+### `Stat.ModelSelect` — model comparison (WAIC / PSIS-LOO)
 
-Computes information criteria from a MCMC chain. Smaller is better.
+Computes information criteria from MCMC chains for model comparison. Lower is better.
 
 ```haskell
 import Stat.ModelSelect
 
-chainWAIC :: ModelP r -> Chain -> WAICResult
-chainLOO  :: ModelP r -> Chain -> LOOResult
+chainWAIC :: Model a -> Chain -> WAICResult
+chainLOO  :: Model a -> Chain -> LOOResult
 
 data WAICResult = WAICResult
-  { waicValue :: Double  -- WAIC (smaller is better)
+  { waicValue :: Double  -- WAIC (lower is better)
   , waicLppd  :: Double  -- log pointwise predictive density
-  , waicPwaic :: Double  -- effective parameter count
+  , waicPwaic :: Double  -- effective number of parameters
   , waicSE    :: Double  -- standard error
   }
 
 data LOOResult = LOOResult
-  { looValue   :: Double    -- LOO-CV (smaller is better)
+  { looValue   :: Double    -- LOO-CV (lower is better)
   , looKHat    :: [Double]  -- per-observation Pareto k̂ (> 0.7 is concerning)
-  , looKHatBad :: Int       -- count of observations with k̂ > 0.7
+  , looKHatBad :: Int       -- number of observations with k̂ > 0.7
   }
-
--- For frequentist models (LM / GLM / LME), posterior-sampling helpers:
-lmPosteriorLogLiks  :: Matrix Double -> Vector Double -> FitResult -> Int -> GenIO -> IO [[Double]]
-glmPosteriorLogLiks :: Family -> LinkFn -> ... -> IO [[Double]]
-lmePosteriorLogLiks :: Matrix Double -> Vector Double -> [Double] -> FitResult -> Int -> GenIO -> IO [[Double]]
 ```
 
-See [Model Comparison Guide](docs/06-model-comparison.md).
+```haskell
+let waicA = chainWAIC modelA chainA
+    waicB = chainWAIC modelB chainB
+printf "ΔWAIC(A−B) = %.3f\n" (waicValue waicA - waicValue waicB)
+-- Negative → A is better; rule of thumb: |ΔWAIC| > SE
+```
+
+Details → [Model comparison guide](docs/bayesian/06-model-comparison.md)
 
 ---
 
-### `Viz.Bar` — Bar charts
+### `Viz.Bar` — bar charts
 
 ```haskell
 import Viz.Bar
+import Viz.Core (defaultConfig, OutputFormat (..))
 
+-- Vertical / horizontal bars
 barChartFile  HTML "bar.html"  cfg "category" "value" labels vals
 barChartHFile HTML "barh.html" cfg "value" "category" labels vals
+
+-- Stacked / grouped bars
 stackedBarFile HTML "stacked.html" cfg "x" "y" "group" xs ys groups
 groupedBarFile HTML "grouped.html" cfg "x" "y" "group" xs ys groups
 ```
 
-See [Visualization Guide](docs/07-visualization.md).
+Details → [Visualization guide](docs/visualization/01-visualization.md)
 
 ---
 
 ## Notes
 
-- **Low ESS**: Inspect the trace plot for poor mixing and re-tune step sizes. NUTS gives substantially higher ESS/time than HMC.
-- **High R-hat (≥ 1.01)**: Increase burn-in, disperse initial values, or adjust step sizes.
-- **Non-root distribution display**: `collectNodes` continues with placeholder `0` for latent variables, so distribution parameters at non-root nodes aren't meaningful (only family names shown in graphs).
-- **Test data**: place under `demo/` (not `/tmp`).
-- **CPU parallelism**: `nutsChains` / `hmcChains` / `metropolisChains` use OS-thread parallelism with `+RTS -N`. Example: `cabal run hbm-example -- +RTS -N4`.
+- **Low ESS**: check the trace plot for poor mixing and re-tune the step size. NUTS substantially improves ESS-per-time over HMC.
+- **High R-hat** (≥ 1.01): increase burn-in, scatter the initial values, or adjust the step size.
+- **Distribution shown for non-root nodes**: `collectNodes` continues latent variables with the placeholder value `0`, so distribution parameters of nodes with dependencies do not have meaningful values. The model graph displays only the family name.
+- **Test data**: place under `demo/` (do not use `/tmp`).
+- **CPU parallelism**: `nutsChains` / `hmcChains` / `metropolisChains` parallelize across OS threads with `+RTS -N`. Example: `cabal run hbm-example -- +RTS -N4`.
+- **Removed legacy modules** `Model.MCMC` / `Model.HMC` / `Model.NUTS`. Use `MCMC.MH` / `MCMC.HMC` / `MCMC.NUTS` instead.
