@@ -26,8 +26,11 @@ import qualified Design.Orthogonal as OA
 import qualified Design.Taguchi as TG
 import qualified Viz.Taguchi as VTG
 import qualified Viz.ReportBuilder as RB
+import qualified Graphics.Vega.VegaLite as VL
+import Graphics.Vega.VegaLite (VegaLite, VLProperty, VLSpec)
 import qualified Model.Kernel as Kern
 import qualified Model.Regularized as Reg
+import qualified Model.Quantile as QR
 import qualified Model.RFF as RFF
 import qualified Model.Spline as Spl
 import Model.LM (SmoothFit (..))
@@ -313,6 +316,7 @@ helpMsg = unlines
   , "  ridge     Regularized regression (Ridge/Lasso/Elastic Net)           [implemented]"
   , "  kernel    Kernel regression / RFF approximation                      [implemented]"
   , "  spline    B-spline / natural cubic regression                        [implemented]"
+  , "  quantile  Quantile regression (τ-quantile, MM-IRLS)                  [implemented]"
   , "  doe       Orthogonal arrays (L_n) for experimental designs           [implemented]"
   , "  taguchi   Taguchi method (SN ratio + factor effects + inner/outer)   [implemented]"
   , ""
@@ -351,6 +355,7 @@ dispatch ("taguchi":rest)             = runTaguchiCmd rest
 dispatch ("ridge":rest)               = runRidgeCmd rest
 dispatch ("kernel":rest)              = runKernelCmd rest
 dispatch ("spline":rest)              = runSplineCmd rest
+dispatch ("quantile":rest)            = runQuantileCmd rest
 dispatch (cmd:_) | isFutureSubcommand cmd = do
   hPutStrLn stderr $ "hanalyze: " ++ stubMessage cmd
   hPutStrLn stderr "  Run 'hanalyze help' to see implemented subcommands."
@@ -2203,3 +2208,224 @@ mkRidgePathSection xCols xMat yLA opts =
       title = "Regularization path (" <> roPenalty opts <> ")"
       spec  = RB.regPathSpec xCols pathNoInt
   in RB.secVega title spec
+
+-- ---------------------------------------------------------------------------
+-- quantile subcommand
+-- ---------------------------------------------------------------------------
+
+quantileUsage :: String
+quantileUsage = unlines
+  [ "Usage: hanalyze quantile <file> <xcols> <ycol> [options]"
+  , ""
+  , "  <xcols>   x column name(s); quote multiple: \"x1 x2\""
+  , "  <ycol>    y column name (single)"
+  , ""
+  , "Options:"
+  , "  --tau T          quantile in (0, 1) (default: 0.5 = median)"
+  , "  --taus T1,T2,... overlay multiple quantiles in the report (e.g. 0.1,0.5,0.9)"
+  , "  --format FMT     html|png|svg (default: html)"
+  , "  --out FILE       scatter+fit output path (default: quantile.html)"
+  , "  --report [FILE]  build composite HTML report (default: quantile.html)"
+  , ""
+  , "Examples:"
+  , "  hanalyze quantile data.csv x y --tau 0.5"
+  , "  hanalyze quantile data.csv x y --taus 0.1,0.5,0.9 --report"
+  ]
+
+data QuantileOpts = QuantileOpts
+  { qoTau    :: Double
+  , qoTaus   :: [Double]    -- when not empty, overlay multiple quantiles
+  , qoFormat :: OutputFormat
+  , qoOut    :: FilePath
+  , qoReport :: Maybe FilePath
+  }
+
+defaultQuantileOpts :: QuantileOpts
+defaultQuantileOpts = QuantileOpts 0.5 [] HTML "quantile.html" Nothing
+
+runQuantileCmd :: [String] -> IO ()
+runQuantileCmd (file : xColsStr : yColStr : rest) =
+  case parseQuantileOpts rest defaultQuantileOpts of
+    Left err   -> hPutStrLn stderr ("quantile: " ++ err)
+    Right opts -> doQuantile file xColsStr yColStr opts
+runQuantileCmd _ = putStrLn quantileUsage
+
+parseQuantileOpts :: [String] -> QuantileOpts -> Either String QuantileOpts
+parseQuantileOpts [] acc = Right acc
+parseQuantileOpts (flag : rest) acc
+  | flag == "--tau" = case rest of
+      (v:rs) -> case reads v :: [(Double, String)] of
+        [(d,"")] | d > 0, d < 1 -> parseQuantileOpts rs (acc { qoTau = d })
+        _        -> Left ("invalid --tau '" ++ v ++ "' (must be in (0,1))")
+      []     -> Left "--tau requires a value"
+  | flag == "--taus" = case rest of
+      (v:rs) ->
+        let parts = filter (not . null) (splitOnComma v)
+        in case mapM (\s -> case reads s :: [(Double, String)] of
+                              [(d,"")] | d > 0, d < 1 -> Just d
+                              _ -> Nothing) parts of
+             Just ds -> parseQuantileOpts rs (acc { qoTaus = ds })
+             Nothing -> Left ("invalid --taus '" ++ v
+                              ++ "' (comma-separated values in (0,1))")
+      [] -> Left "--taus requires a value"
+  | flag `elem` ["-f","--format"] = case rest of
+      (v:rs) -> case parseFormat v of
+        Right f -> parseQuantileOpts rs (acc { qoFormat = f })
+        Left e  -> Left e
+      []     -> Left "--format requires an argument"
+  | flag == "--out" = case rest of
+      (v:rs) -> parseQuantileOpts rs (acc { qoOut = v })
+      []     -> Left "--out requires a file path"
+  | flag == "--report" = case rest of
+      (v:rs) | not (null v) && head v /= '-' ->
+        parseQuantileOpts rs (acc { qoReport = Just v })
+      _ -> parseQuantileOpts rest (acc { qoReport = Just "quantile.html" })
+  | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
+
+splitOnComma :: String -> [String]
+splitOnComma s = case break (== ',') s of
+  (a, ',' : rest) -> a : splitOnComma rest
+  (a, _)          -> [a]
+
+doQuantile :: FilePath -> String -> String -> QuantileOpts -> IO ()
+doQuantile file xColsStr yColStr opts = do
+  let xCols = map T.pack (words xColsStr)
+      yCol  = T.pack yColStr
+  result <- loadXY file xCols yCol
+  case result of
+    Left err -> hPutStrLn stderr err
+    Right (df, xVecs, yVec) -> do
+      let n = V.length yVec
+          intercept = LA.konst 1 n
+          xMat = LA.fromColumns
+                   (intercept : map (LA.fromList . V.toList) xVecs)
+          yLA  = LA.fromList (V.toList yVec)
+          tau  = qoTau opts
+          fit  = QR.fitQuantile tau xMat yLA
+          beta = LA.toList (QR.qfBeta fit)
+      printf "Loaded %d rows from %s\n" n file
+      printf "Quantile: tau = %.3f  (median: %s)\n" tau
+             (if abs (tau - 0.5) < 1e-9 then ("yes" :: String) else "no")
+      printf "MM-IRLS converged in %d iterations\n" (QR.qfIters fit)
+      putStrLn ""
+      putStrLn "Coefficients:"
+      printf "  %-30s = %9.4f\n" ("intercept" :: String) (head beta)
+      mapM_ (\(i, c, b) ->
+        printf "  %-30s = %9.4f\n"
+               ("β_" ++ show (i :: Int) ++ " (" ++ T.unpack c ++ ")") b)
+        (zip3 [1..] xCols (tail beta))
+      printf "Pinball loss V̂_τ: %.4f\n" (QR.qfPinball fit)
+      printf "Pseudo R¹_τ:      %.4f\n" (QR.qfR1 fit)
+
+      -- 単変数なら scatter + fit (+ overlay multiple quantiles)
+      case (xCols, xVecs) of
+        ([xc1], [xVec]) -> do
+          let xs = V.toList xVec
+              ys = V.toList yVec
+              grid = makeGrid xVec 100
+              gridMat = LA.fromColumns
+                          [ LA.konst 1 100, LA.fromList grid ]
+              gridY = LA.toList (QR.predictQuantile fit gridMat)
+              sf = SmoothFit
+                     { sfX = grid
+                     , sfFit = gridY
+                     , sfLower = []
+                     , sfUpper = []
+                     , sfHasBand = False
+                     }
+              _ = xs
+          writeSmoothPlot (qoFormat opts) (qoOut opts)
+            (T.pack ("Quantile τ=" ++ show tau)) df xc1 yCol sf
+          putStrLn ("Plot: " ++ qoOut opts)
+          openInBrowser (qoOut opts)
+
+          -- HTML レポート
+          case qoReport opts of
+            Nothing -> return ()
+            Just rpath -> do
+              let coeffPairs = zip ("intercept" : xCols) beta
+                  modelLbl = "Quantile regression (τ=" <> T.pack (show tau) <> ")"
+                  formula = T.pack ("Q_τ(" ++ T.unpack yCol ++ "|x) = "
+                                    ++ "β₀ + " ++ T.unpack (T.intercalate " + "
+                                                              [ "β" <> T.pack (show i)
+                                                                <> "·" <> c
+                                                              | (i, c) <- zip [(1::Int)..] xCols ]))
+                  cfg = RB.defaultReportConfig
+                          ("Quantile regression — τ=" <> T.pack (show tau)
+                           <> ",  " <> yCol <> " ~ " <> T.intercalate " + " xCols)
+                  baseSections =
+                    [ RB.secDataOverview df xCols yCol
+                    , RB.secModelOverview modelLbl formula Nothing
+                    , RB.secCoefficients coeffPairs (Just ("Pseudo R¹_τ", QR.qfR1 fit))
+                    , RB.secKeyValue "Fit summary"
+                        [ ("τ",                T.pack (printf "%.3f" tau))
+                        , ("Pinball loss V̂_τ", T.pack (printf "%.4f" (QR.qfPinball fit)))
+                        , ("Iterations",       T.pack (show (QR.qfIters fit)))
+                        ]
+                    , RB.secFitScatter xc1 yCol xs ys (Just (RB.SmoothCurve grid gridY [] []))
+                    , RB.secResiduals (LA.toList (QR.qfYHat fit))
+                                      (LA.toList (QR.qfResid fit))
+                    ]
+                  -- overlay multi quantile chart
+                  multiSec = case qoTaus opts of
+                    [] -> []
+                    taus ->
+                      let curves = [ ( T.pack ("τ=" ++ show t)
+                                     , LA.toList (QR.predictQuantile
+                                                   (QR.fitQuantile t xMat yLA)
+                                                   gridMat))
+                                   | t <- taus ]
+                          spec = multiQuantileSpec xc1 yCol xs ys grid curves
+                      in [RB.secVega "Multiple quantile fits" spec]
+              RB.renderReport rpath cfg (baseSections ++ multiSec)
+              putStrLn ("Report: " ++ rpath)
+              openInBrowser rpath
+        _ -> putStrLn "(scatter plot skipped for multiple x columns)"
+
+-- 複数分位線を 1 枚の Vega-Lite spec で描く
+multiQuantileSpec :: T.Text -> T.Text -> [Double] -> [Double] -> [Double]
+                  -> [(T.Text, [Double])] -> VegaLite
+multiQuantileSpec xc yc xs ys grid curves =
+  VL.toVegaLite
+    [ VL.layer
+        [ VL.asSpec
+            [ VL.dataFromColumns []
+                . VL.dataColumn xc (VL.Numbers xs)
+                . VL.dataColumn yc (VL.Numbers ys)
+                $ []
+            , VL.mark VL.Point
+                [VL.MOpacity 0.5, VL.MSize 40, VL.MColor "#888888"]
+            , VL.encoding
+                . VL.position VL.X
+                    [VL.PName xc, VL.PmType VL.Quantitative,
+                     VL.PAxis [VL.AxTitle xc]]
+                . VL.position VL.Y
+                    [VL.PName yc, VL.PmType VL.Quantitative,
+                     VL.PAxis [VL.AxTitle yc]]
+                $ []
+            ]
+        , VL.asSpec (multiLineLayer xc yc grid curves)
+        ]
+    , VL.width 640
+    , VL.height 320
+    ]
+
+multiLineLayer :: T.Text -> T.Text -> [Double] -> [(T.Text, [Double])]
+               -> [(VLProperty, VLSpec)]
+multiLineLayer xc yc grid curves =
+  let rowsX  = concat [ replicate (length grid) lbl | (lbl, _) <- curves ]
+      rowsXs = concat [ grid                         | _       <- curves ]
+      rowsYs = concat [ ys'                          | (_, ys') <- curves ]
+  in [ VL.dataFromColumns []
+         . VL.dataColumn "tau" (VL.Strings rowsX)
+         . VL.dataColumn xc    (VL.Numbers rowsXs)
+         . VL.dataColumn yc    (VL.Numbers rowsYs)
+         $ []
+     , VL.mark VL.Line [VL.MStrokeWidth 2.2]
+     , VL.encoding
+         . VL.position VL.X [VL.PName xc, VL.PmType VL.Quantitative]
+         . VL.position VL.Y [VL.PName yc, VL.PmType VL.Quantitative]
+         . VL.color [VL.MName "tau", VL.MmType VL.Nominal,
+                     VL.MScale [VL.SScheme "tableau10" []]]
+         $ []
+     ]
