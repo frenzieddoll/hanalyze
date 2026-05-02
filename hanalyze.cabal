@@ -782,7 +782,8 @@ test-suite hanalyze-test
   hs-source-dirs:   test
   default-language: GHC2021
   build-depends:
-      base     >= 4.14 && < 5
+      base       >= 4.14 && < 5
     , hanalyze
-    , hspec    >= 2.10 && < 2.12
-    , vector   >= 0.12 && < 0.14
+    , hspec      >= 2.10 && < 2.12
+    , vector     >= 0.12 && < 0.14
+    , mwc-random >= 0.15 && < 0.16
