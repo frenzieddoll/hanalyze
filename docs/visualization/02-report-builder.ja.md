@@ -475,8 +475,10 @@ hanalyze taguchi  analyze L9 -f ... --csv ... --report
 `--report` の引数を省略すると `<subcommand>.html` (例: `ridge.html`) になる。
 明示する場合: `--report path/to/myreport.html`。
 
-`regress` (LM/GLM/GLMM/GP/HBM) は **`Viz.AnalysisReport`** で生成 (こちらは
-DAG・MCMC 診断・対話的予測を含むより詳細なレポート)。それ以外は **`Viz.ReportBuilder`** ベース。
+**全サブコマンドが `Viz.ReportBuilder` 経路** で動作 (Phase 2 完了)。`regress` も
+`app/Main.hs` の `cliRegressSections` / `cliMixedSections` / `cliGPSections` /
+`cliHBMSections` を経由して `RB.renderReport` で生成される。
+`Viz.AnalysisReport` は非推奨だがレガシーとして残置。
 
 ---
 
@@ -561,8 +563,11 @@ renderReport "out.html" cfg (baseSections ++ extra)
    - ✅ `LMReport` / `GLMReport` (Cycle 2)
    - ✅ `QRFit` / `GAMFit` / `RFReport` (Cycle 3 — 横展開)
    - ✅ `GLMMReport` / `GPReport` / `HBMLinearReport` (Cycle 4)
-2. **Phase 2**: CLI `regress --report` を ReportBuilder 経路に切り替え (次サイクル)
-3. **Phase 3**: `Viz.AnalysisReport` を削除 (Phase 2 後)
+2. **Phase 2 (完了)**: CLI `regress --report` を ReportBuilder 経路に切り替え (Cycle 5)
+   - LM/GLM/GLMM/GP/HBM 全パスで `cliRegressSections` / `cliMixedSections` /
+     `cliGPSections` / `cliHBMSections` ヘルパに統一
+   - 多項式次数 (`--degree`) と WAIC/LOO 表示も保持
+3. **Phase 3 (保留)**: `Viz.AnalysisReport` の削除 — ユーザー指示によりレガシーとして残置
 
 ---
 

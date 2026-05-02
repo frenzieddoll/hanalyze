@@ -6,7 +6,7 @@ import DataIO.CSV        (loadAuto)
 import qualified DataIO.Preprocess as Pp
 import DataFrame.Core    (DataFrame, Column (..), columnNames, numRows,
                           getColumn, getNumeric, getText)
-import Model.Core        (Band (..), rSquared1, coeffList, fittedList)
+import Model.Core        (Band (..), FitResult, rSquared1, coeffList, fittedList, residualsV)
 import Model.GLM         (Family (..), parseFamily, LinkFn (..), parseLink, canonicalLink,
                           fitGLMWithSmooth, fitGLMFull)
 import Model.GLMM        (GLMMResult (..), fitLMEDataFrame, fitGLMMDataFrame)
@@ -26,6 +26,8 @@ import qualified Design.Orthogonal as OA
 import qualified Design.Taguchi as TG
 import qualified Viz.Taguchi as VTG
 import qualified Viz.ReportBuilder as RB
+import qualified Viz.ReportInstances as RI
+import qualified Viz.ModelGraph
 import qualified Graphics.Vega.VegaLite as VL
 import Graphics.Vega.VegaLite (VegaLite, VLProperty, VLSpec)
 import qualified Model.Kernel as Kern
@@ -43,6 +45,7 @@ import qualified Data.Map.Strict as Map
 import Viz.MCMC (mcmcDiagnostics, autocorrPlot)
 import Viz.Core (PlotConfig (..))
 import Model.GP           (Kernel (..), GPModel (..), GPParams, GPPredData,
+                           GPResult, gpMean,
                            initParamsFromData, optimizeGP, fitGP, logMarginalLikelihood,
                            gpPredData)
 
@@ -288,6 +291,223 @@ maybeExportReportPlots cfg htmlPath plots =
       let prefix = dropExtension htmlPath
       paths <- writeAnalysisReportPlots prefix fmt plots
       mapM_ (\p -> putStrLn $ "Plot image:          " ++ p) paths
+
+-- ---------------------------------------------------------------------------
+-- CLI report builders (Phase 2: regress --report → ReportBuilder 経路)
+-- ---------------------------------------------------------------------------
+
+-- | NamedPlot を ReportSection に変換 (タイトル付き secVega)。
+namedPlotsToSecs :: [NamedPlot] -> [RB.ReportSection]
+namedPlotsToSecs nps =
+  [ RB.secVega title vega | NamedPlot _ title vega <- nps ]
+
+-- | WAIC/LOO 結果 (オプション) を 1 セクションに整形。
+waicSection :: Maybe (WAICResult, LOOResult) -> [RB.ReportSection]
+waicSection Nothing = []
+waicSection (Just (w, l)) =
+  [ RB.secKeyValue "モデル選択 (WAIC / LOO-CV)"
+      [ ("WAIC",     T.pack (printf "%.2f" (waicValue w)))
+      , ("LOO",      T.pack (printf "%.2f" (looValue l)))
+      , ("p_WAIC",   T.pack (printf "%.2f" (waicPwaic w)))
+      , ("k\x0302 > 0.7", T.pack (show (looKHatBad l) ++ " 件"))
+      ]
+  ]
+
+-- | 残差の (σ_hat, RMSE, max|r|)。p は推定パラメータ数 (intercept 含む)。
+cliResidStats :: [Double] -> Int -> (Double, Double, Double)
+cliResidStats resid p =
+  let n     = length resid
+      sumSq = sum [ r * r | r <- resid ]
+      sH    = sqrt (sumSq / fromIntegral (max 1 (n - p)))
+      rmse  = sqrt (sumSq / fromIntegral (max 1 n))
+      mAbs  = maximum (0 : map abs resid)
+  in (sH, rmse, mAbs)
+
+-- | LM / GLM 用 CLI レポートセクション群。多項式次数と WAIC/LOO に対応。
+cliRegressSections
+  :: Config -> DataFrame -> Family -> LinkFn
+  -> [(T.Text, Int)] -> FitResult -> Maybe SmoothFit
+  -> Maybe (WAICResult, LOOResult)
+  -> [NamedPlot]
+  -> [RB.ReportSection]
+cliRegressSections cfg df dist lnk colDegs res mSmooth mModelSel pvsaPlots =
+  let xCols   = cfgXCols cfg
+      yCol    = case cfgYCols cfg of (y:_) -> y; _ -> "y"
+      beta    = coeffList res
+      coefLbls = map T.pack (multiCoeffLabels colDegs)
+      coeffs  = zip coefLbls beta
+      fitted  = fittedList res
+      resid   = LA.toList (residualsV res)
+      p       = length beta
+      (sigmaH, rmse, maxAbs) = cliResidStats resid p
+      r2      = rSquared1 res
+      r2Lbl   = T.pack (r2Label dist)
+      isLM    = dist == Gaussian
+      isPoly  = any (\(_, d) -> d > 1) colDegs
+      modelType
+        | isLM      = if isPoly then "LM (polynomial)" else "LM"
+        | otherwise = "GLM(" <> T.pack (show dist) <> ")"
+
+      formulaTex
+        | isLM = "$" <> yCol <> "_i = "
+                 <> T.intercalate " + "
+                     ("\\beta_0" :
+                       [ "\\beta_" <> T.pack (show (i :: Int)) <> " " <> trm
+                       | (i, trm) <- zip [1 ..] (polyTerms colDegs) ])
+                 <> " + \\varepsilon_i$<br>"
+                 <> "$\\varepsilon_i \\sim \\text{Normal}(0, \\sigma^2)$"
+        | otherwise =
+            "$g(\\mu_i) = "
+            <> T.intercalate " + "
+                ("\\beta_0" :
+                  [ "\\beta_" <> T.pack (show (i :: Int)) <> " " <> trm
+                  | (i, trm) <- zip [1 ..] (polyTerms colDegs) ])
+            <> "$<br>"
+            <> "$" <> yCol <> "_i \\sim \\text{" <> T.pack (show dist) <> "}(\\mu_i)$"
+
+      smoothC = case mSmooth of
+        Just sf -> RB.SmoothCurve (sfX sf) (sfFit sf) (sfLower sf) (sfUpper sf)
+        Nothing -> RB.SmoothCurve [] [] [] []
+
+      scatterCard = case (xCols, mSmooth) of
+        ([xc], Just _) -> case (getNumeric xc df, getNumeric yCol df) of
+          (Just xv, Just yv) ->
+            [ RB.secCard "散布図 + 回帰線"
+                [ RB.secFitScatter xc yCol (V.toList xv) (V.toList yv)
+                    (Just smoothC) ] ]
+          _ -> []
+        _ -> []
+
+      -- 対話的予測: 多項式拡張の場合は係数数と x 列数が合わないので省略。
+      interactiveSecs = case (isPoly, traverse (`getNumeric` df) xCols, getNumeric yCol df) of
+        (False, Just xVs, Just yV) | not (null xVs) ->
+          let xRows = [ [ xv V.! i | xv <- xVs ]
+                      | i <- [0 .. V.length yV - 1] ]
+              mkSlider xv =
+                let lo = V.minimum xv
+                    hi = V.maximum xv
+                    ext = (hi - lo) * 0.5
+                in (lo - ext, (lo + hi) / 2, hi + ext)
+              im = RB.InteractiveModel
+                     { RB.imXCols     = xCols
+                     , RB.imYCol      = yCol
+                     , RB.imXValues   = xRows
+                     , RB.imYValues   = V.toList yV
+                     , RB.imIntercept = head beta
+                     , RB.imBetas     = drop 1 beta
+                     , RB.imLink      = T.pack (linkLabelLower lnk)
+                     , RB.imSlider    = map mkSlider xVs
+                     , RB.imCISigma   = if isLM then Just sigmaH else Nothing
+                     }
+          in [RB.secInteractiveMulti "対話的予測" im]
+        _ -> []
+
+      statRow =
+        RB.secStatRow
+          [ (r2Lbl,         T.pack (printf "%.4f" r2))
+          , ("方法",        if isLM then "OLS (QR)" else "IRLS")
+          , ("σ_hat",      T.pack (printf "%.4f" sigmaH))
+          , ("RMSE",        T.pack (printf "%.4f" rmse))
+          , ("最大絶対残差", T.pack (printf "%.4f" maxAbs))
+          ]
+
+      resultSec =
+        RB.secCollapsible "<span class=\"sec-icon\">&#128200;</span> 回帰結果" True
+          ([ statRow
+           , RB.secCard "係数"
+               [RB.secCoefficients coeffs (Just (r2Lbl, r2))]
+           ]
+           ++ scatterCard
+           ++ [RB.secCard "残差プロット" [RB.secResiduals fitted resid]])
+
+      modelSec
+        | isLM      = RB.secModelOverview modelType formulaTex Nothing
+        | otherwise = RB.secModelOverviewLink modelType formulaTex
+                        (T.pack (linkLabelLower lnk)) Nothing
+
+      extraPlotSecs = namedPlotsToSecs pvsaPlots
+
+  in [ RB.secDataOverview df xCols yCol
+     , modelSec
+     , resultSec
+     ] ++ interactiveSecs ++ extraPlotSecs ++ waicSection mModelSel
+
+-- | colDegs を polynomial 項の文字列に展開: [(x, 2), (z, 1)] → ["x", "x^2", "z"]
+polyTerms :: [(T.Text, Int)] -> [T.Text]
+polyTerms = concatMap (\(c, d) ->
+  [ if k == 1 then c else c <> "^" <> T.pack (show k) | k <- [1 .. d] ])
+
+-- | リンク関数を JS 側のリンク名に対応させる (identity / log / logit / sqrt)。
+linkLabelLower :: LinkFn -> String
+linkLabelLower Identity = "identity"
+linkLabelLower Log      = "log"
+linkLabelLower Logit    = "logit"
+linkLabelLower Sqrt     = "sqrt"
+
+-- | GLMM (LME) 用 CLI レポートセクション群。
+cliMixedSections
+  :: Config -> DataFrame -> Family -> LinkFn
+  -> [(T.Text, Int)] -> T.Text -> GLMMResult -> Maybe (WAICResult, LOOResult)
+  -> [NamedPlot]
+  -> [RB.ReportSection]
+cliMixedSections cfg df dist lnk colDegs grpCol gr mModelSel extraPlots =
+  let xCols    = cfgXCols cfg
+      yCol     = case cfgYCols cfg of (y:_) -> y; _ -> "y"
+      base     = RB.toReport (RB.defaultReportConfig "") df xCols yCol
+                   (RI.GLMMReport gr dist lnk grpCol)
+      colDegInfo =
+        [ RB.secKeyValue "Polynomial degrees"
+            [ (c, T.pack (show d)) | (c, d) <- colDegs, d > 1 ]
+        | any (\(_, d) -> d > 1) colDegs
+        ]
+  in base ++ colDegInfo ++ namedPlotsToSecs extraPlots ++ waicSection mModelSel
+
+-- | GP 用 CLI レポートセクション群。マルチカーネル比較対応。
+-- 呼び出し側で予測グリッド X (`gridX`) を渡す。
+cliGPSections
+  :: T.Text -> T.Text -> DataFrame -> [Double] -> [Double]
+  -> [Double]              -- ^ 予測グリッド X
+  -> [GPKernelFit]
+  -> [RB.ReportSection]
+cliGPSections xCol yCol df xs ys gridX kfits =
+  let bestK = case kfits of (k:_) -> Just k; _ -> Nothing
+      mainSec = case bestK of
+        Just kf ->
+          RB.toReport (RB.defaultReportConfig "") df [xCol] yCol
+            (RI.GPReport (gkKernel kf) (gkParams kf) (gkResult kf)
+                          gridX xs ys (gkLML kf))
+        Nothing -> []
+      cmpRows = [ [ gkLabel kf
+                  , T.pack (printf "%.2f" (gkLML kf)) ]
+                | kf <- kfits ]
+      cmpSec = case kfits of
+        []  -> []
+        [_] -> []
+        _   -> [RB.secComparisonTable
+                  "カーネル比較 (LML 降順)"
+                  ["カーネル", "log p(y|X,θ)"] cmpRows (Just 0)]
+  in mainSec ++ cmpSec
+
+-- | HBM 用 CLI レポートセクション群。
+cliHBMSections
+  :: T.Text -> T.Text -> DataFrame -> [Double] -> [Double]
+  -> MCMCcore.Chain -> Maybe T.Text -> Maybe (WAICResult, LOOResult)
+  -> [NamedPlot]
+  -> [RB.ReportSection]
+cliHBMSections xCol yCol df xs ys chain mGraph mModelSel extraPlots =
+  let rep = RI.HBMLinearReport
+              { RI.hbmrChain     = chain
+              , RI.hbmrXs        = xs
+              , RI.hbmrYs        = ys
+              , RI.hbmrAlphaName = "alpha"
+              , RI.hbmrBetaName  = "beta"
+              , RI.hbmrSigmaName = "sigma"
+              , RI.hbmrGraph     = mGraph
+              }
+      base = RB.toReport (RB.defaultReportConfig "") df [xCol] yCol rep
+      _    = xCol  -- silence warning
+      _    = yCol
+  in base ++ namedPlotsToSecs extraPlots ++ waicSection mModelSel
 
 -- ---------------------------------------------------------------------------
 -- Main
@@ -656,12 +876,8 @@ runMixedModel cfg df fmt xCol1 yCol grpCol = do
                    _ -> return Nothing
             else return Nothing
 
-          let baseSummary = mkGLMMSummary dist lnk colDegs grpCol Nothing gr
-              summary     = baseSummary { gsModelSelect = mModelSel }
-              rptCfg  = AnalysisReportConfig
-                          { arcTitle = T.pack modelKind
-                                     <> ": " <> yCol <> " | " <> grpCol }
-              -- Vega-Lite specs
+          let rbCfg = RB.defaultReportConfig
+                        (T.pack modelKind <> ": " <> yCol <> " | " <> grpCol)
               scatterPlots =
                 case (length (cfgXCols cfg), getNumeric xCol1 df, getNumeric yCol df, getText grpCol df) of
                   (1, Just xVec, Just yVec, Just gVec) ->
@@ -679,7 +895,8 @@ runMixedModel cfg df fmt xCol1 yCol grpCol = do
                          (predictedVsActual pvCfg (V.toList yVec) (fittedList (glmmFixed gr)))]
                   Nothing -> []
               plots = scatterPlots ++ pvsaPlots
-          writeAnalysisReport path rptCfg df (cfgXCols cfg) yCol (MixFit summary) plots
+              sections = cliMixedSections cfg df dist lnk colDegs grpCol gr mModelSel plots
+          RB.renderReport path rbCfg sections
           putStrLn $ "Report:              " ++ path
           maybeExportReportPlots cfg path plots
           openInBrowser path
@@ -738,20 +955,10 @@ runRegression cfg df fmt xCol1 yCol = do
       case cfgReport cfg of
         Nothing   -> return ()
         Just path -> do
-          let -- SmoothFit → SmoothData 変換 (単回帰のみ)
-              mSmoothData = case (mSmooth, cfgXCols cfg) of
-                (Just sf, [xc]) -> Just (xc, SmoothData
-                  { sdXs      = sfX sf
-                  , sdYs      = sfFit sf
-                  , sdLower   = sfLower sf
-                  , sdUpper   = sfUpper sf
-                  , sdHasBand = sfHasBand sf })
-                _               -> Nothing
-              baseSummary = mkFitSummary dist lnk colDegs mSmoothData res
-              rptCfg  = AnalysisReportConfig
-                          { arcTitle = T.pack (modelLabel dist lnk)
-                                     <> ": " <> yCol <> " ~ "
-                                     <> T.pack (modelFormula colDegs) }
+          let rbCfg = RB.defaultReportConfig
+                        (T.pack (modelLabel dist lnk)
+                          <> ": " <> yCol <> " ~ "
+                          <> T.pack (modelFormula colDegs))
               pvsaPlots = case getNumeric yCol df of
                 Just yVec ->
                   let pvCfg = defaultConfig ("Predicted vs Actual" <> titleSuffix)
@@ -787,8 +994,9 @@ runRegression cfg df fmt xCol1 yCol = do
                            (waicValue w) (looValue l) (waicPwaic w) (looKHatBad l)
                     return (Just (w, l))
 
-          let summary = baseSummary { fsModelSelect = mModelSelect }
-          writeAnalysisReport path rptCfg df (cfgXCols cfg) yCol (RegFit summary) pvsaPlots
+          let sections = cliRegressSections cfg df dist lnk colDegs res mSmooth
+                            mModelSelect pvsaPlots
+          RB.renderReport path rbCfg sections
           putStrLn $ "Report:              " ++ path
           maybeExportReportPlots cfg path pvsaPlots
           openInBrowser path
@@ -879,18 +1087,12 @@ runGP cfg df xCol1 = do
           insertByLML x [] = [x]
           insertByLML x (y:ys') = if gkLML x >= gkLML y then x:y:ys'
                                   else y : insertByLML x ys'
-          gfSummary = GPFitSummary
-            { gfKernelFits = sorted
-            , gfXCol       = xCol1
-            , gfYCol       = yCol
-            , gfTrainXs    = xs
-            , gfTrainYs    = ys
-            }
           path   = maybe "report.html" id (cfgReport cfg)
-          rptCfg = AnalysisReportConfig
-            { arcTitle = "GP Regression: " <> xCol1 <> " \x2192 " <> yCol }
+          rbCfg  = RB.defaultReportConfig
+                     ("GP Regression: " <> xCol1 <> " \x2192 " <> yCol)
+          sections = cliGPSections xCol1 yCol df xs ys testXs sorted
 
-      writeAnalysisReport path rptCfg df [xCol1] yCol (GPFit gfSummary) []
+      RB.renderReport path rbCfg sections
       putStrLn $ "Report: " ++ path
       maybeExportReportPlots cfg path []
       openInBrowser path
@@ -981,47 +1183,13 @@ runHBMRegression xs ys xCol yCol df cfg = do
             return (Just (w, l))
           else return Nothing
 
-      let fs = FitSummary
-                 { fsModelType    = "Bayesian Linear Regression (HBM, NUTS)"
-                 , fsFormula      = "y ~ α + β · " <> xCol
-                 , fsCoeffs       = [("α (Intercept)", aMean), ("β (" <> xCol <> ")", bMean)]
-                 , fsR2           = r2
-                 , fsR2Label      = "R²"
-                 , fsFitted       = fitted
-                 , fsResiduals    = resid
-                 , fsLinkName     = "Normal (identity link)"
-                 , fsXColDegs     = [(xCol, 1)]
-                 , fsSmoothData   = Just (xCol, smooth)
-                 , fsModelSelect  = mWaicLoo
-                 }
-          hs = HBMRegSummary
-                 { hbmsFit           = fs
-                 , hbmsModelGraph    = HBMod.buildModelGraph hbmModel
-                 , hbmsChain         = chain
-                 , hbmsParams        = ["alpha", "beta", "sigma"]
-                 , hbmsPosteriorRows =
-                     [ ("alpha", aMean, aSD
-                       , maybe 0 id (MCMCcore.posteriorQuantile 0.025 "alpha" chain)
-                       , maybe 0 id (MCMCcore.posteriorQuantile 0.975 "alpha" chain))
-                     , ("beta",  bMean, bSD
-                       , maybe 0 id (MCMCcore.posteriorQuantile 0.025 "beta"  chain)
-                       , maybe 0 id (MCMCcore.posteriorQuantile 0.975 "beta"  chain))
-                     , ("sigma", sMean, sSD
-                       , maybe 0 id (MCMCcore.posteriorQuantile 0.025 "sigma" chain)
-                       , maybe 0 id (MCMCcore.posteriorQuantile 0.975 "sigma" chain))
-                     ]
-                 }
-          diagCfg = PlotConfig "MCMC 診断 (KDE + トレース)" 760 320
-          acfCfg  = PlotConfig "自己相関 (lag 0..40)" 760 220
-          diagPlot = NamedPlot "vl-hbm-diag" "MCMC 診断"
-                       (mcmcDiagnostics diagCfg ["alpha","beta","sigma"] chain)
-          acfPlot  = NamedPlot "vl-hbm-acf"  "自己相関"
-                       (autocorrPlot acfCfg 40 ["alpha","beta","sigma"] chain)
-          rptCfg = AnalysisReportConfig
-                     { arcTitle = "HBM Linear Regression: " <> yCol <> " ~ " <> xCol }
-      writeAnalysisReport path rptCfg df [xCol] yCol (HBMFit hs) [diagPlot, acfPlot]
+      let mGraph = Just (Viz.ModelGraph.buildMermaid (HBMod.buildModelGraph hbmModel))
+          rbCfg  = RB.defaultReportConfig
+                     ("HBM Linear Regression: " <> yCol <> " ~ " <> xCol)
+          sections = cliHBMSections xCol yCol df xs ys chain mGraph mWaicLoo []
+      RB.renderReport path rbCfg sections
       putStrLn $ "Report:              " ++ path
-      maybeExportReportPlots cfg path [diagPlot, acfPlot]
+      maybeExportReportPlots cfg path []
       openInBrowser path
   where
     -- 信用区間付き予測曲線: 各事後サンプルから μ* = α + β·x* を計算 → 分位点
