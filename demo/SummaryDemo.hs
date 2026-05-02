@@ -12,7 +12,7 @@ import System.Random.MWC (createSystemRandom)
 import MCMC.NUTS (nuts, nutsChains, defaultNUTSConfig, NUTSConfig (..))
 import Model.HBM (ModelP, sample, observe, Distribution (..))
 import Viz.MCMC (printPosteriorSummary, posteriorSummaryFile,
-                 tracePlotHDIFile)
+                 tracePlotHDIFile, rankPlotFile)
 import Viz.Core (defaultConfig, OutputFormat (..), PlotConfig (..))
 
 cfg :: NUTSConfig
@@ -66,6 +66,12 @@ main = do
                    { plotWidth = 700, plotHeight = 90 }
   tracePlotHDIFile HTML "trace-hdi.html" traceCfg 0.94 ["mu", "sigma"] ch
   putStrLn "  → trace-hdi.html (HDI 帯付きトレース)"
+
+  -- ── Rank plot (多チェーン収束診断) ──
+  let rankCfg = (defaultConfig "Rank plot — chain uniformity")
+                  { plotWidth = 700, plotHeight = 100 }
+  rankPlotFile HTML "rank.html" rankCfg 20 ["mu", "sigma"] chs
+  putStrLn "  → rank.html (Rank plot, 4 chains)"
   putStrLn ""
 
   putStrLn "═══════════════════════════════════════════════════════════════"

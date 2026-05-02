@@ -18,6 +18,8 @@ module Viz.MCMC
   , forestPlot, forestPlotFile
     -- * Energy plot (NUTS の BFMI 診断)
   , energyPlot, energyPlotFile
+    -- * Rank plot (多チェーン収束診断)
+  , rankPlot, rankPlotFile
     -- * Posterior summary table (`az.summary` 相当)
   , SummaryRow (..)
   , posteriorSummary
@@ -32,6 +34,7 @@ import Graphics.Vega.VegaLite
 
 import MCMC.Core  (Chain (..), chainVals)
 import Stat.MCMC  (autocorr, hdi, kde, bfmi, ess, rhat)
+import Data.List   (sortBy)
 import Data.Maybe (fromMaybe)
 import Text.Printf (printf)
 import qualified Data.Text.IO as TIO
@@ -651,3 +654,83 @@ printPosteriorSummary params chains = do
   hdr
   putStrLn (replicate (if multi then 79 else 72) '-')
   mapM_ pr rows
+
+-- ---------------------------------------------------------------------------
+-- Rank plot (多チェーン収束診断)
+-- ---------------------------------------------------------------------------
+
+-- | Rank plot (PyMC `plot_rank` 相当)。Vehtari 2021 で提案された
+-- 多チェーンの収束診断: 全チェーンを混ぜた順位を各チェーン内で
+-- ヒストグラムにすると、収束時はチェーンごとに一様分布に近づく。
+--
+-- 引数 nBins は順位ヒストグラムのビン数 (典型値: 20)。
+rankPlot :: PlotConfig -> Int -> [Text] -> [Chain] -> VegaLite
+rankPlot cfg nBins names chains = toVegaLite
+  [ title (plotTitle cfg) []
+  , vConcat (map panel names)
+  ]
+  where
+    nChains = length chains
+    panel pname =
+      let perChain  = map (chainVals pname) chains
+          flat      = [ (cid, v)
+                      | (cid, vs) <- zip [(1 :: Int) ..] perChain
+                      , v <- vs ]
+          n         = length flat
+          -- 順位 (1..n) を value 昇順に割り当てる
+          indexed   = zip [(0 :: Int) ..] flat
+          sorted    = sortBy (\(_, (_, a)) (_, (_, b)) -> compare a b) indexed
+          ranked    = zipWith (\rk (origIdx, _) -> (origIdx, rk))
+                              [(1 :: Int) ..] sorted
+          rankBy    = sortBy (\(a,_) (b,_) -> compare a b) ranked
+          ranks     = map snd rankBy   -- 元 (chain, value) 順序の rank 列
+          chainSeq  = map fst flat
+          binSize   = max 1 (n `div` nBins)
+          binOf r   = min (nBins - 1) ((r - 1) `div` binSize)
+          counts    = [ ((cid, b), 1 :: Int)
+                      | (cid, r) <- zip chainSeq ranks
+                      , let b = binOf r ]
+          -- (chain, bin) ごとに集計
+          tally     = groupAndCount counts
+          xs        = [ fromIntegral b :: Double
+                      | (_, b) <- map fst tally ]
+          ys        = [ fromIntegral c :: Double
+                      | (_, c) <- tally ]
+          chainIds  = [ T.pack (show cid)
+                      | ((cid, _), _) <- tally ]
+      in asSpec
+          [ dataFromColumns []
+              . dataColumn "bin"   (Numbers xs)
+              . dataColumn "count" (Numbers ys)
+              . dataColumn "chain" (Strings chainIds)
+              $ []
+          , mark Bar [MOpacity 0.7]
+          , encoding
+              . position X [ PName "bin",   PmType Ordinal
+                           , PAxis [AxTitle "Rank bin"] ]
+              . position Y [ PName "count", PmType Quantitative
+                           , PAxis [AxTitle pname] ]
+              . color [ MName "chain", MmType Nominal
+                      , MScale [SScheme "tableau10" []]
+                      , MLegend [LTitle "Chain"] ]
+              . column [ FName "chain", FmType Nominal,
+                         FHeader [HTitle ("chain (" <> pname <> ")")] ]
+              $ []
+          , width (max 60 (plotWidth cfg / fromIntegral nChains))
+          , height 100
+          ]
+
+    groupAndCount :: [((Int, Int), Int)] -> [((Int, Int), Int)]
+    groupAndCount xs =
+      let mp = foldr (\(k, v) acc -> insertWith (+) k v acc) [] xs
+      in mp
+      where
+        insertWith f k v ((k', v'):rest)
+          | k == k'   = (k', f v v') : rest
+          | otherwise = (k', v')     : insertWith f k v rest
+        insertWith _ k v [] = [(k, v)]
+
+rankPlotFile :: OutputFormat -> FilePath -> PlotConfig
+             -> Int -> [Text] -> [Chain] -> IO ()
+rankPlotFile fmt path cfg nBins names chains =
+  writeSpec fmt path (rankPlot cfg nBins names chains)
