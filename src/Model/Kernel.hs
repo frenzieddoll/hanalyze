@@ -15,6 +15,10 @@ module Model.Kernel
   , kernelRidge
   , predictKernelRidge
   , gridSearchBandwidth
+    -- * 多出力
+  , KernelRidgeFitMulti (..)
+  , kernelRidgeMulti
+  , predictKernelRidgeMulti
   ) where
 
 import qualified Data.Vector as V
@@ -146,3 +150,40 @@ gridSearchBandwidth kern xs ys hs =
       best = head [ pair | pair <- results
                          , snd pair == minimum (map snd results) ]
   in best
+
+-- ---------------------------------------------------------------------------
+-- 多出力 Kernel Ridge (Phase T2)
+-- ---------------------------------------------------------------------------
+
+-- | 多出力 Kernel Ridge: Y は n × q。各列を独立に解くが、Gram 行列 K は共有。
+data KernelRidgeFitMulti = KernelRidgeFitMulti
+  { krmKernel :: Kernel
+  , krmH      :: Double
+  , krmLambda :: Double
+  , krmXs     :: V.Vector Double
+  , krmAlpha  :: LA.Matrix Double   -- α (n × q)
+  } deriving (Show)
+
+-- | (K + λI)⁻¹ Y を 1 回計算で全列処理 (高速)。
+kernelRidgeMulti :: Kernel -> Double -> Double
+                 -> V.Vector Double -> LA.Matrix Double
+                 -> KernelRidgeFitMulti
+kernelRidgeMulti kern h lam xs ys =
+  let n     = V.length xs
+      kMat  = gramMatrix kern h xs
+      regK  = kMat + LA.scale lam (LA.ident n)
+      alpha = regK LA.<\> ys              -- n × q
+  in KernelRidgeFitMulti kern h lam xs alpha
+
+predictKernelRidgeMulti :: KernelRidgeFitMulti -> V.Vector Double
+                        -> LA.Matrix Double
+predictKernelRidgeMulti fit xNew =
+  let xs    = krmXs fit
+      h     = krmH fit
+      kern  = krmKernel fit
+      alpha = krmAlpha fit
+      kMat  = LA.fromLists
+                [ [ kernelEval kern ((xStar - xi) / h)
+                  | xi <- V.toList xs ]
+                | xStar <- V.toList xNew ]
+  in kMat LA.<> alpha

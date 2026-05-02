@@ -20,6 +20,10 @@ module Model.Regularized
   , predictRegularized
   , standardize
   , unstandardizeBeta
+    -- * 多出力 (Phase T2)
+  , RegFitMulti (..)
+  , fitRegularizedMulti
+  , predictRegularizedMulti
   ) where
 
 import qualified Data.Vector as V
@@ -236,3 +240,33 @@ unstandardizeBeta sds betaStd =
   in LA.fromList
        [ (betaStd `LA.atIndex` j) / (sds V.! j)
        | j <- [0 .. p - 1] ]
+
+-- ---------------------------------------------------------------------------
+-- 多出力対応 (Phase T2)
+-- ---------------------------------------------------------------------------
+
+-- | 多出力正則化回帰のフィット結果。各列ごとに RegFit を持つ。
+data RegFitMulti = RegFitMulti
+  { rfmFits     :: [RegFit]            -- 列ごとの単出力 fit
+  , rfmBeta     :: LA.Matrix Double    -- p × q
+  , rfmYHat     :: LA.Matrix Double    -- n × q
+  , rfmResid    :: LA.Matrix Double    -- n × q
+  , rfmR2       :: [Double]            -- 列ごとの R²
+  , rfmPenalty  :: Penalty
+  } deriving (Show)
+
+-- | 多出力正則化回帰: Y は n × q、各列を独立に fitRegularized で解く。
+fitRegularizedMulti :: Penalty -> LA.Matrix Double -> LA.Matrix Double
+                    -> RegFitMulti
+fitRegularizedMulti pen x y =
+  let q        = LA.cols y
+      colFit j = fitRegularized pen x (LA.flatten (y LA.¿ [j]))
+      fits     = [colFit j | j <- [0 .. q - 1]]
+      betaMat  = LA.fromColumns [rfBeta f | f <- fits]
+      yHatMat  = LA.fromColumns [rfYHat f | f <- fits]
+      residMat = LA.fromColumns [rfResid f | f <- fits]
+      r2List   = [rfR2 f | f <- fits]
+  in RegFitMulti fits betaMat yHatMat residMat r2List pen
+
+predictRegularizedMulti :: RegFitMulti -> LA.Matrix Double -> LA.Matrix Double
+predictRegularizedMulti mf xNew = xNew LA.<> rfmBeta mf

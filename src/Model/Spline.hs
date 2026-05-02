@@ -12,10 +12,13 @@
 module Model.Spline
   ( SplineKind (..)
   , SplineFit (..)
+  , SplineFitMulti (..)
   , bsplineBasis
   , naturalSplineBasis
   , fitSpline
+  , fitSplineMulti
   , predictSpline
+  , predictSplineMulti
   , equalSpacedKnots
   , quantileKnots
   ) where
@@ -24,7 +27,7 @@ import qualified Data.Vector as V
 import qualified Numeric.LinearAlgebra as LA
 import Data.List (sort)
 import Model.Core (FitResult (..), coefficientsV)
-import Model.LM (fitLMVec)
+import Model.LM (fitLM, fitLMVec)
 
 -- | スプラインの種類。
 data SplineKind
@@ -151,6 +154,35 @@ predictSpline fit xsNew =
         NaturalCubic  -> naturalSplineBasis (sfKnots fit) xsNew
       yPred = dm LA.#> sfBeta fit
   in V.fromList (LA.toList yPred)
+
+-- | 多出力スプライン回帰: 同じ x グリッドで q 出力を同時 fit。
+-- 内部は基底行列 + Multi LM。
+data SplineFitMulti = SplineFitMulti
+  { smfKind    :: SplineKind
+  , smfKnots   :: [Double]
+  , smfBeta    :: LA.Matrix Double  -- (basis_dim × q)
+  , smfResult  :: FitResult
+  } deriving (Show)
+
+-- | Y は n × q (Matrix)。各列を独立に fit するが基底は共有。
+fitSplineMulti :: SplineKind
+               -> [Double]            -- ノット
+               -> V.Vector Double     -- xs (n)
+               -> LA.Matrix Double    -- Y (n × q)
+               -> SplineFitMulti
+fitSplineMulti kind knots xs ys =
+  let dm = case kind of
+        BSpline k     -> bsplineBasis k knots xs
+        NaturalCubic  -> naturalSplineBasis knots xs
+      r  = fitLM dm ys
+  in SplineFitMulti kind knots (coefficients r) r
+
+predictSplineMulti :: SplineFitMulti -> V.Vector Double -> LA.Matrix Double
+predictSplineMulti fit xsNew =
+  let dm = case smfKind fit of
+        BSpline k     -> bsplineBasis k (smfKnots fit) xsNew
+        NaturalCubic  -> naturalSplineBasis (smfKnots fit) xsNew
+  in dm LA.<> smfBeta fit
 
 -- ---------------------------------------------------------------------------
 -- Knot helpers
