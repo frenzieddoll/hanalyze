@@ -3,7 +3,8 @@
 module Main where
 
 import DataIO.CSV        (loadAuto)
-import DataFrame.Core    (DataFrame, columnNames, numRows, getNumeric, getText)
+import DataFrame.Core    (DataFrame, Column (..), columnNames, numRows,
+                          getColumn, getNumeric, getText)
 import Model.Core        (Band (..), rSquared1, coeffList, fittedList)
 import Model.GLM         (Family (..), parseFamily, LinkFn (..), parseLink, canonicalLink,
                           fitGLMWithSmooth, fitGLMFull)
@@ -35,7 +36,8 @@ import Stat.ModelSelect  (lmPosteriorLogLiks, glmPosteriorLogLiks,
                           WAICResult (..), LOOResult (..))
 
 import Data.Char          (isDigit)
-import Data.List          (intercalate)
+import Data.List          (intercalate, sort)
+import qualified Data.Set as Set
 import System.FilePath    (dropExtension)
 import qualified Data.Text    as T
 import qualified Data.Text.IO as TIO
@@ -275,12 +277,220 @@ maybeExportReportPlots cfg htmlPath plots =
 -- Main
 -- ---------------------------------------------------------------------------
 
+-- ---------------------------------------------------------------------------
+-- Subcommand dispatcher (Phase C: hybrid CLI)
+--
+-- Top-level usage:
+--   hanalyze <subcommand> [args...]
+--   hanalyze <file> <xcols> <ycols> [LM|GLM|...] [opts]   (legacy = regress)
+--
+-- Implemented:  regress, info, hist, help
+-- Stubs:        ridge, kernel, spline, doe, taguchi
+-- ---------------------------------------------------------------------------
+
+helpMsg :: String
+helpMsg = unlines
+  [ "hanalyze \x2014 general-purpose statistical analysis & visualization toolkit"
+  , ""
+  , "Usage: hanalyze <subcommand> [args...]"
+  , "       hanalyze <file> <xcols> <ycols> [LM|GLM|NoReg|GP|HBM] [opts]   (legacy = regress)"
+  , ""
+  , "Subcommands:"
+  , "  regress   Classical/Bayesian regression (LM/GLM/GLMM/GP/HBM)         [implemented]"
+  , "  info      Print per-column type and basic statistics                 [implemented]"
+  , "  hist      Plot a histogram (optionally with theoretical density)     [implemented]"
+  , "  ridge     Regularized regression (Ridge/Lasso/Elastic Net)           [planned: Phase A]"
+  , "  kernel    Kernel regression / RFF approximation                      [planned: Phase A]"
+  , "  spline    B-spline / natural cubic regression                        [planned]"
+  , "  doe       Generate experimental designs (factorial, OA L_n, RSM, D-optimal)"
+  , "                                                                        [planned: Phase E1]"
+  , "  taguchi   Taguchi method (OA + SN ratio + inner/outer arrays)        [planned: Phase E2]"
+  , ""
+  , "  help      Show this message"
+  , "  --help, -h, help   Same as 'help'"
+  , ""
+  , "Run 'hanalyze regress' (or invoke without a subcommand) to see regression-specific options."
+  ]
+
+futureSubcommands :: [(String, String)]
+futureSubcommands =
+  [ ("ridge",   "Phase A (RFF/regularized) implementation pending")
+  , ("kernel",  "Phase A (RFF/kernel) implementation pending")
+  , ("spline",  "Spline subcommand implementation pending")
+  , ("doe",     "Phase E1 (orthogonal arrays / DOE) implementation pending")
+  , ("taguchi", "Phase E2 (Taguchi method) implementation pending")
+  ]
+
+isFutureSubcommand :: String -> Bool
+isFutureSubcommand c = c `elem` map fst futureSubcommands
+
+stubMessage :: String -> String
+stubMessage c = case lookup c futureSubcommands of
+  Just msg -> msg
+  Nothing  -> "subcommand '" ++ c ++ "' is not yet implemented"
+
 main :: IO ()
-main = do
-  args <- getArgs
-  case parseArgs args of
-    Left err  -> hPutStrLn stderr err
-    Right cfg -> runConfig cfg
+main = getArgs >>= dispatch
+
+dispatch :: [String] -> IO ()
+dispatch []                           = putStrLn helpMsg
+dispatch ("--help":_)                 = putStrLn helpMsg
+dispatch ("-h":_)                     = putStrLn helpMsg
+dispatch ("help":_)                   = putStrLn helpMsg
+dispatch ("info":rest)                = runInfoCmd rest
+dispatch ("hist":rest)                = runHistCmd rest
+dispatch ("regress":rest)             = runRegressCmd rest
+dispatch (cmd:_) | isFutureSubcommand cmd = do
+  hPutStrLn stderr $ "hanalyze: " ++ stubMessage cmd
+  hPutStrLn stderr "  Run 'hanalyze help' to see implemented subcommands."
+dispatch args                         = runRegressCmd args  -- legacy / bare
+
+runRegressCmd :: [String] -> IO ()
+runRegressCmd args = case parseArgs args of
+  Left err  -> hPutStrLn stderr err
+  Right cfg -> runConfig cfg
+
+-- ---------------------------------------------------------------------------
+-- info subcommand
+-- ---------------------------------------------------------------------------
+
+runInfoCmd :: [String] -> IO ()
+runInfoCmd []        = hPutStrLn stderr "Usage: hanalyze info <file>"
+runInfoCmd (file:_)  = do
+  result <- loadAuto file
+  case result of
+    Left err -> hPutStrLn stderr ("Parse error: " ++ err)
+    Right df -> printDataFrameInfo file df
+
+printDataFrameInfo :: FilePath -> DataFrame -> IO ()
+printDataFrameInfo file df = do
+  let n    = numRows df
+      cols = columnNames df
+  putStrLn $ "File:    " ++ file
+  putStrLn $ "Rows:    " ++ show n
+  putStrLn $ "Columns: " ++ show (length cols)
+  putStrLn ""
+  printf "  %-20s %-7s %5s %10s %10s %10s %10s %10s\n"
+         ("name" :: String) ("type" :: String) ("n" :: String)
+         ("min" :: String) ("max" :: String) ("mean" :: String)
+         ("median" :: String) ("sd" :: String)
+  putStrLn (replicate 92 '-')
+  mapM_ (printColInfo df) cols
+
+printColInfo :: DataFrame -> T.Text -> IO ()
+printColInfo df name = case getColumn name df of
+  Just (NumericCol v) -> do
+    let xs   = V.toList v
+        m    = length xs
+        mn   = minimum xs
+        mx   = maximum xs
+        mean = sum xs / fromIntegral m
+        ss   = sort xs
+        med  = if m == 0 then 0 else ss !! (m `div` 2)
+        var  = if m <= 1 then 0
+               else sum [ (x - mean)^(2 :: Int) | x <- xs ]
+                  / fromIntegral (m - 1)
+        sd_  = sqrt var
+    printf "  %-20s %-7s %5d %10.4f %10.4f %10.4f %10.4f %10.4f\n"
+           (T.unpack name) ("numeric" :: String) m mn mx mean med sd_
+  Just (TextCol v) -> do
+    let xs   = V.toList v
+        m    = length xs
+        uniq = Set.size (Set.fromList xs)
+        topN = take 3 (countTop xs)
+        topStr = intercalate ", "
+                   [ T.unpack k ++ "(" ++ show c ++ ")" | (k, c) <- topN ]
+    printf "  %-20s %-7s %5d  unique=%-3d top: %s\n"
+           (T.unpack name) ("text" :: String) m uniq topStr
+  Nothing -> return ()
+
+-- | Count occurrences and return descending list.
+countTop :: Ord a => [a] -> [(a, Int)]
+countTop xs =
+  let counts = foldr (\x -> insertWithInc x) [] xs
+      insertWithInc x []                 = [(x, 1)]
+      insertWithInc x ((y, c) : rest)
+        | x == y    = (y, c + 1) : rest
+        | otherwise = (y, c) : insertWithInc x rest
+      sorted = qSortBy (\(_, a) (_, b) -> compare b a) counts
+  in sorted
+  where
+    qSortBy _ []     = []
+    qSortBy f (p:rs) = qSortBy f [x | x <- rs, f x p == LT || f x p == EQ]
+                    ++ [p]
+                    ++ qSortBy f [x | x <- rs, f x p == GT]
+
+-- ---------------------------------------------------------------------------
+-- hist subcommand
+-- ---------------------------------------------------------------------------
+
+runHistCmd :: [String] -> IO ()
+runHistCmd args = case parseHistArgs args of
+  Left err  -> hPutStrLn stderr err
+  Right ho  -> runHistOpts ho
+
+data HistOpts = HistOpts
+  { hoFile   :: FilePath
+  , hoCol    :: T.Text
+  , hoFit    :: Maybe Distribution
+  , hoFormat :: OutputFormat
+  , hoOut    :: FilePath
+  } deriving (Show)
+
+parseHistArgs :: [String] -> Either String HistOpts
+parseHistArgs (file : col : rest) = goHistOpts rest
+  HistOpts { hoFile = file, hoCol = T.pack col
+           , hoFit = Nothing, hoFormat = HTML, hoOut = "histogram.html" }
+parseHistArgs _ = Left $ unlines
+  [ "Usage: hanalyze hist <file> <col> [options]"
+  , ""
+  , "Options:"
+  , "  --fit DIST [PARAMS...]   overlay theoretical density"
+  , "                           (e.g. --fit normal 0 1, --fit poisson 3)"
+  , "  --format html|png|svg    output format (default: html)"
+  , "  --out FILE               output file path (default: histogram.html)"
+  ]
+
+goHistOpts :: [String] -> HistOpts -> Either String HistOpts
+goHistOpts []                ho = Right ho
+goHistOpts ("--fit" : rest)  ho = case rest of
+  (name : rest') ->
+    let (paramStrs, rest'') = span isNumericToken rest'
+        params = map read paramStrs :: [Double]
+    in case parseDistribution name params of
+         Left err -> Left ("--fit: " ++ err)
+         Right d  -> goHistOpts rest'' (ho { hoFit = Just d })
+  [] -> Left "--fit requires a distribution name (e.g. --fit normal 0 1)"
+goHistOpts ("--format" : v : rest) ho =
+  case parseFormat v of
+    Left err -> Left err
+    Right f  -> goHistOpts rest (ho { hoFormat = f })
+goHistOpts ("-f"       : v : rest) ho = goHistOpts ("--format" : v : rest) ho
+goHistOpts ("--out"    : v : rest) ho = goHistOpts rest (ho { hoOut = v })
+goHistOpts (flag       : _)        _  =
+  Left ("hist: unexpected argument '" ++ flag ++ "' (try 'hanalyze hist' for usage)")
+
+runHistOpts :: HistOpts -> IO ()
+runHistOpts ho = do
+  result <- loadAuto (hoFile ho)
+  case result of
+    Left err -> hPutStrLn stderr ("Parse error: " ++ err)
+    Right df -> case getNumeric (hoCol ho) df of
+      Nothing -> hPutStrLn stderr $
+        "Error: column '" ++ T.unpack (hoCol ho) ++ "' not found or not numeric"
+      Just xVec -> do
+        let vals    = V.toList xVec
+            histCfg = defaultConfig ("Histogram: " <> hoCol ho)
+            outPath = hoOut ho
+            fmt     = hoFormat ho
+        case hoFit ho of
+          Nothing -> do
+            histogramPlotFile fmt outPath histCfg (hoCol ho) vals Nothing
+            putStrLn $ "Histogram:           " ++ outPath
+          Just dist -> do
+            histogramWithDensityFile fmt outPath histCfg (hoCol ho) vals Nothing dist
+            putStrLn $ "Histogram + density: " ++ outPath
+        openInBrowser outPath
 
 runConfig :: Config -> IO ()
 runConfig cfg = do
