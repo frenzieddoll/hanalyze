@@ -115,6 +115,7 @@ A free-monad DSL from which **four interpretations** (structural inspection / lo
 | [GLMM (mixed-effects models)](docs/regression/03-glmm.md) | LME/GLMM, mixture distributions, derivation of the negative binomial |
 | [Splines / kernels / regularization](docs/regression/04-spline-kernel-regularized.md) | B-spline / Natural cubic / Kernel Ridge / Ridge / Lasso / ElasticNet |
 | [Multi-output models](docs/regression/05-multivariate.md) | MultiLM / RRR / PLS / CCA / MultiGP |
+| [Quantile / GAM / Random Forest](docs/regression/06-quantile-gam-rf.md) | Quantile regression, additive models, ensemble trees (★ new methods) |
 | [Theory — regression extensions](docs/regression/theory-regression-extensions.md) | Spline bases, kernel methods, L1/L2 regularization, bias-variance |
 | [Theory — multivariate regression](docs/regression/theory-multivariate.md) | Mathematical background of OLS / RRR / PLS / CCA / Multi-GP |
 
@@ -124,6 +125,7 @@ A free-monad DSL from which **four interpretations** (structural inspection / lo
 |---|---|
 | [Design of Experiments (DOE)](docs/doe-optim/01-doe.md) | Full/fractional factorial / Latin square / RCBD / RSM / D-optimal / ANOVA / power analysis |
 | [Multi-objective optimization](docs/doe-optim/02-multi-objective.md) | NSGA-II / Pareto / Bayesian MOO |
+| [Orthogonal arrays and Taguchi method](docs/doe-optim/03-orthogonal-taguchi.md) | Lₙ tables, four SN ratios, inner/outer arrays, robust design (★ unified guide) |
 | [Theory — Design of Experiments](docs/doe-optim/theory-doe.md) | Orthogonality, efficiency criteria, RSM, power, sample size |
 | [Theory — Pareto efficiency and MOO](docs/doe-optim/theory-pareto-moo.md) | NSGA-II algorithm, HV/IGD, scalarization, ZDT |
 | [Theory — Bayesian Optimization](docs/doe-optim/theory-bayesopt.md) | EI / UCB / PI / EHVI / ParEGO / q-EHVI |
@@ -149,6 +151,7 @@ A free-monad DSL from which **four interpretations** (structural inspection / lo
 | Page | Contents |
 |---|---|
 | [Visualization overview](docs/visualization/01-visualization.md) | Report / Bar / Histogram / PNG/SVG output |
+| [HTML report builder](docs/visualization/02-report-builder.md) | Viz.ReportBuilder + Reportable typeclass usage (★ unified report API) |
 
 ---
 

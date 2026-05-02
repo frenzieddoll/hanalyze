@@ -114,6 +114,7 @@ myModel = do
 | [GLMM (混合効果モデル)](docs/regression/03-glmm.ja.md) | LME/GLMM、混合分布、負の二項分布の導出 |
 | [スプライン / カーネル / 正則化](docs/regression/04-spline-kernel-regularized.ja.md) | B-spline / Natural cubic / Kernel Ridge / Ridge / Lasso / ElasticNet |
 | [多次元出力モデル](docs/regression/05-multivariate.ja.md) | MultiLM / RRR / PLS / CCA / MultiGP |
+| [Quantile / GAM / Random Forest](docs/regression/06-quantile-gam-rf.ja.md) | 分位点回帰、加法モデル、アンサンブル木 (★ 新手法) |
 | [理論 — 回帰拡張](docs/regression/theory-regression-extensions.ja.md) | スプライン基底、カーネルメソッド、L1/L2 正則化、bias-variance |
 | [理論 — 多変量回帰](docs/regression/theory-multivariate.ja.md) | OLS / RRR / PLS / CCA / Multi-GP の数学的背景 |
 
@@ -123,6 +124,7 @@ myModel = do
 |---|---|
 | [実験計画法 (DOE)](docs/doe-optim/01-doe.ja.md) | 完全/部分要因 / ラテン方格 / 乱塊 / RSM / D-optimal / ANOVA / Power 解析 |
 | [多目的最適化](docs/doe-optim/02-multi-objective.ja.md) | NSGA-II / Pareto / Bayesian MOO |
+| [直交表とタグチメソッド](docs/doe-optim/03-orthogonal-taguchi.ja.md) | Lₙ 表、SN 比 4 種、内/外配置、ロバスト設計 (★ 統合ガイド) |
 | [理論 — 実験計画法](docs/doe-optim/theory-doe.ja.md) | 直交性、効率指標、RSM、検出力、サンプルサイズ |
 | [理論 — Pareto 効率と MOO](docs/doe-optim/theory-pareto-moo.ja.md) | NSGA-II アルゴリズム、HV/IGD、scalarization、ZDT |
 | [理論 — Bayesian Optimization](docs/doe-optim/theory-bayesopt.ja.md) | EI / UCB / PI / EHVI / ParEGO / q-EHVI |
@@ -148,6 +150,7 @@ myModel = do
 | ページ | 内容 |
 |---|---|
 | [可視化全般](docs/visualization/01-visualization.ja.md) | Report / Bar / Histogram / PNG/SVG 出力 |
+| [HTML レポートビルダ](docs/visualization/02-report-builder.ja.md) | Viz.ReportBuilder + Reportable typeclass の使い方 (★ 共通レポート API) |
 
 ---
 
