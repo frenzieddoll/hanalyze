@@ -101,6 +101,16 @@ cabal test               # テスト
 | `discrete-obs-demo` | Bernoulli / Categorical 観測 | 離散観測尤度 |
 | `ppc-demo`          | 事前/事後予測サンプリング + ベイズ p 値 | PPC ワークフロー |
 | `forest-compare`    | Forest plot + Pseudo-BMA モデル比較 | 複数モデル要約、ArviZ 風出力 |
+| `potential-demo`    | `pm.Potential` 相当 (ソフト制約・カスタム尤度・正則化) | 任意 log 項の追加 |
+| `mixture-demo`      | `pm.Mixture` (2 成分ガウス混合) | log-sum-exp、潜在クラスタ |
+| `trunc-censor-demo` | `Truncated` / `Censored` 分布 (生存解析・Tobit) | CDF を使った観測モデル |
+| `cdf-test`          | Beta/Gamma/Cauchy/StudentT/HalfCauchy の CDF 検証 | 不完全ガンマ・不完全ベータ |
+| `mvnormal-demo`     | `MvNormal` 観測専用 (Cholesky 経由) | 多変量観測尤度 |
+| `energy-demo`       | NUTS の Energy plot + BFMI 診断 | 病的事後分布の検出 |
+| `pymc-status-demo`  | PyMC parity ステータスレポート (カテゴリ別件数 + TODO 一覧) | 実装状況の可視化 |
+
+> 📊 **PyMC 機能比較とロードマップ**: 詳細は [docs/08-pymc-comparison.ja.md](docs/08-pymc-comparison.ja.md) を参照。
+> 全カテゴリの実装状況の棒グラフは `cabal run pymc-status-demo` で `pymc-status.html` として出力できる。
 
 ---
 
