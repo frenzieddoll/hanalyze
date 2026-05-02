@@ -34,6 +34,7 @@ library
     Design.Power
     Design.Quality
     Design.RSM
+    Design.Optimal
     Model.HBM
     MCMC.Core
     MCMC.MH
@@ -219,6 +220,16 @@ executable newdistribs-demo
     , text       >= 1.2  && < 2.2
     , containers >= 0.6  && < 0.8
     , mwc-random >= 0.15 && < 0.16
+
+executable optimaldoe-demo
+  import:           warnings
+  main-is:          OptimalDOEDemo.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , text       >= 1.2  && < 2.2
 
 executable rsm-demo
   import:           warnings
