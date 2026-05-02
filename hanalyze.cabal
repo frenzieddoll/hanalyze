@@ -27,6 +27,12 @@ library
     Model.GLMM
     Model.Spline
     Model.Kernel
+    Design.Factorial
+    Design.Block
+    Design.Mixed
+    Design.Anova
+    Design.Power
+    Design.Quality
     Model.HBM
     MCMC.Core
     MCMC.MH
@@ -212,6 +218,16 @@ executable newdistribs-demo
     , text       >= 1.2  && < 2.2
     , containers >= 0.6  && < 0.8
     , mwc-random >= 0.15 && < 0.16
+
+executable doe-demo
+  import:           warnings
+  main-is:          DOEDemo.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , text       >= 1.2  && < 2.2
 
 executable kernel-demo
   import:           warnings
