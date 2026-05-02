@@ -11,7 +11,9 @@ import System.Random.MWC (createSystemRandom)
 
 import MCMC.NUTS (nuts, nutsChains, defaultNUTSConfig, NUTSConfig (..))
 import Model.HBM (ModelP, sample, observe, Distribution (..))
-import Viz.MCMC (printPosteriorSummary, posteriorSummaryFile)
+import Viz.MCMC (printPosteriorSummary, posteriorSummaryFile,
+                 tracePlotHDIFile)
+import Viz.Core (defaultConfig, OutputFormat (..), PlotConfig (..))
 
 cfg :: NUTSConfig
 cfg = defaultNUTSConfig
@@ -57,6 +59,13 @@ main = do
   posteriorSummaryFile "summary-multi.html"
     "Posterior summary (4 chains, R-hat)" ["mu", "sigma"] chs
   putStrLn "  → summary-single.html / summary-multi.html"
+  putStrLn ""
+
+  -- ── HDI 帯付きトレース ──
+  let traceCfg = (defaultConfig "Trace with 94% HDI")
+                   { plotWidth = 700, plotHeight = 90 }
+  tracePlotHDIFile HTML "trace-hdi.html" traceCfg 0.94 ["mu", "sigma"] ch
+  putStrLn "  → trace-hdi.html (HDI 帯付きトレース)"
   putStrLn ""
 
   putStrLn "═══════════════════════════════════════════════════════════════"

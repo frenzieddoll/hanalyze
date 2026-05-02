@@ -6,6 +6,7 @@
 module Viz.MCMC
   ( -- * 単一チェーン
     tracePlot,       tracePlotFile
+  , tracePlotHDI,    tracePlotHDIFile
   , posteriorPlot,   posteriorPlotFile
   , autocorrPlot,    autocorrPlotFile
   , pairScatter,     pairScatterFile
@@ -68,6 +69,69 @@ tracePlot cfg names chain = toVegaLite
 tracePlotFile :: OutputFormat -> FilePath -> PlotConfig -> [Text] -> Chain -> IO ()
 tracePlotFile fmt path cfg names chain =
   writeSpec fmt path (tracePlot cfg names chain)
+
+-- | HDI 帯を重ねたトレースプロット (level 例: 0.94)。
+-- 上下の HDI 境界を赤い水平ルールで描画し、内側を半透明赤で塗りつぶす。
+-- バーンイン後サンプルから HDI を計算し、視覚的に「事後分布の質量がどこに
+-- 集中しているか」をトレースと一緒に確認できる。
+tracePlotHDI :: PlotConfig -> Double -> [Text] -> Chain -> VegaLite
+tracePlotHDI cfg level names chain = toVegaLite
+  [ title (plotTitle cfg) []
+  , vConcat (map tracePanel names)
+  ]
+  where
+    n = length (chainSamples chain)
+    tracePanel pname =
+      let vals     = chainVals pname chain
+          (lo, hi) = hdi level vals
+      in asSpec
+          [ layer
+              [ -- HDI 帯 (rect)
+                asSpec
+                  [ dataFromColumns []
+                      . dataColumn "lo" (Numbers [lo])
+                      . dataColumn "hi" (Numbers [hi])
+                      $ []
+                  , mark Rect [MColor "#DD4444", MOpacity 0.12]
+                  , encoding
+                      . position Y  [PName "lo", PmType Quantitative]
+                      . position Y2 [PName "hi"]
+                      $ []
+                  ]
+              , -- HDI 上限 / 下限ライン
+                asSpec
+                  [ dataFromColumns []
+                      . dataColumn "y" (Numbers [lo, hi])
+                      $ []
+                  , mark Rule [MColor "#DD4444", MStrokeWidth 1.5,
+                               MStrokeDash [3, 3]]
+                  , encoding
+                      . position Y [PName "y", PmType Quantitative]
+                      $ []
+                  ]
+              , -- トレース本体
+                asSpec
+                  [ dataFromColumns []
+                      . dataColumn "iter"  (Numbers (map fromIntegral [1 .. n]))
+                      . dataColumn "value" (Numbers vals)
+                      $ []
+                  , mark Line [MColor "#4C72B0", MStrokeWidth 1.0, MOpacity 0.7]
+                  , encoding
+                      . position X [ PName "iter",  PmType Quantitative
+                                   , PAxis [AxTitle "Iteration"] ]
+                      . position Y [ PName "value", PmType Quantitative
+                                   , PAxis [AxTitle pname] ]
+                      $ []
+                  ]
+              ]
+          , width  (plotWidth cfg)
+          , height 90
+          ]
+
+tracePlotHDIFile :: OutputFormat -> FilePath -> PlotConfig
+                 -> Double -> [Text] -> Chain -> IO ()
+tracePlotHDIFile fmt path cfg level names chain =
+  writeSpec fmt path (tracePlotHDI cfg level names chain)
 
 -- ---------------------------------------------------------------------------
 -- Multi-chain trace plot
