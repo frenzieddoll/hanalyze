@@ -258,6 +258,16 @@ executable pareto-smoke
       base       >= 4.14 && < 5
     , hanalyze
 
+executable nsga-demo
+  import:           warnings
+  main-is:          NSGADemo.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , mwc-random >= 0.15 && < 0.16
+
 executable nsga-smoke
   import:           warnings
   main-is:          NSGASmokeDemo.hs

@@ -26,8 +26,10 @@ module Optim.NSGA
   , Solution (..)
   , NSGAConfig (..)
   , defaultNSGAConfig
-    -- * 高レベル API (Phase S で実装)
+    -- * 高レベル API
   , nsga2
+  , nsga2WithConstraints
+  , evaluateSolution
     -- * 構成要素
   , dominates
   , paretoDominates
@@ -87,13 +89,178 @@ defaultNSGAConfig = NSGAConfig
 -- | NSGA-II 本体。`objFun` は決定変数を受け取り目的関数値ベクトルを返す。
 -- 戻り値は最終世代の Pareto 近似 front (= rank 0 の個体集合)。
 --
--- TODO Phase S3 で実装。
+-- 制約なし版。制約付きには 'nsga2WithConstraints' を使う。
 nsga2 :: NSGAConfig
       -> ([Double] -> [Double])  -- ^ 目的関数 (m 次元出力)
       -> Bounds                  -- ^ 探索範囲 (d 次元)
       -> GenIO
       -> IO [Solution]
-nsga2 _cfg _f _bounds _gen = error "Optim.NSGA.nsga2: not yet implemented (Phase S3)"
+nsga2 cfg f bounds gen =
+  nsga2WithConstraints cfg f (const 0) bounds gen
+
+-- | 制約付き NSGA-II。`constrFun` は決定変数を受け取り、制約違反量を返す
+-- (0 = 実行可能、>0 = 違反量)。複数の制約 g_i(x) ≤ 0 がある場合は
+-- @sum [max 0 (g_i x)]@ などで集約して渡す。
+nsga2WithConstraints
+  :: NSGAConfig
+  -> ([Double] -> [Double])    -- 目的関数 (m 次元)
+  -> ([Double] -> Double)      -- 制約違反量 (≥ 0、0 = feasible)
+  -> Bounds                    -- 探索範囲 (d 次元)
+  -> GenIO
+  -> IO [Solution]
+nsga2WithConstraints cfg f cFn bounds gen = do
+  let n  = nsgaPopSize cfg
+      d  = length bounds
+      pM = case nsgaMutationP cfg of
+             Just p  -> p
+             Nothing -> 1.0 / fromIntegral d
+      etaC = nsgaEtaCross cfg
+      etaM = nsgaEtaMut cfg
+      pC   = nsgaCrossoverP cfg
+
+  -- 初期母集団
+  initPop <- mapM (const (do
+                            x <- randomInBounds bounds gen
+                            return (evaluateSolution f cFn x)))
+                  [1 .. n]
+
+  -- 世代ループ
+  finalPop <- generationLoop (nsgaGenerations cfg) initPop pC etaC etaM pM bounds f cFn gen
+
+  -- 最終世代の最初の front (Pareto 近似) を返す
+  case nonDominatedSort finalPop of
+    (front : _) -> return front
+    []          -> return []
+
+-- | 決定変数 x から Solution を作る (目的関数 + 制約評価)。
+evaluateSolution :: ([Double] -> [Double])
+                 -> ([Double] -> Double)
+                 -> [Double]
+                 -> Solution
+evaluateSolution f cFn x =
+  Solution { solDecision   = x
+           , solObjectives = f x
+           , solViolation  = cFn x
+           }
+
+-- | 1 世代の進化ステップを T 回反復。
+generationLoop
+  :: Int -> [Solution]
+  -> Double -> Double -> Double -> Double  -- pC, etaC, etaM, pM
+  -> Bounds
+  -> ([Double] -> [Double])
+  -> ([Double] -> Double)
+  -> GenIO
+  -> IO [Solution]
+generationLoop 0 pop _ _ _ _ _ _ _ _ = return pop
+generationLoop t pop pC etaC etaM pM bounds f cFn gen = do
+  let n = length pop
+
+  -- ── ranked + crowding 情報を計算 ──
+  let fronts = nonDominatedSort pop
+      sortedFronts = map crowdingDistance fronts
+      -- (個体, rank, distance) のリスト
+      ranked = concat
+        [ zip3 (repeat r) (frontDistances fr) fr
+        | (r, fr) <- zip [0 :: Int ..] sortedFronts ]
+      -- ranked = [(rank, distance, sol)]
+
+  -- ── 子母集団 Q を生成 ──
+  -- N/2 ペアを生成 (各ペアで 2 子)
+  let nPairs = n `div` 2
+  childPairs <- mapM (const (makeChildPair pC etaC etaM pM bounds f cFn ranked gen))
+                     [1 .. nPairs]
+  let children = concatMap (\(c1, c2) -> [c1, c2]) childPairs
+      -- N が奇数なら 1 個追加
+      childrenAdj = if length children >= n
+                       then take n children
+                       else children   -- ほぼ起きない
+      _ = childrenAdj
+
+  -- ── R = P ∪ Q から上位 N を選別 ──
+  let combined = pop ++ children
+      combinedFronts = nonDominatedSort combined
+      newPop = selectTopN n combinedFronts
+
+  generationLoop (t - 1) newPop pC etaC etaM pM bounds f cFn gen
+
+-- | 1 ペアの子 (c1, c2) を生成。tournament 選択 → SBX → mutation。
+makeChildPair
+  :: Double -> Double -> Double -> Double  -- pC, etaC, etaM, pM
+  -> Bounds
+  -> ([Double] -> [Double])
+  -> ([Double] -> Double)
+  -> [(Int, Double, Solution)]   -- ranked pop
+  -> GenIO
+  -> IO (Solution, Solution)
+makeChildPair pC etaC etaM pM bounds f cFn ranked gen = do
+  -- 親選び (tournament)
+  let cmp (r1, d1, _) (r2, d2, _) = crowdedCompare (r1, d1) (r2, d2)
+  (_, _, parent1) <- binaryTournament ranked cmp gen
+  (_, _, parent2) <- binaryTournament ranked cmp gen
+
+  -- SBX (確率 pC) または親をそのまま
+  u <- uniform gen :: IO Double
+  (c1Vec, c2Vec) <-
+    if u < pC
+      then sbxCrossover etaC bounds (solDecision parent1) (solDecision parent2) gen
+      else return (solDecision parent1, solDecision parent2)
+
+  -- Polynomial mutation
+  c1Mut <- polynomialMutation etaM pM bounds c1Vec gen
+  c2Mut <- polynomialMutation etaM pM bounds c2Vec gen
+
+  return ( evaluateSolution f cFn c1Mut
+         , evaluateSolution f cFn c2Mut )
+
+-- | front の各個体の crowding distance を取り出す。
+-- crowdingDistance はソート済リストを返すので、正確な距離は内部に隠れる。
+-- 簡易対処: 距離を再計算してインデックスで突き合わせ。
+frontDistances :: [Solution] -> [Double]
+frontDistances front
+  | length front <= 2 = replicate (length front) (1 / 0)
+  | otherwise =
+      let l    = length front
+          m    = length (solObjectives (head front))
+          ps   = zip [0 :: Int ..] front
+          contrib objIdx =
+            let sorted = sortBy
+                          (comparing (\(_, s) -> solObjectives s !! objIdx)) ps
+                vals   = map (\(_, s) -> solObjectives s !! objIdx) sorted
+                fMin   = minimum vals
+                fMax   = maximum vals
+                rng    = fMax - fMin
+            in if rng == 0
+                 then [(idx, 0) | (idx, _) <- sorted]
+                 else
+                   let nL = length sorted
+                       go k acc
+                         | k <  0      = acc
+                         | k == 0      = go (k + 1) ((fst (sorted !! k), 1/0) : acc)
+                         | k == nL - 1 = (fst (sorted !! k), 1/0) : acc
+                         | otherwise   =
+                             let prev = vals !! (k - 1)
+                                 next = vals !! (k + 1)
+                                 d    = (next - prev) / rng
+                             in go (k + 1) ((fst (sorted !! k), d) : acc)
+                   in go 0 []
+          totalDist origIdx =
+            sum [ d | objIdx <- [0 .. m - 1]
+                    , (i, d) <- contrib objIdx
+                    , i == origIdx ]
+      in [totalDist i | (i, _) <- ps]
+
+-- | ソート済 fronts (上から良い順) から n 個を選別。
+-- - 入る front は丸ごと採用
+-- - 最後の front は crowding distance 順で半分採用
+selectTopN :: Int -> [[Solution]] -> [Solution]
+selectTopN _ [] = []
+selectTopN n (fr : rest)
+  | length fr >= n = take n (crowdingDistance fr)
+  | otherwise =
+      let fr' = fr  -- 全採用
+          remaining = n - length fr
+      in fr' ++ selectTopN remaining rest
 
 -- | 個体 a が個体 b を **支配** するか (制約付き Pareto dominance)。
 --
