@@ -56,6 +56,9 @@ module Model.HBM
   , observe
   , observeMV
   , potential
+  , deterministic
+  , runDeterministics
+  , augmentChainWithDeterministic
   , mvNormalLogDensity
     -- * 構造検査
   , Node (..)
@@ -102,6 +105,7 @@ import qualified System.Random.MWC.Distributions as MWC
 import System.Random.MWC (GenIO)
 
 import Stat.Distribution (Transform (..))
+import MCMC.Core (Chain (..))
 
 -- ---------------------------------------------------------------------------
 -- Free monad (再実装。Model.HBM のものとは型が違うので別途定義)
@@ -832,6 +836,10 @@ data ModelF a next
   | Observe Text (Distribution a) [Double] next
   | Potential Text a next
     -- ^ 名前付きの ad-hoc な log-prob 項。値 @a@ がそのまま log-joint に加算される。
+  | Deterministic Text a (a -> next)
+    -- ^ 名前付きの派生量 (PyMC `pm.Deterministic`)。log-joint には寄与せず、
+    --   サンプルごとに値を保存する。継続には値そのものを通すので、その後の
+    --   モデル中でも参照可能。
   deriving Functor
 
 type Model a = Free (ModelF a)
@@ -865,6 +873,17 @@ observeMV n d obss = liftF (Observe n d (concat obss) ())
 potential :: Text -> a -> Model a ()
 potential nm v = liftF (Potential nm v ())
 
+-- | 派生量を名前付きで保存する (PyMC `pm.Deterministic` 相当)。
+--
+-- log-joint には寄与しないが、各 posterior サンプルごとに値が記録され
+-- 'augmentChainWithDeterministic' で Chain に注入できる。
+--
+-- 例:
+--
+-- > tau <- deterministic "tau" (1 / (sigma * sigma))
+deterministic :: Text -> a -> Model a a
+deterministic nm v = liftF (Deterministic nm v id)
+
 -- ---------------------------------------------------------------------------
 -- 構造検査
 -- ---------------------------------------------------------------------------
@@ -890,6 +909,7 @@ collectNodes m = go m []
     go (Free (Observe n d ys next)) acc =
       go next (Node n (ObservedN (length ys)) (distName d) Set.empty : acc)
     go (Free (Potential _ _ next)) acc = go next acc   -- Node 表示には含めない
+    go (Free (Deterministic _ v k)) acc = go (k v) acc
 
 sampleNames :: ModelP r -> [Text]
 sampleNames m = [nodeName n | n <- collectNodes m, nodeKind n == LatentN]
@@ -914,6 +934,7 @@ logJoint model params = go model 0
       let ll = obsLogSum d ys
       in go next (acc + ll)
     go (Free (Potential _ v next)) acc = go next (acc + v)
+    go (Free (Deterministic _ v k)) acc = go (k v) acc
 
 -- | log p(θ) のみ (prior 部分)。
 logPrior :: (Floating a, Ord a) => Model a r -> Map Text a -> a
@@ -926,6 +947,7 @@ logPrior model params = go model 0
         Just v  -> go (k v) (acc + logDensity d v)
     go (Free (Observe _ _ _ next)) acc = go next acc
     go (Free (Potential _ v next)) acc = go next (acc + v)
+    go (Free (Deterministic _ v k)) acc = go (k v) acc
 
 -- | log p(y | θ) のみ (likelihood 部分)。
 logLikelihood :: (Floating a, Ord a) => Model a r -> Map Text a -> a
@@ -940,6 +962,7 @@ logLikelihood model params = go model 0
       let ll = obsLogSum d ys
       in go next (acc + ll)
     go (Free (Potential _ _ next)) acc = go next acc   -- Potential は事前項とみなす
+    go (Free (Deterministic _ v k)) acc = go (k v) acc
 
 -- | 各 Observe ノードの「現在のパラメータ値で評価した分布」と観測値を取得する。
 -- Gibbs サンプラーが共役構造を検出する際に、潜在変数の現在値に対する
@@ -957,6 +980,8 @@ runObserveDists (Free (Observe n d ys next)) ps =
   (n, d, ys) : runObserveDists next ps
 runObserveDists (Free (Potential _ _ next)) ps =
   runObserveDists next ps
+runObserveDists (Free (Deterministic _ v k)) ps =
+  runObserveDists (k v) ps
 
 -- | 各 Sample ノードの (名前, 事前分布) を Double 特殊化で取得する。
 -- Gibbs サンプラーの共役検出で「この潜在変数の事前は Gamma か Beta か」を
@@ -966,6 +991,7 @@ priorList (Pure _) = []
 priorList (Free (Sample n d k)) = (n, d) : priorList (k 0)
 priorList (Free (Observe _ _ _ next)) = priorList next
 priorList (Free (Potential _ _ next)) = priorList next
+priorList (Free (Deterministic _ v k)) = priorList (k v)
 
 -- ---------------------------------------------------------------------------
 -- 互換 API
@@ -992,6 +1018,32 @@ perObsLogLiks m params = go m []
             _ -> [ logDensityObs d y | y <- ys ]
       in go next (reverse lls ++ acc)
     go (Free (Potential _ _ next)) acc = go next acc
+    go (Free (Deterministic _ v k)) acc = go (k v) acc
+
+-- | モデルの 'Deterministic' ノードを評価し、派生量の Map を返す。
+--
+-- @params@ は latent 変数 (sample) の値を表す Map。Deterministic は
+-- それらから導出される量で、ここでは Double 特殊化で評価する。
+runDeterministics :: forall r. ModelP r -> Params -> Map Text Double
+runDeterministics m params = go m Map.empty
+  where
+    go :: Model Double r -> Map Text Double -> Map Text Double
+    go (Pure _) acc = acc
+    go (Free (Sample n _ k)) acc =
+      go (k (Map.findWithDefault 0 n params)) acc
+    go (Free (Observe _ _ _ next)) acc = go next acc
+    go (Free (Potential _ _ next)) acc = go next acc
+    go (Free (Deterministic n v k)) acc =
+      go (k v) (Map.insert n v acc)
+
+-- | 各 posterior サンプルに対して 'runDeterministics' を計算し、
+-- 結果を 'chainSamples' の Map にマージした新しい Chain を返す。
+-- これにより 'chainVals' / 'posteriorSummary' などのヘルパで派生量を
+-- そのまま参照できる。
+augmentChainWithDeterministic :: ModelP r -> Chain -> Chain
+augmentChainWithDeterministic m ch =
+  let aug ps = Map.union (runDeterministics m ps) ps
+  in ch { chainSamples = map aug (chainSamples ch) }
 
 -- | モデル構造の人間向け要約 (推論は実行しない)。
 describeModel :: ModelP r -> Text
@@ -1223,6 +1275,11 @@ extractDeps m = go m []
       let parentDeps = trackDeps v
           node = Node nm LatentN "Potential" parentDeps
       in go next (node : acc)
+    go (Free (Deterministic nm v k)) acc =
+      -- Deterministic も親 latent からの導出関係を保存
+      let parentDeps = trackDeps v
+          node = Node nm LatentN "Deterministic" parentDeps
+      in go (k v) (node : acc)
 
 -- | Distribution Track に含まれる依存変数集合を取り出す。
 distDepsT :: Distribution Track -> Set Text
