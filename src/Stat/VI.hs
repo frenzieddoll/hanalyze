@@ -33,6 +33,7 @@ import System.Random.MWC (GenIO)
 import System.Random.MWC.Distributions (standard)
 
 import Model.HBM (ModelP, Params, sampleNames, getTransforms)
+import Optim.Adam (adamStep)
 import MCMC.HMC  ( logJointU, paramsToVec, vecToParams
                  , toUnconstrainedParams, fromUnconstrainedParams )
 
@@ -204,18 +205,8 @@ advi model cfg initP gen = do
 -- 補助関数
 -- ---------------------------------------------------------------------------
 
--- | Adam 1 ステップ: (m1', m2', Δx)
-adamStep
-  :: Double -> Double -> Double -> Double -> Int
-  -> [Double] -> [Double] -> [Double]
-  -> ([Double], [Double], [Double])
-adamStep b1 b2 eps alpha t m1 m2 g =
-  let m1' = zipWith (\m gi -> b1 * m + (1 - b1) * gi)      m1 g
-      m2' = zipWith (\v gi -> b2 * v + (1 - b2) * gi * gi)  m2 g
-      mH  = map (/ (1 - b1 ^ t)) m1'
-      vH  = map (/ (1 - b2 ^ t)) m2'
-      dx  = zipWith (\m_ v -> alpha * m_ / (sqrt v + eps))   mH vH
-  in (m1', m2', dx)
+-- adamStep は Optim.Adam に集約 (Phase R0)。
+-- 再 export することで既存の利用箇所はそのまま動く。
 
 -- | リストの i 番目要素を x で置換する。
 replaceAt :: Int -> Double -> [Double] -> [Double]

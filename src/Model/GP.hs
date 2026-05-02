@@ -43,6 +43,8 @@ module Model.GP
 
 import Data.Text (Text)
 import qualified Numeric.LinearAlgebra as LA
+import qualified Optim.GradAscent
+import qualified Optim.Numeric
 
 -- ---------------------------------------------------------------------------
 -- Types
@@ -209,7 +211,14 @@ fitGP model trainX trainY testX =
 optimizeGP :: Kernel -> [Double] -> [Double] -> GPParams -> GPParams
 optimizeGP ker trainX trainY p0 =
   let u0   = [log (gpLengthScale p0), log (gpSignalVar p0), log (gpNoiseVar p0)]
-      uOpt = gradientAscent (400 :: Int) 0.1 u0
+      cfg  = Optim.GradAscent.defaultGradConfig
+               { Optim.GradAscent.gradIterations   = 400
+               , Optim.GradAscent.gradLearningRate = 0.1
+               , Optim.GradAscent.gradDecay        = 0.995
+               , Optim.GradAscent.gradTolerance    = 1e-8
+               }
+      uOpt = Optim.GradAscent.gradientAscent cfg
+               (Optim.Numeric.numGradCentral 1e-4 obj) u0
   in p0
        { gpLengthScale = exp (uOpt !! 0)
        , gpSignalVar   = exp (uOpt !! 1)
@@ -221,26 +230,7 @@ optimizeGP ker trainX trainY p0 =
       , gpSignalVar   = exp (u !! 1)
       , gpNoiseVar    = exp (u !! 2)
       }
-
     obj u = logMarginalLikelihood trainX trainY ker (toParams u)
-
-    numGrad u =
-      [ (obj (upd i (u !! i + h)) - obj (upd i (u !! i - h))) / (2 * h)
-      | i <- [0 .. 2]
-      ]
-      where
-        h     = 1e-4
-        upd i v = take i u ++ [v] ++ drop (i + 1) u
-
-    gradientAscent :: Int -> Double -> [Double] -> [Double]
-    gradientAscent 0   _  u = u
-    gradientAscent itr lr u =
-      let g     = numGrad u
-          gnorm = sqrt (sum (map (\x -> x * x) g))
-      in if gnorm < 1e-8
-           then u
-           else gradientAscent (itr - 1) (lr * 0.995)
-                  (zipWith (\ui gi -> ui + lr * gi / gnorm) u g)
 
 -- ---------------------------------------------------------------------------
 -- Interactive prediction data (for Viz.GPReport)

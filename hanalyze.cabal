@@ -50,6 +50,9 @@ library
     Stat.VI
     Stat.PosteriorPredictive
     Stat.Summary
+    Optim.Adam
+    Optim.GradAscent
+    Optim.Numeric
     Viz.MCMC
     Viz.ModelGraph
     Viz.Report
