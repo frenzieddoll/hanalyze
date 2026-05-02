@@ -64,6 +64,7 @@ module Model.HBM
   , dirichlet
   , dataNamed
   , withData
+  , mvNormalLatent
   , mvNormalLogDensity
     -- * 構造検査
   , Node (..)
@@ -923,6 +924,38 @@ withData n new (Free f) = Free (case f of
   Observe nm d ys nx    -> Observe nm d ys (withData n new nx)
   Potential nm v nx     -> Potential nm v (withData n new nx)
   Deterministic nm v k  -> Deterministic nm v (\v' -> withData n new (k v')))
+
+-- | 多変量正規分布の latent ベクトル (PyMC `pm.MvNormal` の latent 用法)。
+--
+-- 非中心化パラメタ化 + Cholesky 分解で実装:
+--
+--   z_i ~ Normal(0, 1)  (i = 0..K-1, 独立な latent)
+--   x   = μ + L z       (L = Cholesky(Σ))
+--
+-- 各 z_i は通常の latent として NUTS が探索し、x は派生量として
+-- Chain に記録される。共分散行列が他の latent に依存する形でも
+-- 動作する (choleskyL は @(Floating a, Ord a)@ 多相)。
+--
+-- 共分散が非正定値のときは μ をそのまま返す (NUTS 探索中の不正領域
+-- に対する graceful fallback)。
+--
+-- 戻り値: K 次元 latent ベクトル @[a]@ (μ + L z)。
+-- Chain には @<name>_z<i>@ (raw latent) と @<name>_<i>@ (派生量) を保存。
+mvNormalLatent :: forall a. (Floating a, Ord a)
+               => Text -> [a] -> [[a]] -> Model a [a]
+mvNormalLatent name muVec covMatrix = do
+  let k = length muVec
+  zs <- mapM (\i -> sample (name <> "_z" <> T.pack (show i)) (Normal 0 1))
+             [0 .. k - 1]
+  let xs = case choleskyL covMatrix of
+        Just l  -> [ (muVec !! i) +
+                       sum [ ((l !! i) !! j) * (zs !! j)
+                           | j <- [0 .. i] ]
+                   | i <- [0 .. k - 1] ]
+        Nothing -> muVec      -- non-PD のフォールバック
+  mapM
+    (\(i, x) -> deterministic (name <> "_" <> T.pack (show i)) x)
+    (zip [0 :: Int ..] xs)
 
 -- | 非中心化 (non-centered) 正規分布。
 --
