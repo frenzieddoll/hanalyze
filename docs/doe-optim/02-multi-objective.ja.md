@@ -1,8 +1,8 @@
 # 多目的最適化 (MOO) の使い方
 
 > NSGA-II / Pareto utilities / Bayesian Multi-Objective Optimization。
-> 理論は [docs/learn/09-pareto-and-moo.ja.md](learn/09-pareto-and-moo.ja.md) と
-> [docs/learn/10-bayesian-optimization.ja.md](learn/10-bayesian-optimization.ja.md)。
+> 理論は [docs/doe-optim/theory-pareto-moo.ja.md](theory-pareto-moo.ja.md) と
+> [docs/doe-optim/theory-bayesopt.ja.md](theory-bayesopt.ja.md)。
 
 ## モジュール早見表
 

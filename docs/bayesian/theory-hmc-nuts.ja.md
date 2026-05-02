@@ -279,8 +279,8 @@ cabal run integrated-demo
 
 ## 次のステップ
 
-- VI / ADVI と モデル選択 → [05-vi-modelselect.ja.md](05-vi-modelselect.ja.md) (M5)
-- 既存ドキュメント: [03-mcmc-samplers.ja.md](../03-mcmc-samplers.ja.md) は API 概観
+- VI / ADVI と モデル選択 → [theory-advanced.ja.md](theory-advanced.ja.md) (M5)
+- 既存ドキュメント: [03-mcmc-samplers.ja.md](03-mcmc-samplers.ja.md) は API 概観
 - 原論文:
   - HMC: Neal "MCMC using Hamiltonian dynamics" (2011)
   - NUTS: Hoffman & Gelman (2014)

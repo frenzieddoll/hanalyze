@@ -232,7 +232,7 @@ MH は次元 $D$ が大きいと非効率:
 | HMC | $\sim D^{1/4}$ |
 | NUTS | HMC の自動軌道長版 |
 
-→ 高次元なら **HMC / NUTS** ([04-hmc-nuts.ja.md](04-hmc-nuts.ja.md) M4)。
+→ 高次元なら **HMC / NUTS** ([theory-hmc-nuts.ja.md](theory-hmc-nuts.ja.md) M4)。
 
 ---
 
@@ -272,6 +272,6 @@ graph TD
 
 ## 次のステップ
 
-- HMC/NUTS の幾何学と実装 → [04-hmc-nuts.ja.md](04-hmc-nuts.ja.md) (M4)
-- 既存ドキュメント: [03-mcmc-samplers.ja.md](../03-mcmc-samplers.ja.md) は API レベル概観
+- HMC/NUTS の幾何学と実装 → [theory-hmc-nuts.ja.md](theory-hmc-nuts.ja.md) (M4)
+- 既存ドキュメント: [03-mcmc-samplers.ja.md](03-mcmc-samplers.ja.md) は API レベル概観
 - 実演: `cabal run slice-demo` (Slice/MH/NUTS 比較)

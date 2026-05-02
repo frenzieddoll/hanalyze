@@ -69,48 +69,51 @@ myModel = do
 | ページ | 内容 |
 |---|---|
 | [クイックスタート](docs/01-quickstart.ja.md) | ビルド・最小ワークフロー・**やりたい事 → どのデモ** 早見表 |
-| [確率分布の関係図](docs/09-distribution-relationships.ja.md) | 27 分布の極限・共役・特殊化を Mermaid で可視化 |
-| [PyMC 比較 & ロードマップ](docs/08-pymc-comparison.ja.md) | PyMC との機能差・実装計画 (78 機能中 65 完了) |
+| [PyMC 比較 & ロードマップ](docs/02-pymc-comparison.ja.md) | PyMC との機能差・実装計画 |
 
-### 1. 回帰分析と統計モデル
-
-| ページ | 内容 |
-|---|---|
-| [回帰拡張 (Spline / Kernel / Regularized)](docs/10-regression-extensions.ja.md) | B-spline / Natural cubic / Kernel Ridge / Ridge / Lasso / ElasticNet |
-| [多次元出力モデル](docs/12-multivariate-models.ja.md) | MultiLM / RRR / PLS / CCA / MultiGP |
-| [学習資料 6 — 回帰拡張の理論](docs/learn/06-regression-extensions.ja.md) | スプライン基底、カーネルメソッド、L1/L2 正則化、bias-variance tradeoff |
-| [学習資料 8 — 多変量回帰の理論](docs/learn/08-multivariate-theory.ja.md) | OLS / RRR / PLS / CCA / Multi-GP の数学的背景 |
-
-### 2. 実験計画と最適化
+### 1. 回帰分析と統計モデル — `docs/regression/`
 
 | ページ | 内容 |
 |---|---|
-| [実験計画法 (DOE)](docs/11-design-of-experiments.ja.md) | 完全/部分要因 / ラテン方格 / 乱塊 / RSM / D-optimal / ANOVA / Power 解析 |
-| [多目的最適化](docs/13-multi-objective-optimization.ja.md) | NSGA-II / Pareto / Bayesian MOO |
-| [学習資料 7 — 実験計画法の理論](docs/learn/07-doe-foundations.ja.md) | 直交性、効率指標、RSM、検出力、サンプルサイズ |
-| [学習資料 9 — Pareto 効率と MOO](docs/learn/09-pareto-and-moo.ja.md) | NSGA-II アルゴリズム、HV/IGD、scalarization、ZDT |
-| [学習資料 10 — Bayesian Optimization](docs/learn/10-bayesian-optimization.ja.md) | EI / UCB / PI / EHVI / ParEGO / q-EHVI |
+| [LM (線形回帰)](docs/regression/01-lm.ja.md) | OLS、信頼帯、診断、仮定検証 (★詳細解説) |
+| [GLM](docs/regression/02-glm.ja.md) | 全ファミリ網羅 + IRLS + リンク関数 |
+| [GLMM (混合効果モデル)](docs/regression/03-glmm.ja.md) | LME/GLMM、混合分布、負の二項分布の導出 |
+| [スプライン / カーネル / 正則化](docs/regression/04-spline-kernel-regularized.ja.md) | B-spline / Natural cubic / Kernel Ridge / Ridge / Lasso / ElasticNet |
+| [多次元出力モデル](docs/regression/05-multivariate.ja.md) | MultiLM / RRR / PLS / CCA / MultiGP |
+| [理論 — 回帰拡張](docs/regression/theory-regression-extensions.ja.md) | スプライン基底、カーネルメソッド、L1/L2 正則化、bias-variance |
+| [理論 — 多変量回帰](docs/regression/theory-multivariate.ja.md) | OLS / RRR / PLS / CCA / Multi-GP の数学的背景 |
 
-### 3. ベイズ統計と確率モデリング
-
-| ページ | 内容 |
-|---|---|
-| [確率的プログラミング DSL](docs/02-probabilistic-model.ja.md) | Model.HBM のパターン集 (Beta-Binomial / 階層正規 / 多相解釈・依存自動抽出) |
-| [MCMC サンプラー選択ガイド](docs/03-mcmc-samplers.ja.md) | MH / HMC / NUTS の使い分け・チューニング・R-hat |
-| [Gibbs サンプリング](docs/04-gibbs.ja.md) | 共役アップデート・ESS/s 比較 |
-| [変分推論 (ADVI)](docs/05-variational-inference.ja.md) | VI vs NUTS・ELBO 収束・平均場の限界 |
-| [モデル比較 (WAIC/LOO)](docs/06-model-comparison.ja.md) | WAIC・PSIS-LOO・Pareto k̂ 診断 |
-| [学習資料 1 — 確率分布の基礎](docs/learn/01-probability-distributions.ja.md) | 全 27 分布の数式・直観・用途 |
-| [学習資料 2 — ベイズ統計の基礎](docs/learn/02-bayesian-basics.ja.md) | 事前/尤度/事後、共役、HBM、事後予測、ワークフロー |
-| [学習資料 3 — MCMC の原理](docs/learn/03-mcmc-foundations.ja.md) | マルコフ連鎖、エルゴード性、MH、Gibbs、Slice、収束診断 |
-| [学習資料 4 — HMC / NUTS](docs/learn/04-hmc-nuts.ja.md) | Hamiltonian、leapfrog、制約変換、NUTS、dual averaging、BFMI、divergence |
-| [学習資料 5 — VI / モデル選択 / 高度トピック](docs/learn/05-vi-modelselect-advanced.ja.md) | ELBO、ADVI、WAIC、PSIS-LOO、Mixture、LKJ、AR、Censored 等 |
-
-### 4. 可視化
+### 2. 実験計画と最適化 — `docs/doe-optim/`
 
 | ページ | 内容 |
 |---|---|
-| [可視化全般](docs/07-visualization.ja.md) | Report / Bar / Histogram / PNG/SVG 出力 |
+| [実験計画法 (DOE)](docs/doe-optim/01-doe.ja.md) | 完全/部分要因 / ラテン方格 / 乱塊 / RSM / D-optimal / ANOVA / Power 解析 |
+| [多目的最適化](docs/doe-optim/02-multi-objective.ja.md) | NSGA-II / Pareto / Bayesian MOO |
+| [理論 — 実験計画法](docs/doe-optim/theory-doe.ja.md) | 直交性、効率指標、RSM、検出力、サンプルサイズ |
+| [理論 — Pareto 効率と MOO](docs/doe-optim/theory-pareto-moo.ja.md) | NSGA-II アルゴリズム、HV/IGD、scalarization、ZDT |
+| [理論 — Bayesian Optimization](docs/doe-optim/theory-bayesopt.ja.md) | EI / UCB / PI / EHVI / ParEGO / q-EHVI |
+
+### 3. ベイズ統計と確率モデリング — `docs/bayesian/`
+
+| ページ | 内容 |
+|---|---|
+| [確率分布の関係図](docs/bayesian/01-distributions.ja.md) | 27 分布の極限・共役・特殊化を Mermaid で可視化 |
+| [確率的プログラミング DSL](docs/bayesian/02-probabilistic-model.ja.md) | Model.HBM のパターン集 (Beta-Binomial / 階層正規 / 多相解釈) |
+| [MCMC サンプラー選択ガイド](docs/bayesian/03-mcmc-samplers.ja.md) | MH / HMC / NUTS の使い分け・チューニング・R-hat |
+| [Gibbs サンプリング](docs/bayesian/04-gibbs.ja.md) | 共役アップデート・ESS/s 比較 |
+| [変分推論 (ADVI)](docs/bayesian/05-vi.ja.md) | VI vs NUTS・ELBO 収束・平均場の限界 |
+| [モデル比較 (WAIC/LOO)](docs/bayesian/06-model-comparison.ja.md) | WAIC・PSIS-LOO・Pareto k̂ 診断 |
+| [理論 — 確率分布の基礎](docs/bayesian/theory-distributions.ja.md) | 全 27 分布の数式・直観・用途 |
+| [理論 — ベイズ統計の基礎](docs/bayesian/theory-bayesian-basics.ja.md) | 事前/尤度/事後、共役、HBM、事後予測、ワークフロー |
+| [理論 — MCMC の原理](docs/bayesian/theory-mcmc.ja.md) | マルコフ連鎖、エルゴード性、MH、Gibbs、Slice、収束診断 |
+| [理論 — HMC / NUTS](docs/bayesian/theory-hmc-nuts.ja.md) | Hamiltonian、leapfrog、制約変換、NUTS、dual averaging、BFMI |
+| [理論 — VI / モデル選択 / 高度トピック](docs/bayesian/theory-advanced.ja.md) | ELBO、ADVI、WAIC、PSIS-LOO、Mixture、LKJ、AR、**Truncated/Censored 詳細** |
+
+### 4. 可視化 — `docs/visualization/`
+
+| ページ | 内容 |
+|---|---|
+| [可視化全般](docs/visualization/01-visualization.ja.md) | Report / Bar / Histogram / PNG/SVG 出力 |
 
 ---
 

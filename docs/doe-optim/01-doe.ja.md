@@ -1,7 +1,7 @@
 # 実験計画法 (DOE) の使い方
 
 > 効率的にデータを集めて、最大の情報を引き出すための統計的設計手法。
-> 理論は [docs/learn/07-doe-foundations.ja.md](learn/07-doe-foundations.ja.md) を参照。
+> 理論は [docs/doe-optim/theory-doe.ja.md](theory-doe.ja.md) を参照。
 
 ## モジュール早見表
 
@@ -263,6 +263,6 @@ let nA = sampleSizeOneWayAnova 0.25 3 0.8 0.05
 
 ## 関連リンク
 
-- 理論: [docs/learn/07-doe-foundations.ja.md](learn/07-doe-foundations.ja.md)
+- 理論: [docs/doe-optim/theory-doe.ja.md](theory-doe.ja.md)
 - demo: `doe-demo`, `rsm-demo`, `optimaldoe-demo`
 - 既存の回帰: `Model.LM` で因子効果を fit

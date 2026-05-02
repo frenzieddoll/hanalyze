@@ -199,7 +199,7 @@ $$ \text{BF}_{12} = \frac{p(y \mid M_1)}{p(y \mid M_2)} $$
 - BF > 10: M1 の強い支持
 - BF < 1/10: M2 の強い支持
 
-`p(y | M)` の計算は重く (高次元積分)、hanalyze では未実装。代わりに **WAIC** / **LOO-CV** を使う ([07-model-selection.ja.md] M5 で解説)。
+`p(y | M)` の計算は重く (高次元積分)、hanalyze では未実装。代わりに **WAIC** / **LOO-CV** を使う ([06-model-comparison.ja.md](06-model-comparison.ja.md) で解説)。
 
 ---
 
@@ -253,7 +253,7 @@ graph LR
 
 ## 次のステップ
 
-- 推論アルゴリズムを学ぶ → [03-mcmc-foundations.ja.md](03-mcmc-foundations.ja.md) (M3)
-- 共役性を活かした Gibbs サンプリング → [04-gibbs.ja.md](../04-gibbs.ja.md)
+- 推論アルゴリズムを学ぶ → [theory-mcmc.ja.md](theory-mcmc.ja.md) (M3)
+- 共役性を活かした Gibbs サンプリング → [04-gibbs.ja.md](04-gibbs.ja.md)
 - 階層モデルの demo → `cabal run integrated-demo`, `noncentered-demo`,
   `mvnormal-latent-demo`

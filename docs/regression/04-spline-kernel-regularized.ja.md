@@ -1,7 +1,7 @@
 # 回帰拡張 (Spline / Kernel / Regularized) の使い方
 
 > LM/GLM の上に重ねる **非線形** ・ **非パラメトリック** ・ **正則化** モデル群。
-> 理論は [docs/learn/06-regression-extensions.ja.md](learn/06-regression-extensions.ja.md) を参照。
+> 理論は [docs/regression/theory-regression-extensions.ja.md](theory-regression-extensions.ja.md) を参照。
 
 ## モジュール早見表
 
@@ -240,6 +240,6 @@ graph TD
 
 ## 関連リンク
 
-- 理論: [docs/learn/06-regression-extensions.ja.md](learn/06-regression-extensions.ja.md)
+- 理論: [docs/regression/theory-regression-extensions.ja.md](theory-regression-extensions.ja.md)
 - 既存の LM/GLM: [docs/01-quickstart.ja.md](01-quickstart.ja.md), `Model.LM` / `Model.GLM`
 - Bayesian 版の正則化: `Model.HBM` で `potential` (Phase A) を使うとカスタムペナルティが書ける

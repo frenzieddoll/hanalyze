@@ -1,7 +1,7 @@
 # 多次元出力モデルの使い方
 
 > 多目的最適化や複数応答の同時推定で使う多変量回帰モデル群。
-> 理論は [docs/learn/08-multivariate-theory.ja.md](learn/08-multivariate-theory.ja.md) を参照。
+> 理論は [docs/regression/theory-multivariate.ja.md](theory-multivariate.ja.md) を参照。
 
 ## モジュール早見表
 

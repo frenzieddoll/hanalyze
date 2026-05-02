@@ -1,7 +1,7 @@
 # 学習資料 7 — 実験計画法 (DOE) の理論
 
 > 効率的なデータ収集設計の数学的基礎。
-> 使い方は [docs/11-design-of-experiments.ja.md](../11-design-of-experiments.ja.md)。
+> 使い方は [docs/doe-optim/01-doe.ja.md](01-doe.ja.md)。
 
 ## 1. 統計的実験計画法とは
 
