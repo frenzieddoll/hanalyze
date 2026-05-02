@@ -182,6 +182,15 @@ data Distribution a
     -- ^ Multinomial(n, [p_0,…,p_{K-1}]) (観測専用)。
     --   試行数 n と確率ベクトル p を持つ。観測は K 次元のカウントベクトル
     --   (合計 n)。'observeMV' で観測列をベクトルとして渡す。
+  | ZeroInflatedPoisson a a
+    -- ^ ZeroInflatedPoisson(ψ, λ): ゼロ過剰ポアソン。
+    --   ψ ∈ [0,1] は「構造的ゼロ」(余分なゼロが出る確率)。
+    --   P(0)   = ψ + (1-ψ) e^{-λ}
+    --   P(k>0) = (1-ψ) λ^k e^{-λ} / k!
+  | ZeroInflatedBinomial Int a a
+    -- ^ ZeroInflatedBinomial(n, ψ, p): ゼロ過剰二項。
+    --   P(0)   = ψ + (1-ψ) (1-p)^n
+    --   P(k>0) = (1-ψ) C(n,k) p^k (1-p)^{n-k}
   deriving (Show, Functor)
 
 distName :: Distribution a -> Text
@@ -204,7 +213,9 @@ distName Truncated{}   = "Truncated"
 distName Censored{}    = "Censored"
 distName MvNormal{}    = "MvNormal"
 distName NegativeBinomial{} = "NegativeBinomial"
-distName Multinomial{}      = "Multinomial"
+distName Multinomial{}          = "Multinomial"
+distName ZeroInflatedPoisson{}  = "ZeroInflatedPoisson"
+distName ZeroInflatedBinomial{} = "ZeroInflatedBinomial"
 
 -- | サンプル値 (型 @a@) に対する事前分布の対数密度。
 logDensity :: (Floating a, Ord a) => Distribution a -> a -> a
@@ -296,6 +307,27 @@ logDensity (Censored d _ _) x =
   logDensity d x
 logDensity MvNormal{} _ = 0  -- observation-only: latent としては使わない
 logDensity Multinomial{} _ = 0  -- observation-only
+logDensity (ZeroInflatedPoisson psi lam) x
+  | psi < 0 || psi > 1 || lam <= 0 || x < 0 = negInf
+  | x == 0 =
+      -- log(ψ + (1-ψ) e^{-λ})
+      logSumExpA [log psi, log (1 - psi) - lam]
+  | otherwise =
+      -- log(1-ψ) + Poisson logpmf
+      log (1 - psi) + x * log lam - lam - lgammaApprox (x + 1)
+logDensity (ZeroInflatedBinomial n psi p) x
+  | psi < 0 || psi > 1 || p <= 0 || p >= 1 || x < 0 = negInf
+  | otherwise =
+      let nA   = realToFrac (fromIntegral n :: Double)
+          -- log(C(n,k)) = lgamma(n+1) - lgamma(k+1) - lgamma(n-k+1) (多相)
+          logC = lgammaApprox (nA + 1)
+               - lgammaApprox (x + 1)
+               - lgammaApprox (nA - x + 1)
+      in if x == 0
+           then logSumExpA [log psi
+                           , log (1 - psi) + nA * log (1 - p)]
+           else log (1 - psi)
+                + logC + x * log p + (nA - x) * log (1 - p)
 logDensity (NegativeBinomial mu alpha) x
   | mu <= 0 || alpha <= 0 || x < 0 = negInf
   | otherwise =
@@ -438,6 +470,27 @@ logDensityObs MvNormal{} _ = 0
   -- スカラー観測経路では使わない (chunk して 'mvNormalLogDensity' を呼ぶ obsLogSum 経由)
 logDensityObs Multinomial{} _ = 0
   -- スカラー観測経路では使わない (k 次元 chunk で multinomialLogDensity を呼ぶ)
+logDensityObs (ZeroInflatedPoisson psi lam) y
+  | psi < 0 || psi > 1 || lam <= 0 || y < 0 = negInf
+  | y == 0 =
+      logSumExpA [log psi, log (1 - psi) - lam]
+  | otherwise =
+      let kA       = realToFrac y :: a
+          kInt     = round y :: Int
+          logFactK = realToFrac (logFactorial kInt) :: a
+      in log (1 - psi) + kA * log lam - lam - logFactK
+logDensityObs (ZeroInflatedBinomial n psi p) y
+  | psi < 0 || psi > 1 || p <= 0 || p >= 1 || y < 0 = negInf
+  | otherwise =
+      let kA   = realToFrac y :: a
+          k    = round y :: Int
+          nA   = realToFrac (fromIntegral n :: Double) :: a
+          logC = realToFrac (logBinomCoeff n k) :: a
+      in if y == 0
+           then logSumExpA [log psi
+                           , log (1 - psi) + nA * log (1 - p)]
+           else log (1 - psi)
+                + logC + kA * log p + (nA - kA) * log (1 - p)
 logDensityObs (NegativeBinomial mu alpha) y
   | mu <= 0 || alpha <= 0 || y < 0 = negInf
   | otherwise =
@@ -868,6 +921,16 @@ sampleDist MvNormal{} _ =
   error "MvNormal: observation-only — 'sample' 経由でのドローは未対応"
 sampleDist Multinomial{} _ =
   error "Multinomial: observation-only — 'sample' 経由でのドローは未対応"
+sampleDist (ZeroInflatedPoisson psi lam) gen = do
+  u <- MWCBase.uniform gen :: IO Double
+  if u < psi
+    then return 0
+    else samplePoissonKnuth lam gen
+sampleDist (ZeroInflatedBinomial n psi p) gen = do
+  u <- MWCBase.uniform gen :: IO Double
+  if u < psi
+    then return 0
+    else sampleDist (Binomial n p) gen
 sampleDist (NegativeBinomial mu alpha) gen = do
   -- Gamma-Poisson mixture: λ ~ Gamma(α, β=α/μ); X ~ Poisson(λ)
   lam <- MWC.gamma alpha (mu / alpha) gen
@@ -1513,6 +1576,8 @@ distDepsT (MvNormal mus covRows) =
     <> mconcat (concatMap (map trackDeps) covRows)
 distDepsT (NegativeBinomial mu alpha) = trackDeps mu <> trackDeps alpha
 distDepsT (Multinomial _ ps) = mconcat (map trackDeps ps)
+distDepsT (ZeroInflatedPoisson psi lam) = trackDeps psi <> trackDeps lam
+distDepsT (ZeroInflatedBinomial _ psi p) = trackDeps psi <> trackDeps p
 
 -- | Track でモデルを評価する (log joint も依存集合付きで計算)。
 runTrack :: forall r. ModelP r -> Map Text Track -> Track
