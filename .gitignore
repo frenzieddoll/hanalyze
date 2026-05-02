@@ -4,3 +4,9 @@
 *.txt
 *.png
 *.svg
+
+# Track demo data CSVs under data/ (reproducible inputs)
+!data/**/*.csv
+
+# Ignore the trash directory entirely (output artifacts; user-managed cleanup)
+/trash/

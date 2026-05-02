@@ -170,6 +170,14 @@ cabal test               # テスト
 | `demo/visualization/` | Bar/Histogram 等 | 1 |
 | `demo/io/`            | DataIO 系 (Preprocess / External) | 2 |
 
+### サンプルデータ・出力ディレクトリ
+
+| ディレクトリ | 内容 |
+|---|---|
+| `data/regression/`    | 回帰用デモデータ (`test_lm.csv`, `test_poisson.csv`) |
+| `data/distributions/` | 確率分布のサンプル (`normal.csv`, `poisson.csv`, `exponential.csv`) |
+| `trash/`              | デモやテストで生成された HTML/PNG/SVG (gitignore、ユーザーが手動削除) |
+
 ### 入門 (まずはこれ)
 
 | デモ | 内容 | 主に学べること |
