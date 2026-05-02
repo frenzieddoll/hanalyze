@@ -1,330 +1,577 @@
-# 学習資料 5 — VI / モデル選択 / 高度なトピック
+# 学習資料 — VI / モデル選択 / 高度トピック (入門者向け再整理)
 
-> Variational Inference、WAIC / LOO-CV、そして hanalyze に実装した
-> 応用機能 (Mixture / LKJ / AR / Censored / non-centered など) の理論と
-> 使い方をまとめる。
+> **想定読者**: ベイズ統計の基礎 (事前/尤度/事後、共役、HBM の概念) を
+> 学んだ人。各トピックを **用語の定義から** 噛み砕いて説明し、
+> 「次に何を勉強すればよいか」の道標を示します。
+>
+> 関連: [theory-bayesian-basics.ja.md](theory-bayesian-basics.ja.md) /
+> [theory-mcmc.ja.md](theory-mcmc.ja.md) /
+> [theory-hmc-nuts.ja.md](theory-hmc-nuts.ja.md)
 
-## 1. Variational Inference (VI)
+## 目次
 
-### 1.1 動機
-
-MCMC は正確だが遅い。**VI** は事後を近似する別アプローチ:
-
-- 簡単な分布族 $\mathcal{Q}$ を選ぶ
-- $\mathcal{Q}$ の中で事後 $p(\theta \mid y)$ に最も近い $q^*$ を探す
-- 最適化問題に帰着 → 速い
-
-### 1.2 ELBO (Evidence Lower BOund)
-
-「近さ」の指標として KL divergence:
-
-$$ \text{KL}(q \,\|\, p) = E_q\!\left[\log\frac{q(\theta)}{p(\theta \mid y)}\right] $$
-
-を最小化したい。$p(\theta \mid y) = p(\theta, y) / p(y)$ なので:
-
-$$ \log p(y) = \underbrace{E_q[\log p(\theta, y) - \log q(\theta)]}_{\text{ELBO}} + \text{KL}(q \,\|\, p) $$
-
-$\log p(y)$ は定数なので、KL 最小化 = ELBO 最大化。
-
-### 1.3 平均場近似 (Mean Field)
-
-最も簡単な選択:
-
-$$ q(\theta) = \prod_i q_i(\theta_i) $$
-
-各 $\theta_i$ を独立にした単純な分布の積。各 $q_i$ は典型的に
-Normal$(\mu_i, \sigma_i)$ などのパラメトリック家族。
-
-### 1.4 ADVI (Automatic Differentiation VI)
-
-Kucukelbir et al. 2017。任意のモデルに自動適用:
-
-1. 全パラメタを **unconstrained 空間** に変換 ($u = T(\theta)$)
-2. 各成分に Normal $q_i = \text{Normal}(\mu_i, \sigma_i)$ を仮定
-3. ELBO を AD で勾配計算、Adam 等で最適化
-
-### 1.5 hanalyze の `Stat.VI`
-
-```haskell
-import Stat.VI (advi, defaultVIConfig)
-
-result <- advi model
-            defaultVIConfig
-              { viIterations = 5000
-              , viLearningRate = 0.05
-              }
-            init0 gen
-
--- result :: VIResult, fields:
---   viParams :: Map Text (Double, Double)  -- (μ, σ) per param
---   viELBO   :: [Double]                   -- 反復ごとの ELBO 履歴
-```
-
-### 1.6 VI vs MCMC
-
-| | MCMC (NUTS) | VI (ADVI) |
-|---|---|---|
-| 精度 | 漸近的に正確 | 近似 (KL 最小化のバイアス) |
-| 速度 | 遅い | 速い (10〜100x) |
-| 不確実性 | 正確 | 過小評価しがち (mean-field) |
-| 多峰 | 苦手だが原理的に可能 | 単峰しか捕えない |
-| 用途 | 最終推論 | 探索、初期検討 |
+1. [Variational Inference (VI) — 事後を最適化で求める](#1-variational-inference-vi--事後を最適化で求める)
+2. [モデル選択 — WAIC / PSIS-LOO](#2-モデル選択--waic--psis-loo)
+3. [Mixture (混合分布)](#3-mixture-混合分布)
+4. [LKJ — 相関行列の事前分布](#4-lkj--相関行列の事前分布)
+5. [AR / 状態空間モデル](#5-ar--状態空間モデル)
+6. [**Truncated 分布** — 切り詰め (★重点)](#6-truncated-分布--切り詰め-重点)
+7. [**Censored 分布** — 打ち切り (★重点)](#7-censored-分布--打ち切り-重点)
+8. [どれをいつ使うか](#8-どれをいつ使うか)
+9. [次に学ぶこと](#9-次に学ぶこと)
+10. [参考文献](#10-参考文献)
 
 ---
 
-## 2. モデル選択
+## 1. Variational Inference (VI) — 事後を最適化で求める
 
-### 2.1 観点: 予測精度 (out-of-sample)
+### 1.1 何が問題か
 
-新しいデータ $\tilde{y}$ への予測が良いモデルを選ぶ:
+ベイズ推論で事後 $p(\theta \mid y)$ を求めたいが、
 
-$$ \text{elpd} = E_{p(\tilde y)}[\log p(\tilde y \mid y)] $$
+- **正規化定数 $p(y) = \int p(y \mid \theta) p(\theta) d\theta$ が高次元積分で計算不能**
+- MCMC は正確だが **遅い** (収束まで数千〜数万反復)
 
-これを近似する手法が **WAIC** と **LOO-CV**。
+→ **VI** で事後を「**簡単な分布で近似**」する。最適化問題に帰着するので速い。
 
-### 2.2 WAIC (Widely Applicable Information Criterion)
+### 1.2 用語の定義
 
-Watanabe 2010。事後サンプルから:
+- **変分分布** (variational distribution) $q(\theta; \phi)$:
+  事後を近似する分布。パラメタ $\phi$ を持つ (= 通常の確率分布のパラメタ μ, σ など)。
+- **平均場近似** (mean-field): $q(\theta) = \prod_i q_i(\theta_i)$
+  パラメタ間を独立とみなす最も簡単な選択。
+- **KL ダイバージェンス** (Kullback-Leibler):
+  2 分布の "距離" (非対称、非負)。0 のとき同一。
 
-$$ \widehat{\text{elpd}}_{\text{WAIC}} = \sum_i \log\!\left(\frac{1}{S}\sum_s p(y_i \mid \theta^{(s)})\right) - \sum_i \text{Var}_s(\log p(y_i \mid \theta^{(s)})) $$
+### 1.3 ELBO の導出 (噛み砕き版)
 
-第二項が **有効パラメタ数 $p_{\text{WAIC}}$** (= 過適合ペナルティ)。
+我々が求めたいのは「$q$ が事後 $p(\theta \mid y)$ にどれだけ近いか」。
+**KL divergence** で測る:
 
-`Stat.ModelSelect.waic` で実装。
+$$ \text{KL}(q \,\|\, p_{\text{post}}) = E_q\!\left[\log q(\theta) - \log p(\theta \mid y)\right] $$
 
-### 2.3 LOO-CV (Leave-One-Out Cross-Validation)
+ここで $p(\theta \mid y) = p(\theta, y) / p(y)$ なので:
 
-各データ点を順に除いて予測精度を評価。Vehtari 2017 の **PSIS-LOO**:
+$$ \text{KL} = E_q[\log q(\theta) - \log p(\theta, y)] + \log p(y) $$
 
-- 重要度サンプリングで通常の posterior から $p(y_i \mid y_{-i})$ を推定
-- $\hat k$ 診断: 各観測の重み分布を Pareto 分布で fit、$\hat k$ で
-  「重要度サンプリングが信頼できるか」を判定
-  - $\hat k < 0.5$: OK
-  - $0.5 \le \hat k < 0.7$: 注意
-  - $\hat k \ge 0.7$: 信頼性低い (該当点を除外して MCMC 再実行を推奨)
+$\log p(y)$ は $\theta$ によらない定数。第 1 項を **負の** ELBO と呼ぶ:
 
-`Stat.ModelSelect.loo` で実装。
+$$ \text{ELBO}(\phi) = E_q[\log p(\theta, y) - \log q(\theta; \phi)] $$
 
-### 2.4 モデル比較
+すると:
+
+$$ \log p(y) = \text{ELBO}(\phi) + \text{KL}(q_\phi \| p_{\text{post}}) $$
+
+$\log p(y)$ は定数、$\text{KL} \ge 0$ なので **ELBO は $\log p(y)$ の下限** (lower bound)。
+**ELBO 最大化 = KL 最小化** = 事後への最良近似。
+
+### 1.4 ADVI: 自動 VI
+
+Kucukelbir et al. (2017)。任意のモデルに自動適用:
+
+1. 全 latent を **unconstrained 空間** (`PositiveT`/`UnitIntervalT` 等) に変換
+2. 各成分を **Normal**$(\mu_i, \sigma_i)$ で近似 (= 平均場)
+3. ELBO 勾配を AD (自動微分) で計算
+4. **Adam** などで最適化
+
+### 1.5 hanalyze での使い方
 
 ```haskell
-import Stat.ModelSelect (compareModels, ModelInfo (..))
+import Stat.VI (advi, defaultVIConfig, VIConfig (..), VIResult (..))
 
--- 各モデルから loglik 行列を取得し
-loglik1 <- ...   -- shape: [S × N]
-loglik2 <- ...
-
-let comparisons = compareModels
-      [ ModelInfo "M1" loglik1
-      , ModelInfo "M2" loglik2
-      , ModelInfo "M3" loglik3
-      ]
--- 出力: 各モデルの elpd_loo, se, weight (Pseudo-BMA)
+result <- advi model defaultVIConfig
+                  { viIterations = 5000, viLearningRate = 0.05 }
+                init0 gen
+-- result.viParams :: Map Text (Double, Double)  -- (μ, σ) per param
+-- result.viELBO   :: [Double]                    -- 反復ごとの ELBO 履歴
 ```
 
-**Pseudo-BMA**: $w_k = \exp(\text{elpd}_k) / \sum_l \exp(\text{elpd}_l)$。
-不確実性付きの予測平均化に使う。
+`vi-demo` で NUTS と精度比較。VI は ~700 倍速。
 
-### 2.5 hanalyze での実演
+### 1.6 VI の弱点
 
-```bash
-cabal run forest-compare    # 3 モデルの forest plot + WAIC/LOO 比較
-```
+- **平均場の制約**: パラメタ間の相関を捉えない (= sd を過小評価しがち)
+- **多峰分布に弱い**: 1 つの峰しか捕えない
+- **裾の評価が悪い**: VI は KL(q‖p) を最小化するので、p の裾を q が無視しがち
+  (= "mode-seeking")
+
+→ 探索的分析や初期値選定で VI、最終分析は MCMC、が実用的。
 
 ---
 
-## 3. 高度なモデリングテクニック
+## 2. モデル選択 — WAIC / PSIS-LOO
 
-### 3.1 Mixture モデル
+### 2.1 何のための指標か
 
-```haskell
-mix <- sample "x" (Mixture [w1, w2, w3] [comp1, comp2, comp3])
-```
+「複数モデルから良いものを選ぶ」基準。**観測データへの fit ではなく、
+新観測への予測精度** を評価する (= out-of-sample 性能)。
 
-潜在クラスタの自動検出。**ラベルスイッチング** (どの成分が
-"成分 1" かは不定) に注意 — `forestPlot` で順序を強制するなどで対処。
+### 2.2 用語の定義
 
-実装の核心: log-density 計算で **log-sum-exp** を使う:
+- **elpd** (expected log predictive density):
+  $\text{elpd} = E_{p(\tilde y)}[\log p(\tilde y \mid y)]$
+  「新観測 $\tilde y$ に対する対数予測密度の期待値」。**大きい (= 0 に近い負の値) ほど良い**。
+- **WAIC** (Widely Applicable Information Criterion, Watanabe 2010):
+  事後サンプルから elpd を直接近似する指標。
+- **PSIS-LOO** (Pareto Smoothed Importance Sampling LOO-CV, Vehtari 2017):
+  Leave-One-Out 交差検証 を重要度サンプリングで近似。
 
-$$ \log p(x) = \log\!\sum_k w_k p_k(x) = \text{logsumexp}(\log w_k + \log p_k(x)) $$
+### 2.3 WAIC の式
 
-`logSumExpA` ヘルパで数値安定。
+$$ \widehat{\text{elpd}}_{\text{WAIC}} = \sum_{i=1}^n \log\!\left(\frac{1}{S}\sum_{s=1}^S p(y_i \mid \theta^{(s)})\right) - \sum_i \text{Var}_s\!\left(\log p(y_i \mid \theta^{(s)})\right) $$
 
-### 3.2 Truncated / Censored
+第 1 項: 事後予測密度の対数平均
+第 2 項: **有効パラメタ数 $p_{\text{WAIC}}$** (過適合ペナルティ)
 
-- **Truncated**: 観測が範囲内のみ。CDF で正規化定数補正
+### 2.4 PSIS-LOO の概要
 
-  $$ p_T(y) = p(y) \big/ [F(\text{hi}) - F(\text{lo})] $$
+LOO-CV は通常 $n$ 回 fit が必要 ($O(n)$ コスト)。
+**重要度サンプリング** で 1 回の事後 sample から $n$ 個の LOO 予測を近似:
 
-- **Censored** (Tobit):
-  - $y_i$ が範囲内: 通常の密度 $p(y_i)$
-  - $y_i = \text{lo}$: 左打ち切り尤度 $F(\text{lo})$
-  - $y_i = \text{hi}$: 右打ち切り尤度 $1 - F(\text{hi})$
+$$ p(y_i \mid y_{-i}) \approx \frac{\sum_s w_i^{(s)} p(y_i \mid \theta^{(s)})}{\sum_s w_i^{(s)}} $$
 
-`distCDF` (CDF) と `logCDFInterval` を使って実装。
+重みの分布が裾重いと不安定。**Pareto** 分布で平滑化 (PSIS):
 
-### 3.3 Dirichlet と stick-breaking
+- 上位 M 個の重みから Pareto の形状 $\hat k$ を推定
+- $\hat k < 0.5$: OK
+- $0.5 \le \hat k < 0.7$: 注意
+- $\hat k \ge 0.7$: その観測点は信頼性低い (= 該当点を除外して MCMC 再実行を推奨)
 
-シンプレックス制約 $\sum \pi_k = 1$ を K-1 個の Beta 変数に分解:
-
-```text
-β_k ~ Beta(α_k, Σ_{j>k} α_j),  k = 1..K-1
-π_1 = β_1
-π_k = β_k Π_{j<k} (1 - β_j)
-π_K = Π_{j<K} (1 - β_j)
-```
-
-各 $\beta_k$ は独立に $(0, 1)$ なので HMC が安定。
-
-### 3.4 LKJ 相関事前
-
-相関行列 $R$ ($K \times K$) の事前 $p(R) \propto |R|^{\eta - 1}$。
-$\eta = 1$ で uniform、$\eta > 1$ で I に集中。
-
-**Canonical Partial Correlations (CPC)** 法で latent 化:
-
-```text
-z_ij ~ scaled Beta on (-1, 1),  α_i = η + (K-i-1)/2  (1 ≤ j < i ≤ K-1)
-
-L[i][i] = √(1 - Σ_{k<i} z_{i,k}²)
-L[i][j] = z_ij × √(Π_{k<j}(1 - z_{i,k}²))   (j < i)
-```
-
-R = L Lᵀ で相関行列が再構築される。共分散事前は **diag(σ) R diag(σ)**:
+### 2.5 hanalyze での使用
 
 ```haskell
-l <- lkjCorrCholesky "R" K eta
-sigmas <- mapM (\i -> sample ... HalfNormal) [1..K]
-let cov = ... -- diag(σ) L Lᵀ diag(σ)
-mvNormalLatent "x" mu cov
+import Stat.ModelSelect (waic, loo, compareModels, ModelInfo (..))
+
+let waicResult = waic loglikMatrix    -- loglik :: [[Double]]  (S × N)
+let looResult  = loo  loglikMatrix
+-- looKHat looResult :: [Double]       (各観測の k̂)
+
+-- 複数モデル比較
+let cmps = compareModels [ ModelInfo "M1" loglik1
+                         , ModelInfo "M2" loglik2 ]
+-- 各モデルの elpd, se, 重み (Pseudo-BMA)
 ```
 
-### 3.5 AR(1) 状態空間
+### 2.6 Pseudo-BMA (モデル平均化)
+
+複数モデルの予測を **重み付き平均**:
+
+$$ w_k = \frac{\exp(\text{elpd}_k)}{\sum_l \exp(\text{elpd}_l)} $$
+
+「モデル選択 (1 つを選ぶ)」より「モデル平均化 (複数を確率重みで使う)」が
+ロバストなことが多い。
+
+---
+
+## 3. Mixture (混合分布)
+
+### 3.1 用語の定義
+
+**混合分布** (mixture distribution):
+
+$$ p(x) = \sum_{k=1}^K w_k \, p_k(x), \quad \sum_k w_k = 1, \, w_k \ge 0 $$
+
+各 $p_k$ が **成分** (component)、$w_k$ が **混合比** (mixing weight)。
+
+### 3.2 用途
+
+- **クラスタリング**: データが複数の正規分布の混合と仮定 → 各点がどの成分由来か推論
+- **外れ値モデル**: 主成分 + 「広い」成分を混合 → 外れ値を許容
+- **ヘテロシダスティック** な誤差: 異なる分散を持つ成分の混合
+- **柔軟な分布**: GMM (Gaussian Mixture Model) で任意分布を近似
+
+### 3.3 log-sum-exp
+
+ログ空間で計算するための数値安定化:
+
+$$ \log p(x) = \log \sum_k w_k p_k(x) = \text{logsumexp}(\log w_k + \log p_k(x)) $$
+
+`logSumExpA` ヘルパで実装。
+
+### 3.4 hanalyze
+
+```haskell
+mix <- sample "x" (Mixture [0.3, 0.7] [Normal 0 1, Normal 5 2])
+-- 30% 確率で Normal(0, 1), 70% 確率で Normal(5, 2)
+```
+
+### 3.5 ラベルスイッチング問題
+
+**MCMC で混合モデルを fit** すると、成分の番号が反復ごとに入れ替わる
+(= 同じ事後分布なので尤度が変わらない)。
+
+対処:
+- 順序制約 ($\mu_1 < \mu_2 < \cdots$) を `potential` で課す
+- post-hoc に成分を整列
+
+---
+
+## 4. LKJ — 相関行列の事前分布
+
+### 4.1 動機
+
+多変量正規 $\text{MvN}(\boldsymbol\mu, \Sigma)$ で **共分散行列 $\Sigma$** を推定したい。
+$\Sigma$ は対称正定値で、構造が複雑。
+
+**LKJ 分解**:
+
+$$ \Sigma = \text{diag}(\boldsymbol\sigma) \, R \, \text{diag}(\boldsymbol\sigma) $$
+
+- $\boldsymbol\sigma$: 各次元の sd (= **scale**)
+- $R$: 相関行列 (対角 1、対称正定値)
+
+各々に独立な事前を置く:
+- $\sigma_i \sim \text{HalfNormal}$
+- $R \sim \text{LKJ}(\eta)$
+
+### 4.2 LKJ 分布 (Lewandowski-Kurowicka-Joe 2009)
+
+K×K 相関行列上の分布。確率密度:
+
+$$ p(R) \propto |R|^{\eta - 1} $$
+
+| $\eta$ | 性質 |
+|---|---|
+| $\eta = 1$ | uniform on correlation matrices |
+| $\eta > 1$ | I (単位行列) に集中 (= 弱い相関) |
+| $\eta < 1$ | 相関が ±1 に集中 |
+
+### 4.3 hanalyze の実装
+
+```haskell
+import Model.HBM (lkjCorrCholesky)
+
+l <- lkjCorrCholesky "R" 3 1.0  -- K=3, η=1
+-- l :: [[a]] は L (R = L Lᵀ の Cholesky factor)
+```
+
+内部は **CPC (Canonical Partial Correlations)** 法で K(K-1)/2 個の Beta 変数を sample。
+
+### 4.4 用途
+
+- 多変量階層モデルの共分散事前
+- 多出力 GP の出力間相関 (`Multi-output GP`)
+- ランダム傾きモデルで切片と傾きの相関
+
+---
+
+## 5. AR / 状態空間モデル
+
+### 5.1 AR(1) モデル
+
+時系列の最も基本的なモデル:
+
+$$ x_t = \phi x_{t-1} + \varepsilon_t, \quad \varepsilon_t \sim \text{Normal}(0, \sigma) $$
+
+- $|\phi| < 1$ で **定常**: 長期平均 = 0、分散 = $\sigma^2 / (1-\phi^2)$
+- $\phi = 1$ で **ランダムウォーク**
+
+### 5.2 状態空間モデル
+
+潜在状態 $x_t$ + 観測 $y_t$:
+
+```text
+x_t = φ x_{t-1} + ε_t        (状態方程式)
+y_t = x_t + η_t              (観測方程式)
+```
+
+ノイズ $\varepsilon_t$ と $\eta_t$ を別に扱うので **ノイズ除去** が可能。
+
+### 5.3 hanalyze の `ar1Latent`
 
 ```haskell
 xs <- ar1Latent "x" T phi sigma
 -- 内部:
---   raw_t ~ Normal(0, 1) for t = 0..T-1
---   x_0 = (σ/√(1-φ²)) × raw_0    (定常分布)
---   x_t = φ x_{t-1} + σ × raw_t   (t > 0)
+--   raw_t ~ Normal(0, 1)
+--   x_0 = (σ / √(1-φ²)) × raw_0           (定常分布)
+--   x_t = φ x_{t-1} + σ × raw_t           (t > 0)
+-- 全部 raw_t は独立な Normal で、x_t は派生量として保存
 ```
 
-時系列の latent 状態を非中心化で表現。観測モデルは:
+これは **非中心化パラメタ化** ([§7 — non-centered](theory-hmc-nuts.ja.md))。
+HMC が安定。
+
+### 5.4 拡張
+
+- **AR(p)**: 過去 p ステップに依存
+- **VAR**: 多変量時系列
+- **Kalman filter**: 線形ガウス状態空間の最尤推定 (hanalyze 未実装)
+
+---
+
+## 6. Truncated 分布 — 切り詰め (★重点)
+
+### 6.1 状況: なぜ必要か
+
+「**観測が特定の範囲内のみ** で、範囲外の値は **そもそも観測されない**」場合。
+
+**例 1: 生存解析の打ち切り (truncation)**
+- 病院に入院した患者の生存時間を観測
+- 観測期間は最大 5 年 → 5 年超で死亡した人は **存在自体が分からない** (退院済 etc.)
+- 観測対象は「5 年以内に死亡した患者だけ」
+
+**例 2: センサーの検出範囲**
+- センサーが [0.1, 100] の範囲しか読めない
+- 範囲外の値は記録されない (= 信号が来ない)
+
+**例 3: アンケートの自己選別**
+- 「過去 1 年に運動した日数」を聞く
+- 「全く運動しない人」がアンケート対象から外れていると、最小値 ≥ 1 のデータに
+
+これらでは「**観測サンプル自体が偏っている**」(= selection bias) ので、
+普通の Normal/Exp などで尤度を計算すると **bias** がかかる。
+
+### 6.2 数学的定式化
+
+元の分布 $p(x)$ を範囲 $[a, b]$ に **切り詰める**:
+
+$$ p_T(x \mid a \le x \le b) = \begin{cases} \dfrac{p(x)}{F(b) - F(a)} & a \le x \le b \\ 0 & \text{otherwise} \end{cases} $$
+
+ここで $F$ は元分布の CDF。**正規化定数 $F(b) - F(a)$** で確率を 1 に揃える。
+
+**直観**: 「分布の質量を範囲内にスケールアップする」。
+
+### 6.3 範囲が片側だけの場合
+
+- 下限のみ ($x \ge a$): $p_T(x) = p(x) / [1 - F(a)]$
+- 上限のみ ($x \le b$): $p_T(x) = p(x) / F(b)$
+
+例: 「**指数分布で観測されるのは t > 1 の場合のみ**」なら:
+
+$$ p_T(t \mid t > 1) = \frac{\lambda e^{-\lambda t}}{e^{-\lambda}} = \lambda e^{-\lambda(t-1)} \quad (t \ge 1) $$
+
+メモリレス性のおかげで実は **平行移動した指数分布**。一般的にはこんな簡素にはならない。
+
+### 6.4 hanalyze での使い方
 
 ```haskell
-y_t ~ Normal(x_t, σ_obs)
+import Model.HBM (Distribution (..), observe)
+
+-- 例: 生存時間が観測期間 [0, 5] 内に切り詰められた指数分布
+truncatedSurvival :: ModelP ()
+truncatedSurvival = do
+  rate <- sample "rate" (HalfNormal 2)
+  observe "y" (Truncated (Exponential rate) (Just 0) (Just 5)) survivalTimes
+  -- y の値は全部 [0, 5] 内、5 年超で亡くなった人のデータは含まれない
 ```
 
-を per-step の `observe` で記述 (Phase J2)。
+**鍵**: `Truncated d (Just lo) (Just hi)` で正規化を自動化。
 
-### 3.6 ZeroInflated
+### 6.5 真値推定との対比
+
+「観測された平均生存時間」と「真の rate」は別物:
+- データが [0, 5] に切り詰められていると、真の rate より **小さく見える**
+  (長生きの患者がデータから抜けている)
+- Truncated を使うと正しく rate を推定できる
+
+`trunc-censor-demo` で実証:
+```
+正解: rate = 0.5 → 平均生存 2 年
+Truncated 補正あり: rate ≈ 0.5  ✓
+補正なし (普通の Exponential): rate を過大推定 (生存時間を短く見積もる)
+```
+
+### 6.6 注意点
+
+- **両側 Truncated** (区間 [a, b]) は log-density 不連続性が強く、NUTS で収束困難な場合あり。
+  代替: MH で解く、または Gibbs サンプラー。
+- 元分布が **CDF を持つもの** に限る (Normal/Exponential/LogNormal/Uniform/
+  Beta/Gamma/Cauchy/StudentT/HalfCauchy で hanalyze は対応)。
+
+---
+
+## 7. Censored 分布 — 打ち切り (★重点)
+
+### 7.1 Truncated との違い
+
+**Censored (打ち切り)** は **「サンプルは取れるが値が一部しか分からない」**:
+
+| | Truncated (切り詰め) | Censored (打ち切り) |
+|---|---|---|
+| 観測自体 | 範囲外は **存在しない** | 範囲外も **記録される (が境界値として)** |
+| データ件数 | 範囲内のみ | 全件 (境界値含む) |
+| 例 | 5 年以内死亡者のみ | 全患者観測、5 年生きてる人は ≥5 と記録 |
+
+### 7.2 例
+
+#### 例 A: Tobit モデル (経済学)
+- 時計の購入金額を観測
+- 「買わなかった人」は 0 と記録 (= 検出下限以下は 0 にまるめ)
+- 真値は連続的だが、観測は 0 でクリッピング
+
+#### 例 B: 検出限界
+- 化学分析で物質濃度を測定、検出下限 = 0.01 ppm
+- 0.005 ppm の真値は「< 0.01」と記録 (= 0.01 で打ち切り)
+
+#### 例 C: 生存解析の右側打ち切り
+- 観測終了時点でまだ生きている患者
+- 真の死亡時刻は不明だが「≥ 観測終了時刻」と分かる
+
+### 7.3 数学的定式化
+
+観測値 $y_i$ が:
+
+- **境界内**: 通常の密度 $p(y_i)$
+- **左境界 lo に等しい** (= 真値が ≤ lo の打ち切り): $P(Y \le \text{lo}) = F(\text{lo})$
+- **右境界 hi に等しい** (= 真値が ≥ hi の打ち切り): $P(Y \ge \text{hi}) = 1 - F(\text{hi})$
+
+これらを **対数尤度に正しく組み込む** ことで bias なく推定できる。
+
+### 7.4 hanalyze の `Censored`
+
+```haskell
+import Model.HBM (Distribution (..), observe)
+
+-- 例: 検出下限 1.0 のセンサーで Normal 観測
+censoredSensor :: ModelP ()
+censoredSensor = do
+  mu  <- sample "mu"    (Normal 0 5)
+  sig <- sample "sigma" (HalfNormal 3)
+  observe "y" (Censored (Normal mu sig) (Just 1.0) Nothing) sensorReadings
+  -- sensorReadings には 1.0 (打ち切り) と通常値が混在
+```
+
+内部では:
+- 観測 $y_i$ が `lo` に等しいなら **CDF 値** $F(\text{lo})$ を使う
+- 普通の値なら **density** $p(y_i)$ を使う
+
+#### Truncated/Censored の API 共通
+
+```haskell
+data Distribution a
+  = ...
+  | Truncated (Distribution a) (Maybe a) (Maybe a)
+  --             元分布           lo        hi   (Nothing = -∞ / +∞)
+  | Censored  (Distribution a) (Maybe a) (Maybe a)
+```
+
+### 7.5 真値推定との対比
+
+`trunc-censor-demo` の Censored Normal の例:
+
+| | μ̂ (推定) | σ̂ |
+|---|---|---|
+| Censored 補正あり (正しいモデル) | ≈ 真値 | ≈ 真値 |
+| 補正なし (1.0 を真値として扱う) | μ を **上方バイアス** | σ を **過小推定** |
+
+下限値を「真値」と勘違いすると、平均がそちらに引っ張られる。
+
+### 7.6 Tobit との関係
+
+経済学の **Tobit モデル** = Censored Normal の特殊形:
 
 ```text
-P(0)   = ψ + (1-ψ) P_d(0)
-P(k>0) = (1-ψ) P_d(k)
+y* = X β + ε (真値、観測されない)
+y  = max(0, y*)  (観測値、検出下限 0 で打ち切り)
 ```
 
-`logSumExpA [log ψ, log(1-ψ) + log P_d(0)]` で 0 の log-density、
-それ以外は通常 + `log(1-ψ)`。
+これは `Censored (Normal (X β) sigma) (Just 0) Nothing` と等価。
+
+### 7.7 両者の混在
+
+実用では **両方が同時に発生** することも:
+
+- 生存解析: 範囲 [0, 5] で観測 (truncated) + 観測終了時に生きている人は右側打ち切り
+- センサー: 検出範囲 [0.01, 100] (truncated) + 範囲内でも上限超は 100 にまるめ (censored)
+
+→ 両方の機構を組み合わせて尤度を構築する。hanalyze では別々の `Distribution`
+として扱い、`observe` を 2 回呼ぶ等で対応。
+
+### 7.8 識別性 (Identifiability)
+
+**Censored / Truncated は適切なデータ量がないと推定不可**:
+
+- 全部が打ち切り境界 → μ や σ が定まらない
+- 範囲が極端に狭い → 観測数が少なすぎ
+
+→ 事後 HDI が広い時は警戒。事前情報を強めるか、データ追加。
 
 ---
 
-## 4. 推論の選び方フローチャート
+## 8. どれをいつ使うか
 
-```mermaid
-graph TD
-  Q1{次元 D ?}
-  Q1 -->|"D < 5"| Q2{共役性?}
-  Q1 -->|"5 ≤ D < 100"| NUTS["NUTS (推奨)"]
-  Q1 -->|"D ≥ 100, 速度優先"| ADVI["ADVI"]
-  Q1 -->|"D ≥ 100, 精度優先"| NUTS
-
-  Q2 -->|"完全に共役"| Gibbs["Gibbs"]
-  Q2 -->|"部分的"| GibbsMH["Gibbs+MH"]
-  Q2 -->|"なし"| MH["MH or NUTS"]
-```
-
-```mermaid
-graph TD
-  P1{病的事後分布の徴候?}
-  P1 -->|"BFMI < 0.3"| R1["non-centered パラメタ化"]
-  P1 -->|"divergence 多い"| R1
-  P1 -->|"R-hat > 1.01"| R2["反復数 +、target_accept 上げる"]
-  P1 -->|"ESS 低い"| R3["並列チェーン、軌道長見直し"]
-  P1 -->|"なし"| OK["完了"]
-```
-
----
-
-## 5. 全機能の使い分け早見表
-
-| やりたいこと | hanalyze API |
+| やりたいこと | 使うもの |
 |---|---|
-| シンプルな線形モデル + Bayesian 事後 | `nuts` + `Model.HBM.sample/observe` |
-| 階層モデル | 上記 + `nonCenteredNormal` |
-| カテゴリ確率 (Categorical の事前) | `dirichlet` |
-| 多変量観測 | `MvNormal` + `observeMV` |
-| 多変量 latent | `mvNormalLatent` + `lkjCorrCholesky` |
-| 過分散カウント | `NegativeBinomial` |
-| ゼロ過剰カウント | `ZeroInflatedPoisson` |
-| 切り詰めデータ | `Truncated` |
-| Tobit / 検出限界 | `Censored` |
-| 混合モデル (クラスタ自動検出) | `Mixture` |
-| 派生量 (`τ = 1/σ²` など) | `deterministic` |
-| カスタム正則化 | `potential` |
-| 角度データ | `VonMises` |
-| 生存解析 | `Weibull` |
-| 重い裾 | `Pareto`, `StudentT(ν=3)` |
-| 時系列 | `ar1Latent`, `Model.GP` |
-| データ差し替え | `dataNamed` + `withData` |
-| 高速近似推論 | `Stat.VI.advi` |
-| モデル比較 | `compareModels` (Pseudo-BMA) |
-| 収束診断 | `rhat`, `ess`, `bfmi`, `chainDivergences` |
-| 統合 HTML レポート | `Viz.Report.renderReport` |
+| 事後を素早く得る (大規模データ) | **VI (ADVI)** |
+| 多峰・複雑事後 | NUTS (MCMC) — VI は単峰しか捕えない |
+| クラスタ自動検出 | Mixture |
+| 重い裾の観測 | StudentT, Mixture (主+広成分) |
+| 多変量の共分散推定 | LKJ + scale 分解 |
+| 時系列 | AR(1)、状態空間 |
+| 観測が範囲内のみ存在 (selection bias) | **Truncated** |
+| 観測が境界値で潰れている (= 全件あるが部分情報) | **Censored** |
+| 生存時間データ | 用途で Truncated と Censored を組合せ |
+| モデル比較 | WAIC + LOO + (compareModels) |
 
 ---
 
-## 6. 学習の進め方
+## 9. 次に学ぶこと
 
-| ステップ | やること |
-|---|---|
-| 1. 基礎理論 | M1 (分布) → M2 (ベイズ) → M3 (MCMC) |
-| 2. 高度推論 | M4 (HMC/NUTS) → M5 (VI/モデル選択) |
-| 3. 既存 demo を読む | `simpleModel`, `forest-compare`, `integrated-demo` |
-| 4. 自分のデータで適用 | `Model.HBM` で書く → `nuts` → `Viz.Report` |
-| 5. 診断 | `summary-demo`, `noncentered-demo` を真似する |
-| 6. 拡張 | DSL に新分布を加えるなど (CONTRIBUTING な雰囲気で) |
+入門者として次のステップ:
+
+1. **demo を読んで動かす** ([demo](../../demo/) の以下を順に):
+   - `clinical-trial`, `simpson-paradox` (基本)
+   - `mixture-demo` (Mixture)
+   - `lkj-demo`, `lkj3d-demo` (LKJ)
+   - `ar1-demo` (AR)
+   - `trunc-censor-demo` (★ Truncated / Censored)
+   - `vi-demo` (VI vs NUTS)
+   - `forest-compare` (モデル比較)
+
+2. **実データで適用**:
+   - 自分のデータを `Model.HBM` で書く
+   - NUTS で fit → `Viz.Report` で診断 HTML を見る
+   - 仮定がおかしければ Truncated/Censored/Mixture を検討
+
+3. **理論を深掘り** (本書の参考文献に進む):
+   - Gelman BDA: ベイズ統計のバイブル
+   - Gelman & Hill: 階層モデル実例豊富
+   - Vehtari papers: WAIC/LOO の最新
+
+4. **HMC/NUTS の動作原理** ([theory-hmc-nuts.ja.md](theory-hmc-nuts.ja.md))
+
+5. **次のレベルへ**:
+   - 因果推論 (DoWhy, IV, DID)
+   - Gaussian Process (`gp-demo`)
+   - 多目的最適化 ([../doe-optim/02-multi-objective.ja.md](../doe-optim/02-multi-objective.ja.md))
 
 ---
 
-## 7. 主要な参考文献
+## 10. 参考文献
 
-| トピック | 文献 |
-|---|---|
-| ベイズ統計全般 | Gelman et al. "Bayesian Data Analysis" 3rd ed. (2013) |
-| MCMC | Robert & Casella "Monte Carlo Statistical Methods" (2004) |
-| HMC | Neal "MCMC using Hamiltonian dynamics" (2011) |
-| NUTS | Hoffman & Gelman (2014) |
-| BFMI | Betancourt (2016) |
-| ADVI | Kucukelbir et al. (2017) |
-| WAIC | Watanabe (2010) |
-| PSIS-LOO | Vehtari, Gelman, Gabry (2017) |
-| Pseudo-BMA | Yao et al. (2018) |
-| LKJ | Lewandowski et al. (2009) |
-| split R-hat | Vehtari et al. (2021) |
-| Slice sampling | Neal (2003) |
+### VI / モデル選択
+- **Kucukelbir, A., Tran, D., Ranganath, R., Gelman, A., Blei, D. M.** (2017). "Automatic Differentiation Variational Inference". *JMLR*. → ADVI 原論文
+- **Watanabe, S.** (2010). "Asymptotic Equivalence of Bayes Cross Validation and WAIC". *JMLR*. → WAIC
+- **Vehtari, A., Gelman, A., Gabry, J.** (2017). "Practical Bayesian model evaluation using leave-one-out cross-validation and WAIC". *Statistics and Computing*. → PSIS-LOO
+- **Yao, Y., Vehtari, A., Simpson, D., Gelman, A.** (2018). "Using Stacking to Average Bayesian Predictive Distributions". *Bayesian Analysis*. → Pseudo-BMA / Stacking
 
----
+### Mixture
+- **McLachlan, G., Peel, D.** (2000). *Finite Mixture Models*. Wiley. → 古典
 
-## 次のステップ
+### LKJ
+- **Lewandowski, D., Kurowicka, D., Joe, H.** (2009). "Generating random correlation matrices based on vines and extended onion method". *J. Multivariate Analysis*.
 
-学習資料 M1〜M5 はこれで完了。あとは実装を読み、自分のデータに適用するだけ。
+### Truncated / Censored ★
+- **Klein, J. P., Moeschberger, M. L.** (2003). *Survival Analysis: Techniques for Censored and Truncated Data* (2nd ed.). Springer.
+  → 生存解析の標準教科書、打ち切り/切り詰めを徹底的に。
+- **Greene, W. H.** (2017). *Econometric Analysis* (8th ed.). Pearson. Chapter 19.
+  → Tobit / Heckman / Censored regression の経済学的扱い。
+- **Cohen, A. C.** (1991). *Truncated and Censored Samples*. Marcel Dekker.
+  → 専門書、両者の数学的扱い。
 
-```bash
-# 各 demo を順番に実行して理解を深める
-cabal run hbm-example       # 最も簡単な HBM
-cabal run new-distrib-demo  # 連続分布の使い方
-cabal run forest-compare    # WAIC/LOO/Forest plot
-cabal run noncentered-demo  # 非中心化、divergence
-cabal run integrated-demo   # 階層モデル + 全機能統合
-```
+### 時系列
+- **Durbin, J., Koopman, S. J.** (2012). *Time Series Analysis by State Space Methods* (2nd ed.). Oxford.
+
+### 全般
+- **Gelman, A., Carlin, J. B., Stern, H. S., Dunson, D. B., Vehtari, A., Rubin, D. B.** (2013). *Bayesian Data Analysis* (3rd ed.). CRC. [Web (free)](http://www.stat.columbia.edu/~gelman/book/)
+  → ベイズ統計のバイブル。
+- **McElreath, R.** (2020). *Statistical Rethinking* (2nd ed.). CRC.
+  → 直観重視、入門書として最良。
+
+### 関連 hanalyze ドキュメント
+- [theory-bayesian-basics.ja.md](theory-bayesian-basics.ja.md) — ベイズの基礎
+- [theory-mcmc.ja.md](theory-mcmc.ja.md) — MCMC 原理
+- [theory-hmc-nuts.ja.md](theory-hmc-nuts.ja.md) — HMC/NUTS
+- [theory-distributions.ja.md](theory-distributions.ja.md) — 分布カタログ
+- [05-vi.ja.md](05-vi.ja.md) — VI の実装と使い方
+- [06-model-comparison.ja.md](06-model-comparison.ja.md) — WAIC/LOO の実装
