@@ -375,6 +375,8 @@ hanalyze spline data.csv x y --type natural --knots 8 --report
 全て scatter+fit プロットを `--out` に出力 (HTML/PNG/SVG)。
 `--report [FILE]` で **データ概要 + モデル概要 + 係数/ハイパラ + 散布図 + 残差**
 を統合した自己完結 HTML レポートを生成。
+`ridge` の `--report` には **正則化パスプロット** (λ 1e-4..1e2 を対数掃引、
+各係数の収縮を可視化、Lasso では係数のスパース化過程も観察可能) を自動追加。
 
 ### `doe` — 直交表 Lₙ で実験計画を生成
 

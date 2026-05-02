@@ -376,6 +376,9 @@ Each subcommand exposes the main hyperparameters (bandwidth/lambda/knots/...)
 directly, and writes a scatter+fit plot to `--out` (HTML/PNG/SVG).
 With `--report [FILE]` it also produces a self-contained HTML report combining
 **data overview + model overview + coefficients/hyperparameters + scatter+fit + residuals**.
+`ridge --report` additionally includes a **regularization path plot** (λ swept on
+log scale 1e-4..1e2, visualizing each coefficient's shrinkage; for Lasso, the
+sparsification trajectory).
 
 ### `doe` — generate experimental designs from orthogonal arrays Lₙ
 
