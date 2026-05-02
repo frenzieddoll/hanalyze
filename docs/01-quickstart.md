@@ -44,8 +44,12 @@ cabal run hanalyze -- regress data.csv x y LM --report    # regression (= bare f
 | `hist` | ✅ | Standalone histogram (`--fit`/`--format`/`--out`) |
 | `doe` | ✅ | Orthogonal arrays Lₙ (L4/L8/L9/L12/L16/L18) (Phase E1) |
 | `taguchi` | ✅ | Taguchi method (SN ratio + factor effects + inner/outer) (Phase E2) |
-| `ridge` / `kernel` | planned | Regularized / kernel regression |
-| `spline` | planned | Spline regression |
+| `ridge` | ✅ | Ridge / Lasso / Elastic Net (+ regularization path) |
+| `kernel` | ✅ | Kernel regression (Nadaraya-Watson / Kernel Ridge / RFF) |
+| `spline` | ✅ | B-spline / natural cubic |
+| `quantile` | ✅ | Quantile regression (τ-quantile, MM-IRLS) |
+| `gam` | ✅ | Generalized Additive Model |
+| `rf` | ✅ | Random Forest regression |
 
 ---
 
@@ -195,6 +199,9 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | Multivariate LR / RRR / PLS / CCA | `Model.MultiLM` / `Model.Multivariate` | |
 | Gaussian process / Multi-output GP | `Model.GP` / `Model.MultiGP` | `optimizeGP`, `fitGP` |
 | **Robust GP** (StudentT/Cauchy) | `Model.GPRobust` | `fitGPRobust`, `predictGPRobust` |
+| **Quantile regression** (τ-quantile) | `Model.Quantile` | `fitQuantile`, `predictQuantile` |
+| **GAM** (additive B-spline) | `Model.GAM` | `fitGAM`, `predictGAM`, `predictGAMComponent` |
+| **Random Forest** (regression) | `Model.RandomForest` | `fitRF`, `predictRF`, `featureImportance` |
 
 ### Data I/O & preprocessing
 | Use case | Module | Key functions |

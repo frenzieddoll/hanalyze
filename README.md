@@ -9,8 +9,9 @@ Usable both as a CLI tool and as a Haskell library.
 
 | Category | Highlights |
 |---|---|
-| **Classical regression** | LM (OLS) / GLM (IRLS) / GLMM / polynomial / confidence bands |
-| **Nonlinear & regularized** | B-spline / Natural cubic / Kernel Ridge / Ridge / Lasso / Elastic Net / **RFF (Random Fourier Features)** |
+| **Classical regression** | LM (OLS) / GLM (IRLS) / GLMM / polynomial / confidence bands / **Quantile (median / τ-quantile)** |
+| **Nonlinear & regularized** | B-spline / Natural cubic / Kernel Ridge / Ridge / Lasso / Elastic Net / **RFF** / **GAM** |
+| **Ensemble** | **Random Forest regression (CART + bagging + feature subset)** |
 | **Multi-output models** | Multivariate LM / RRR / PLS / CCA / Multi-output GP |
 | **Time series** | AR(1) / Gaussian Process |
 | **Robust regression** | **Robust GP (StudentT / Cauchy likelihoods + IRLS)** |
@@ -280,9 +281,12 @@ cabal run hanalyze -- <file> <xcols> <ycols> [LM|GLM|...] [opts]   # legacy = re
 | `hist`       | Standalone histogram (with optional density overlay) | ✅ implemented |
 | `doe`        | Orthogonal arrays Lₙ (L4/L8/L9/L12/L16/L18) | ✅ implemented (Phase E1) |
 | `taguchi`    | Taguchi method (SN ratio + factor effects + inner/outer) | ✅ implemented (Phase E2) |
-| `ridge`      | Ridge / Lasso / Elastic Net | ✅ implemented |
+| `ridge`      | Ridge / Lasso / Elastic Net (+ regularization path) | ✅ implemented |
 | `kernel`     | Kernel regression / RFF approximation | ✅ implemented |
 | `spline`     | B-spline / natural cubic | ✅ implemented |
+| `quantile`   | Quantile regression (τ-quantile, MM-IRLS) | ✅ implemented |
+| `gam`        | Generalized Additive Model (additive B-spline + Ridge) | ✅ implemented |
+| `rf`         | Random Forest regression (CART + bagging) | ✅ implemented |
 | `help`       | List subcommands | ✅ |
 
 ### `regress` (= bare form)
@@ -488,6 +492,9 @@ Model/
   HBM.hs           -- polymorphic probabilistic programming DSL (AD gradients, Track-based dependency extraction)
   RFF.hs           -- Random Fourier Features (O(nD) kernel-method approximation)
   GPRobust.hs      -- Robust GP (StudentT / Cauchy likelihoods + IRLS MAP)
+  Quantile.hs      -- Quantile regression (τ-quantile, MM-IRLS)
+  GAM.hs           -- Generalized Additive Model (additive B-splines + Ridge)
+  RandomForest.hs  -- Random Forest regression (CART + bagging + feature importance)
 
 MCMC/
   Core.hs          -- Chain type and posterior statistics (usable standalone)

@@ -9,8 +9,9 @@ CLI ツールとしても Haskell ライブラリとしても使えます。
 
 | カテゴリ | 主要な内容 |
 |---|---|
-| **古典的回帰** | LM (OLS) / GLM (IRLS) / GLMM / 多項式 / 信頼帯 |
-| **非線形・正則化** | B-spline / Natural cubic / Kernel Ridge / Ridge / Lasso / Elastic Net / **RFF (Random Fourier Features)** |
+| **古典的回帰** | LM (OLS) / GLM (IRLS) / GLMM / 多項式 / 信頼帯 / **Quantile (中央値・分位点)** |
+| **非線形・正則化** | B-spline / Natural cubic / Kernel Ridge / Ridge / Lasso / Elastic Net / **RFF** / **GAM** |
+| **アンサンブル** | **Random Forest (回帰、CART + bagging + 特徴サブセット)** |
 | **多次元出力モデル** | Multivariate LM / RRR / PLS / CCA / Multi-output GP |
 | **時系列** | AR(1) / Gaussian Process |
 | **ロバスト回帰** | **Robust GP (StudentT / Cauchy 観測 + IRLS)** |
@@ -279,9 +280,12 @@ cabal run hanalyze -- <file> <xcols> <ycols> [LM|GLM|...] [opts]   # legacy = re
 | `hist`       | ヒストグラム単体生成 | ✅ 実装 |
 | `doe`        | 直交表 Lₙ (L4/L8/L9/L12/L16/L18) | ✅ 実装 (Phase E1) |
 | `taguchi`    | タグチメソッド (SN 比 + 要因効果 + 内/外配置) | ✅ 実装 (Phase E2) |
-| `ridge`      | Ridge / Lasso / Elastic Net | ✅ 実装 |
+| `ridge`      | Ridge / Lasso / Elastic Net (+ regularization path) | ✅ 実装 |
 | `kernel`     | カーネル回帰 / RFF 近似 | ✅ 実装 |
 | `spline`     | B-spline / Natural cubic | ✅ 実装 |
+| `quantile`   | 分位点回帰 (τ-quantile, MM-IRLS) | ✅ 実装 |
+| `gam`        | Generalized Additive Model (additive B-spline + Ridge) | ✅ 実装 |
+| `rf`         | Random Forest 回帰 (CART + bagging) | ✅ 実装 |
 | `help`       | サブコマンド一覧表示 | ✅ |
 
 ### `regress` (= bare 呼び出し)
@@ -481,6 +485,9 @@ Model/
   HBM.hs           -- 多相確率的プログラミング DSL (AD 勾配・Track 依存抽出対応)
   RFF.hs           -- Random Fourier Features (カーネル法の O(nD) 近似)
   GPRobust.hs      -- ロバスト GP (StudentT / Cauchy 観測 + IRLS MAP)
+  Quantile.hs      -- Quantile regression (τ-quantile, MM-IRLS)
+  GAM.hs           -- Generalized Additive Model (additive B-splines + Ridge)
+  RandomForest.hs  -- Random Forest 回帰 (CART + bagging + feature importance)
 
 MCMC/
   Core.hs          -- Chain 型・事後統計量 (独立して使用可)
