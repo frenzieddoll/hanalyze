@@ -32,6 +32,7 @@ import qualified Model.Kernel as Kern
 import qualified Model.Regularized as Reg
 import qualified Model.GAM as GAM
 import qualified Model.Quantile as QR
+import qualified Model.RandomForest as RF
 import qualified Model.RFF as RFF
 import qualified Model.Spline as Spl
 import Model.LM (SmoothFit (..))
@@ -319,6 +320,7 @@ helpMsg = unlines
   , "  spline    B-spline / natural cubic regression                        [implemented]"
   , "  quantile  Quantile regression (τ-quantile, MM-IRLS)                  [implemented]"
   , "  gam       Generalized Additive Model (additive B-splines + Ridge)   [implemented]"
+  , "  rf        Random Forest regression (CART + bagging + feature subset) [implemented]"
   , "  doe       Orthogonal arrays (L_n) for experimental designs           [implemented]"
   , "  taguchi   Taguchi method (SN ratio + factor effects + inner/outer)   [implemented]"
   , ""
@@ -359,6 +361,7 @@ dispatch ("kernel":rest)              = runKernelCmd rest
 dispatch ("spline":rest)              = runSplineCmd rest
 dispatch ("quantile":rest)            = runQuantileCmd rest
 dispatch ("gam":rest)                 = runGAMCmd rest
+dispatch ("rf":rest)                  = runRFCmd rest
 dispatch (cmd:_) | isFutureSubcommand cmd = do
   hPutStrLn stderr $ "hanalyze: " ++ stubMessage cmd
   hPutStrLn stderr "  Run 'hanalyze help' to see implemented subcommands."
@@ -2549,6 +2552,136 @@ doGAM file xColsStr yColStr opts = do
                 [ RB.secResiduals yhat resid ]
               _ = ys
           RB.renderReport rpath cfg sections
+          putStrLn ("Report: " ++ rpath)
+          openInBrowser rpath
+
+-- ---------------------------------------------------------------------------
+-- rf subcommand
+-- ---------------------------------------------------------------------------
+
+rfUsage :: String
+rfUsage = unlines
+  [ "Usage: hanalyze rf <file> <xcols> <ycol> [options]"
+  , ""
+  , "Options:"
+  , "  --trees N        number of trees (default: 100)"
+  , "  --max-depth D    maximum tree depth (default: 12)"
+  , "  --min-samples N  minimum samples per leaf (default: 3)"
+  , "  --mtry M         features per split (default: max(1, d/3))"
+  , "  --report [FILE]  build composite HTML report (with feature importance)"
+  , ""
+  , "Example:"
+  , "  hanalyze rf data.csv \"x1 x2 x3\" y --trees 200 --report"
+  ]
+
+data RFOpts = RFOpts
+  { roTrees      :: Int
+  , roMaxDepth   :: Int
+  , roMinSamples :: Int
+  , roMtry       :: Maybe Int
+  , roReport_    :: Maybe FilePath
+  }
+
+defaultRFOpts :: RFOpts
+defaultRFOpts = RFOpts 100 12 3 Nothing Nothing
+
+runRFCmd :: [String] -> IO ()
+runRFCmd (file : xColsStr : yColStr : rest) =
+  case parseRFOpts rest defaultRFOpts of
+    Left err   -> hPutStrLn stderr ("rf: " ++ err)
+    Right opts -> doRF file xColsStr yColStr opts
+runRFCmd _ = putStrLn rfUsage
+
+parseRFOpts :: [String] -> RFOpts -> Either String RFOpts
+parseRFOpts [] acc = Right acc
+parseRFOpts (flag:rest) acc
+  | flag == "--trees" = case rest of
+      (v:rs) -> case reads v :: [(Int,String)] of
+        [(d,"")] -> parseRFOpts rs (acc { roTrees = d })
+        _ -> Left ("invalid --trees '" ++ v ++ "'")
+      [] -> Left "--trees requires a value"
+  | flag == "--max-depth" = case rest of
+      (v:rs) -> case reads v :: [(Int,String)] of
+        [(d,"")] -> parseRFOpts rs (acc { roMaxDepth = d })
+        _ -> Left ("invalid --max-depth '" ++ v ++ "'")
+      [] -> Left "--max-depth requires a value"
+  | flag == "--min-samples" = case rest of
+      (v:rs) -> case reads v :: [(Int,String)] of
+        [(d,"")] -> parseRFOpts rs (acc { roMinSamples = d })
+        _ -> Left ("invalid --min-samples '" ++ v ++ "'")
+      [] -> Left "--min-samples requires a value"
+  | flag == "--mtry" = case rest of
+      (v:rs) -> case reads v :: [(Int,String)] of
+        [(d,"")] -> parseRFOpts rs (acc { roMtry = Just d })
+        _ -> Left ("invalid --mtry '" ++ v ++ "'")
+      [] -> Left "--mtry requires a value"
+  | flag == "--report" = case rest of
+      (v:rs) | not (null v) && head v /= '-' ->
+        parseRFOpts rs (acc { roReport_ = Just v })
+      _ -> parseRFOpts rest (acc { roReport_ = Just "rf.html" })
+  | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
+
+doRF :: FilePath -> String -> String -> RFOpts -> IO ()
+doRF file xColsStr yColStr opts = do
+  let xCols = map T.pack (words xColsStr)
+      yCol  = T.pack yColStr
+  result <- loadXY file xCols yCol
+  case result of
+    Left err -> hPutStrLn stderr err
+    Right (df, xVecs, yVec) -> do
+      let n     = V.length yVec
+          rows  = [ [ xv V.! i | xv <- xVecs ] | i <- [0 .. n - 1] ]
+          ys    = V.toList yVec
+          cfg   = RF.defaultRFConfig
+                    { RF.rfTrees      = roTrees opts
+                    , RF.rfMaxDepth   = roMaxDepth opts
+                    , RF.rfMinSamples = roMinSamples opts
+                    , RF.rfMtry       = roMtry opts
+                    }
+      gen <- createSystemRandom
+      forest <- RF.fitRF cfg rows ys gen
+      let yhat = map (RF.predictRF forest) rows
+          resid = zipWith (-) ys yhat
+          yMean = sum ys / fromIntegral n
+          tss   = sum [ (y - yMean) ^ (2 :: Int) | y <- ys ]
+          rss   = sum [ r ^ (2 :: Int) | r <- resid ]
+          r2    = if tss < 1e-12 then 0 else 1 - rss / tss
+          rmseVal = sqrt (rss / fromIntegral n)
+          imp   = V.toList (RF.featureImportance forest)
+          impPairs = zip xCols imp
+      printf "Loaded %d rows from %s\n" n file
+      printf "RandomForest: trees=%d, max-depth=%d, min-samples=%d\n"
+             (roTrees opts) (roMaxDepth opts) (roMinSamples opts)
+      printf "R²:               %.4f\n" r2
+      printf "RMSE (in-sample): %.4f\n" rmseVal
+      putStrLn ""
+      putStrLn "Feature importance (split-count fraction):"
+      mapM_ (\(c, v) -> printf "  %-20s = %.4f\n" (T.unpack c) v) impPairs
+
+      case roReport_ opts of
+        Nothing -> return ()
+        Just rpath -> do
+          let modelLbl = "Random Forest regression"
+              formula = yCol <> " ~ ensemble of " <> T.pack (show (roTrees opts))
+                        <> " CART trees over (" <> T.intercalate ", " xCols <> ")"
+              cfg' = RB.defaultReportConfig
+                       ("Random Forest — " <> yCol <> " ~ "
+                        <> T.intercalate " + " xCols)
+              sections =
+                [ RB.secDataOverview df xCols yCol
+                , RB.secModelOverview modelLbl formula Nothing
+                , RB.secKeyValue "Fit summary"
+                    [ ("Trees",       T.pack (show (roTrees opts)))
+                    , ("Max depth",   T.pack (show (roMaxDepth opts)))
+                    , ("Min samples", T.pack (show (roMinSamples opts)))
+                    , ("R²",          T.pack (printf "%.4f" r2))
+                    , ("RMSE",        T.pack (printf "%.4f" rmseVal))
+                    ]
+                , RB.secBarChart "Feature importance"
+                    [ (c, v) | (c, v) <- impPairs ]
+                , RB.secResiduals yhat resid
+                ]
+          RB.renderReport rpath cfg' sections
           putStrLn ("Report: " ++ rpath)
           openInBrowser rpath
 
