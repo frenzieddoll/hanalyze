@@ -45,6 +45,7 @@ library
     Design.Optimal
     Design.MultiRSM
     Design.Orthogonal
+    Design.Taguchi
     Optim.Desirability
     Model.HBM
     MCMC.Core

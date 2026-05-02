@@ -23,6 +23,7 @@ import Viz.AnalysisReport (AnalysisReportConfig (..), ModelFit (..), NamedPlot (
                            mkFitSummary, mkGLMMSummary,
                            writeAnalysisReport, writeAnalysisReportPlots)
 import qualified Design.Orthogonal as OA
+import qualified Design.Taguchi as TG
 import qualified Model.HBM as HBMod
 import qualified MCMC.NUTS as HBMnuts
 import qualified MCMC.Core as MCMCcore
@@ -37,6 +38,7 @@ import Stat.ModelSelect  (lmPosteriorLogLiks, glmPosteriorLogLiks,
                           lmePosteriorLogLiks, waic, loo,
                           WAICResult (..), LOOResult (..))
 
+import Control.Monad      (when)
 import Data.Char          (isDigit)
 import Data.List          (intercalate, sort)
 import qualified Data.Set as Set
@@ -305,7 +307,7 @@ helpMsg = unlines
   , "  kernel    Kernel regression / RFF approximation                      [planned: Phase A]"
   , "  spline    B-spline / natural cubic regression                        [planned]"
   , "  doe       Orthogonal arrays (L_n) for experimental designs           [implemented]"
-  , "  taguchi   Taguchi method (OA + SN ratio + inner/outer arrays)        [planned: Phase E2]"
+  , "  taguchi   Taguchi method (SN ratio + factor effects + inner/outer)   [implemented]"
   , ""
   , "  help      Show this message"
   , "  --help, -h, help   Same as 'help'"
@@ -318,7 +320,6 @@ futureSubcommands =
   [ ("ridge",   "Phase A (RFF/regularized) implementation pending")
   , ("kernel",  "Phase A (RFF/kernel) implementation pending")
   , ("spline",  "Spline subcommand implementation pending")
-  , ("taguchi", "Phase E2 (Taguchi method) implementation pending")
   ]
 
 isFutureSubcommand :: String -> Bool
@@ -341,6 +342,7 @@ dispatch ("info":rest)                = runInfoCmd rest
 dispatch ("hist":rest)                = runHistCmd rest
 dispatch ("regress":rest)             = runRegressCmd rest
 dispatch ("doe":rest)                 = runDoeCmd rest
+dispatch ("taguchi":rest)             = runTaguchiCmd rest
 dispatch (cmd:_) | isFutureSubcommand cmd = do
   hPutStrLn stderr $ "hanalyze: " ++ stubMessage cmd
   hPutStrLn stderr "  Run 'hanalyze help' to see implemented subcommands."
@@ -1262,3 +1264,268 @@ emitText txt Nothing     = TIO.putStrLn txt
 emitText txt (Just path) = do
   TIO.writeFile path txt
   putStrLn $ "Written: " ++ path
+
+-- ---------------------------------------------------------------------------
+-- taguchi subcommand (Phase E2: SN ratio + factor effects + inner/outer)
+-- ---------------------------------------------------------------------------
+
+taguchiUsage :: String
+taguchiUsage = unlines
+  [ "Usage: hanalyze taguchi <action> [args...]"
+  , ""
+  , "Actions:"
+  , "  sn <type> <values...>             Compute a single SN ratio (dB)"
+  , "                                    type: smaller | larger | nominal | nominal-target=M"
+  , ""
+  , "  analyze <ARRAY> -f F=v1,v2,... [-f ...] --csv FILE [--sntype TYPE]"
+  , "                                    Analyze observations from a CSV file:"
+  , "                                    rows = inner runs, cols (after factor cols) = repetitions/outer."
+  , "                                    Computes per-row SN ratio, factor effects, and optimum levels."
+  , ""
+  , "  cross <INNER> <OUTER>"
+  , "    -f Fc=v1,v2,...   [-f ...]      Inner control factors"
+  , "    --noise Fn=v1,v2,...  [...]     Outer noise factors"
+  , "    [--out FILE]                    Output the cross-design CSV template"
+  , ""
+  , "SN types:"
+  , "  smaller          smaller-the-better (e.g. defect rate)"
+  , "  larger           larger-the-better (e.g. strength)"
+  , "  nominal          nominal-the-best (mean^2 / variance)"
+  , "  nominal-target=M nominal with target value M"
+  , ""
+  , "Examples:"
+  , "  hanalyze taguchi sn smaller 1.2 1.5 0.9 1.1"
+  , "  hanalyze taguchi analyze L9 -f temp=150,180,210 -f time=10,20,30 -f cat=A,B,C"
+  , "                              --csv runs.csv --sntype smaller"
+  , "  hanalyze taguchi cross L9 L4 -f temp=150,180,210 -f time=10,20,30 -f cat=A,B,C"
+  , "                                --noise humidity=low,high --noise vibration=on,off --out cross.csv"
+  ]
+
+runTaguchiCmd :: [String] -> IO ()
+runTaguchiCmd []                = putStrLn taguchiUsage
+runTaguchiCmd ["help"]           = putStrLn taguchiUsage
+runTaguchiCmd ["--help"]         = putStrLn taguchiUsage
+runTaguchiCmd ("sn":rest)        = runTaguchiSN rest
+runTaguchiCmd ("analyze":rest)   = runTaguchiAnalyze rest
+runTaguchiCmd ("cross":rest)     = runTaguchiCross rest
+runTaguchiCmd (action:_)         =
+  hPutStrLn stderr ("taguchi: unknown action '" ++ action ++ "'\n" ++ taguchiUsage)
+
+-- ── sn ──────────────────────────────────────────────────────────────────
+
+runTaguchiSN :: [String] -> IO ()
+runTaguchiSN [] = hPutStrLn stderr "taguchi sn: missing type and values"
+runTaguchiSN (typeStr : valStrs)
+  | null valStrs = hPutStrLn stderr "taguchi sn: need at least one value"
+  | otherwise = case parseSNType typeStr of
+      Left err -> hPutStrLn stderr ("taguchi sn: " ++ err)
+      Right t  ->
+        let vals = mapM readMaybeD valStrs
+        in case vals of
+             Nothing -> hPutStrLn stderr "taguchi sn: non-numeric value(s)"
+             Just xs -> do
+               let eta = TG.snRatio t xs
+               printf "SN(%s) = %.4f dB  (n=%d)\n"
+                      (T.unpack (TG.snTypeName t)) eta (length xs)
+
+parseSNType :: String -> Either String TG.SNType
+parseSNType s = case s of
+  "smaller"           -> Right TG.SmallerBetter
+  "smaller-better"    -> Right TG.SmallerBetter
+  "larger"            -> Right TG.LargerBetter
+  "larger-better"     -> Right TG.LargerBetter
+  "nominal"           -> Right TG.NominalBest
+  "nominal-best"      -> Right TG.NominalBest
+  _ | "nominal-target=" `isPrefixOfStr` s ->
+      case readMaybeD (drop (length ("nominal-target=" :: String)) s) of
+        Just m  -> Right (TG.NominalBestTarget m)
+        Nothing -> Left ("invalid target value in '" ++ s ++ "'")
+  _ -> Left ("unknown SN type '" ++ s
+          ++ "' (try smaller | larger | nominal | nominal-target=M)")
+
+isPrefixOfStr :: String -> String -> Bool
+isPrefixOfStr p s = take (length p) s == p
+
+readMaybeD :: String -> Maybe Double
+readMaybeD s = case reads s :: [(Double, String)] of
+  [(v, "")] -> Just v
+  _         -> Nothing
+
+-- ── analyze ─────────────────────────────────────────────────────────────
+
+data TgAnalyzeOpts = TgAnalyzeOpts
+  { toFactors :: [(T.Text, [T.Text])]
+  , toCSV     :: Maybe FilePath
+  , toSN      :: TG.SNType
+  } deriving (Show)
+
+defaultTgAnalyzeOpts :: TgAnalyzeOpts
+defaultTgAnalyzeOpts = TgAnalyzeOpts [] Nothing TG.SmallerBetter
+
+runTaguchiAnalyze :: [String] -> IO ()
+runTaguchiAnalyze [] = hPutStrLn stderr "taguchi analyze: missing array name"
+runTaguchiAnalyze (arrayStr : rest) =
+  case OA.lookupOA (T.pack arrayStr) of
+    Nothing -> hPutStrLn stderr $
+      "taguchi analyze: unknown array '" ++ arrayStr ++ "'"
+    Just oa -> case parseTgAnalyzeOpts rest defaultTgAnalyzeOpts of
+      Left err   -> hPutStrLn stderr ("taguchi analyze: " ++ err)
+      Right opts -> case toCSV opts of
+        Nothing   -> hPutStrLn stderr "taguchi analyze: --csv FILE required"
+        Just path -> doTaguchiAnalyze oa opts path
+
+parseTgAnalyzeOpts :: [String] -> TgAnalyzeOpts -> Either String TgAnalyzeOpts
+parseTgAnalyzeOpts [] acc = Right acc
+parseTgAnalyzeOpts (flag : rest) acc
+  | flag `elem` ["-f", "--factor"] = case rest of
+      (v : rs) -> case parseFactorSpec v of
+        Left err  -> Left err
+        Right fac -> parseTgAnalyzeOpts rs
+                       (acc { toFactors = toFactors acc ++ [fac] })
+      [] -> Left "-f/--factor requires NAME=v1,v2,..."
+  | flag == "--csv" = case rest of
+      (v : rs) -> parseTgAnalyzeOpts rs (acc { toCSV = Just v })
+      []       -> Left "--csv requires a file path"
+  | flag == "--sntype" = case rest of
+      (v : rs) -> case parseSNType v of
+        Left err  -> Left err
+        Right t   -> parseTgAnalyzeOpts rs (acc { toSN = t })
+      [] -> Left "--sntype requires an argument"
+  | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
+
+doTaguchiAnalyze :: OA.OA -> TgAnalyzeOpts -> FilePath -> IO ()
+doTaguchiAnalyze oa opts path = do
+  result <- loadAuto path
+  case result of
+    Left err -> hPutStrLn stderr ("Parse error: " ++ err)
+    Right df -> do
+      let specs = [ OA.FactorSpec name (map toLevelValue lvls)
+                  | (name, lvls) <- toFactors opts ]
+      case OA.assignFactors oa specs of
+        Left err -> hPutStrLn stderr (T.unpack err)
+        Right ad -> runAnalyzeWith ad opts df
+
+runAnalyzeWith :: OA.AssignedDesign -> TgAnalyzeOpts -> DataFrame -> IO ()
+runAnalyzeWith ad opts df = do
+  let factorNames = map OA.fsName (OA.adFactors ad)
+      yCols = filter (\c -> not (c `elem` factorNames) && c /= "Run")
+                     (columnNames df)
+      n = length (OA.adRows ad)
+  when (numRows df /= n) $
+    hPutStrLn stderr $
+      "Warning: CSV has " ++ show (numRows df)
+      ++ " rows, expected " ++ show n
+  if null yCols
+    then hPutStrLn stderr
+           "taguchi analyze: no observation columns found in CSV"
+    else do
+      -- Per-inner-run observations (skip non-numeric rows)
+      let yMatrix =
+            [ [ case getNumeric c df of
+                  Just v | i < V.length v -> v V.! i
+                  _ -> 0
+              | c <- yCols ]
+            | i <- [0 .. min (numRows df) n - 1] ]
+          sns  = TG.snRatioRows (toSN opts) yMatrix
+          fes  = TG.analyzeSN ad sns
+          opts' = TG.optimalLevels fes
+          predEta = TG.predictSN fes sns
+
+      printf "Array:      %s\n" (T.unpack (OA.oaName (OA.adArray ad)))
+      printf "SN type:    %s\n" (T.unpack (TG.snTypeName (toSN opts)))
+      printf "Inner runs: %d\n" n
+      printf "Repetitions per run: %d (columns %s)\n"
+             (length yCols) (T.unpack (T.intercalate ", " yCols))
+      putStrLn ""
+
+      putStrLn "--- Per-run SN ratios ---"
+      mapM_ (\(i, eta) -> printf "  Run %2d:  SN = %8.3f dB\n" (i :: Int) eta)
+            (zip [1..] sns)
+      putStrLn ""
+
+      putStrLn "--- Factor effects (mean SN per level) ---"
+      mapM_ (printFactorEffect opts') fes
+      putStrLn ""
+
+      putStrLn "--- Optimal levels (max SN per factor) ---"
+      mapM_ (\(f, lvl, eta) ->
+        printf "  %-12s = %-12s  (SN = %8.3f dB)\n"
+               (T.unpack f) (T.unpack (lvText lvl)) eta) opts'
+      putStrLn ""
+      printf "Predicted SN at optimum (additive model): %.3f dB\n" predEta
+  where
+    lvText (OA.LText t)    = t
+    lvText (OA.LNumeric d)
+      | d == fromIntegral (round d :: Integer) = T.pack (show (round d :: Integer))
+      | otherwise                              = T.pack (printf "%g" d)
+
+printFactorEffect :: [(T.Text, OA.LevelValue, Double)] -> TG.FactorEffect -> IO ()
+printFactorEffect _opts fe = do
+  printf "  %s:\n" (T.unpack (TG.feFactor fe))
+  let pairs = zip (TG.feLevels fe) (TG.feSNByLevel fe)
+  mapM_ (\(lv, eta) ->
+    printf "    %-12s : %8.3f dB\n"
+      (T.unpack (lvShow lv)) eta) pairs
+  where
+    lvShow (OA.LText t)    = t
+    lvShow (OA.LNumeric d)
+      | d == fromIntegral (round d :: Integer) = T.pack (show (round d :: Integer))
+      | otherwise                              = T.pack (printf "%g" d)
+
+-- ── cross ───────────────────────────────────────────────────────────────
+
+data TgCrossOpts = TgCrossOpts
+  { tcInner :: [(T.Text, [T.Text])]
+  , tcOuter :: [(T.Text, [T.Text])]
+  , tcOut   :: Maybe FilePath
+  } deriving (Show)
+
+defaultTgCrossOpts :: TgCrossOpts
+defaultTgCrossOpts = TgCrossOpts [] [] Nothing
+
+runTaguchiCross :: [String] -> IO ()
+runTaguchiCross [] = hPutStrLn stderr "taguchi cross: missing INNER and OUTER array names"
+runTaguchiCross [_] = hPutStrLn stderr "taguchi cross: missing OUTER array name"
+runTaguchiCross (innerStr : outerStr : rest) =
+  case (OA.lookupOA (T.pack innerStr), OA.lookupOA (T.pack outerStr)) of
+    (Nothing, _) -> hPutStrLn stderr $
+      "taguchi cross: unknown inner array '" ++ innerStr ++ "'"
+    (_, Nothing) -> hPutStrLn stderr $
+      "taguchi cross: unknown outer array '" ++ outerStr ++ "'"
+    (Just innerOA, Just outerOA) ->
+      case parseTgCrossOpts rest defaultTgCrossOpts of
+        Left err   -> hPutStrLn stderr ("taguchi cross: " ++ err)
+        Right opts -> doTaguchiCross innerOA outerOA opts
+
+parseTgCrossOpts :: [String] -> TgCrossOpts -> Either String TgCrossOpts
+parseTgCrossOpts [] acc = Right acc
+parseTgCrossOpts (flag : rest) acc
+  | flag `elem` ["-f", "--factor"] = case rest of
+      (v : rs) -> case parseFactorSpec v of
+        Left err  -> Left err
+        Right fac -> parseTgCrossOpts rs (acc { tcInner = tcInner acc ++ [fac] })
+      [] -> Left "-f/--factor requires NAME=v1,v2,..."
+  | flag `elem` ["-fn", "--noise"] = case rest of
+      (v : rs) -> case parseFactorSpec v of
+        Left err  -> Left err
+        Right fac -> parseTgCrossOpts rs (acc { tcOuter = tcOuter acc ++ [fac] })
+      [] -> Left "-fn/--noise requires NAME=v1,v2,..."
+  | flag == "--out" = case rest of
+      (v : rs) -> parseTgCrossOpts rs (acc { tcOut = Just v })
+      []       -> Left "--out requires a file path"
+  | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
+
+doTaguchiCross :: OA.OA -> OA.OA -> TgCrossOpts -> IO ()
+doTaguchiCross innerOA outerOA opts = do
+  let innerSpecs = [ OA.FactorSpec n (map toLevelValue ls)
+                   | (n, ls) <- tcInner opts ]
+      outerSpecs = [ OA.FactorSpec n (map toLevelValue ls)
+                   | (n, ls) <- tcOuter opts ]
+  case (OA.assignFactors innerOA innerSpecs,
+        OA.assignFactors outerOA outerSpecs) of
+    (Left err, _) -> hPutStrLn stderr ("inner: " ++ T.unpack err)
+    (_, Left err) -> hPutStrLn stderr ("outer: " ++ T.unpack err)
+    (Right ai, Right ao) -> do
+      let io = TG.makeInnerOuter ai ao
+          csv = TG.renderInnerOuterCSV io
+      emitText csv (tcOut opts)
