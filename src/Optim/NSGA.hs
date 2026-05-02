@@ -33,11 +33,18 @@ module Optim.NSGA
   , paretoDominates
   , nonDominatedSort
   , crowdingDistance
+    -- * 遺伝的演算子 (Phase S3)
+  , sbxCrossover
+  , polynomialMutation
+  , randomInBounds
+  , binaryTournament
+  , crowdedCompare
   ) where
 
+import Control.Monad (zipWithM)
 import Data.List (sortBy)
 import Data.Ord  (comparing)
-import System.Random.MWC (GenIO)
+import System.Random.MWC (GenIO, uniform, uniformR)
 
 -- ---------------------------------------------------------------------------
 -- 型
@@ -222,3 +229,115 @@ crowdingDistance front
       in map snd sortedDesc
   where
     inf = 1 / 0  -- ∞
+
+-- ---------------------------------------------------------------------------
+-- 遺伝的演算子 (Phase S3)
+-- ---------------------------------------------------------------------------
+
+-- | SBX (Simulated Binary Crossover, Deb 1995)。
+--
+-- 2 親 (p1, p2) から 2 子 (c1, c2) を生成。各次元独立に:
+--
+--   1. 確率 0.5 で交叉実施 (それ以外は親をそのままコピー)
+--   2. \|p1 - p2\| < eps なら交叉せず親を返す (退化対策)
+--   3. β ~ SBX 分布 (η_c で形状制御):
+--        u ∈ [0, 0.5)  →  β = (2u)^(1/(η+1))
+--        u ∈ [0.5, 1)  →  β = (1/(2(1-u)))^(1/(η+1))
+--   4. c1 = 0.5 * ((1+β) p1 + (1-β) p2)
+--      c2 = 0.5 * ((1-β) p1 + (1+β) p2)
+--   5. 範囲外なら境界に clip
+--
+-- 大きい η_c は親付近に集中、小さい η_c はより広く探索。
+sbxCrossover :: Double      -- η_c (分布指数、典型 15-20)
+             -> Bounds      -- 各次元の範囲
+             -> [Double]    -- 親 1
+             -> [Double]    -- 親 2
+             -> GenIO
+             -> IO ([Double], [Double])
+sbxCrossover etaC bounds p1 p2 gen = do
+  pairs <- zipWithM (sbxOneVar etaC gen) bounds (zip p1 p2)
+  let (c1, c2) = unzip pairs
+  return (c1, c2)
+
+sbxOneVar :: Double -> GenIO -> (Double, Double) -> (Double, Double)
+          -> IO (Double, Double)
+sbxOneVar etaC gen (lo, hi) (a, b) = do
+  flip_ <- uniform gen :: IO Double  -- 各次元 50% で交叉
+  if flip_ >= 0.5 || abs (a - b) < 1e-12
+    then return (a, b)
+    else do
+      u <- uniform gen :: IO Double
+      let beta
+            | u < 0.5    = (2 * u) ** (1 / (etaC + 1))
+            | otherwise  = (1 / (2 * (1 - u))) ** (1 / (etaC + 1))
+          c1 = 0.5 * ((1 + beta) * a + (1 - beta) * b)
+          c2 = 0.5 * ((1 - beta) * a + (1 + beta) * b)
+          clip x = min hi (max lo x)
+      return (clip c1, clip c2)
+
+-- | Polynomial mutation (Deb & Goyal 1996)。
+--
+-- 各次元独立に確率 @pMut@ で:
+--
+--   δq = (2u)^(1/(η+1)) − 1               (u < 0.5)
+--      = 1 − (2(1-u))^(1/(η+1))           (u ≥ 0.5)
+--   y' = y + δq * (yU − yL)
+--
+-- 大きい η_m は元値付近、小さい η_m は大きい変異。
+polynomialMutation :: Double    -- η_m (分布指数、典型 20)
+                   -> Double    -- 突然変異確率 (典型 1/d)
+                   -> Bounds
+                   -> [Double]
+                   -> GenIO
+                   -> IO [Double]
+polynomialMutation etaM pMut bounds xs gen =
+  zipWithM (mutateOneVar etaM pMut gen) bounds xs
+
+mutateOneVar :: Double -> Double -> GenIO -> (Double, Double) -> Double
+             -> IO Double
+mutateOneVar etaM pMut gen (lo, hi) x = do
+  r <- uniform gen :: IO Double
+  if r >= pMut
+    then return x
+    else do
+      u <- uniform gen :: IO Double
+      let dq
+            | u < 0.5    = (2 * u) ** (1 / (etaM + 1)) - 1
+            | otherwise  = 1 - (2 * (1 - u)) ** (1 / (etaM + 1))
+          y = x + dq * (hi - lo)
+      return (min hi (max lo y))
+
+-- | 各次元の範囲から uniform にランダムドロー (初期母集団生成用)。
+randomInBounds :: Bounds -> GenIO -> IO [Double]
+randomInBounds bounds gen =
+  mapM (\(lo, hi) -> do
+           u <- uniform gen :: IO Double
+           return (lo + u * (hi - lo)))
+       bounds
+
+-- | NSGA-II の crowded comparison operator:
+--   1. rank が低い (front 番号小) 方が良い
+--   2. rank 同じなら crowding distance 大が良い
+--
+-- LT = 第 1 引数が良い、GT = 第 2 引数が良い、EQ = 同等。
+crowdedCompare :: (Int, Double) -> (Int, Double) -> Ordering
+crowdedCompare (r1, d1) (r2, d2)
+  | r1 < r2          = LT
+  | r1 > r2          = GT
+  | d1 > d2          = LT   -- 距離大が良い
+  | d1 < d2          = GT
+  | otherwise        = EQ
+
+-- | 二項トーナメント選択。
+-- pop からランダムに 2 個体取り、cmp に従って勝者を返す。
+-- cmp x y == LT のとき x が勝者。
+binaryTournament :: [a] -> (a -> a -> Ordering) -> GenIO -> IO a
+binaryTournament pop cmp gen = do
+  let n = length pop
+  i <- uniformR (0, n - 1) gen
+  j <- uniformR (0, n - 1) gen
+  let xi = pop !! i
+      xj = pop !! j
+  return $ case cmp xi xj of
+    GT -> xj
+    _  -> xi

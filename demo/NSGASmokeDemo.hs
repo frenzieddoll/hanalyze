@@ -6,8 +6,11 @@
 module Main where
 
 import Text.Printf (printf)
+import System.Random.MWC (createSystemRandom)
 import Optim.NSGA (Solution (..), dominates, paretoDominates,
-                   nonDominatedSort, crowdingDistance)
+                   nonDominatedSort, crowdingDistance,
+                   sbxCrossover, polynomialMutation, randomInBounds,
+                   binaryTournament, crowdedCompare)
 
 mkSol :: [Double] -> [Double] -> Double -> Solution
 mkSol = Solution
@@ -94,8 +97,79 @@ main = do
          (show (length sorted6))
   putStrLn ""
 
+  -- ── Phase S3: 遺伝的演算子 ──
   putStrLn "═══════════════════════════════════════════════════════════════"
-  putStrLn "  ✓ Phase S1: 非優越ソート + crowding 全テスト通過"
+  putStrLn "  Phase S3: 遺伝的演算子の動作確認"
+  putStrLn "═══════════════════════════════════════════════════════════════"
+  putStrLn ""
+
+  gen <- createSystemRandom
+
+  -- Test 7: SBX
+  putStrLn "[7] sbxCrossover"
+  let bounds3 = [(0, 10), (-5, 5)]
+      p1 = [3.0, 1.0]
+      p2 = [7.0, -2.0]
+  (c1, c2) <- sbxCrossover 15 bounds3 p1 p2 gen
+  printf "  parents:  %s, %s\n" (show p1) (show p2)
+  printf "  children: %s, %s\n" (show c1) (show c2)
+  assertBool "c1 in bounds (dim 0)" (head c1 >= 0 && head c1 <= 10)
+  assertBool "c1 in bounds (dim 1)" (c1 !! 1 >= -5 && c1 !! 1 <= 5)
+  assertBool "c2 in bounds (dim 0)" (head c2 >= 0 && head c2 <= 10)
+  assertBool "c2 in bounds (dim 1)" (c2 !! 1 >= -5 && c2 !! 1 <= 5)
+  -- 同一親なら同一子
+  (c1', c2') <- sbxCrossover 15 bounds3 p1 p1 gen
+  assertBool "同一親 → 同一子 (dim 0)"
+             (abs (head c1' - 3.0) < 1e-12 && abs (head c2' - 3.0) < 1e-12)
+  putStrLn ""
+
+  -- Test 8: polynomial mutation
+  putStrLn "[8] polynomialMutation"
+  let xs = [3.0, 1.0]
+  -- pMut=1 で必ず変異、bounds 内に留まる
+  ys <- polynomialMutation 20 1.0 bounds3 xs gen
+  printf "  before: %s, after: %s\n" (show xs) (show ys)
+  assertBool "ys in bounds (dim 0)" (head ys >= 0 && head ys <= 10)
+  assertBool "ys in bounds (dim 1)" (ys !! 1 >= -5 && ys !! 1 <= 5)
+  -- pMut=0 で変異なし
+  ysNo <- polynomialMutation 20 0.0 bounds3 xs gen
+  assertBool "pMut=0 で不変" (ysNo == xs)
+  putStrLn ""
+
+  -- Test 9: randomInBounds
+  putStrLn "[9] randomInBounds"
+  rs <- mapM (const (randomInBounds bounds3 gen)) [1 .. 50 :: Int]
+  let dim0Vals = map head rs
+      dim1Vals = map (!! 1) rs
+      inRange0 = all (\v -> v >= 0 && v <= 10) dim0Vals
+      inRange1 = all (\v -> v >= -5 && v <= 5) dim1Vals
+  assertBool "dim 0 すべて [0, 10] に収まる" inRange0
+  assertBool "dim 1 すべて [-5, 5] に収まる" inRange1
+  putStrLn ""
+
+  -- Test 10: crowdedCompare
+  putStrLn "[10] crowdedCompare"
+  assertBool "rank 0 < rank 1"      (crowdedCompare (0, 0)   (1, 100) == LT)
+  assertBool "rank 同 → 距離大が良い" (crowdedCompare (0, 5.0) (0, 1.0) == LT)
+  assertBool "rank 同 → 距離小は劣"   (crowdedCompare (0, 1.0) (0, 5.0) == GT)
+  assertBool "完全同じ"               (crowdedCompare (0, 5.0) (0, 5.0) == EQ)
+  putStrLn ""
+
+  -- Test 11: binaryTournament
+  putStrLn "[11] binaryTournament (常に小さい数値が勝つ comparator)"
+  -- pop = [1..10], 「数値小=良い」順なら勝者は最小の方の index に近い
+  -- 確率的なので 100 回試行して平均が真ん中より小さいことを確認
+  results <- mapM
+    (const (binaryTournament [1..10 :: Int] compare gen))
+    [1..100 :: Int]
+  let meanRes = fromIntegral (sum results) / 100 :: Double
+  printf "  100 回トーナメント平均: %.2f (期待 < 5.5 = single-pick mean)\n"
+         meanRes
+  assertBool "平均 < 5.5 (= 良い方が選ばれる傾向)" (meanRes < 5.5)
+  putStrLn ""
+
+  putStrLn "═══════════════════════════════════════════════════════════════"
+  putStrLn "  ✓ Phase S1 + S3: 全テスト通過"
   putStrLn "═══════════════════════════════════════════════════════════════"
 
   where
