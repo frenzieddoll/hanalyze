@@ -68,6 +68,7 @@ module Model.HBM
   , mvNormalLogDensity
   , multinomialLogDensity
   , lkjCorrCholesky
+  , ar1Latent
     -- * 構造検査
   , Node (..)
   , NodeKind (..)
@@ -1256,6 +1257,45 @@ lkjCorrCholesky name k eta
                         ((lMat !! i) !! j))
         [(i, j) | i <- [0 .. k - 1], j <- [0 .. i]]
       return lMat
+
+-- | AR(1) latent 時系列 (PyMC `pm.AR1` 相当)。
+--
+-- 状態方程式:  x_t = ϕ x_{t−1} + ε_t,   ε_t ~ Normal(0, σ)
+-- 初期分布:    x_0 ~ Normal(0, σ / √(1 − ϕ²))   (定常分布、|ϕ| < 1 なら有限)
+--
+-- 引数 @phi@ は AR 係数、@sigma@ は innovation の sd。N 個の latent
+-- 状態 x_0 .. x_{N-1} を非中心化パラメタ化で sample する:
+--
+--   raw_t ~ Normal(0, 1)
+--   x_t = phi * x_{t-1} + sigma * raw_t       (t > 0)
+--   x_0 = (sigma / √(1 - ϕ²)) * raw_0
+--
+-- 戻り値: x_0 .. x_{N-1} の latent 値リスト ([a])。各 raw_t は
+-- @<name>_raw<t>@、x_t 自体は派生量 @<name>_<t>@ として保存。
+--
+-- |ϕ| ≥ 1 のフォールバック: 初期 sd を sigma に置き換える。
+ar1Latent :: forall a. (Floating a, Ord a)
+          => Text -> Int -> a -> a -> Model a [a]
+ar1Latent name nT phi sigma
+  | nT < 1 = error "ar1Latent: length must be >= 1"
+  | otherwise = do
+      raws <- mapM
+        (\t -> sample (name <> "_raw" <> T.pack (show t)) (Normal 0 1))
+        [0 .. nT - 1]
+      let phi2     = phi * phi
+          stat     = if phi2 < 1
+                       then sigma / sqrt (1 - phi2)
+                       else sigma   -- フォールバック
+          x0       = stat * head raws
+          xs       = scanl
+                       (\xPrev (rt, _) -> phi * xPrev + sigma * rt)
+                       x0
+                       (zip (tail raws) [(1 :: Int) ..])
+      _ <- mapM
+        (\(t, x) -> deterministic
+                       (name <> "_" <> T.pack (show t)) x)
+        (zip [0 :: Int ..] xs)
+      return xs
 
 -- | 非中心化 (non-centered) 正規分布。
 --

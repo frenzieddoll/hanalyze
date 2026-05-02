@@ -210,6 +210,18 @@ executable newdistribs-demo
     , containers >= 0.6  && < 0.8
     , mwc-random >= 0.15 && < 0.16
 
+executable ar1-demo
+  import:           warnings
+  main-is:          AR1Demo.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , text       >= 1.2  && < 2.2
+    , containers >= 0.6  && < 0.8
+    , mwc-random >= 0.15 && < 0.16
+
 executable lkj3d-demo
   import:           warnings
   main-is:          LKJ3DDemo.hs
