@@ -24,6 +24,8 @@ module Model.Regularized
   , RegFitMulti (..)
   , fitRegularizedMulti
   , predictRegularizedMulti
+    -- * 正則化パス
+  , regularizationPath
   ) where
 
 import qualified Data.Vector as V
@@ -270,3 +272,29 @@ fitRegularizedMulti pen x y =
 
 predictRegularizedMulti :: RegFitMulti -> LA.Matrix Double -> LA.Matrix Double
 predictRegularizedMulti mf xNew = xNew LA.<> rfmBeta mf
+
+-- ---------------------------------------------------------------------------
+-- Regularization path
+-- ---------------------------------------------------------------------------
+
+-- | 与えられた λ の系列に対して係数推移を計算する (regularization path)。
+-- 戻り値: 各 λ に対する係数ベクトル。
+--
+-- 利用例 (Ridge):
+--
+-- @
+-- let lams = [10 ** (-4 + 0.1 * i) | i <- [0..60]]
+--     path = regularizationPath L2 lams xMat yVec
+-- -- path :: [(Double, [Double])]  -- (λ, [β₀, β₁, ...])
+-- @
+regularizationPath
+  :: (Double -> Penalty)         -- ^ λ → Penalty (e.g. @L2@, @L1@,
+                                 --   @\\l -> ElasticNet (l*α) (l*(1-α))@)
+  -> [Double]                    -- ^ λ 系列
+  -> LA.Matrix Double            -- ^ X (intercept 列付き)
+  -> LA.Vector Double            -- ^ y
+  -> [(Double, [Double])]        -- ^ [(λ, 係数ベクトル)]
+regularizationPath mkPen lambdas x y =
+  [ (lam, LA.toList (rfBeta (fitRegularized (mkPen lam) x y)))
+  | lam <- lambdas ]
+

@@ -47,6 +47,8 @@ module Viz.ReportBuilder
   , renderReport
     -- * Reportable typeclass
   , Reportable (..)
+    -- * 専用 Vega-Lite ヘルパ (regularization path 等)
+  , regPathSpec
   ) where
 
 import Data.Aeson (encode)
@@ -493,6 +495,41 @@ residualsSpec fitted resids =
     , width 600
     , height 280
     ]
+
+-- | Regularization path (lambda 対 各係数) をログスケール x 軸の多線グラフで描く。
+-- 入力: 係数ラベル + (λ, 係数ベクトル) のリスト。intercept は除外推奨。
+regPathSpec
+  :: [Text]                    -- ^ 係数ラベル (length = 係数数)
+  -> [(Double, [Double])]      -- ^ (λ, [coef])
+  -> VegaLite
+regPathSpec labels path =
+  let -- long format: 各 (λ, label, value) を平坦化
+      rows = [ (lam, lbl, val)
+             | (lam, coefs) <- path
+             , (lbl, val)   <- zip labels coefs ]
+      lams   = [ lam | (lam, _, _) <- rows ]
+      lbls   = [ lbl | (_, lbl, _) <- rows ]
+      vals   = [ val | (_, _, val) <- rows ]
+  in toVegaLite
+       [ dataFromColumns []
+           . dataColumn "lambda"      (Numbers lams)
+           . dataColumn "coefficient" (Strings lbls)
+           . dataColumn "value"       (Numbers vals)
+           $ []
+       , mark Line [MStrokeWidth 2.2, MOpacity 0.9]
+       , encoding
+           . position X [PName "lambda", PmType Quantitative,
+                         PScale [SType ScLog],
+                         PAxis [AxTitle "λ (log scale)"]]
+           . position Y [PName "value", PmType Quantitative,
+                         PAxis [AxTitle "Coefficient"]]
+           . color [MName "coefficient", MmType Nominal,
+                    MScale [SScheme "tableau10" []],
+                    MLegend [LTitle "feature"]]
+           $ []
+       , width 640
+       , height 320
+       ]
 
 barChartSpec :: Text -> [(Text, Double)] -> VegaLite
 barChartSpec _title vs =

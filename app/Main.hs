@@ -1753,24 +1753,16 @@ doRidge file xColsStr yColStr opts = do
             Nothing -> return ()
             Just rpath -> do
               let smooth = RB.SmoothCurve grid gridY [] []
-                  modelLbl = "Regularized regression (" <> roPenalty opts <> ")"
-                  formula = T.pack (T.unpack yCol ++ " ~ "
-                                    ++ intercalate " + " (map T.unpack xCols)
-                                    ++ "  (lambda=" ++ show (roLambda opts) ++ ")")
-                  cfg = RB.defaultReportConfig
-                          ("Regularized regression — "
-                           <> yCol <> " ~ " <> T.intercalate " + " xCols)
+                  pathSec = mkRidgePathSection xCols xMat yLA opts
+                  cfg = ridgeReportConfig opts xCols yCol
                   sections =
                     [ RB.secDataOverview df xCols yCol
-                    , RB.secModelOverview modelLbl formula Nothing
+                    , RB.secModelOverview (ridgeModelLabel opts)
+                        (ridgeFormula opts xCols yCol) Nothing
                     , RB.secCoefficients coeffNumPairs (Just ("R²", Reg.rfR2 fit))
                     , RB.secKeyValue "Fit summary"
-                        [ ("RMSE (in-sample)", T.pack (printf "%.4f" rmseVal))
-                        , ("|β| > 1e-8", T.pack (show (Reg.rfNonZero fit) <> " / "
-                                                  <> show (length beta)))
-                        , ("Penalty", roPenalty opts)
-                        , ("Lambda", T.pack (printf "%g" (roLambda opts)))
-                        ]
+                        (ridgeFitKVs opts fit beta rmseVal)
+                    , pathSec
                     , RB.secFitScatter xc1 yCol xs ys (Just smooth)
                     , RB.secResiduals yhat residuals
                     ]
@@ -1782,24 +1774,16 @@ doRidge file xColsStr yColStr opts = do
           case roReport opts of
             Nothing -> return ()
             Just rpath -> do
-              let modelLbl = "Regularized regression (" <> roPenalty opts <> ")"
-                  formula = T.pack (T.unpack yCol ++ " ~ "
-                                    ++ intercalate " + " (map T.unpack xCols)
-                                    ++ "  (lambda=" ++ show (roLambda opts) ++ ")")
-                  cfg = RB.defaultReportConfig
-                          ("Regularized regression — "
-                           <> yCol <> " ~ " <> T.intercalate " + " xCols)
+              let pathSec = mkRidgePathSection xCols xMat yLA opts
+                  cfg = ridgeReportConfig opts xCols yCol
                   sections =
                     [ RB.secDataOverview df xCols yCol
-                    , RB.secModelOverview modelLbl formula Nothing
+                    , RB.secModelOverview (ridgeModelLabel opts)
+                        (ridgeFormula opts xCols yCol) Nothing
                     , RB.secCoefficients coeffNumPairs (Just ("R²", Reg.rfR2 fit))
                     , RB.secKeyValue "Fit summary"
-                        [ ("RMSE (in-sample)", T.pack (printf "%.4f" rmseVal))
-                        , ("|β| > 1e-8", T.pack (show (Reg.rfNonZero fit) <> " / "
-                                                  <> show (length beta)))
-                        , ("Penalty", roPenalty opts)
-                        , ("Lambda", T.pack (printf "%g" (roLambda opts)))
-                        ]
+                        (ridgeFitKVs opts fit beta rmseVal)
+                    , pathSec
                     , RB.secResiduals yhat residuals
                     ]
               RB.renderReport rpath cfg sections
@@ -2172,3 +2156,50 @@ doSpline file xColStr yColStr opts = do
           putStrLn ("Report: " ++ rpath)
           openInBrowser rpath
     Right _ -> hPutStrLn stderr "spline: expected single x column"
+
+-- ---------------------------------------------------------------------------
+-- ridge report ヘルパ
+-- ---------------------------------------------------------------------------
+
+ridgeModelLabel :: RidgeOpts -> T.Text
+ridgeModelLabel opts =
+  "Regularized regression (" <> roPenalty opts <> ")"
+
+ridgeFormula :: RidgeOpts -> [T.Text] -> T.Text -> T.Text
+ridgeFormula opts xCols yCol =
+  T.pack (T.unpack yCol ++ " ~ "
+          ++ intercalate " + " (map T.unpack xCols)
+          ++ "  (lambda=" ++ show (roLambda opts) ++ ")")
+
+ridgeReportConfig :: RidgeOpts -> [T.Text] -> T.Text -> RB.ReportConfig
+ridgeReportConfig _opts xCols yCol = RB.defaultReportConfig
+  ("Regularized regression — "
+   <> yCol <> " ~ " <> T.intercalate " + " xCols)
+
+ridgeFitKVs :: RidgeOpts -> Reg.RegFit -> [Double] -> Double -> [(T.Text, T.Text)]
+ridgeFitKVs opts fit beta rmseVal =
+  [ ("RMSE (in-sample)", T.pack (printf "%.4f" rmseVal))
+  , ("|β| > 1e-8", T.pack (show (Reg.rfNonZero fit) <> " / "
+                            <> show (length beta)))
+  , ("Penalty", roPenalty opts)
+  , ("Lambda", T.pack (printf "%g" (roLambda opts)))
+  ]
+
+-- | Regularization path: λ を 1e-4 .. 1e2 で対数スケール掃引、
+-- 各 λ で fit して係数を集める。intercept は除外して可視化。
+mkRidgePathSection :: [T.Text] -> LA.Matrix Double -> LA.Vector Double
+                   -> RidgeOpts -> RB.ReportSection
+mkRidgePathSection xCols xMat yLA opts =
+  let lambdas = [10 ** (-4 + 0.1 * fromIntegral i) | i <- [0 .. 60 :: Int]]
+      mkPen lam = case roPenalty opts of
+        "ridge"       -> Reg.L2 lam
+        "lasso"       -> Reg.L1 lam
+        "elasticnet"  -> Reg.ElasticNet (lam * roAlpha opts)
+                                         (lam * (1 - roAlpha opts))
+        _             -> Reg.L2 lam
+      path = Reg.regularizationPath mkPen lambdas xMat yLA
+      -- intercept (係数 0) を除外
+      pathNoInt = [ (lam, drop 1 coefs) | (lam, coefs) <- path ]
+      title = "Regularization path (" <> roPenalty opts <> ")"
+      spec  = RB.regPathSpec xCols pathNoInt
+  in RB.secVega title spec
