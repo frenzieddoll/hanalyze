@@ -129,6 +129,12 @@ data Distribution a
   | Beta        a a       -- ^ Beta(α, β)
   | Poisson     a         -- ^ Poisson(λ)
   | Binomial    Int a     -- ^ Binomial(n, p)
+  | Uniform     a a       -- ^ Uniform(low, high)
+  | StudentT    a a a     -- ^ StudentT(ν degrees of freedom, μ location, σ scale)
+  | Cauchy      a a       -- ^ Cauchy(x₀ location, γ scale)
+  | HalfNormal  a         -- ^ HalfNormal(σ) — support: x ≥ 0
+  | HalfCauchy  a         -- ^ HalfCauchy(γ scale) — support: x ≥ 0
+  | LogNormal   a a       -- ^ LogNormal(μ log-mean, σ log-sd) — support: x > 0
   deriving (Show, Functor)
 
 distName :: Distribution a -> Text
@@ -138,6 +144,12 @@ distName Gamma{}       = "Gamma"
 distName Beta{}        = "Beta"
 distName Poisson{}     = "Poisson"
 distName Binomial{}    = "Binomial"
+distName Uniform{}     = "Uniform"
+distName StudentT{}    = "StudentT"
+distName Cauchy{}      = "Cauchy"
+distName HalfNormal{}  = "HalfNormal"
+distName HalfCauchy{}  = "HalfCauchy"
+distName LogNormal{}   = "LogNormal"
 
 -- | サンプル値 (型 @a@) に対する事前分布の対数密度。
 logDensity :: (Floating a, Ord a) => Distribution a -> a -> a
@@ -167,6 +179,42 @@ logDensity (Poisson lam) x
 logDensity (Binomial _ p) _
   | p <= 0 || p >= 1 = negInf
   | otherwise        = 0  -- サンプル時は使わない (構造のみ)
+logDensity (Uniform lo hi) x
+  | hi <= lo            = negInf
+  | x  < lo || x  > hi  = negInf
+  | otherwise           = -log (hi - lo)
+logDensity (StudentT df mu sig) x
+  | df <= 0 || sig <= 0 = negInf
+  | otherwise =
+      let z = (x - mu) / sig
+      in lgammaApprox ((df + 1) / 2)
+       - lgammaApprox (df / 2)
+       - 0.5 * log (df * pi)
+       - log sig
+       - ((df + 1) / 2) * log (1 + z * z / df)
+logDensity (Cauchy loc sc) x
+  | sc <= 0   = negInf
+  | otherwise =
+      let z = (x - loc) / sc
+      in -log pi - log sc - log (1 + z * z)
+logDensity (HalfNormal sig) x
+  | sig <= 0 = negInf
+  | x < 0    = negInf
+  | otherwise =
+      0.5 * log 2 - 0.5 * log pi - log sig
+      - 0.5 * (x / sig) ^ (2::Int)
+logDensity (HalfCauchy sc) x
+  | sc <= 0 = negInf
+  | x < 0   = negInf
+  | otherwise =
+      log 2 - log pi - log sc - log (1 + (x / sc) ^ (2::Int))
+logDensity (LogNormal mu sig) x
+  | sig <= 0 = negInf
+  | x  <= 0  = negInf
+  | otherwise =
+      let lx = log x
+      in -0.5 * log (2 * pi) - log sig - lx
+         - 0.5 * ((lx - mu) / sig) ^ (2::Int)
 
 -- | 観測値 (Double 定数) に対する尤度の対数密度。
 -- 観測は @[Double]@ で渡されるので、@Floating a@ 制約のみで計算可能。
@@ -209,6 +257,48 @@ logDensityObs (Binomial n p) y
           nA   = realToFrac (fromIntegral n :: Double) :: a
           logC = realToFrac (logBinomCoeff n k) :: a
       in logC + kA * log p + (nA - kA) * log (1 - p)
+logDensityObs (Uniform lo hi) y
+  | hi <= lo  = negInf
+  | otherwise =
+      let yA = realToFrac y :: a
+      in if yA < lo || yA > hi then negInf else -log (hi - lo)
+logDensityObs (StudentT df mu sig) y
+  | df <= 0 || sig <= 0 = negInf
+  | otherwise =
+      let yA = realToFrac y :: a
+          z  = (yA - mu) / sig
+      in lgammaApprox ((df + 1) / 2)
+       - lgammaApprox (df / 2)
+       - 0.5 * log (df * pi)
+       - log sig
+       - ((df + 1) / 2) * log (1 + z * z / df)
+logDensityObs (Cauchy loc sc) y
+  | sc <= 0   = negInf
+  | otherwise =
+      let yA = realToFrac y :: a
+          z  = (yA - loc) / sc
+      in -log pi - log sc - log (1 + z * z)
+logDensityObs (HalfNormal sig) y
+  | sig <= 0 = negInf
+  | y  < 0   = negInf
+  | otherwise =
+      let yA = realToFrac y :: a
+      in 0.5 * log 2 - 0.5 * log pi - log sig
+       - 0.5 * (yA / sig) ^ (2::Int)
+logDensityObs (HalfCauchy sc) y
+  | sc <= 0 = negInf
+  | y  < 0  = negInf
+  | otherwise =
+      let yA = realToFrac y :: a
+      in log 2 - log pi - log sc - log (1 + (yA / sc) ^ (2::Int))
+logDensityObs (LogNormal mu sig) y
+  | sig <= 0 = negInf
+  | y  <= 0  = negInf
+  | otherwise =
+      let yA = realToFrac y :: a
+          lx = log yA
+      in -0.5 * log (2 * pi) - log sig - lx
+       - 0.5 * ((lx - mu) / sig) ^ (2::Int)
 
 negInf :: Floating a => a
 negInf = -1/0
@@ -461,6 +551,12 @@ getTransforms m = Map.fromList
     transformFor "Exponential" = PositiveT
     transformFor "Gamma"       = PositiveT
     transformFor "Beta"        = UnitIntervalT
+    transformFor "StudentT"    = UnconstrainedT
+    transformFor "Cauchy"      = UnconstrainedT
+    transformFor "HalfNormal"  = PositiveT
+    transformFor "HalfCauchy"  = PositiveT
+    transformFor "LogNormal"   = PositiveT  -- support: x>0 (log は AD 安全)
+    transformFor "Uniform"     = UnconstrainedT  -- 注: 真の制約変換は logit-on-(lo,hi) だが現状は未実装
     transformFor _             = UnconstrainedT
 
 -- | unconstrained 空間における log-joint (Jacobian 補正込み)。
@@ -566,12 +662,18 @@ extractDeps m = go m []
 
 -- | Distribution Track に含まれる依存変数集合を取り出す。
 distDepsT :: Distribution Track -> Set Text
-distDepsT (Normal mu sig)   = trackDeps mu <> trackDeps sig
-distDepsT (Exponential r)   = trackDeps r
-distDepsT (Gamma s r)       = trackDeps s <> trackDeps r
-distDepsT (Beta a b)        = trackDeps a <> trackDeps b
-distDepsT (Poisson lam)     = trackDeps lam
-distDepsT (Binomial _ p)    = trackDeps p
+distDepsT (Normal mu sig)    = trackDeps mu <> trackDeps sig
+distDepsT (Exponential r)    = trackDeps r
+distDepsT (Gamma s r)        = trackDeps s <> trackDeps r
+distDepsT (Beta a b)         = trackDeps a <> trackDeps b
+distDepsT (Poisson lam)      = trackDeps lam
+distDepsT (Binomial _ p)     = trackDeps p
+distDepsT (Uniform lo hi)    = trackDeps lo <> trackDeps hi
+distDepsT (StudentT df mu s) = trackDeps df <> trackDeps mu <> trackDeps s
+distDepsT (Cauchy loc s)     = trackDeps loc <> trackDeps s
+distDepsT (HalfNormal s)     = trackDeps s
+distDepsT (HalfCauchy s)     = trackDeps s
+distDepsT (LogNormal mu s)   = trackDeps mu <> trackDeps s
 
 -- | Track でモデルを評価する (log joint も依存集合付きで計算)。
 runTrack :: forall r. ModelP r -> Map Text Track -> Track

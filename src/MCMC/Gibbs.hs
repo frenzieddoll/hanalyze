@@ -151,6 +151,12 @@ distParams (Poisson lam)      = [lam]
 distParams (Exponential r)    = [r]
 distParams (Gamma a b)        = [a, b]
 distParams (Beta a b)         = [a, b]
+distParams (Uniform lo hi)    = [lo, hi]
+distParams (StudentT df mu s) = [df, mu, s]
+distParams (Cauchy loc s)     = [loc, s]
+distParams (HalfNormal s)     = [s]
+distParams (HalfCauchy s)     = [s]
+distParams (LogNormal mu s)   = [mu, s]
 
 -- 各潜在変数が Observe ノードのどの (obsIndex, slotIndex) に影響するかを検出。
 detectObsDeps :: ModelP r -> [Text] -> Map Text [(Int, Int)]
