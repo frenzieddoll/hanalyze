@@ -30,6 +30,10 @@ module Stat.ModelSelect
   , lmPosteriorLogLiks
   , glmPosteriorLogLiks
   , lmePosteriorLogLiks
+    -- * モデル比較の重み (PyMC `pm.compare` 相当)
+  , CompareEntry (..)
+  , CompareResult (..)
+  , compareModels
   ) where
 
 import Control.Monad (replicateM)
@@ -325,3 +329,62 @@ sampleVar xs
       let mu = mean xs
       in sum (map (\x -> (x - mu) ^ (2::Int)) xs)
          / fromIntegral (length xs - 1)
+
+-- ---------------------------------------------------------------------------
+-- モデル比較の重み (Pseudo-BMA, ArviZ.compare 相当)
+-- ---------------------------------------------------------------------------
+
+-- | 比較対象 1 モデル分の入力 (ラベル + log-lik 行列)
+data CompareEntry = CompareEntry
+  { ceLabel    :: String          -- ^ モデルラベル
+  , ceLogLikMat :: [[Double]]     -- ^ S × N 対数尤度行列
+  } deriving (Show)
+
+-- | 1 モデル分の比較結果
+data CompareResult = CompareResult
+  { crLabel  :: String
+  , crWAIC   :: Double           -- WAIC (smaller better)
+  , crLOO    :: Double           -- LOO  (smaller better)
+  , crDeltaWAIC :: Double        -- ΔWAIC vs best
+  , crDeltaLOO  :: Double        -- ΔLOO  vs best
+  , crSE     :: Double           -- WAIC SE
+  , crKHatBad :: Int             -- 観測値で k̂ > 0.7 の数
+  , crWeight :: Double           -- Pseudo-BMA 重み (Σ = 1)
+  } deriving (Show)
+
+-- | 複数モデルを WAIC / LOO で比較し、Pseudo-BMA 重みを計算する。
+--
+-- アルゴリズム:
+--   * 各モデルの WAIC, LOO を計算
+--   * 最良 (最小) モデルを基準に ΔWAIC, ΔLOO を算出
+--   * Pseudo-BMA 重み: w_i = exp(elpd_i) / Σ exp(elpd_j)
+--     (実用的には Δ から計算: w_i ∝ exp(-Δelpd_i))
+compareModels :: [CompareEntry] -> [CompareResult]
+compareModels entries =
+  let waicResults = map (\e -> (ceLabel e, waic (ceLogLikMat e))) entries
+      looResults  = map (\e -> (ceLabel e, loo  (ceLogLikMat e))) entries
+      waicVals    = map (waicValue . snd) waicResults
+      looVals     = map (looValue  . snd) looResults
+      -- elpd_loo (= -looValue / 2) 基準で Pseudo-BMA 重みを計算
+      elpds       = map (\v -> -v / 2) looVals
+      maxElpd     = maximum elpds
+      unnorm      = map (\e -> exp (e - maxElpd)) elpds
+      total       = sum unnorm
+      weights     = map (/ total) unnorm
+      bestWaic    = minimum waicVals
+      bestLoo     = minimum looVals
+  in zipWith4 mkRow entries waicResults looResults weights
+  where
+    mkRow entry (lbl, w) (_, l) wt = CompareResult
+      { crLabel     = lbl
+      , crWAIC      = waicValue w
+      , crLOO       = looValue  l
+      , crDeltaWAIC = waicValue w - minimum (map (\e -> waicValue (waic (ceLogLikMat e))) entries)
+      , crDeltaLOO  = looValue  l - minimum (map (\e -> looValue  (loo  (ceLogLikMat e))) entries)
+      , crSE        = waicSE w
+      , crKHatBad   = looKHatBad l
+      , crWeight    = wt
+      }
+    zipWith4 f as bs cs ds = case (as, bs, cs, ds) of
+      (a:as', b:bs', c:cs', d:ds') -> f a b c d : zipWith4 f as' bs' cs' ds'
+      _ -> []

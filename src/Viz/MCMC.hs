@@ -13,6 +13,8 @@ module Viz.MCMC
     -- * 多チェーン (PyMC スタイル)
   , multiTracePlot,        multiTracePlotFile
   , mcmcDiagnosticsMulti,  mcmcDiagnosticsMultiFile
+    -- * Forest plot (パラメータ間の事後比較)
+  , forestPlot, forestPlotFile
   ) where
 
 import Data.Text (Text)
@@ -294,3 +296,89 @@ mkMultiTracePanel pname w h chains =
           $ []
       , width w, height h
       ]
+
+-- ---------------------------------------------------------------------------
+-- Forest plot (パラメータ事後を 1 つの図に並べて比較)
+-- ---------------------------------------------------------------------------
+
+-- | Forest plot: 各パラメータの事後平均と 95% 信用区間を横向きに並べる。
+--
+-- ArviZ の `plot_forest` 相当。複数モデル/複数チェーンの比較や、
+-- 階層モデルでグループ別パラメータを並べて見るのに便利。
+--
+-- 単一チェーンの場合は @[chain]@ に 1 要素入れて呼ぶ。
+forestPlot
+  :: PlotConfig
+  -> [Text]      -- ^ 表示するパラメータ名 (上から下に並ぶ)
+  -> [Chain]     -- ^ 1 つ以上のチェーン (複数あれば色分け)
+  -> VegaLite
+forestPlot cfg params chains = toVegaLite
+  [ title (plotTitle cfg) []
+  , dataFromColumns []
+      . dataColumn "param" (Strings params')
+      . dataColumn "chain" (Strings chainIds)
+      . dataColumn "mean"  (Numbers means)
+      . dataColumn "lo"    (Numbers loQs)
+      . dataColumn "hi"    (Numbers hiQs)
+      $ []
+  , layer
+      [ -- 信用区間の横線
+        asSpec
+          [ mark Rule [MStrokeWidth 2, MOpacity 0.7]
+          , encoding
+              . position Y [ PName "param", PmType Nominal
+                           , PAxis [AxTitle "Parameter", AxLabelFontSize 11] ]
+              . position X  [ PName "lo", PmType Quantitative
+                            , PAxis [AxTitle "Posterior 95% CI"] ]
+              . position X2 [ PName "hi" ]
+              . color [ MName "chain", MmType Nominal
+                      , MScale [SScheme "tableau10" []]
+                      , MLegend [LTitle "Chain"] ]
+              $ []
+          ]
+        -- 事後平均ドット
+      , asSpec
+          [ mark Circle [MSize 80, MOpacity 0.95]
+          , encoding
+              . position Y [ PName "param", PmType Nominal ]
+              . position X [ PName "mean", PmType Quantitative ]
+              . color [ MName "chain", MmType Nominal
+                      , MScale [SScheme "tableau10" []] ]
+              $ []
+          ]
+      ]
+  , width (plotWidth cfg)
+  , height (max 200 (fromIntegral (length params * 30) :: Double))
+  ]
+  where
+    cs = zip [1 :: Int ..] chains
+    -- 各 (param, chain) の組について 1 行
+    rows =
+      [ (p, T.pack (show ci), m, l, h)
+      | (ci, ch) <- cs
+      , p        <- params
+      , let xs = chainVals p ch
+      , not (null xs)
+      , let n   = length xs
+            sxs = sortAsc xs
+            mu  = sum xs / fromIntegral n
+            qAt q = sxs !! min (n - 1) (max 0 (floor (q * fromIntegral n) :: Int))
+            (l, h) = (qAt 0.025, qAt 0.975)
+            m  = mu
+      ]
+    params'   = [p | (p,_,_,_,_) <- rows]
+    chainIds  = [c | (_,c,_,_,_) <- rows]
+    means     = [m | (_,_,m,_,_) <- rows]
+    loQs      = [l | (_,_,_,l,_) <- rows]
+    hiQs      = [h | (_,_,_,_,h) <- rows]
+
+    sortAsc :: [Double] -> [Double]
+    sortAsc = qs
+      where
+        qs []     = []
+        qs (p:xs) = qs [x | x <- xs, x <= p] ++ [p] ++ qs [x | x <- xs, x > p]
+
+forestPlotFile
+  :: OutputFormat -> FilePath -> PlotConfig -> [Text] -> [Chain] -> IO ()
+forestPlotFile fmt path cfg params chains =
+  writeSpec fmt path (forestPlot cfg params chains)
