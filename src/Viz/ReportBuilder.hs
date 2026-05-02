@@ -44,6 +44,8 @@ module Viz.ReportBuilder
   , secMarkdown
   , secHtml
   , secCollapsible
+  , secCard
+  , secStatRow
     -- * Markdown ファイル読込 (appendix 用)
   , secAppendixFromMd
   , renderSimpleMarkdown
@@ -160,6 +162,12 @@ data ReportSection
     -- | 折りたたみ可能なグループ。子セクションを 1 つの details で囲む。
     --   フィールド: title / openByDefault / 子セクション
   | SecCollapsible Text Bool [ReportSection]
+    -- | 淡い背景色の囲みカード。SecCollapsible の内部などで使い、
+    --   関連する図表をひとまとめにする (常に開いた状態)。
+  | SecCard Text [ReportSection]
+    -- | フラットな統計行 (section 包装なし)。
+    --   info-box が横並びになる stat-row。
+  | SecStatRow [(Text, Text)]
 
 -- ---------------------------------------------------------------------------
 -- ビルダ
@@ -205,6 +213,14 @@ secHtml = SecHtml
 -- | 折りたたみ可能グループ。
 secCollapsible :: Text -> Bool -> [ReportSection] -> ReportSection
 secCollapsible = SecCollapsible
+
+-- | 淡い背景の囲みカード。回帰結果セクション内で関連図表をグループ化するのに使う。
+secCard :: Text -> [ReportSection] -> ReportSection
+secCard = SecCard
+
+-- | フラットな統計行 (section box なし)。Card と Card の間で軽く統計を並べる用途。
+secStatRow :: [(Text, Text)] -> ReportSection
+secStatRow = SecStatRow
 
 -- ---------------------------------------------------------------------------
 -- Markdown appendix
@@ -508,6 +524,8 @@ mkNavBar cfg pairs =
       SecInteractiveLM {}    -> "対話的予測"
       SecInteractiveMulti {} -> "対話的予測"
       SecCollapsible t _ _   -> if T.null t then "詳細" else t
+      SecCard t _            -> if T.null t then "" else t
+      SecStatRow _           -> ""
 
 sectionId :: Int -> Text
 sectionId i = "sec_" <> T.pack (show i)
@@ -534,6 +552,8 @@ renderSection sid sec = case sec of
   SecInteractiveMulti t im   -> renderInteractiveMulti sid t im
   SecCollapsible t open children ->
     renderCollapsible sid t open children
+  SecCard t children     -> renderCard sid t children
+  SecStatRow kvs         -> renderStatRow sid kvs
 
 wrapSection :: Text -> Text -> Text -> Text
 wrapSection sid title inner = T.unlines
@@ -989,6 +1009,35 @@ renderCollapsible sid title open children =
        , "</section>"
        ]
 
+-- | 淡い背景色のカード。子セクションの section ラッパは CSS で flat 化される。
+renderCard :: Text -> Text -> [ReportSection] -> Text
+renderCard sid title children =
+  let childHtml = T.intercalate "\n"
+        [ renderSection (childId sid i) c
+        | (i, c) <- zip [0::Int ..] children ]
+      titleHtml = if T.null title then ""
+                  else "  <h3 class=\"card-title\">" <> title <> "</h3>"
+  in T.unlines
+       [ "<div class=\"result-card\" id=\"" <> sid <> "\">"
+       , titleHtml
+       , childHtml
+       , "</div>"
+       ]
+
+-- | フラットな統計行 (section box なし)。
+renderStatRow :: Text -> [(Text, Text)] -> Text
+renderStatRow sid kvs =
+  let boxes = T.intercalate "\n"
+        [ "  <div class=\"stat-box\">"
+          <> "<div class=\"lbl\">" <> k
+          <> "</div><div class=\"val\">" <> v <> "</div></div>"
+        | (k, v) <- kvs ]
+  in T.unlines
+       [ "<div class=\"stat-row\" id=\"" <> sid <> "\">"
+       , boxes
+       , "</div>"
+       ]
+
 -- Interactive LM ------------------------------------------------------------
 
 renderInteractiveLM :: Text -> Text -> Text -> Text
@@ -1035,6 +1084,10 @@ sectionScript sid sec = case sec of
   SecInteractiveMulti _ im ->
     interactiveMultiScript sid im
   SecCollapsible _ _ children ->
+    T.intercalate "\n"
+      [ sectionScript (childId sid i) child
+      | (i, child) <- zip [0::Int ..] children ]
+  SecCard _ children ->
     T.intercalate "\n"
       [ sectionScript (childId sid i) child
       | (i, child) <- zip [0::Int ..] children ]
@@ -1347,7 +1400,28 @@ css = T.unlines
   , "details summary::-webkit-details-marker { color: #888; }"
   , ".collapsible-wrap { padding: 0; background: transparent; box-shadow: none; }"
   , ".collapsible-body { padding: 14px 0 0 0; }"
-  , ".collapsible-body section { border: 1px solid #e0e6ee; box-shadow: none; }"
+  , ".collapsible-body > section { background: transparent; border: none;"
+  , "                              box-shadow: none; padding: 6px 0; margin: 0; }"
+  , ".collapsible-body > section > h2 { display: none; }"
+  -- Card (淡い背景の囲み)
+  , ".result-card { background: #f7f9fc; border: 1px solid #e4e9f0;"
+  , "               border-radius: 10px; padding: 14px 16px; margin: 12px 0; }"
+  , ".result-card .card-title { font-weight: 600; color: #1e3a5c;"
+  , "                           margin-bottom: 10px; font-size: .98em;"
+  , "                           border-bottom: 1px solid #dde6ee; padding-bottom: 6px; }"
+  , ".result-card section { background: transparent; border: none;"
+  , "                       box-shadow: none; padding: 0; margin: 0; }"
+  , ".result-card section > h2 { display: none; }"
+  -- Stat row (Card 間のフラットな統計バー)
+  , ".stat-row { display: flex; gap: 12px; flex-wrap: wrap;"
+  , "            margin: 14px 0; }"
+  , ".stat-row .stat-box { background: white; border: 1px solid #d6dde6;"
+  , "                      border-radius: 8px; padding: 10px 14px;"
+  , "                      min-width: 110px; flex: 1; text-align: center; }"
+  , ".stat-row .lbl { font-size: .7em; color: #888; text-transform: uppercase;"
+  , "                 letter-spacing: .04em; margin-bottom: 4px; }"
+  , ".stat-row .val { font-size: 1.1em; font-weight: 700; color: #1e3a5c;"
+  , "                 font-family: monospace; }"
   , ".stats-card, .hist-card-group { margin: 10px 0; }"
   , ".stats-card[open] summary, .hist-card-group[open] summary { background: #d6e4f0; }"
   , ".hist-card { border: 1px solid #e0e6ee; border-radius: 6px;"

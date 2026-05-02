@@ -145,21 +145,32 @@ writeRBLM df xVec yVec = do
                  , RB.imSlider    = [(xMinO - ext, (xMinO + xMaxO)/2, xMaxO + ext)]
                  , RB.imCISigma   = Just sd_
                  }
-          cfg   = RB.defaultReportConfig "LM (ReportBuilder)"
+          cfg     = RB.defaultReportConfig "LM (ReportBuilder)"
+          rmseV   = sqrt (sum [ r ^ (2::Int) | r <- resid ]
+                          / fromIntegral (max 1 (length resid)))
+          maxAbsR = maximum (0 : map abs resid)
           sections =
             [ RB.secDataOverview df ["x"] "y"
-            , RB.secModelOverview "線形回帰 (LM)"
-                "$y = \\beta_0 + \\beta_1 x + \\varepsilon$, $\\varepsilon \\sim \\text{Normal}(0, \\sigma^2)$ (Gaussian, identity link)"
+            , RB.secModelOverview "LM"
+                ("$y_i = \\beta_0 + \\beta_1 x_i + \\varepsilon_i$<br>"
+                 <> "$\\varepsilon_i \\sim \\text{Normal}(0, \\sigma^2)$")
                 Nothing
-            , RB.secCollapsible "回帰結果 (係数 + 散布 + 残差)" False
-                [ RB.secCoefficients coeffs (Just ("R²", rSquared1 fit))
-                , RB.secKeyValue "あてはめの要約"
+            , RB.secCollapsible "回帰結果" True
+                [ RB.secCard "係数"
+                    [ RB.secCoefficients coeffs (Just ("R²", rSquared1 fit)) ]
+                , RB.secStatRow
                     [ ("R²",     T.pack (printf "%.4f" (rSquared1 fit)))
-                    , ("方法",   "OLS (QR 分解)")
+                    , ("方法",   "OLS (QR)")
                     , ("σ_hat",  T.pack (printf "%.4f" sd_))
                     ]
-                , RB.secFitScatter "x" "y" xs ys (Just smooth)
-                , RB.secResiduals fitted resid
+                , RB.secCard "散布図 + 回帰線"
+                    [ RB.secFitScatter "x" "y" xs ys (Just smooth) ]
+                , RB.secStatRow
+                    [ ("RMSE",        T.pack (printf "%.4f" rmseV))
+                    , ("最大絶対残差", T.pack (printf "%.4f" maxAbsR))
+                    ]
+                , RB.secCard "残差プロット"
+                    [ RB.secResiduals fitted resid ]
                 ]
             , RB.secInteractiveMulti "対話的予測" im
             , appendixSec
@@ -241,24 +252,33 @@ writeRBGLM df xVec yVec xCol yCol = do
                  , RB.imSlider    = [(xMinO - ext, (xMinO + xMaxO)/2, xMaxO + ext)]
                  , RB.imCISigma   = Nothing
                  }
-          cfg   = RB.defaultReportConfig "GLM Poisson (ReportBuilder)"
+          cfg     = RB.defaultReportConfig "GLM Poisson (ReportBuilder)"
+          rmseV   = sqrt (sum [ r ^ (2::Int) | r <- resid ]
+                          / fromIntegral (max 1 (length resid)))
+          maxAbsR = maximum (0 : map abs resid)
           sections =
             [ RB.secDataOverview df [xCol] yCol
-            , RB.secModelOverview "GLM Poisson / log link"
-                ("$\\log E[\\text{" <> yCol <> "}] = \\beta_0 + \\beta_1 \\text{" <> xCol
-                 <> "}$, $\\text{" <> yCol <> "} \\sim \\text{Poisson}(\\lambda)$")
+            , RB.secModelOverview "GLM(Poisson, log)"
+                ("$" <> yCol <> "_i \\sim \\text{Poisson}(\\lambda_i)$<br>"
+                 <> "$\\log \\lambda_i = \\beta_0 + \\beta_1 " <> xCol <> "_i$")
                 Nothing
-            , RB.secCollapsible "回帰結果 (係数 + 散布 + 残差)" False
-                [ RB.secCoefficients
-                    [(T.pack k, v) | (k, v) <- coeffs]
-                    (Just ("McFadden R²", rSquared1 fit))
-                , RB.secKeyValue "あてはめの要約"
-                    [ ("ファミリ", "Poisson")
-                    , ("リンク",   "log")
-                    , ("方法",     "IRLS")
+            , RB.secCollapsible "回帰結果" True
+                [ RB.secCard "係数"
+                    [ RB.secCoefficients
+                        [(T.pack k, v) | (k, v) <- coeffs]
+                        (Just ("McFadden R²", rSquared1 fit)) ]
+                , RB.secStatRow
+                    [ ("McFadden R²", T.pack (printf "%.4f" (rSquared1 fit)))
+                    , ("方法",        "IRLS")
                     ]
-                , RB.secFitScatter xCol yCol xs ys (Just smooth)
-                , RB.secResiduals fitted resid
+                , RB.secCard "散布図 + 回帰線"
+                    [ RB.secFitScatter xCol yCol xs ys (Just smooth) ]
+                , RB.secStatRow
+                    [ ("RMSE",         T.pack (printf "%.4f" rmseV))
+                    , ("最大絶対残差", T.pack (printf "%.4f" maxAbsR))
+                    ]
+                , RB.secCard "残差プロット"
+                    [ RB.secResiduals fitted resid ]
                 ]
             , RB.secInteractiveMulti "対話的予測" im
             , appendixSec
@@ -306,28 +326,36 @@ writeRBGLMM df gr = do
                    (V.toList (GLMM.glmmBLUPs gr))
       fitted = fittedList (GLMM.glmmFixed gr)
       resid  = LA.toList (residualsV (GLMM.glmmFixed gr))
-      cfg    = RB.defaultReportConfig "LME (ReportBuilder)"
+      cfg     = RB.defaultReportConfig "LME (ReportBuilder)"
+      rmseV   = sqrt (sum [ r ^ (2::Int) | r <- resid ]
+                      / fromIntegral (max 1 (length resid)))
+      maxAbsR = maximum (0 : map abs resid)
       sections =
         [ RB.secDataOverview df ["x"] "y"
-        , RB.secModelOverview "線形混合効果 (LME)"
-            ("$y_{ij} = \\beta_0 + \\beta_1 x + u_j + \\varepsilon$, "
-             <> "$u_j \\sim \\text{Normal}(0, \\sigma^2_u)$, "
-             <> "$\\varepsilon \\sim \\text{Normal}(0, \\sigma^2)$")
+        , RB.secModelOverview "LME"
+            ("$y_{ij} = \\beta_0 + \\beta_1 x_{ij} + u_j + \\varepsilon_{ij}$<br>"
+             <> "$u_j \\sim \\text{Normal}(0, \\sigma^2_u)$<br>"
+             <> "$\\varepsilon_{ij} \\sim \\text{Normal}(0, \\sigma^2)$")
             Nothing
-        , RB.secCollapsible "回帰結果 (固定効果 + 分散成分 + BLUP)" False
-            [ RB.secCoefficients coeffs
-                (Just ("周辺 R²", rSquared1 (GLMM.glmmFixed gr)))
-            , RB.secKeyValue "分散成分"
-                [ ("σ²_u (グループ)",  T.pack (printf "%.4f" (GLMM.glmmRandVar gr)))
-                , ("σ² (残差)",         T.pack (printf "%.4f" (GLMM.glmmResidVar gr)))
-                , ("ICC", T.pack (printf "%.4f (%d%%)"
-                                   (GLMM.glmmICC gr)
-                                   (round (GLMM.glmmICC gr * 100) :: Int)))
+        , RB.secCollapsible "回帰結果" True
+            [ RB.secCard "固定効果"
+                [ RB.secCoefficients coeffs
+                    (Just ("周辺 R²", rSquared1 (GLMM.glmmFixed gr))) ]
+            , RB.secStatRow
+                [ ("σ²_u",  T.pack (printf "%.4f" (GLMM.glmmRandVar gr)))
+                , ("σ²",    T.pack (printf "%.4f" (GLMM.glmmResidVar gr)))
+                , ("ICC",   T.pack (printf "%.4f" (GLMM.glmmICC gr)))
                 ]
-            , RB.secTable "BLUP (グループ別ランダム切片)"
-                ["グループ", "u_j"]
-                [ [g, T.pack (printf "%+.4f" u)] | (g, u) <- blups ]
-            , RB.secResiduals fitted resid
+            , RB.secCard "BLUP (グループ別ランダム切片)"
+                [ RB.secTable ""
+                    ["グループ", "u_j"]
+                    [ [g, T.pack (printf "%+.4f" u)] | (g, u) <- blups ] ]
+            , RB.secStatRow
+                [ ("RMSE",        T.pack (printf "%.4f" rmseV))
+                , ("最大絶対残差", T.pack (printf "%.4f" maxAbsR))
+                ]
+            , RB.secCard "残差プロット"
+                [ RB.secResiduals fitted resid ]
             ]
         , appendixSec
         ]
@@ -393,22 +421,35 @@ writeRBGP df xs ys gridX res params = do
       xMinO = V.minimum xVec
       xMaxO = V.maximum xVec
       ext   = (xMaxO - xMinO) * 0.3
-      cfg   = RB.defaultReportConfig "GP RBF (ReportBuilder)"
+      cfg     = RB.defaultReportConfig "GP RBF (ReportBuilder)"
+      yhat    = GP.gpMean (GP.fitGP (GP.GPModel GP.RBF params) xs ys xs)
+      resid   = zipWith (-) ys yhat
+      rmseV   = sqrt (sum [ r ^ (2::Int) | r <- resid ]
+                      / fromIntegral (max 1 (length resid)))
+      maxAbsR = maximum (0 : map abs resid)
       sections =
         [ RB.secDataOverview df ["x"] "y"
-        , RB.secModelOverview "ガウス過程 (RBF カーネル)"
-            ("$f \\sim \\text{GP}(0, k_{\\text{RBF}}(x, x'))$, "
-             <> "$k(x, x') = \\sigma_f^2 \\exp\\!\\left(-(x-x')^2 / (2\\ell^2)\\right)$")
+        , RB.secModelOverview "GP(RBF)"
+            ("$f \\sim \\text{GP}(0, k(x, x'))$<br>"
+             <> "$k(x, x') = \\sigma_f^2 \\exp\\!\\left(-(x-x')^2 / (2\\ell^2)\\right)$<br>"
+             <> "$y_i = f_i + \\varepsilon_i, \\quad \\varepsilon_i \\sim \\text{Normal}(0, \\sigma_n^2)$")
             Nothing
-        , RB.secCollapsible "回帰結果 (ハイパラ + 散布)" False
-            [ RB.secKeyValue "最適化されたハイパラメータ"
-                [ ("ℓ (長さスケール)", T.pack (printf "%.4f" (GP.gpLengthScale params)))
-                , ("σ_f² (信号分散)",T.pack (printf "%.4f" (GP.gpSignalVar params)))
-                , ("σ_n² (ノイズ分散)", T.pack (printf "%.4f" (GP.gpNoiseVar params)))
-                , ("LML", T.pack (printf "%.4f"
-                                  (GP.logMarginalLikelihood xs ys GP.RBF params)))
+        , RB.secCollapsible "回帰結果" True
+            [ RB.secStatRow
+                [ ("ℓ",  T.pack (printf "%.4f" (GP.gpLengthScale params)))
+                , ("σ_f²", T.pack (printf "%.4f" (GP.gpSignalVar params)))
+                , ("σ_n²", T.pack (printf "%.4f" (GP.gpNoiseVar params)))
+                , ("LML", T.pack (printf "%.2f"
+                                   (GP.logMarginalLikelihood xs ys GP.RBF params)))
                 ]
-            , RB.secFitScatter "x" "y" xs ys (Just smooth)
+            , RB.secCard "事後平均 + 95% 信用帯"
+                [ RB.secFitScatter "x" "y" xs ys (Just smooth) ]
+            , RB.secStatRow
+                [ ("RMSE",         T.pack (printf "%.4f" rmseV))
+                , ("最大絶対残差", T.pack (printf "%.4f" maxAbsR))
+                ]
+            , RB.secCard "残差プロット"
+                [ RB.secResiduals yhat resid ]
             ]
         , RB.secInteractiveLM "対話的予測" "x" "y"
             xs ys smooth (xMinO - ext, xMaxO + ext)
@@ -539,26 +580,44 @@ writeRBHBM df xs ys chain = do
       xMaxO = V.maximum xVec
       ext   = (xMaxO - xMinO) * 0.5
       mgDag = VMG.buildMermaid (HBM.buildModelGraph (hbmModel xs ys))
+      -- 統計量
+      fitted  = [aMean + bMean * x | x <- xs]
+      resid   = zipWith (-) ys fitted
+      rmseV   = sqrt (sum [ r ^ (2::Int) | r <- resid ]
+                      / fromIntegral (max 1 (length resid)))
+      maxAbsR = maximum (0 : map abs resid)
+      yBar    = sum ys / fromIntegral (length ys)
+      tss     = sum [ (y - yBar) ^ (2::Int) | y <- ys ]
+      rss     = sum [ r ^ (2::Int) | r <- resid ]
+      r2      = if tss < 1e-12 then 0 else 1 - rss / tss
+      acc     = MCMCcore.acceptanceRate chain
+      nSamp   = length (MCMCcore.chainSamples chain)
       sections =
         [ RB.secDataOverview df ["x"] "y"
-        , RB.secModelOverview "Bayesian Linear Regression (HBM, NUTS)"
-            ("$y_i \\sim \\text{Normal}(\\alpha + \\beta x_i, \\sigma)$, "
-             <> "$\\alpha, \\beta \\sim \\text{Normal}(0, 10)$, "
+        , RB.secModelOverview "HBM(NUTS)"
+            ("$y_i \\sim \\text{Normal}(\\alpha + \\beta x_i, \\sigma)$<br>"
+             <> "$\\alpha, \\beta \\sim \\text{Normal}(0, 10)$<br>"
              <> "$\\sigma \\sim \\text{Exponential}(1)$")
             (Just mgDag)
-        , RB.secCollapsible "回帰結果 (係数 + 事後要約 + MCMC 診断)" False
-            [ RB.secCoefficients
-                [ ("α (posterior mean)", aMean)
-                , ("β (posterior mean)", bMean)
-                , ("σ (posterior mean)", sMean)
+        , RB.secCollapsible "回帰結果" True
+            [ RB.secCard "事後要約"
+                [ RB.secPosteriorSummary "" summaryRows ]
+            , RB.secStatRow
+                [ ("R²",       T.pack (printf "%.4f" r2))
+                , ("サンプル数", T.pack (show nSamp))
+                , ("受容率",    T.pack (printf "%.1f%%" (acc * 100)))
                 ]
-                Nothing
-            , RB.secPosteriorSummary "事後要約" summaryRows
-            , RB.secFitScatter "x" "y" xs ys (Just smoothRB)
-            , RB.secMCMCDiagnostics "MCMC 診断 (KDE + トレース)"
-                params chain
-            , RB.secMCMCAutocorr "自己相関" 40 params chain
-            , RB.secMCMCPair "ペア散布図 (α, β)" "alpha" "beta" chain
+            , RB.secCard "MCMC 診断"
+                [ RB.secMCMCDiagnostics "" params chain
+                , RB.secMCMCAutocorr "" 40 params chain
+                , RB.secMCMCPair "" "alpha" "beta" chain
+                ]
+            , RB.secStatRow
+                [ ("RMSE",         T.pack (printf "%.4f" rmseV))
+                , ("最大絶対残差", T.pack (printf "%.4f" maxAbsR))
+                ]
+            , RB.secCard "残差プロット"
+                [ RB.secResiduals fitted resid ]
             ]
         , RB.secInteractiveLM "対話的予測 (事後中央値)"
             "x" "y" xs ys smoothRB (xMinO - ext, xMaxO + ext)
