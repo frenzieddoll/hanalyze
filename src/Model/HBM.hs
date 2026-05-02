@@ -192,6 +192,26 @@ data Distribution a
     -- ^ ZeroInflatedBinomial(n, ψ, p): ゼロ過剰二項。
     --   P(0)   = ψ + (1-ψ) (1-p)^n
     --   P(k>0) = (1-ψ) C(n,k) p^k (1-p)^{n-k}
+  | InverseGamma a a
+    -- ^ InverseGamma(α, β): 逆ガンマ。support: x > 0。
+    --   X ~ InverseGamma(α, β) ⇔ 1/X ~ Gamma(α, β) (rate=β)。
+    --   分散の共役事前として頻用 (mean = β/(α-1), α>1 で有限)。
+  | Weibull a a
+    -- ^ Weibull(k shape, λ scale): 生存解析の典型分布。support: x > 0。
+    --   pdf: (k/λ) (x/λ)^(k-1) exp(-(x/λ)^k)
+    --   k = 1 で Exponential(rate=1/λ) と等価。
+  | Pareto a a
+    -- ^ Pareto(α shape, x_m scale): 重い裾の冪分布。support: x ≥ x_m > 0。
+    --   pdf: α x_m^α / x^(α+1)
+    --   α > 1 で平均 = α x_m / (α-1)。
+  | BetaBinomial Int a a
+    -- ^ BetaBinomial(n, α, β): Beta-Binomial 過分散二項。観測専用。
+    --   P(k) = C(n,k) B(k+α, n-k+β) / B(α, β)
+    --   α=β=1 で Uniform on {0,…,n}、α/β を大きくすると Binomial に近づく。
+  | VonMises a a
+    -- ^ VonMises(μ location, κ concentration): 角度 (-π, π] 上の分布。
+    --   pdf: exp(κ cos(x − μ)) / (2π I_0(κ))
+    --   κ → 0 で uniform、κ → ∞ で Normal(μ, 1/√κ) に近づく。
   deriving (Show, Functor)
 
 distName :: Distribution a -> Text
@@ -217,6 +237,11 @@ distName NegativeBinomial{} = "NegativeBinomial"
 distName Multinomial{}          = "Multinomial"
 distName ZeroInflatedPoisson{}  = "ZeroInflatedPoisson"
 distName ZeroInflatedBinomial{} = "ZeroInflatedBinomial"
+distName InverseGamma{}         = "InverseGamma"
+distName Weibull{}              = "Weibull"
+distName Pareto{}               = "Pareto"
+distName BetaBinomial{}         = "BetaBinomial"
+distName VonMises{}             = "VonMises"
 
 -- | サンプル値 (型 @a@) に対する事前分布の対数密度。
 logDensity :: (Floating a, Ord a) => Distribution a -> a -> a
@@ -308,6 +333,28 @@ logDensity (Censored d _ _) x =
   logDensity d x
 logDensity MvNormal{} _ = 0  -- observation-only: latent としては使わない
 logDensity Multinomial{} _ = 0  -- observation-only
+logDensity (InverseGamma alpha beta) x
+  | alpha <= 0 || beta <= 0 || x <= 0 = negInf
+  | otherwise =
+      alpha * log beta - lgammaApprox alpha
+      - (alpha + 1) * log x - beta / x
+logDensity (Weibull kShape lam) x
+  | kShape <= 0 || lam <= 0 || x <= 0 = negInf
+  | otherwise =
+      log kShape - log lam
+      + (kShape - 1) * (log x - log lam)
+      - (x / lam) ** kShape
+logDensity (Pareto alpha xm) x
+  | alpha <= 0 || xm <= 0 || x < xm = negInf
+  | otherwise =
+      log alpha + alpha * log xm - (alpha + 1) * log x
+logDensity BetaBinomial{} _ = 0  -- 観測専用 (離散)
+logDensity (VonMises mu kappa) x
+  | kappa <= 0 = negInf
+  | otherwise =
+      kappa * cos (x - mu)
+      - log (2 * pi)
+      - logBesselI0 kappa
 logDensity (ZeroInflatedPoisson psi lam) x
   | psi < 0 || psi > 1 || lam <= 0 || x < 0 = negInf
   | x == 0 =
@@ -471,6 +518,43 @@ logDensityObs MvNormal{} _ = 0
   -- スカラー観測経路では使わない (chunk して 'mvNormalLogDensity' を呼ぶ obsLogSum 経由)
 logDensityObs Multinomial{} _ = 0
   -- スカラー観測経路では使わない (k 次元 chunk で multinomialLogDensity を呼ぶ)
+logDensityObs (InverseGamma alpha beta) y
+  | alpha <= 0 || beta <= 0 || y <= 0 = negInf
+  | otherwise =
+      let yA = realToFrac y :: a
+      in alpha * log beta - lgammaApprox alpha
+       - (alpha + 1) * log yA - beta / yA
+logDensityObs (Weibull kShape lam) y
+  | kShape <= 0 || lam <= 0 || y <= 0 = negInf
+  | otherwise =
+      let yA = realToFrac y :: a
+      in log kShape - log lam
+       + (kShape - 1) * (log yA - log lam)
+       - (yA / lam) ** kShape
+logDensityObs (Pareto alpha xm) y
+  | alpha <= 0 || xm <= 0 = negInf
+  | otherwise =
+      let yA = realToFrac y :: a
+      in if yA < xm
+           then negInf
+           else log alpha + alpha * log xm - (alpha + 1) * log yA
+logDensityObs (BetaBinomial n alpha beta) y
+  | alpha <= 0 || beta <= 0 || y < 0 = negInf
+  | otherwise =
+      let yA   = realToFrac y :: a
+          nA   = realToFrac (fromIntegral n :: Double) :: a
+          k    = round y :: Int
+          logC = realToFrac (logBinomCoeff n k) :: a
+      in logC
+       + lgammaApprox (yA + alpha)
+       + lgammaApprox (nA - yA + beta)
+       - lgammaApprox (nA + alpha + beta)
+       - (lgammaApprox alpha + lgammaApprox beta - lgammaApprox (alpha + beta))
+logDensityObs (VonMises mu kappa) y
+  | kappa <= 0 = negInf
+  | otherwise =
+      let yA = realToFrac y :: a
+      in kappa * cos (yA - mu) - log (2 * pi) - logBesselI0 kappa
 logDensityObs (ZeroInflatedPoisson psi lam) y
   | psi < 0 || psi > 1 || lam <= 0 || y < 0 = negInf
   | y == 0 =
@@ -922,6 +1006,40 @@ sampleDist MvNormal{} _ =
   error "MvNormal: observation-only — 'sample' 経由でのドローは未対応"
 sampleDist Multinomial{} _ =
   error "Multinomial: observation-only — 'sample' 経由でのドローは未対応"
+sampleDist (InverseGamma alpha beta) gen = do
+  -- 1 / Gamma(α, rate=β) = 1 / Gamma(α, scale=1/β)
+  y <- MWC.gamma alpha (1 / beta) gen
+  return (1 / y)
+sampleDist (Weibull kShape lam) gen = do
+  -- 逆 CDF 法: x = λ (-log(1-u))^(1/k)
+  u <- MWCBase.uniform gen :: IO Double
+  return (lam * ((-log (1 - u)) ** (1 / kShape)))
+sampleDist (Pareto alpha xm) gen = do
+  -- 逆 CDF 法: x = x_m / u^(1/α)
+  u <- MWCBase.uniform gen :: IO Double
+  return (xm / (u ** (1 / alpha)))
+sampleDist (BetaBinomial n alpha beta) gen = do
+  -- p ~ Beta(α, β); k ~ Binomial(n, p)
+  p <- sampleDist (Beta alpha beta) gen
+  sampleDist (Binomial n p) gen
+sampleDist (VonMises mu kappa) gen = do
+  -- Best-Fisher の rejection sampler
+  let a = 1 + sqrt (1 + 4 * kappa * kappa)
+      b = (a - sqrt (2 * a)) / (2 * kappa)
+      r = (1 + b * b) / (2 * b)
+      tryOnce = do
+        u1 <- MWCBase.uniform gen :: IO Double
+        let z = cos (pi * u1)
+            f = (1 + r * z) / (r + z)
+            c = kappa * (r - f)
+        u2 <- MWCBase.uniform gen :: IO Double
+        if c * (2 - c) - u2 > 0 || log (c / u2) + 1 - c >= 0
+          then do
+            u3 <- MWCBase.uniform gen :: IO Double
+            let sign = if u3 - 0.5 < 0 then (-1.0) else 1.0
+            return (mu + sign * acos f)
+          else tryOnce
+  tryOnce
 sampleDist (ZeroInflatedPoisson psi lam) gen = do
   u <- MWCBase.uniform gen :: IO Double
   if u < psi
@@ -1494,6 +1612,11 @@ getTransforms m = Map.fromList
     transformFor "Truncated"   = UnconstrainedT  -- 簡易: 範囲制約は logDensity 内で扱う
     transformFor "Censored"    = UnconstrainedT
     transformFor "MvNormal"    = UnconstrainedT  -- observation-only
+    transformFor "InverseGamma" = PositiveT
+    transformFor "Weibull"     = PositiveT
+    transformFor "Pareto"      = PositiveT
+    transformFor "BetaBinomial" = UnitIntervalT
+    transformFor "VonMises"    = UnconstrainedT  -- 角度 (-π, π]
     transformFor _             = UnconstrainedT
 
 -- | unconstrained 空間における log-joint (Jacobian 補正込み)。
@@ -1638,6 +1761,11 @@ distDepsT (NegativeBinomial mu alpha) = trackDeps mu <> trackDeps alpha
 distDepsT (Multinomial _ ps) = mconcat (map trackDeps ps)
 distDepsT (ZeroInflatedPoisson psi lam) = trackDeps psi <> trackDeps lam
 distDepsT (ZeroInflatedBinomial _ psi p) = trackDeps psi <> trackDeps p
+distDepsT (InverseGamma a b) = trackDeps a <> trackDeps b
+distDepsT (Weibull k l)      = trackDeps k <> trackDeps l
+distDepsT (Pareto a xm)      = trackDeps a <> trackDeps xm
+distDepsT (BetaBinomial _ a b) = trackDeps a <> trackDeps b
+distDepsT (VonMises mu k)    = trackDeps mu <> trackDeps k
 
 -- | Track でモデルを評価する (log joint も依存集合付きで計算)。
 runTrack :: forall r. ModelP r -> Map Text Track -> Track
@@ -1661,3 +1789,24 @@ logFactorial n
 
 logBinomCoeff :: Int -> Int -> Double
 logBinomCoeff n k = logFactorial n - logFactorial k - logFactorial (n - k)
+
+-- | log I_0(x) — 修正 Bessel 関数 (第一種・order 0) の対数。VonMises 用。
+-- 小 x: 級数 I_0(x) = Σ (x/2)^(2k) / (k!)² (k = 0..)
+-- 大 x: 漸近展開 I_0(x) ≈ exp(x) / √(2πx) × [1 + 1/(8x) + 9/(128x²) + …]
+-- AD/Track 互換のため (Floating a, Ord a) 多相。
+logBesselI0 :: (Floating a, Ord a) => a -> a
+logBesselI0 x
+  | x < 0     = logBesselI0 (-x)  -- 偶関数
+  | x < 3.75  =
+      -- Abramowitz & Stegun 9.8.1: 多項式近似 (誤差 < 1.6e-7)
+      let t = (x / 3.75) ^ (2::Int)
+          i0 = 1 + t * (3.5156229 + t * (3.0899424 + t * (1.2067492
+             + t * (0.2659732 + t * (0.0360768 + t * 0.0045813)))))
+      in log i0
+  | otherwise =
+      -- Abramowitz & Stegun 9.8.2: 漸近 (誤差 < 1.9e-7)
+      let t = 3.75 / x
+          poly = 0.39894228 + t * (0.01328592 + t * (0.00225319
+               + t * (-0.00157565 + t * (0.00916281 + t * (-0.02057706
+               + t * (0.02635537 + t * (-0.01647633 + t * 0.00392377)))))))
+      in x - 0.5 * log x + log poly

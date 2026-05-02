@@ -169,6 +169,11 @@ distParams (NegativeBinomial mu a) = [mu, a]
 distParams (Multinomial _ ps)      = ps
 distParams (ZeroInflatedPoisson psi lam)  = [psi, lam]
 distParams (ZeroInflatedBinomial _ psi p) = [psi, p]
+distParams (InverseGamma a b)             = [a, b]
+distParams (Weibull k l)                  = [k, l]
+distParams (Pareto a xm)                  = [a, xm]
+distParams (BetaBinomial _ a b)           = [a, b]
+distParams (VonMises mu k)                = [mu, k]
 
 -- 各潜在変数が Observe ノードのどの (obsIndex, slotIndex) に影響するかを検出。
 detectObsDeps :: ModelP r -> [Text] -> Map Text [(Int, Int)]

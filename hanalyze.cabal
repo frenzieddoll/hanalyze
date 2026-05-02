@@ -198,6 +198,18 @@ executable gibbs-hbm-demo
     , containers >= 0.6  && < 0.8
     , mwc-random >= 0.15 && < 0.16
 
+executable newdistribs-demo
+  import:           warnings
+  main-is:          NewDistribsDemo.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , text       >= 1.2  && < 2.2
+    , containers >= 0.6  && < 0.8
+    , mwc-random >= 0.15 && < 0.16
+
 executable lkj-demo
   import:           warnings
   main-is:          LKJDemo.hs
