@@ -54,7 +54,9 @@ module Model.HBM
   , ModelP
   , sample
   , observe
+  , observeMV
   , potential
+  , mvNormalLogDensity
     -- * 構造検査
   , Node (..)
   , NodeKind (..)
@@ -156,6 +158,11 @@ data Distribution a
     -- ^ Censored(d, lo, hi): y ≤ lo / y ≥ hi で打ち切り。
     --   観測 y_i がしきい値ちょうどなら左/右打ち切りとして CDF/SF を使う。
     --   Tobit 風モデルなどで使用。元分布は CDF を持つものに限る。
+  | MvNormal [a] [[a]]
+    -- ^ MvNormal(μ, Σ): 多変量正規分布 (観測専用)。
+    --   μ は長さ k の平均ベクトル、Σ は k×k の共分散行列 (対称正定値)。
+    --   'observeMV' で k 次元観測ベクトル列を渡す。Cholesky 分解で評価。
+    --   注: @sample@ 経由で latent として使うのは非対応 (logDensity = 0)。
   deriving (Show, Functor)
 
 distName :: Distribution a -> Text
@@ -176,6 +183,7 @@ distName Categorical{} = "Categorical"
 distName Mixture{}     = "Mixture"
 distName Truncated{}   = "Truncated"
 distName Censored{}    = "Censored"
+distName MvNormal{}    = "MvNormal"
 
 -- | サンプル値 (型 @a@) に対する事前分布の対数密度。
 logDensity :: (Floating a, Ord a) => Distribution a -> a -> a
@@ -265,6 +273,7 @@ logDensity (Truncated d mLo mHi) x =
 logDensity (Censored d _ _) x =
   -- prior 評価では通常の密度を使う (打ち切りは観測時のみ意味を持つ)
   logDensity d x
+logDensity MvNormal{} _ = 0  -- observation-only: latent としては使わない
 
 -- | 観測値 (Double 定数) に対する尤度の対数密度。
 -- 観測は @[Double]@ で渡されるので、@Floating a@ 制約のみで計算可能。
@@ -394,6 +403,91 @@ logDensityObs (Censored d mLo mHi) y =
        (Just lo, _) | yA <= lo || isAt yA lo -> logCDF d lo                -- 左打ち切り
        (_, Just hi) | yA >= hi || isAt yA hi -> logSF  d hi                -- 右打ち切り
        _                                     -> logDensityObs d y          -- 通常観測
+logDensityObs MvNormal{} _ = 0
+  -- スカラー観測経路では使わない (chunk して 'mvNormalLogDensity' を呼ぶ obsLogSum 経由)
+
+-- | 観測リストに対する尤度の総和。通常分布は 1 観測 = 1 スカラーで sum。
+-- MvNormal は k 次元なので flatten された @[Double]@ を chunk して評価する。
+obsLogSum :: forall a. (Floating a, Ord a) => Distribution a -> [Double] -> a
+obsLogSum (MvNormal mu cov) ys =
+  let k       = length mu
+      chunks  = chunksOf k ys
+  in sum [ mvNormalLogDensity mu cov (map realToFrac yv :: [a])
+         | yv <- chunks ]
+obsLogSum d ys = sum [ logDensityObs d y | y <- ys ]
+
+-- | 観測 1 件 (k 次元ベクトル) に対する MvNormal 対数密度。
+--   log p(y) = -k/2 log(2π) - 0.5 log|Σ| - 0.5 (y-μ)ᵀ Σ⁻¹ (y-μ)
+--   Σ⁻¹ と log|Σ| は Cholesky 分解 Σ = L Lᵀ から計算。
+mvNormalLogDensity :: forall a. (Floating a, Ord a) => [a] -> [[a]] -> [a] -> a
+mvNormalLogDensity mu cov yObs
+  | length mu == 0           = 0
+  | length yObs /= length mu = negInf
+  | otherwise =
+      case choleskyL cov of
+        Nothing -> negInf
+        Just l  ->
+          let k      = length mu
+              kA     = fromIntegral k :: a
+              d      = zipWith (-) yObs mu
+              z      = forwardSub l d           -- L z = d
+              quad   = sum (map (\zi -> zi * zi) z)
+              logDet = 2 * sum [ log ((l !! i) !! i) | i <- [0 .. k - 1] ]
+          in -0.5 * kA * log (2 * pi) - 0.5 * logDet - 0.5 * quad
+
+-- | リストを長さ @n@ ごとに分割。最後が短ければそのまま (本実装では使わない想定)。
+chunksOf :: Int -> [a] -> [[a]]
+chunksOf _ [] = []
+chunksOf n xs = let (h, t) = splitAt n xs in h : chunksOf n t
+
+-- | 対称正定値行列 Σ の Cholesky 下三角分解 L (Σ = L Lᵀ)。
+-- 行列は行リスト @[[a]]@ で、l[i] は長さ @i+1@ の下三角行 ([L[i][0]..L[i][i]])。
+-- 対角が非正になれば @Nothing@。
+choleskyL :: forall a. (Floating a, Ord a) => [[a]] -> Maybe [[a]]
+choleskyL a0 =
+  let n = length a0
+      step :: Int -> [[a]] -> Maybe [[a]]
+      step i prev
+        | i == n = Just prev
+        | otherwise =
+            let row = a0 !! i
+                buildCol :: Int -> [a] -> Maybe [a]
+                buildCol j cur
+                  | j > i  = Just cur
+                  | j == i =
+                      let s  = sum (map (\v -> v * v) cur)
+                          d2 = (row !! i) - s
+                      in if d2 <= 0
+                           then Nothing
+                           else buildCol (j + 1) (cur ++ [sqrt d2])
+                  | otherwise =
+                      let lj  = prev !! j           -- 長さ j+1
+                          s   = sum (zipWith (*) cur lj)
+                          ljj = lj !! j
+                      in if ljj == 0
+                           then Nothing
+                           else buildCol (j + 1) (cur ++ [((row !! j) - s) / ljj])
+            in case buildCol 0 [] of
+                 Nothing -> Nothing
+                 Just nr -> step (i + 1) (prev ++ [nr])
+  in step 0 []
+
+-- | 下三角系 L z = b の前進代入 (L は @choleskyL@ 形式、長さ各 i+1)。
+forwardSub :: forall a. Floating a => [[a]] -> [a] -> [a]
+forwardSub l b =
+  let n   = length b
+      go :: Int -> [a] -> [a]
+      go i acc
+        | i == n = acc
+        | otherwise =
+            let lrow = l !! i              -- 長さ i+1
+                lii  = lrow !! i
+                lpre = take i lrow         -- L[i][0..i-1]
+                bi   = b !! i
+                s    = sum (zipWith (*) lpre acc)
+                zi   = (bi - s) / lii
+            in go (i + 1) (acc ++ [zi])
+  in go 0 []
 
 negInf :: Floating a => a
 negInf = -1/0
@@ -707,6 +801,8 @@ sampleDist (Truncated d mLo mHi) gen =
             y <- sampleDist d gen
             if inRange y then return y else tryOnce (maxAttempts - 1)
   in tryOnce (10000 :: Int)
+sampleDist MvNormal{} _ =
+  error "MvNormal: observation-only — 'sample' 経由でのドローは未対応"
 sampleDist (Censored d _ _) gen =
   -- 元分布から普通にサンプリング (打ち切りは「観測過程」の話で生成側ではない)
   sampleDist d gen
@@ -749,6 +845,11 @@ sample n d = liftF (Sample n d id)
 
 observe :: Text -> Distribution a -> [Double] -> Model a ()
 observe n d ys = liftF (Observe n d ys ())
+
+-- | 多変量観測 (MvNormal 用)。各観測は長さ k のベクトルを並べたリスト @[[Double]]@。
+-- 内部的には @concat@ で flatten され、評価時に Distribution の次元 k で chunk される。
+observeMV :: Text -> Distribution a -> [[Double]] -> Model a ()
+observeMV n d obss = liftF (Observe n d (concat obss) ())
 
 -- | 任意の log-prob 項をモデルに加える (PyMC `pm.Potential` 相当)。
 --
@@ -810,7 +911,7 @@ logJoint model params = go model 0
           let lp = logDensity d v
           in go (k v) (acc + lp)
     go (Free (Observe _ d ys next)) acc =
-      let ll = sum [ logDensityObs d y | y <- ys ]
+      let ll = obsLogSum d ys
       in go next (acc + ll)
     go (Free (Potential _ v next)) acc = go next (acc + v)
 
@@ -836,7 +937,7 @@ logLikelihood model params = go model 0
         Nothing -> go (k 0) acc
         Just v  -> go (k v) acc
     go (Free (Observe _ d ys next)) acc =
-      let ll = sum [ logDensityObs d y | y <- ys ]
+      let ll = obsLogSum d ys
       in go next (acc + ll)
     go (Free (Potential _ _ next)) acc = go next acc   -- Potential は事前項とみなす
 
@@ -883,7 +984,12 @@ perObsLogLiks m params = go m []
     go (Free (Sample n _ k)) acc =
       go (k (Map.findWithDefault 0 n params)) acc
     go (Free (Observe _ d ys next)) acc =
-      let lls = [ logDensityObs d y | y <- ys ]
+      let lls = case d of
+            MvNormal mu cov ->
+              let k = length mu
+              in [ mvNormalLogDensity mu cov (map realToFrac yv :: [Double])
+                 | yv <- chunksOf k ys ]
+            _ -> [ logDensityObs d y | y <- ys ]
       in go next (reverse lls ++ acc)
     go (Free (Potential _ _ next)) acc = go next acc
 
@@ -1009,6 +1115,7 @@ getTransforms m = Map.fromList
     transformFor "Mixture"     = UnconstrainedT  -- 混合分布の潜在は通常 unconstrained
     transformFor "Truncated"   = UnconstrainedT  -- 簡易: 範囲制約は logDensity 内で扱う
     transformFor "Censored"    = UnconstrainedT
+    transformFor "MvNormal"    = UnconstrainedT  -- observation-only
     transformFor _             = UnconstrainedT
 
 -- | unconstrained 空間における log-joint (Jacobian 補正込み)。
@@ -1138,6 +1245,9 @@ distDepsT (Truncated d mLo mHi) =
   distDepsT d <> maybe mempty trackDeps mLo <> maybe mempty trackDeps mHi
 distDepsT (Censored  d mLo mHi) =
   distDepsT d <> maybe mempty trackDeps mLo <> maybe mempty trackDeps mHi
+distDepsT (MvNormal mus covRows) =
+  mconcat (map trackDeps mus)
+    <> mconcat (concatMap (map trackDeps) covRows)
 
 -- | Track でモデルを評価する (log joint も依存集合付きで計算)。
 runTrack :: forall r. ModelP r -> Map Text Track -> Track

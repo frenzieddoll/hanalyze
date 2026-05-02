@@ -162,6 +162,7 @@ distParams (Categorical ps)   = ps
 distParams (Mixture ws _)     = ws  -- 共役検出には使えない (重みのみ)
 distParams (Truncated _ _ _)  = []  -- 共役検出対象外
 distParams (Censored  _ _ _)  = []  -- 共役検出対象外
+distParams MvNormal{}         = []  -- 共役検出対象外 (観測専用)
 
 -- 各潜在変数が Observe ノードのどの (obsIndex, slotIndex) に影響するかを検出。
 detectObsDeps :: ModelP r -> [Text] -> Map Text [(Int, Int)]
