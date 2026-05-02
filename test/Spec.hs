@@ -295,6 +295,76 @@ main = hspec $ do
         Nothing -> expectationFailure "y should be numeric"
 
   -- ─────────────────────────────────────────────────────────────────────
+  describe "DataIO.Preprocess (groupBy)" $ do
+    let dfGrp = mkDataFrame
+                  [ ("group", TextCol (V.fromList ["A","B","A","B","A","C"]))
+                  , ("y",     NumericCol (V.fromList [1, 4, 3, 6, 5, 10]))
+                  ]
+
+    it "groupByMean computes per-group mean" $ do
+      case Pp.groupByMean "group" "y" dfGrp of
+        Just df' -> do
+          numRows df' `shouldBe` 3
+          case (getText "group" df', getNumeric "y" df') of
+            (Just gs, Just vs) -> do
+              let pairs = zip (V.toList gs) (V.toList vs)
+              lookup "A" pairs `shouldBe` Just 3.0       -- (1+3+5)/3
+              lookup "B" pairs `shouldBe` Just 5.0       -- (4+6)/2
+              lookup "C" pairs `shouldBe` Just 10.0
+            _ -> expectationFailure "expected text + numeric columns"
+        Nothing -> expectationFailure "groupByMean failed"
+
+    it "groupBySum computes per-group sum" $ do
+      case Pp.groupBySum "group" "y" dfGrp of
+        Just df' -> do
+          case (getText "group" df', getNumeric "y" df') of
+            (Just gs, Just vs) -> do
+              let pairs = zip (V.toList gs) (V.toList vs)
+              lookup "A" pairs `shouldBe` Just 9.0
+              lookup "B" pairs `shouldBe` Just 10.0
+            _ -> expectationFailure "expected columns"
+        Nothing -> expectationFailure "groupBySum failed"
+
+    it "groupByCount counts rows per group" $ do
+      case Pp.groupByCount "group" dfGrp of
+        Just df' -> do
+          case (getText "group" df', getNumeric "count" df') of
+            (Just gs, Just vs) -> do
+              let pairs = zip (V.toList gs) (V.toList vs)
+              lookup "A" pairs `shouldBe` Just 3.0
+              lookup "B" pairs `shouldBe` Just 2.0
+              lookup "C" pairs `shouldBe` Just 1.0
+            _ -> expectationFailure "expected columns"
+        Nothing -> expectationFailure "groupByCount failed"
+
+    it "groupByMin/Max return correct extremes" $ do
+      case Pp.groupByMin "group" "y" dfGrp of
+        Just dfMin ->
+          case getNumeric "y" dfMin of
+            Just vs ->
+              case getText "group" dfMin of
+                Just gs -> do
+                  let pairs = zip (V.toList gs) (V.toList vs)
+                  lookup "A" pairs `shouldBe` Just 1.0
+                  lookup "B" pairs `shouldBe` Just 4.0
+                Nothing -> expectationFailure "no group"
+            Nothing -> expectationFailure "no y"
+        Nothing -> expectationFailure "groupByMin failed"
+
+      case Pp.groupByMax "group" "y" dfGrp of
+        Just dfMax ->
+          case getNumeric "y" dfMax of
+            Just vs ->
+              case getText "group" dfMax of
+                Just gs -> do
+                  let pairs = zip (V.toList gs) (V.toList vs)
+                  lookup "A" pairs `shouldBe` Just 5.0
+                  lookup "B" pairs `shouldBe` Just 6.0
+                Nothing -> expectationFailure "no group"
+            Nothing -> expectationFailure "no y"
+        Nothing -> expectationFailure "groupByMax failed"
+
+  -- ─────────────────────────────────────────────────────────────────────
   describe "Model.RFF" $ do
     it "feature matrix has correct shape" $ do
       gen   <- MWC.createSystemRandom

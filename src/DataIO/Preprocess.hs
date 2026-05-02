@@ -36,6 +36,14 @@ module DataIO.Preprocess
   , mapNumeric
   , deriveNumeric
   , deriveText
+    -- * groupBy / aggregate
+  , groupByAggregate
+  , groupByMean
+  , groupBySum
+  , groupByMin
+  , groupByMax
+  , groupByMedian
+  , groupByCount
   ) where
 
 import DataFrame.Core
@@ -287,3 +295,84 @@ replaceColumn name col df =
 -- | 列を末尾に追加 (重複時は上書き)。
 addColumn :: Text -> Column -> DataFrame -> DataFrame
 addColumn = replaceColumn
+
+-- ---------------------------------------------------------------------------
+-- groupBy / aggregate
+-- ---------------------------------------------------------------------------
+
+-- | 行を group 列でグループ化し、numeric 列に集約関数を適用する。
+-- 戻り値は 2 列 (group, aggregated) の新しい DataFrame。
+-- group 列は TextCol、numeric 列は NumericCol である必要がある。
+--
+-- 利用例:
+--
+-- @
+-- groupByAggregate "group" "score" mean df
+-- -- → "group", "score" の 2 列 DataFrame (group ごとの score 平均)
+-- @
+groupByAggregate
+  :: Text                          -- ^ グループ列 (TextCol)
+  -> Text                          -- ^ 集約対象列 (NumericCol)
+  -> ([Double] -> Double)          -- ^ 集約関数
+  -> DataFrame
+  -> Maybe DataFrame
+groupByAggregate gCol nCol agg df =
+  case (getText gCol df, getNumeric nCol df) of
+    (Just gVec, Just nVec) ->
+      let pairs = V.toList (V.zip gVec nVec)
+          -- 順序保持 group ごとに値を蓄積
+          buckets = foldr step [] pairs
+          step (g, v) acc = case lookup g acc of
+            Just _  -> [ if k == g then (k, v : vs) else (k, vs)
+                       | (k, vs) <- acc ]
+            Nothing -> acc ++ [(g, [v])]
+          groups   = map fst buckets
+          aggVals  = map (agg . snd) buckets
+      in Just $ mkDataFrame
+           [ (gCol, TextCol (V.fromList groups))
+           , (nCol, NumericCol (V.fromList aggVals))
+           ]
+    _ -> Nothing
+
+groupByMean   :: Text -> Text -> DataFrame -> Maybe DataFrame
+groupByMean g n = groupByAggregate g n meanD
+
+groupBySum    :: Text -> Text -> DataFrame -> Maybe DataFrame
+groupBySum g n = groupByAggregate g n sum
+
+groupByMin    :: Text -> Text -> DataFrame -> Maybe DataFrame
+groupByMin g n = groupByAggregate g n minimum
+
+groupByMax    :: Text -> Text -> DataFrame -> Maybe DataFrame
+groupByMax g n = groupByAggregate g n maximum
+
+groupByMedian :: Text -> Text -> DataFrame -> Maybe DataFrame
+groupByMedian g n = groupByAggregate g n medianD
+
+-- | グループごとの行数を返す ('count' 集約)。
+-- 戻り値は (group, count) の 2 列 DataFrame。count 列名は "count" 固定。
+groupByCount :: Text -> DataFrame -> Maybe DataFrame
+groupByCount gCol df = case getText gCol df of
+  Just gVec ->
+    let groups = V.toList gVec
+        buckets = foldr step [] groups
+        step g acc = case lookup g acc of
+          Just c  -> [ if k == g then (k, c + 1) else (k, c) | (k, c) <- acc ]
+          Nothing -> acc ++ [(g, 1 :: Int)]
+        keys    = map fst buckets
+        counts  = map (fromIntegral . snd) buckets
+    in Just $ mkDataFrame
+         [ (gCol,    TextCol (V.fromList keys))
+         , ("count", NumericCol (V.fromList counts))
+         ]
+  Nothing -> Nothing
+
+meanD :: [Double] -> Double
+meanD [] = 0
+meanD xs = sum xs / fromIntegral (length xs)
+
+medianD :: [Double] -> Double
+medianD [] = 0
+medianD xs = let s = sort xs
+                 n = length s
+             in s !! (n `div` 2)
