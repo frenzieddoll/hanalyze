@@ -27,6 +27,7 @@ library
     Model.GLMM
     Model.Spline
     Model.Kernel
+    Model.Regularized
     Design.Factorial
     Design.Block
     Design.Mixed
@@ -219,6 +220,18 @@ executable newdistribs-demo
     , hanalyze
     , text       >= 1.2  && < 2.2
     , containers >= 0.6  && < 0.8
+    , mwc-random >= 0.15 && < 0.16
+
+executable regularized-demo
+  import:           warnings
+  main-is:          RegularizedDemo.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , vector     >= 0.12 && < 0.14
+    , hmatrix    >= 0.20 && < 0.22
     , mwc-random >= 0.15 && < 0.16
 
 executable optimaldoe-demo
