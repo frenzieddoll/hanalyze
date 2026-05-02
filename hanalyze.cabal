@@ -196,6 +196,18 @@ executable gibbs-hbm-demo
     , containers >= 0.6  && < 0.8
     , mwc-random >= 0.15 && < 0.16
 
+executable discrete-obs-demo
+  import:           warnings
+  main-is:          DiscreteObsDemo.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , text       >= 1.2  && < 2.2
+    , containers >= 0.6  && < 0.8
+    , mwc-random >= 0.15 && < 0.16
+
 executable new-distrib-demo
   import:           warnings
   main-is:          NewDistribDemo.hs

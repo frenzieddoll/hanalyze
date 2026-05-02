@@ -135,6 +135,8 @@ data Distribution a
   | HalfNormal  a         -- ^ HalfNormal(σ) — support: x ≥ 0
   | HalfCauchy  a         -- ^ HalfCauchy(γ scale) — support: x ≥ 0
   | LogNormal   a a       -- ^ LogNormal(μ log-mean, σ log-sd) — support: x > 0
+  | Bernoulli   a         -- ^ Bernoulli(p) — observed: 0 or 1
+  | Categorical [a]       -- ^ Categorical(probs) — observed: 0..K-1
   deriving (Show, Functor)
 
 distName :: Distribution a -> Text
@@ -150,6 +152,8 @@ distName Cauchy{}      = "Cauchy"
 distName HalfNormal{}  = "HalfNormal"
 distName HalfCauchy{}  = "HalfCauchy"
 distName LogNormal{}   = "LogNormal"
+distName Bernoulli{}   = "Bernoulli"
+distName Categorical{} = "Categorical"
 
 -- | サンプル値 (型 @a@) に対する事前分布の対数密度。
 logDensity :: (Floating a, Ord a) => Distribution a -> a -> a
@@ -215,6 +219,10 @@ logDensity (LogNormal mu sig) x
       let lx = log x
       in -0.5 * log (2 * pi) - log sig - lx
          - 0.5 * ((lx - mu) / sig) ^ (2::Int)
+logDensity (Bernoulli p) _
+  | p <= 0 || p >= 1 = negInf
+  | otherwise        = 0  -- 構造のみ (離散なので連続 prior 評価には使わない)
+logDensity (Categorical _) _ = 0  -- 同上
 
 -- | 観測値 (Double 定数) に対する尤度の対数密度。
 -- 観測は @[Double]@ で渡されるので、@Floating a@ 制約のみで計算可能。
@@ -299,6 +307,26 @@ logDensityObs (LogNormal mu sig) y
           lx = log yA
       in -0.5 * log (2 * pi) - log sig - lx
        - 0.5 * ((lx - mu) / sig) ^ (2::Int)
+logDensityObs (Bernoulli p) y
+  | p <= 0 || p >= 1 = negInf
+  | otherwise =
+      let k = round y :: Int
+      in case k of
+           1 -> log p
+           0 -> log (1 - p)
+           _ -> negInf
+logDensityObs (Categorical probs) y =
+  let k    = round y :: Int
+      n    = length probs
+  in if k < 0 || k >= n
+       then negInf
+       else
+         -- log p_k - log(Σ p_i)  (probs を正規化)
+         let pk     = probs !! k
+             total  = sum probs
+         in if pk <= 0 || total <= 0
+              then negInf
+              else log pk - log total
 
 negInf :: Floating a => a
 negInf = -1/0
@@ -557,6 +585,8 @@ getTransforms m = Map.fromList
     transformFor "HalfCauchy"  = PositiveT
     transformFor "LogNormal"   = PositiveT  -- support: x>0 (log は AD 安全)
     transformFor "Uniform"     = UnconstrainedT  -- 注: 真の制約変換は logit-on-(lo,hi) だが現状は未実装
+    transformFor "Bernoulli"   = UnitIntervalT   -- p ∈ (0,1)
+    transformFor "Categorical" = UnconstrainedT  -- ベクトル制約は未対応 (Dirichlet で別途)
     transformFor _             = UnconstrainedT
 
 -- | unconstrained 空間における log-joint (Jacobian 補正込み)。
@@ -674,6 +704,8 @@ distDepsT (Cauchy loc s)     = trackDeps loc <> trackDeps s
 distDepsT (HalfNormal s)     = trackDeps s
 distDepsT (HalfCauchy s)     = trackDeps s
 distDepsT (LogNormal mu s)   = trackDeps mu <> trackDeps s
+distDepsT (Bernoulli p)      = trackDeps p
+distDepsT (Categorical ps)   = mconcat (map trackDeps ps)
 
 -- | Track でモデルを評価する (log joint も依存集合付きで計算)。
 runTrack :: forall r. ModelP r -> Map Text Track -> Track
