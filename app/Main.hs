@@ -21,6 +21,7 @@ import Viz.AnalysisReport (AnalysisReportConfig (..), ModelFit (..), NamedPlot (
                            GLMMSummary (..), HBMRegSummary (..),
                            mkFitSummary, mkGLMMSummary,
                            writeAnalysisReport, writeAnalysisReportPlots)
+import qualified Design.Orthogonal as OA
 import qualified Model.HBM as HBMod
 import qualified MCMC.NUTS as HBMnuts
 import qualified MCMC.Core as MCMCcore
@@ -302,8 +303,7 @@ helpMsg = unlines
   , "  ridge     Regularized regression (Ridge/Lasso/Elastic Net)           [planned: Phase A]"
   , "  kernel    Kernel regression / RFF approximation                      [planned: Phase A]"
   , "  spline    B-spline / natural cubic regression                        [planned]"
-  , "  doe       Generate experimental designs (factorial, OA L_n, RSM, D-optimal)"
-  , "                                                                        [planned: Phase E1]"
+  , "  doe       Orthogonal arrays (L_n) for experimental designs           [implemented]"
   , "  taguchi   Taguchi method (OA + SN ratio + inner/outer arrays)        [planned: Phase E2]"
   , ""
   , "  help      Show this message"
@@ -317,7 +317,6 @@ futureSubcommands =
   [ ("ridge",   "Phase A (RFF/regularized) implementation pending")
   , ("kernel",  "Phase A (RFF/kernel) implementation pending")
   , ("spline",  "Spline subcommand implementation pending")
-  , ("doe",     "Phase E1 (orthogonal arrays / DOE) implementation pending")
   , ("taguchi", "Phase E2 (Taguchi method) implementation pending")
   ]
 
@@ -340,6 +339,7 @@ dispatch ("help":_)                   = putStrLn helpMsg
 dispatch ("info":rest)                = runInfoCmd rest
 dispatch ("hist":rest)                = runHistCmd rest
 dispatch ("regress":rest)             = runRegressCmd rest
+dispatch ("doe":rest)                 = runDoeCmd rest
 dispatch (cmd:_) | isFutureSubcommand cmd = do
   hPutStrLn stderr $ "hanalyze: " ++ stubMessage cmd
   hPutStrLn stderr "  Run 'hanalyze help' to see implemented subcommands."
@@ -1134,3 +1134,126 @@ equationLabel fam lnk [(col, deg)] coeffs = Just (T.pack label)
     label = lhs ++ " = " ++ printf "%.4f" b0
           ++ concat (zipWith termStr betas [1 .. deg])
 equationLabel _ _ _ _ = Nothing
+
+-- ---------------------------------------------------------------------------
+-- doe subcommand (Phase E1: orthogonal arrays)
+-- ---------------------------------------------------------------------------
+
+doeUsage :: String
+doeUsage = unlines
+  [ "Usage: hanalyze doe <action> [args...]"
+  , ""
+  , "Actions:"
+  , "  list                              List available standard arrays"
+  , "  ortho <NAME> [opts]               Output an orthogonal array (L4/L8/L9/L12/L16/L18)"
+  , ""
+  , "ortho options:"
+  , "  -f, --factor NAME=v1,v2,...       Assign a factor with comma-separated levels"
+  , "                                    (repeat for multiple factors; left-to-right = column 1, 2, ...)"
+  , "  --csv | --tsv | --pretty          Output format (default: pretty)"
+  , "  --out FILE                        Write to file instead of stdout"
+  , ""
+  , "Examples:"
+  , "  hanalyze doe list"
+  , "  hanalyze doe ortho L9 --pretty"
+  , "  hanalyze doe ortho L9 -f temp=150,180,210 -f time=10,20,30 -f catalyst=A,B,C --csv"
+  , "  hanalyze doe ortho L8 -f A=low,high -f B=0,1 --out design.tsv --tsv"
+  ]
+
+runDoeCmd :: [String] -> IO ()
+runDoeCmd []                = putStrLn doeUsage
+runDoeCmd ["help"]           = putStrLn doeUsage
+runDoeCmd ["--help"]         = putStrLn doeUsage
+runDoeCmd ("list":_)         = runDoeList
+runDoeCmd ("ortho":rest)     = runDoeOrtho rest
+runDoeCmd (action:_)         =
+  hPutStrLn stderr ("doe: unknown action '" ++ action ++ "'\n" ++ doeUsage)
+
+runDoeList :: IO ()
+runDoeList = do
+  putStrLn "Available standard orthogonal arrays:"
+  mapM_ (\(name, descr) ->
+    printf "  %-16s %s\n" (T.unpack name) (T.unpack descr))
+    OA.listArrays
+  putStrLn ""
+  putStrLn "Use 'hanalyze doe ortho <NAME>' to output a specific array."
+
+data OrthoOpts = OrthoOpts
+  { ooFactors :: [(T.Text, [T.Text])]   -- name → comma-split levels
+  , ooFormat  :: OrthoOutFormat
+  , ooOut     :: Maybe FilePath
+  } deriving (Show)
+
+data OrthoOutFormat = OrthoCSV | OrthoTSV | OrthoPretty deriving (Show, Eq)
+
+defaultOrthoOpts :: OrthoOpts
+defaultOrthoOpts = OrthoOpts [] OrthoPretty Nothing
+
+runDoeOrtho :: [String] -> IO ()
+runDoeOrtho [] = hPutStrLn stderr ("doe ortho: missing array name\n" ++ doeUsage)
+runDoeOrtho (nameStr : rest) =
+  case OA.lookupOA (T.pack nameStr) of
+    Nothing -> hPutStrLn stderr $
+      "doe ortho: unknown array '" ++ nameStr
+      ++ "' (try 'hanalyze doe list')"
+    Just oa -> case parseOrthoOpts rest defaultOrthoOpts of
+      Left err   -> hPutStrLn stderr ("doe ortho: " ++ err)
+      Right opts -> emitOrtho oa opts
+
+parseOrthoOpts :: [String] -> OrthoOpts -> Either String OrthoOpts
+parseOrthoOpts [] acc = Right acc
+parseOrthoOpts (flag : rest) acc
+  | flag `elem` ["-f", "--factor"] = case rest of
+      (v : rest') -> case parseFactorSpec v of
+        Left err  -> Left err
+        Right fac -> parseOrthoOpts rest' (acc { ooFactors = ooFactors acc ++ [fac] })
+      [] -> Left "-f/--factor requires an argument like NAME=v1,v2,..."
+  | flag == "--csv"    = parseOrthoOpts rest (acc { ooFormat = OrthoCSV })
+  | flag == "--tsv"    = parseOrthoOpts rest (acc { ooFormat = OrthoTSV })
+  | flag == "--pretty" = parseOrthoOpts rest (acc { ooFormat = OrthoPretty })
+  | flag == "--out"    = case rest of
+      (v : rest') -> parseOrthoOpts rest' (acc { ooOut = Just v })
+      []          -> Left "--out requires a file path"
+  | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
+
+parseFactorSpec :: String -> Either String (T.Text, [T.Text])
+parseFactorSpec s =
+  case break (== '=') s of
+    (name, '=' : levelsStr) | not (null name), not (null levelsStr) ->
+      let levels = filter (not . T.null) (T.splitOn "," (T.pack levelsStr))
+      in if null levels
+         then Left ("factor '" ++ name ++ "' has no levels (use NAME=v1,v2,...)")
+         else Right (T.pack name, levels)
+    _ -> Left ("invalid factor spec '" ++ s ++ "' (expected NAME=v1,v2,...)")
+
+emitOrtho :: OA.OA -> OrthoOpts -> IO ()
+emitOrtho oa opts =
+  case ooFactors opts of
+    [] -> emitText (renderRaw (ooFormat opts) oa) (ooOut opts)
+    fs -> do
+      let specs = [ OA.FactorSpec name (map toLevelValue levels)
+                  | (name, levels) <- fs ]
+      case OA.assignFactors oa specs of
+        Left err -> hPutStrLn stderr ("doe ortho: " ++ T.unpack err)
+        Right ad -> emitText (renderAssigned (ooFormat opts) ad) (ooOut opts)
+
+toLevelValue :: T.Text -> OA.LevelValue
+toLevelValue t = case reads (T.unpack t) :: [(Double, String)] of
+  [(d, "")] -> OA.LNumeric d
+  _         -> OA.LText t
+
+renderRaw :: OrthoOutFormat -> OA.OA -> T.Text
+renderRaw OrthoCSV    = OA.renderRawCSV
+renderRaw OrthoTSV    = OA.renderRawTSV
+renderRaw OrthoPretty = OA.renderRawPretty
+
+renderAssigned :: OrthoOutFormat -> OA.AssignedDesign -> T.Text
+renderAssigned OrthoCSV    = OA.renderCSV
+renderAssigned OrthoTSV    = OA.renderTSV
+renderAssigned OrthoPretty = OA.renderPretty
+
+emitText :: T.Text -> Maybe FilePath -> IO ()
+emitText txt Nothing     = TIO.putStrLn txt
+emitText txt (Just path) = do
+  TIO.writeFile path txt
+  putStrLn $ "Written: " ++ path

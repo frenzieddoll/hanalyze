@@ -40,6 +40,7 @@ library
     Design.RSM
     Design.Optimal
     Design.MultiRSM
+    Design.Orthogonal
     Optim.Desirability
     Model.HBM
     MCMC.Core
