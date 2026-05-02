@@ -15,6 +15,8 @@ module Viz.MCMC
   , mcmcDiagnosticsMulti,  mcmcDiagnosticsMultiFile
     -- * Forest plot (パラメータ間の事後比較)
   , forestPlot, forestPlotFile
+    -- * Energy plot (NUTS の BFMI 診断)
+  , energyPlot, energyPlotFile
   ) where
 
 import Data.Text (Text)
@@ -22,7 +24,9 @@ import qualified Data.Text as T
 import Graphics.Vega.VegaLite
 
 import MCMC.Core  (Chain (..), chainVals)
-import Stat.MCMC  (autocorr, hdi, kde)
+import Stat.MCMC  (autocorr, hdi, kde, bfmi)
+import Data.Maybe (fromMaybe)
+import Text.Printf (printf)
 import Viz.Core   (PlotConfig (..), OutputFormat, writeSpec)
 
 -- ---------------------------------------------------------------------------
@@ -382,3 +386,74 @@ forestPlotFile
   :: OutputFormat -> FilePath -> PlotConfig -> [Text] -> [Chain] -> IO ()
 forestPlotFile fmt path cfg params chains =
   writeSpec fmt path (forestPlot cfg params chains)
+
+-- ---------------------------------------------------------------------------
+-- Energy plot (NUTS の BFMI 診断)
+-- ---------------------------------------------------------------------------
+
+-- | Energy plot (PyMC スタイル)。
+--
+-- 2 本の KDE を重ね描き:
+--
+--   * Marginal energy E_n         — 事後分布から見た energy の分布
+--   * Energy transition |E_n − E_{n−1}| を中心化した分布 (= π_E)
+--
+-- 両者がよく重なるなら良好。乖離が大きい (= BFMI が低い) と
+-- 運動量再サンプリングがエネルギー方向の探索を取りこぼしている可能性。
+--
+-- 'chainEnergy' が空のチェーン (MH/Gibbs 由来) では空の図になる。
+energyPlot :: PlotConfig -> Chain -> VegaLite
+energyPlot cfg chain =
+  let es     = chainEnergy chain
+      mu     = if null es then 0 else sum es / fromIntegral (length es)
+      eMar   = map (\e -> e - mu) es                    -- 中心化エネルギー
+      eTrans = zipWith (-) (drop 1 es) es               -- ΔE_n
+      bfmiV  = fromMaybe (0/0) (bfmi es)
+      sub    = T.pack (printf "BFMI = %.3f" bfmiV)
+      kdeMar = kde 200 eMar
+      kdeTr  = kde 200 eTrans
+      (xM, yM) = unzip kdeMar
+      (xT, yT) = unzip kdeTr
+  in toVegaLite
+      [ title (plotTitle cfg <> " — " <> sub) []
+      , layer
+          [ asSpec
+              [ dataFromColumns []
+                  . dataColumn "x" (Numbers xM)
+                  . dataColumn "y" (Numbers yM)
+                  . dataColumn "kind" (Strings (replicate (length xM) "marginal E (centered)"))
+                  $ []
+              , mark Area [MOpacity 0.35]
+              , encoding
+                  . position X [PName "x", PmType Quantitative,
+                                PAxis [AxTitle "Energy"]]
+                  . position Y [PName "y", PmType Quantitative,
+                                PAxis [AxTitle "Density"]]
+                  . color [ MName "kind", MmType Nominal
+                          , MScale [SScheme "tableau10" []]
+                          , MLegend [LTitle ""] ]
+                  $ []
+              ]
+          , asSpec
+              [ dataFromColumns []
+                  . dataColumn "x" (Numbers xT)
+                  . dataColumn "y" (Numbers yT)
+                  . dataColumn "kind" (Strings (replicate (length xT) "transition ΔE"))
+                  $ []
+              , mark Area [MOpacity 0.35]
+              , encoding
+                  . position X [PName "x", PmType Quantitative]
+                  . position Y [PName "y", PmType Quantitative]
+                  . color [ MName "kind", MmType Nominal
+                          , MScale [SScheme "tableau10" []]
+                          , MLegend [LTitle ""] ]
+                  $ []
+              ]
+          ]
+      , width  (plotWidth cfg)
+      , height (plotHeight cfg)
+      ]
+
+energyPlotFile :: OutputFormat -> FilePath -> PlotConfig -> Chain -> IO ()
+energyPlotFile fmt path cfg chain =
+  writeSpec fmt path (energyPlot cfg chain)

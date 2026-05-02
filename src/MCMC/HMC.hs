@@ -156,20 +156,23 @@ hmc m cfg initC gen = do
         in map negate (gradADU m names transList xs)
 
   samplesRef  <- newIORef []
+  energyRef   <- newIORef ([] :: [Double])
   acceptedRef <- newIORef (0 :: Int)
 
   let step currentU = do
         r <- forM names (\_ -> standard gen)
-        let (proposedU, rFinal) =
+        let h0 = -(logJU currentU) + kinetic r
+            (proposedU, rFinal) =
               leapfrogWith gradFn names
                            (hmcStepSize cfg) (hmcLeapfrogSteps cfg)
                            currentU r
             logAlpha = (logJU proposedU - kinetic rFinal)
                      - (logJU currentU  - kinetic r)
         u <- uniform gen
-        if log (u :: Double) < logAlpha
+        nextU <- if log (u :: Double) < logAlpha
           then do modifyIORef' acceptedRef (+1); return proposedU
           else return currentU
+        return (nextU, h0)
 
   let toConstrained pu = Map.fromList
         [ (n, fromUnconstrained t (Map.findWithDefault 0 n pu))
@@ -177,18 +180,21 @@ hmc m cfg initC gen = do
 
   let loop 0 currentU = return currentU
       loop i currentU = do
-        nextU <- step currentU
-        when (i <= hmcIterations cfg) $
+        (nextU, h0) <- step currentU
+        when (i <= hmcIterations cfg) $ do
           modifyIORef' samplesRef (toConstrained nextU :)
+          modifyIORef' energyRef  (h0 :)
         loop (i - 1) nextU
 
   _ <- loop total initU
   samples  <- fmap reverse (readIORef samplesRef)
+  energies <- fmap reverse (readIORef energyRef)
   accepted <- readIORef acceptedRef
   return Chain
     { chainSamples  = samples
     , chainAccepted = accepted
     , chainTotal    = total
+    , chainEnergy   = energies
     }
 
 -- | hmc を numChains 本並列実行する (+RTS -N で CPU 並列)。

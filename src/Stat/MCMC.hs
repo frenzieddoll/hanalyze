@@ -5,6 +5,7 @@ module Stat.MCMC
   , ess
   , rhat
   , kde
+  , bfmi
   ) where
 
 import Data.List (minimumBy, sort)
@@ -112,3 +113,25 @@ kde nPoints xs
     kernel u = exp (-0.5 * u * u) / sqrt (2 * pi)
     density x = sum [kernel ((x - xi) / h) | xi <- xs]
                 / (fromIntegral n * h)
+
+-- | Bayesian Fraction of Missing Information (Betancourt 2016)。
+--
+-- BFMI = E[(E_n − E_{n−1})²] / Var(E)
+--
+-- HMC/NUTS のエネルギー列 (各反復の Hamiltonian) から計算する。
+-- 値が 0.3 未満なら、運動量再サンプリングが事後分布の裾を十分に探索できて
+-- いないサインで、reparameterization を検討すべき (典型例: Neal's funnel)。
+-- 0.3 以上が望ましく、PyMC ではしばしば 0.5 を目安にする。
+bfmi :: [Double] -> Maybe Double
+bfmi es
+  | length es < 4 = Nothing
+  | varE == 0     = Nothing
+  | otherwise     = Just (numer / varE)
+  where
+    n        = length es
+    mu       = sum es / fromIntegral n
+    varE     = sum (map (\x -> (x - mu) ^ (2 :: Int)) es)
+               / fromIntegral (n - 1)
+    diffs    = zipWith (-) (drop 1 es) es
+    numer    = sum (map (\d -> d * d) diffs)
+               / fromIntegral (length diffs)

@@ -205,6 +205,7 @@ nuts m cfg initC gen = do
         | (n, t) <- zip names transList ]
 
   samplesRef  <- newIORef []
+  energyRef   <- newIORef ([] :: [Double])
   acceptedRef <- newIORef (0 :: Int)
   daRef       <- newIORef (initDualAvg (nutsStepSize cfg))
 
@@ -253,11 +254,11 @@ nuts m cfg initC gen = do
             hOne   = -(logPiFn thetaOne) + kinetic rOne
             alpha  = min 1.0 (exp (h0 - hOne))
         when (proposedU /= currentU) $ modifyIORef' acceptedRef (+1)
-        return (proposedU, alpha)
+        return (proposedU, alpha, h0)
 
   let loop 0 currentU _eps = return currentU
       loop i currentU eps = do
-        (nextU, alpha) <- step eps currentU
+        (nextU, alpha, h0) <- step eps currentU
         let isBurnIn = i > nutsIterations cfg
         eps' <- if doAdapt && isBurnIn
           then do
@@ -272,17 +273,21 @@ nuts m cfg initC gen = do
                          else eps
             return epsBar
         if not isBurnIn
-          then modifyIORef' samplesRef (toConstrained nextU :)
+          then do
+            modifyIORef' samplesRef (toConstrained nextU :)
+            modifyIORef' energyRef  (h0 :)
           else return ()
         loop (i - 1) nextU eps'
 
   _ <- loop total initU (nutsStepSize cfg)
   samples  <- fmap reverse (readIORef samplesRef)
+  energies <- fmap reverse (readIORef energyRef)
   accepted <- readIORef acceptedRef
   return Chain
     { chainSamples  = samples
     , chainAccepted = accepted
     , chainTotal    = total
+    , chainEnergy   = energies
     }
 
 -- | NUTS を numChains 本並列実行する。

@@ -231,6 +231,7 @@ hmcAD logJointC transforms cfg names initC gen = do
     { chainSamples  = samples
     , chainAccepted = accepted
     , chainTotal    = total
+    , chainEnergy   = []
     }
   where
     when True  action = action

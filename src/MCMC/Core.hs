@@ -30,6 +30,9 @@ data Chain = Chain
   { chainSamples  :: [Map.Map Text Double]  -- ^ バーンイン後サンプル (描画順)
   , chainAccepted :: Int                    -- ^ 採択数 (バーンイン含む)
   , chainTotal    :: Int                    -- ^ 提案総数 (バーンイン含む)
+  , chainEnergy   :: [Double]
+    -- ^ 各反復の Hamiltonian エネルギー H = -log p(θ) + 0.5|p|² (バーンイン後)。
+    --   HMC/NUTS のみ意味を持つ; MH/Gibbs などは空リスト。BFMI / energy plot 用。
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
