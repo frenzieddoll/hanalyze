@@ -29,6 +29,7 @@ library
     Model.Kernel
     Model.Regularized
     Model.MultiLM
+    Model.Multivariate
     Design.Factorial
     Design.Block
     Design.Mixed
@@ -259,6 +260,17 @@ executable pareto-smoke
   build-depends:
       base       >= 4.14 && < 5
     , hanalyze
+
+executable multivariate-demo
+  import:           warnings
+  main-is:          MultivariateDemo.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , hmatrix    >= 0.20 && < 0.22
+    , mwc-random >= 0.15 && < 0.16
 
 executable multilm-demo
   import:           warnings
