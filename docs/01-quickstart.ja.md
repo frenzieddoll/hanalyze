@@ -189,8 +189,16 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | スプライン (B-spline / Natural) | `Model.Spline` | `fitSpline`, `fitSplineMulti` |
 | カーネル回帰 / Kernel Ridge | `Model.Kernel` | `nwRegression`, `kernelRidge` |
 | Ridge / Lasso / Elastic Net | `Model.Regularized` | `fitRegularized` (sum-type penalty) |
+| **RFF (Random Fourier Features)** | `Model.RFF` | `sampleRFFRBF`, `rffRidge`, `rffGP` |
 | 多変量 LR / RRR / PLS / CCA | `Model.MultiLM` / `Model.Multivariate` | |
 | ガウス過程 / Multi-output GP | `Model.GP` / `Model.MultiGP` | `optimizeGP`, `fitGP` |
+
+### データ I/O・前処理
+| 用途 | モジュール | 主要関数 |
+|---|---|---|
+| CSV / TSV / SSV (cassava) | `DataIO.CSV` | `loadAuto`, `loadCSV`, `loadTSV` |
+| Parquet / JSON / 高度型推論 | `DataIO.External` | `loadCSVExt`, `loadParquet`, `loadJSON` |
+| 欠損補完 / フィルタ / 派生列 | `DataIO.Preprocess` | `imputeMean`, `imputeMedian`, `dropMissingRows`, `filterRowsByNumeric`, `deriveNumeric`, `mapNumeric` |
 
 ### 実験計画法
 | 用途 | モジュール | 主要関数 |
@@ -202,6 +210,7 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | 直交性 / D-eff / VIF | `Design.Quality` | `dEfficiency`, `vifList` |
 | RSM (CCD / Box-Behnken) | `Design.RSM` | `centralComposite`, `boxBehnken` |
 | D-/A-optimal | `Design.Optimal` | `dOptimal`, `aOptimal` |
+| **直交表 Lₙ (L4/L8/L9/L12/L16/L18)** | `Design.Orthogonal` | `lookupOA`, `assignFactors`, `renderCSV` |
 
 ### 最適化
 | 用途 | モジュール | 主要関数 |

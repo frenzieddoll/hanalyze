@@ -10,7 +10,7 @@ Usable both as a CLI tool and as a Haskell library.
 | Category | Highlights |
 |---|---|
 | **Classical regression** | LM (OLS) / GLM (IRLS) / GLMM / polynomial / confidence bands |
-| **Nonlinear & regularized** | B-spline / Natural cubic / Kernel Ridge / Ridge / Lasso / Elastic Net |
+| **Nonlinear & regularized** | B-spline / Natural cubic / Kernel Ridge / Ridge / Lasso / Elastic Net / **RFF (Random Fourier Features)** |
 | **Multi-output models** | Multivariate LM / RRR / PLS / CCA / Multi-output GP |
 | **Time series** | AR(1) / Gaussian Process |
 | **Design of Experiments (DOE)** | Full/fractional factorial / Latin square / RCBD / RSM (CCD/Box-Behnken) / D-optimal / ANOVA / power analysis |
@@ -36,6 +36,26 @@ hanalyze data.csv "x1 x2" y LM --degree -1 2 -2 3 --waic
 ```haskell
 import Optim.NSGA (nsga2, defaultNSGAConfig)
 front <- nsga2 defaultNSGAConfig objFn bounds gen   -- Pareto front
+```
+
+### Random Fourier Features (RFF) for fast kernel methods
+```haskell
+import Model.RFF
+gen   <- createSystemRandom
+feats <- sampleRFFRBF 200 0.6 1.0 gen     -- D=200, ℓ=0.6, σ_f=1.0
+let fit  = rffGP feats trainX trainY 0.15  -- σ_n=0.15
+    pred = predictRFFGP fit testX          -- (mean, variance) per test point
+```
+At n=1500, **14× faster** than exact GP with matching accuracy
+(measured by `cabal run rff-demo`).
+
+### Data preprocessing (missing-value imputation, derivations, Parquet/JSON)
+```haskell
+import DataIO.External    (loadCSVExt, loadParquet, loadJSON)
+import DataIO.Preprocess  (countMissing, imputeMean, deriveNumeric, filterRowsByNumeric)
+Right df0 <- loadCSVExt "data.csv"   -- via dataframe lib (better type inference, NA → "NA")
+let Just df1 = imputeMean "score" df0   -- TextCol → NumericCol with mean fill
+    df2      = filterRowsByNumeric "score" (>= 50) df1
 ```
 
 ### Design of Experiments
@@ -289,6 +309,8 @@ cabal run hanalyze -- info data.csv
 #   y                    numeric   100    -1.20       8.71       3.45       3.21       1.95
 ```
 
+When a TextCol contains missing-value strings (`NA`, `null`, ...) a `NA=N` suffix is shown.
+
 ### `hist` — standalone histogram
 
 ```
@@ -359,6 +381,11 @@ Add `hanalyze` to the `build-depends` field of `hanalyze.cabal`.
 ## Module layout
 
 ```
+DataIO/
+  CSV.hs           -- cassava-based CSV/TSV/SSV loader (loadAuto)
+  External.hs      -- Hackage `dataframe` wrapper (Parquet / JSON / advanced typing)
+  Preprocess.hs    -- missing-value imputation / filter / derived columns / column selection
+
 Stat/
   Distribution.hs  -- probability distributions (Normal / Gamma / Beta / ...)
   MCMC.hs          -- diagnostics (ESS / HDI / R-hat / KDE)
@@ -367,6 +394,7 @@ Stat/
 
 Model/
   HBM.hs           -- polymorphic probabilistic programming DSL (AD gradients, Track-based dependency extraction)
+  RFF.hs           -- Random Fourier Features (O(nD) kernel-method approximation)
 
 MCMC/
   Core.hs          -- Chain type and posterior statistics (usable standalone)
@@ -374,6 +402,9 @@ MCMC/
   HMC.hs           -- Hamiltonian Monte Carlo (AD gradients)
   NUTS.hs          -- No-U-Turn Sampler (AD gradients + dual averaging)
   Gibbs.hs         -- Gibbs sampling + hybrid Gibbs+MH (automatic conjugacy detection)
+
+Design/
+  Orthogonal.hs    -- orthogonal arrays Lₙ (L4/L8/L9/L12/L16/L18 + factor assignment)
 
 Viz/
   MCMC.hs          -- diagnostic plots (KDE / trace / autocorr / pair scatter)

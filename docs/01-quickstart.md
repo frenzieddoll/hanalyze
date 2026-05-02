@@ -191,8 +191,16 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | Spline (B-spline / Natural) | `Model.Spline` | `fitSpline`, `fitSplineMulti` |
 | Kernel regression / Kernel Ridge | `Model.Kernel` | `nwRegression`, `kernelRidge` |
 | Ridge / Lasso / Elastic Net | `Model.Regularized` | `fitRegularized` (sum-type penalty) |
+| **RFF (Random Fourier Features)** | `Model.RFF` | `sampleRFFRBF`, `rffRidge`, `rffGP` |
 | Multivariate LR / RRR / PLS / CCA | `Model.MultiLM` / `Model.Multivariate` | |
 | Gaussian process / Multi-output GP | `Model.GP` / `Model.MultiGP` | `optimizeGP`, `fitGP` |
+
+### Data I/O & preprocessing
+| Use case | Module | Key functions |
+|---|---|---|
+| CSV / TSV / SSV (cassava) | `DataIO.CSV` | `loadAuto`, `loadCSV`, `loadTSV` |
+| Parquet / JSON / advanced typing | `DataIO.External` | `loadCSVExt`, `loadParquet`, `loadJSON` |
+| Imputation / filter / derived columns | `DataIO.Preprocess` | `imputeMean`, `imputeMedian`, `dropMissingRows`, `filterRowsByNumeric`, `deriveNumeric`, `mapNumeric` |
 
 ### Design of Experiments
 | Use case | Module | Key functions |
@@ -204,6 +212,7 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | Orthogonality / D-eff / VIF | `Design.Quality` | `dEfficiency`, `vifList` |
 | RSM (CCD / Box-Behnken) | `Design.RSM` | `centralComposite`, `boxBehnken` |
 | D-/A-optimal | `Design.Optimal` | `dOptimal`, `aOptimal` |
+| **Orthogonal arrays Lₙ (L4/L8/L9/L12/L16/L18)** | `Design.Orthogonal` | `lookupOA`, `assignFactors`, `renderCSV` |
 
 ### Optimization
 | Use case | Module | Key functions |

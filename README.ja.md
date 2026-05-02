@@ -10,7 +10,7 @@ CLI ツールとしても Haskell ライブラリとしても使えます。
 | カテゴリ | 主要な内容 |
 |---|---|
 | **古典的回帰** | LM (OLS) / GLM (IRLS) / GLMM / 多項式 / 信頼帯 |
-| **非線形・正則化** | B-spline / Natural cubic / Kernel Ridge / Ridge / Lasso / Elastic Net |
+| **非線形・正則化** | B-spline / Natural cubic / Kernel Ridge / Ridge / Lasso / Elastic Net / **RFF (Random Fourier Features)** |
 | **多次元出力モデル** | Multivariate LM / RRR / PLS / CCA / Multi-output GP |
 | **時系列** | AR(1) / Gaussian Process |
 | **実験計画法 (DOE)** | 完全/部分要因 / ラテン方格 / 乱塊 / RSM (CCD/Box-Behnken) / D-optimal / ANOVA / 検出力解析 |
@@ -36,6 +36,25 @@ hanalyze data.csv "x1 x2" y LM --degree -1 2 -2 3 --waic
 ```haskell
 import Optim.NSGA (nsga2, defaultNSGAConfig)
 front <- nsga2 defaultNSGAConfig objFn bounds gen   -- Pareto front
+```
+
+### Random Fourier Features (RFF) でカーネル法を高速化
+```haskell
+import Model.RFF
+gen   <- createSystemRandom
+feats <- sampleRFFRBF 200 0.6 1.0 gen     -- D=200, ℓ=0.6, σ_f=1.0
+let fit  = rffGP feats trainX trainY 0.15  -- σ_n=0.15
+    pred = predictRFFGP fit testX          -- (mean, variance) per test point
+```
+n=1500 で厳密 GP と同精度のまま **14 倍高速** (`cabal run rff-demo` で実測)。
+
+### データ前処理 (欠損値補完・派生列・Parquet/JSON)
+```haskell
+import DataIO.External    (loadCSVExt, loadParquet, loadJSON)
+import DataIO.Preprocess  (countMissing, imputeMean, deriveNumeric, filterRowsByNumeric)
+Right df0 <- loadCSVExt "data.csv"   -- dataframe lib 経由 (型推論↑、欠損→"NA")
+let Just df1 = imputeMean "score" df0   -- TextCol → NumericCol with mean fill
+    df2      = filterRowsByNumeric "score" (>= 50) df1
 ```
 
 ### 実験計画法
@@ -289,6 +308,8 @@ cabal run hanalyze -- info data.csv
 #   y                    numeric   100    -1.20       8.71       3.45       3.21       1.95
 ```
 
+TextCol で `NA` / `null` 等の欠損文字列が含まれる場合は末尾に `NA=N` が表示されます。
+
 ### `hist` — ヒストグラム単体
 
 ```
@@ -354,6 +375,11 @@ cabal run hanalyze -- doe ortho L18 \
 ## モジュール構成
 
 ```
+DataIO/
+  CSV.hs           -- cassava ベース CSV/TSV/SSV 読込 (loadAuto)
+  External.hs      -- Hackage dataframe ラッパー (Parquet / JSON / 高度型推論)
+  Preprocess.hs    -- 欠損補完 / フィルタ / 派生列 / 列選択
+
 Stat/
   Distribution.hs  -- 確率分布 (Normal / Gamma / Beta / ...)
   MCMC.hs          -- 診断統計量 (ESS / HDI / R-hat / KDE)
@@ -362,6 +388,7 @@ Stat/
 
 Model/
   HBM.hs           -- 多相確率的プログラミング DSL (AD 勾配・Track 依存抽出対応)
+  RFF.hs           -- Random Fourier Features (カーネル法の O(nD) 近似)
 
 MCMC/
   Core.hs          -- Chain 型・事後統計量 (独立して使用可)
@@ -369,6 +396,9 @@ MCMC/
   HMC.hs           -- Hamiltonian Monte Carlo (AD 勾配)
   NUTS.hs          -- No-U-Turn Sampler (AD 勾配 + dual averaging)
   Gibbs.hs         -- Gibbs サンプリング + ハイブリッド Gibbs+MH (共役自動検出)
+
+Design/
+  Orthogonal.hs    -- 直交表 L_n (L4/L8/L9/L12/L16/L18 + 因子割当)
 
 Viz/
   MCMC.hs          -- 診断プロット (KDE / トレース / 自己相関 / ペア散布図)
