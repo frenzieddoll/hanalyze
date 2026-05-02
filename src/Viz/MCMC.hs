@@ -17,6 +17,12 @@ module Viz.MCMC
   , forestPlot, forestPlotFile
     -- * Energy plot (NUTS の BFMI 診断)
   , energyPlot, energyPlotFile
+    -- * Posterior summary table (`az.summary` 相当)
+  , SummaryRow (..)
+  , posteriorSummary
+  , posteriorSummaryHtml
+  , posteriorSummaryFile
+  , printPosteriorSummary
   ) where
 
 import Data.Text (Text)
@@ -24,9 +30,10 @@ import qualified Data.Text as T
 import Graphics.Vega.VegaLite
 
 import MCMC.Core  (Chain (..), chainVals)
-import Stat.MCMC  (autocorr, hdi, kde, bfmi)
+import Stat.MCMC  (autocorr, hdi, kde, bfmi, ess, rhat)
 import Data.Maybe (fromMaybe)
 import Text.Printf (printf)
+import qualified Data.Text.IO as TIO
 import Viz.Core   (PlotConfig (..), OutputFormat, writeSpec)
 
 -- ---------------------------------------------------------------------------
@@ -457,3 +464,126 @@ energyPlot cfg chain =
 energyPlotFile :: OutputFormat -> FilePath -> PlotConfig -> Chain -> IO ()
 energyPlotFile fmt path cfg chain =
   writeSpec fmt path (energyPlot cfg chain)
+
+-- ---------------------------------------------------------------------------
+-- Posterior summary table  (az.summary 相当)
+-- ---------------------------------------------------------------------------
+
+-- | パラメタ 1 行分の事後要約。
+data SummaryRow = SummaryRow
+  { srName  :: Text
+  , srMean  :: Double
+  , srSD    :: Double
+  , srHdiLo :: Double  -- ^ 94% HDI 下限
+  , srHdiHi :: Double  -- ^ 94% HDI 上限
+  , srEssV  :: Double
+  , srRhat  :: Maybe Double  -- ^ 単一チェーンなら Nothing
+  } deriving (Show)
+
+-- | 事後要約を計算する。チェーン 1 本なら R-hat は Nothing、
+-- 2 本以上なら全チェーンを連結した値で mean/sd/HDI/ESS を計算し、
+-- R-hat だけ split-R-hat で算出する。
+posteriorSummary :: [Text] -> [Chain] -> [SummaryRow]
+posteriorSummary params chains =
+  let multi = length chains > 1
+      mkRow p =
+        let perChain = map (chainVals p) chains
+            allVals  = concat perChain
+            n        = length allVals
+            mu       = if n == 0 then 0
+                       else sum allVals / fromIntegral n
+            sd_      = if n < 2 then 0
+                       else sqrt (sum [(x - mu) ^ (2::Int) | x <- allVals]
+                                  / fromIntegral (n - 1))
+            (lo, hi) = hdi 0.94 allVals
+            essV     = ess allVals
+            rh       = if multi then rhat perChain else Nothing
+        in SummaryRow p mu sd_ lo hi essV rh
+  in map mkRow params
+
+-- | HTML 1 ページとして出力するスタンドアロンテーブル。
+posteriorSummaryHtml :: Text -> [SummaryRow] -> Text
+posteriorSummaryHtml title rows =
+  let multi      = any (\r -> case srRhat r of Just _ -> True; _ -> False) rows
+      rhatHeader = if multi then "<th>R-hat</th>" else ""
+      cell t     = "<td>" <> t <> "</td>"
+      fmt v      = T.pack (printf "%.4f" v)
+      essCell e  = cell (T.pack (show (round e :: Int)))
+      rhatCell r = case r of
+        Nothing -> if multi then "<td>—</td>" else ""
+        Just v  -> "<td style=\"color:" <>
+                   (if v < 1.01 then "#2a9d2a" else "#cc2222") <>
+                   "\">" <> fmt v <> "</td>"
+      row r = T.unlines
+        [ "    <tr>"
+        , "      " <> cell (srName r)
+        , "      " <> cell (fmt (srMean r))
+        , "      " <> cell (fmt (srSD r))
+        , "      " <> cell (fmt (srHdiLo r))
+        , "      " <> cell (fmt (srHdiHi r))
+        , "      " <> essCell (srEssV r)
+        , "      " <> rhatCell (srRhat r)
+        , "    </tr>"
+        ]
+      header = T.unlines
+        [ "    <tr>"
+        , "      <th>Parameter</th><th>Mean</th><th>SD</th>"
+        , "      <th>HDI 3%</th><th>HDI 97%</th><th>ESS</th>" <> rhatHeader
+        , "    </tr>"
+        ]
+  in T.unlines
+       [ "<!DOCTYPE html>"
+       , "<html><head><meta charset=\"utf-8\"><title>" <> title <> "</title>"
+       , "<style>"
+       , "body{font-family:sans-serif;max-width:900px;margin:2em auto;padding:0 1em;}"
+       , "table{border-collapse:collapse;width:100%;}"
+       , "th,td{padding:.4em .8em;border-bottom:1px solid #ddd;text-align:right;}"
+       , "th:first-child,td:first-child{text-align:left;}"
+       , "th{background:#f3f3f3;}"
+       , "tr:hover{background:#fafafa;}"
+       , "h2{border-bottom:2px solid #333;padding-bottom:.3em;}"
+       , "</style></head><body>"
+       , "<h2>" <> title <> "</h2>"
+       , "<table>"
+       , "  <thead>" <> header <> "  </thead>"
+       , "  <tbody>"
+       , T.concat (map row rows)
+       , "  </tbody>"
+       , "</table>"
+       , "</body></html>"
+       ]
+
+-- | 事後要約をスタンドアロン HTML としてファイルに書き出す。
+posteriorSummaryFile :: FilePath -> Text -> [Text] -> [Chain] -> IO ()
+posteriorSummaryFile path title params chains =
+  TIO.writeFile path
+    (posteriorSummaryHtml title (posteriorSummary params chains))
+
+-- | 事後要約をコンソールに表形式で表示する。
+printPosteriorSummary :: [Text] -> [Chain] -> IO ()
+printPosteriorSummary params chains = do
+  let rows  = posteriorSummary params chains
+      multi = any (\r -> case srRhat r of Just _ -> True; _ -> False) rows
+      hdr | multi     =
+              printf "%-12s  %10s  %10s  %10s  %10s  %6s  %6s\n"
+                     ("Parameter" :: String) ("mean" :: String) ("sd" :: String)
+                     ("hdi_3%" :: String) ("hdi_97%" :: String)
+                     ("ess" :: String) ("r_hat" :: String)
+          | otherwise =
+              printf "%-12s  %10s  %10s  %10s  %10s  %6s\n"
+                     ("Parameter" :: String) ("mean" :: String) ("sd" :: String)
+                     ("hdi_3%" :: String) ("hdi_97%" :: String)
+                     ("ess" :: String)
+      pr r
+        | multi =
+            let rh = case srRhat r of Just v -> printf "%.3f" v; Nothing -> "—" :: String
+            in printf "%-12s  %10.4f  %10.4f  %10.4f  %10.4f  %6d  %6s\n"
+                  (T.unpack (srName r)) (srMean r) (srSD r)
+                  (srHdiLo r) (srHdiHi r) (round (srEssV r) :: Int) rh
+        | otherwise =
+            printf "%-12s  %10.4f  %10.4f  %10.4f  %10.4f  %6d\n"
+                  (T.unpack (srName r)) (srMean r) (srSD r)
+                  (srHdiLo r) (srHdiHi r) (round (srEssV r) :: Int)
+  hdr
+  putStrLn (replicate (if multi then 79 else 72) '-')
+  mapM_ pr rows
