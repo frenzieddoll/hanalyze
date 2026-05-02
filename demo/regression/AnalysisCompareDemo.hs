@@ -30,6 +30,7 @@ import Model.Core (residualsV, fittedList, coeffList, rSquared1)
 
 import qualified Viz.AnalysisReport as AR
 import qualified Viz.ReportBuilder  as RB
+import qualified Viz.ReportInstances as RI
 import qualified Viz.ModelGraph     as VMG
 
 -- ---------------------------------------------------------------------------
@@ -116,63 +117,16 @@ writeARLM df = do
     Nothing -> putStrLn "  AR: fit failed"
 
 writeRBLM :: DataFrame -> V.Vector Double -> V.Vector Double -> IO ()
-writeRBLM df xVec yVec = do
+writeRBLM df _xVec _yVec = do
   appendixSec <- RB.secAppendixFromMd "付録: モデルの原理"
                    "docs/principles/lm.ja.md"
   case LM.fitPolyWithSmooth (Core.CI 0.95) 100 df "x" "y" of
     Just (fit, sf) -> do
-      let beta   = coeffList fit
-          coeffs = zip ["β₀ (intercept)", "β₁ (x)"] beta
-          fitted = fittedList fit
-          resid  = LA.toList (residualsV fit)
-          xs = V.toList xVec
-          ys = V.toList yVec
-          smooth = RB.SmoothCurve (LM.sfX sf) (LM.sfFit sf)
-                                  (LM.sfLower sf) (LM.sfUpper sf)
-          xMinO = V.minimum xVec
-          xMaxO = V.maximum xVec
-          ext   = (xMaxO - xMinO) * 0.5
-          sd_   = sqrt (sum [ r ^ (2::Int) | r <- resid ]
-                        / fromIntegral (max 1 (length resid - 2)))
-          im = RB.InteractiveModel
-                 { RB.imXCols     = ["x"]
-                 , RB.imYCol      = "y"
-                 , RB.imXValues   = [[x] | x <- xs]
-                 , RB.imYValues   = ys
-                 , RB.imIntercept = head beta
-                 , RB.imBetas     = drop 1 beta
-                 , RB.imLink      = "identity"
-                 , RB.imSlider    = [(xMinO - ext, (xMinO + xMaxO)/2, xMaxO + ext)]
-                 , RB.imCISigma   = Just sd_
-                 }
-          cfg     = RB.defaultReportConfig "LM (ReportBuilder)"
-          rmseV   = sqrt (sum [ r ^ (2::Int) | r <- resid ]
-                          / fromIntegral (max 1 (length resid)))
-          maxAbsR = maximum (0 : map abs resid)
-          sections =
-            [ RB.secDataOverview df ["x"] "y"
-            , RB.secModelOverview "LM"
-                ("$y_i = \\beta_0 + \\beta_1 x_i + \\varepsilon_i$<br>"
-                 <> "$\\varepsilon_i \\sim \\text{Normal}(0, \\sigma^2)$")
-                Nothing
-            , RB.secCollapsible "<span class=\"sec-icon\">&#128200;</span> 回帰結果" True
-                [ RB.secStatRow
-                    [ ("R²",         T.pack (printf "%.4f" (rSquared1 fit)))
-                    , ("方法",       "OLS (QR)")
-                    , ("σ_hat",      T.pack (printf "%.4f" sd_))
-                    , ("RMSE",       T.pack (printf "%.4f" rmseV))
-                    , ("最大絶対残差", T.pack (printf "%.4f" maxAbsR))
-                    ]
-                , RB.secCard "係数"
-                    [ RB.secCoefficients coeffs (Just ("R²", rSquared1 fit)) ]
-                , RB.secCard "残差プロット"
-                    [ RB.secResiduals fitted resid ]
-                ]
-            , RB.secInteractiveMulti "対話的予測" im
-            , appendixSec
-            ]
+      let cfg      = RB.defaultReportConfig "LM (ReportBuilder)"
+          report   = RI.LMReport fit (Just sf)
+          sections = RB.toReport cfg df ["x"] "y" report ++ [appendixSec]
       RB.renderReport "trash/cmp_lm_RB.html" cfg sections
-      putStrLn "  RB: trash/cmp_lm_RB.html"
+      putStrLn "  RB: trash/cmp_lm_RB.html (Reportable LMReport instance)"
     Nothing -> putStrLn "  RB: fit failed"
 
 -- ---------------------------------------------------------------------------
@@ -218,68 +172,17 @@ writeARGLM df xCol yCol = do
 
 writeRBGLM :: DataFrame -> V.Vector Double -> V.Vector Double
            -> T.Text -> T.Text -> IO ()
-writeRBGLM df xVec yVec xCol yCol = do
+writeRBGLM df _xVec _yVec xCol yCol = do
   appendixSec <- RB.secAppendixFromMd "付録: モデルの原理"
                    "docs/principles/glm.ja.md"
   case GLM.fitGLMWithSmooth GLM.Poisson GLM.Log [(xCol, 1)]
                               Core.NoBand 100 df yCol of
     Just (fit, mSmooth) -> do
-      let beta = coeffList fit
-          coeffs = zip ["β₀ (intercept)", "β₁ (" <> T.unpack xCol <> ")"] beta
-          fitted = fittedList fit
-          resid  = LA.toList (residualsV fit)
-          xs = V.toList xVec
-          ys = V.toList yVec
-          smooth = case mSmooth of
-            Just sf -> RB.SmoothCurve (LM.sfX sf) (LM.sfFit sf)
-                          (LM.sfLower sf) (LM.sfUpper sf)
-            Nothing -> RB.SmoothCurve [] [] [] []
-          xMinO = V.minimum xVec
-          xMaxO = V.maximum xVec
-          ext   = (xMaxO - xMinO) * 0.5
-          im = RB.InteractiveModel
-                 { RB.imXCols     = [xCol]
-                 , RB.imYCol      = yCol
-                 , RB.imXValues   = [[x] | x <- xs]
-                 , RB.imYValues   = ys
-                 , RB.imIntercept = head beta
-                 , RB.imBetas     = drop 1 beta
-                 , RB.imLink      = "log"
-                 , RB.imSlider    = [(xMinO - ext, (xMinO + xMaxO)/2, xMaxO + ext)]
-                 , RB.imCISigma   = Nothing
-                 }
-          cfg     = RB.defaultReportConfig "GLM Poisson (ReportBuilder)"
-          rmseV   = sqrt (sum [ r ^ (2::Int) | r <- resid ]
-                          / fromIntegral (max 1 (length resid)))
-          maxAbsR = maximum (0 : map abs resid)
-          sections =
-            [ RB.secDataOverview df [xCol] yCol
-            , RB.secModelOverviewLink "GLM(Poisson)"
-                ("$" <> yCol <> "_i \\sim \\text{Poisson}(\\lambda_i)$<br>"
-                 <> "$\\log \\lambda_i = \\beta_0 + \\beta_1 " <> xCol <> "_i$")
-                "log (Poisson の標準リンク)"
-                Nothing
-            , RB.secCollapsible "<span class=\"sec-icon\">&#128200;</span> 回帰結果" True
-                [ RB.secStatRow
-                    [ ("McFadden R²", T.pack (printf "%.4f" (rSquared1 fit)))
-                    , ("方法",        "IRLS")
-                    , ("RMSE",        T.pack (printf "%.4f" rmseV))
-                    , ("最大絶対残差", T.pack (printf "%.4f" maxAbsR))
-                    ]
-                , RB.secCard "係数"
-                    [ RB.secCoefficients
-                        [(T.pack k, v) | (k, v) <- coeffs]
-                        (Just ("McFadden R²", rSquared1 fit)) ]
-                , RB.secCard "散布図 + 回帰線"
-                    [ RB.secFitScatter xCol yCol xs ys (Just smooth) ]
-                , RB.secCard "残差プロット"
-                    [ RB.secResiduals fitted resid ]
-                ]
-            , RB.secInteractiveMulti "対話的予測" im
-            , appendixSec
-            ]
+      let cfg      = RB.defaultReportConfig "GLM Poisson (ReportBuilder)"
+          report   = RI.GLMReport fit GLM.Poisson GLM.Log mSmooth
+          sections = RB.toReport cfg df [xCol] yCol report ++ [appendixSec]
       RB.renderReport "trash/cmp_glm_RB.html" cfg sections
-      putStrLn "  RB: trash/cmp_glm_RB.html"
+      putStrLn "  RB: trash/cmp_glm_RB.html (Reportable GLMReport instance)"
     Nothing -> putStrLn "  RB: fit failed"
 
 -- ---------------------------------------------------------------------------

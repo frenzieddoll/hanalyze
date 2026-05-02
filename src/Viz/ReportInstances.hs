@@ -24,7 +24,10 @@
 --
 -- LM/GLM/GLMM/GP/HBM は当面 'Viz.AnalysisReport' (非推奨) 経由。
 -- ReportBuilder 化が次の課題。
-module Viz.ReportInstances () where
+module Viz.ReportInstances
+  ( LMReport (..)
+  , GLMReport (..)
+  ) where
 
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -33,6 +36,9 @@ import qualified Numeric.LinearAlgebra as LA
 import Text.Printf (printf)
 
 import DataFrame.Core (DataFrame, getNumeric)
+import Model.Core      (FitResult, coeffList, fittedList, residualsV, rSquared1)
+import Model.LM        (SmoothFit (..))
+import Model.GLM       (Family (..), LinkFn (..))
 import Model.Regularized (RegFit (..), Penalty (..), predictRegularized)
 import Model.Spline     (SplineFit (..), SplineKind (..), predictSpline, sfBeta)
 import Model.Kernel     (KernelRidgeFit (..), predictKernelRidge)
@@ -246,3 +252,221 @@ instance Reportable RobustGPFit where
            , ("Train size", T.pack (show (length (rgpTrainX fit))))
            ]
        ]
+
+-- ---------------------------------------------------------------------------
+-- LM / GLM (axis-1 C, Phase 1)
+-- ---------------------------------------------------------------------------
+
+-- | LM レポート用ラッパ。
+--
+-- 単変数 LM の `Reportable` instance に必要な情報を集約。
+-- `lmrSmooth = Just sf` を渡すと信頼帯付き滑らか曲線を散布図に重ね描く。
+--
+-- 多変数 (xCols が 2 つ以上) の場合は scatter+smooth は省略され、
+-- `secInteractiveMulti` が主軸 dropdown + 副軸 slider で予測点を表示する。
+data LMReport = LMReport
+  { lmrFit    :: FitResult
+  , lmrSmooth :: Maybe SmoothFit
+  } deriving Show
+
+-- | GLM レポート用ラッパ。
+data GLMReport = GLMReport
+  { glmrFit    :: FitResult
+  , glmrFamily :: Family
+  , glmrLink   :: LinkFn
+  , glmrSmooth :: Maybe SmoothFit
+  } deriving Show
+
+linkLabel :: LinkFn -> Text
+linkLabel Identity = "identity"
+linkLabel Log      = "log"
+linkLabel Logit    = "logit"
+linkLabel Sqrt     = "sqrt"
+
+familyLabel :: Family -> Text
+familyLabel Gaussian = "Gaussian"
+familyLabel Binomial = "Binomial"
+familyLabel Poisson  = "Poisson"
+
+-- | 残差から σ_hat / RMSE / max|r| を作る。
+residStats :: [Double] -> Int -> (Double, Double, Double)
+residStats resid p =
+  let n        = length resid
+      sumSq    = sum [ r * r | r <- resid ]
+      sigmaHat = sqrt (sumSq / fromIntegral (max 1 (n - p)))
+      rmse     = sqrt (sumSq / fromIntegral (max 1 n))
+      maxAbs   = maximum (0 : map abs resid)
+  in (sigmaHat, rmse, maxAbs)
+
+-- | smoothFit → SmoothCurve への変換 (空 Smooth は空カーブ)。
+smoothFitToCurve :: Maybe SmoothFit -> SmoothCurve
+smoothFitToCurve Nothing   = SmoothCurve [] [] [] []
+smoothFitToCurve (Just sf) = SmoothCurve (sfX sf) (sfFit sf) (sfLower sf) (sfUpper sf)
+
+-- | xCols + xVecs から InteractiveModel を構築 (LM/GLM 共通)。
+mkInteractive :: [Text] -> Text -> [V.Vector Double] -> [Double]
+              -> Double -> [Double] -> Text -> Maybe Double
+              -> InteractiveModel
+mkInteractive xCols yCol xVecs ys b0 betas link mSigma =
+  let n        = length ys
+      xRows    = [ [ xv V.! i | xv <- xVecs ] | i <- [0 .. n - 1] ]
+      mkSlider xv =
+        let lo = if V.null xv then 0 else V.minimum xv
+            hi = if V.null xv then 1 else V.maximum xv
+            ext = (hi - lo) * 0.5
+        in (lo - ext, (lo + hi) / 2, hi + ext)
+  in InteractiveModel
+       { imXCols     = xCols
+       , imYCol      = yCol
+       , imXValues   = xRows
+       , imYValues   = ys
+       , imIntercept = b0
+       , imBetas     = betas
+       , imLink      = link
+       , imSlider    = map mkSlider xVecs
+       , imCISigma   = mSigma
+       }
+
+-- | 数式: y = β₀ + β₁ x_1 + ... + β_p x_p
+linearFormula :: Text -> [Text] -> Text
+linearFormula yCol xCols =
+  yCol <> " ~ "
+       <> T.intercalate " + "
+            ("β₀" : [ "β" <> T.pack (show (i :: Int)) <> " · " <> x
+                   | (i, x) <- zip [1 ..] xCols ])
+
+instance Reportable LMReport where
+  toReport _cfg df xCols yCol (LMReport fit mSmooth) =
+    let beta    = coeffList fit
+        coefLabels = "β₀ (intercept)"
+                   : [ "β" <> T.pack (show (i :: Int)) <> " (" <> x <> ")"
+                     | (i, x) <- zip [1 ..] xCols ]
+        coeffs   = zip coefLabels beta
+        fitted   = fittedList fit
+        resid    = LA.toList (residualsV fit)
+        p        = length beta
+        (sigmaH, rmse, maxAbs) = residStats resid p
+
+        xVecs    = [ v | c <- xCols, Just v <- [getNumeric c df] ]
+        yVecMb   = getNumeric yCol df
+
+        smoothC  = smoothFitToCurve mSmooth
+
+        scatterCard = case (xCols, xVecs, yVecMb) of
+          ([xc], [xv], Just yv)
+            | length xVecs == length xCols ->
+                [ secCard "散布図 + 回帰線"
+                    [ secFitScatter xc yCol (V.toList xv) (V.toList yv)
+                        (Just smoothC) ] ]
+          _ -> []
+
+        interactiveSec
+          | length xVecs == length xCols, not (null xVecs)
+          , Just yv <- yVecMb =
+              let im = mkInteractive xCols yCol xVecs (V.toList yv)
+                                     (head beta) (drop 1 beta)
+                                     "identity" (Just sigmaH)
+              in [secInteractiveMulti "対話的予測" im]
+          | otherwise = []
+
+        formula =
+          "$" <> linearFormula yCol xCols <> "$<br>"
+          <> "$\\varepsilon_i \\sim \\text{Normal}(0, \\sigma^2)$"
+
+        statRow =
+          secStatRow
+            [ ("R²",         T.pack (printf "%.4f" (rSquared1 fit)))
+            , ("方法",       "OLS (QR)")
+            , ("σ_hat",      T.pack (printf "%.4f" sigmaH))
+            , ("RMSE",       T.pack (printf "%.4f" rmse))
+            , ("最大絶対残差", T.pack (printf "%.4f" maxAbs))
+            ]
+
+        resultSec =
+          secCollapsible "<span class=\"sec-icon\">&#128200;</span> 回帰結果" True
+            ([ statRow
+             , secCard "係数" [secCoefficients coeffs (Just ("R²", rSquared1 fit))]
+             ]
+             ++ scatterCard
+             ++ [ secCard "残差プロット" [secResiduals fitted resid] ])
+
+    in [ secDataOverview df xCols yCol
+       , secModelOverview "LM" formula Nothing
+       , resultSec
+       ] ++ interactiveSec
+
+instance Reportable GLMReport where
+  toReport _cfg df xCols yCol (GLMReport fit fam lk mSmooth) =
+    let beta    = coeffList fit
+        coefLabels = "β₀ (intercept)"
+                   : [ "β" <> T.pack (show (i :: Int)) <> " (" <> x <> ")"
+                     | (i, x) <- zip [1 ..] xCols ]
+        coeffs   = zip coefLabels beta
+        fitted   = fittedList fit
+        resid    = LA.toList (residualsV fit)
+        p        = length beta
+        (sigmaH, rmse, maxAbs) = residStats resid p
+
+        xVecs    = [ v | c <- xCols, Just v <- [getNumeric c df] ]
+        yVecMb   = getNumeric yCol df
+
+        smoothC  = smoothFitToCurve mSmooth
+
+        modelType = "GLM(" <> familyLabel fam <> ")"
+        linkTxt   = linkLabel lk
+
+        formula = case fam of
+          Poisson  -> "$" <> yCol <> "_i \\sim \\text{Poisson}(\\lambda_i)$<br>"
+                      <> "$\\log \\lambda_i = "
+                      <> T.intercalate " + "
+                           ("\\beta_0" : [ "\\beta_" <> T.pack (show (i :: Int))
+                                            <> " " <> x <> "_i"
+                                          | (i, x) <- zip [1 ..] xCols ])
+                      <> "$"
+          Binomial -> "$" <> yCol <> "_i \\sim \\text{Binomial}(n_i, p_i)$<br>"
+                      <> "$\\text{logit}(p_i) = \\beta_0 + \\sum \\beta_j x_{ij}$"
+          Gaussian -> "$" <> linearFormula yCol xCols <> "$<br>"
+                      <> "$\\varepsilon_i \\sim \\text{Normal}(0, \\sigma^2)$"
+
+        scatterCard = case (xCols, xVecs, yVecMb) of
+          ([xc], [xv], Just yv)
+            | length xVecs == length xCols ->
+                [ secCard "散布図 + 回帰線"
+                    [ secFitScatter xc yCol (V.toList xv) (V.toList yv)
+                        (Just smoothC) ] ]
+          _ -> []
+
+        interactiveSec
+          | length xVecs == length xCols, not (null xVecs)
+          , Just yv <- yVecMb =
+              let im = mkInteractive xCols yCol xVecs (V.toList yv)
+                                     (head beta) (drop 1 beta)
+                                     linkTxt Nothing
+              in [secInteractiveMulti "対話的予測" im]
+          | otherwise = []
+
+        r2Label = case fam of
+          Gaussian -> "R²"
+          _        -> "McFadden R²"
+
+        statRow =
+          secStatRow
+            [ (r2Label,     T.pack (printf "%.4f" (rSquared1 fit)))
+            , ("方法",       "IRLS")
+            , ("σ_hat",      T.pack (printf "%.4f" sigmaH))
+            , ("RMSE",       T.pack (printf "%.4f" rmse))
+            , ("最大絶対残差", T.pack (printf "%.4f" maxAbs))
+            ]
+
+        resultSec =
+          secCollapsible "<span class=\"sec-icon\">&#128200;</span> 回帰結果" True
+            ([ statRow
+             , secCard "係数" [secCoefficients coeffs (Just (r2Label, rSquared1 fit))]
+             ]
+             ++ scatterCard
+             ++ [ secCard "残差プロット" [secResiduals fitted resid] ])
+
+    in [ secDataOverview df xCols yCol
+       , secModelOverviewLink modelType formula linkTxt Nothing
+       , resultSec
+       ] ++ interactiveSec

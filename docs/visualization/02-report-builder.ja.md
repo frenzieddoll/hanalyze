@@ -151,11 +151,49 @@ class Reportable a where
 
 | 型 | モジュール | 含まれるセクション |
 |---|---|---|
+| `LMReport`       | `Viz.ReportInstances` | DataOverview / ModelOverview / Collapsible(回帰結果: StatRow + 係数 + 散布図 + 残差) / InteractiveMulti |
+| `GLMReport`      | `Viz.ReportInstances` | DataOverview / ModelOverviewLink / Collapsible(回帰結果: StatRow + 係数 + 散布図 + 残差) / InteractiveMulti |
 | `RegFit`         | `Model.Regularized` | DataOverview / ModelOverview / Coefficients (β + R²) / KeyValue (penalty/λ/sparsity) / FitScatter / Residuals |
 | `SplineFit`      | `Model.Spline`      | DataOverview / ModelOverview / KeyValue (kind/knots) / FitScatter / Residuals |
 | `KernelRidgeFit` | `Model.Kernel`      | DataOverview / ModelOverview / KeyValue (kernel/h/λ) / FitScatter / Residuals |
 | `RFFRidgeFit`    | `Model.RFF`         | DataOverview / ModelOverview / KeyValue (D/ℓ/σ_f/λ) / FitScatter / Residuals |
 | `RobustGPFit`    | `Model.GPRobust`    | DataOverview / ModelOverview / KeyValue (kernel/likelihood/IRLS iter) |
+
+`LMReport` / `GLMReport` のラッパ型:
+
+```haskell
+-- LM
+data LMReport = LMReport
+  { lmrFit    :: FitResult     -- Model.LM.fitLM 等の結果
+  , lmrSmooth :: Maybe SmoothFit  -- Model.LM.fitPolyWithSmooth が返す滑らか曲線 (信頼帯付き可)
+  }
+
+-- GLM
+data GLMReport = GLMReport
+  { glmrFit    :: FitResult
+  , glmrFamily :: Family       -- Gaussian / Binomial / Poisson
+  , glmrLink   :: LinkFn       -- Identity / Log / Logit / Sqrt
+  , glmrSmooth :: Maybe SmoothFit
+  }
+```
+
+利用例 (LM):
+
+```haskell
+import qualified Model.Core as Core
+import qualified Model.LM   as LM
+import qualified Viz.ReportBuilder   as RB
+import qualified Viz.ReportInstances as RI
+
+main = do
+  Right df <- DataIO.CSV.loadAuto "data.csv"
+  case LM.fitPolyWithSmooth (Core.CI 0.95) 100 df "x" "y" of
+    Just (fit, sf) -> do
+      let cfg    = RB.defaultReportConfig "My LM"
+          report = RI.LMReport fit (Just sf)
+      RB.renderReport "lm.html" cfg (RB.toReport cfg df ["x"] "y" report)
+    Nothing -> putStrLn "fit failed"
+```
 
 ### 折りたたみ・グループ化
 
@@ -491,7 +529,9 @@ renderReport "out.html" cfg (baseSections ++ extra)
 
 ### 移行ロードマップ
 
-1. **Phase 1 (current)**: `Reportable` instance を LM/GLM/GLMM/GP/HBM に追加 (sum-type なしで CLI 同等のレポートを生成)
+1. **Phase 1 (進行中)**: `Reportable` instance を LM/GLM/GLMM/GP/HBM に追加 (sum-type なしで CLI 同等のレポートを生成)
+   - ✅ `LMReport` / `GLMReport` (Cycle 2 で追加)
+   - ⏳ `GLMMReport` / `GPReport` / `HBMReport` (次サイクル)
 2. **Phase 2**: CLI `regress --report` を ReportBuilder 経路に切り替え
 3. **Phase 3**: `Viz.AnalysisReport` を削除
 
