@@ -42,7 +42,7 @@ import qualified Numeric.LinearAlgebra as LA
 import System.Random.MWC (GenIO)
 import System.Random.MWC.Distributions (normal)
 
-import Model.Core (FitResult (..))
+import Model.Core (FitResult (..), coefficientsV, residualsV)
 import Model.GLM  (Family (..), LinkFn (..))
 import Model.HBM  (ModelP, perObsLogLiks)
 import MCMC.Core  (Chain, chainSamples)
@@ -207,8 +207,8 @@ lmPosteriorLogLiks x y fr s gen = do
   let n      = LA.rows x
       p      = LA.cols x
       df'    = n - p
-      beta0  = coefficients fr
-      rss    = LA.dot (residuals fr) (residuals fr)
+      beta0  = coefficientsV fr
+      rss    = let resV = residualsV fr in LA.dot resV resV
       xtxInv = LA.inv (LA.tr x LA.<> x)
       rChol  = LA.chol (LA.trustSym xtxInv)
       lChol  = LA.tr rChol
@@ -239,7 +239,7 @@ glmPosteriorLogLiks
   -> IO [[Double]]
 glmPosteriorLogLiks family linkFn x y fisherInv fr s gen = do
   let p     = LA.rows fisherInv
-      beta0 = coefficients fr
+      beta0 = coefficientsV fr
       rChol = LA.chol (LA.trustSym fisherInv)
       lChol = LA.tr rChol
   replicateM s $ do
@@ -273,8 +273,8 @@ lmePosteriorLogLiks x y offsets fr s gen = do
   let n      = LA.rows x
       p      = LA.cols x
       df'    = n - p
-      beta0  = coefficients fr
-      rss    = LA.dot (residuals fr) (residuals fr)
+      beta0  = coefficientsV fr
+      rss    = let resV = residualsV fr in LA.dot resV resV
       xtxInv = LA.inv (LA.tr x LA.<> x)
       rChol  = LA.chol (LA.trustSym xtxInv)
       lChol  = LA.tr rChol

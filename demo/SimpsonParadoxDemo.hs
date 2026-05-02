@@ -22,7 +22,7 @@ import System.Random.MWC (createSystemRandom)
 
 import DataFrame.Core (Column (..), DataFrame)
 import qualified DataFrame.Core as DF
-import Model.Core    (Band (..), coefficients)
+import Model.Core    (Band (..), coefficientsV)
 import Model.LM      (fitPolyWithSmooth, SmoothFit (..), polyDesignMatrix)
 import Model.GLMM    (fitLMEDataFrame, GLMMResult (..))
 import Model.GLM     (Family (..), LinkFn (..))
@@ -124,7 +124,7 @@ reportLM = do
   case fitPolyWithSmooth (CI 0.95) 100 df "x" "y" of
     Nothing -> do putStrLn "  LM fit failed"; return Nothing
     Just (res, sf) -> do
-      let beta = coefficients res
+      let beta = coefficientsV res
           slope = LA.atIndex beta 1
           intercept = LA.atIndex beta 0
       printf "  LM:    intercept=%+.3f  slope=%+.3f  R²=%.3f\n"
@@ -172,7 +172,7 @@ reportGLMM = do
   case fitLMEDataFrame [("x", 1)] "group" "y" df of
     Nothing -> do putStrLn "  GLMM fit failed"; return Nothing
     Just gr -> do
-      let beta = coefficients (glmmFixed gr)
+      let beta = coefficientsV (glmmFixed gr)
           slope = LA.atIndex beta 1
           intercept = LA.atIndex beta 0
       printf "  GLMM:  intercept=%+.3f  slope=%+.3f  σ²_u=%.3f  σ²=%.3f  ICC=%.3f\n"

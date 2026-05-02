@@ -3,8 +3,8 @@ module Main where
 
 import DataFrame.Core
 import Model.GLMM
-import Model.Core (coeffList, rSquared, fittedList)
-import Model.LM   (multiPolyDesignMatrix, fitLM)
+import Model.Core (coeffList, rSquared1, fittedList)
+import Model.LM   (multiPolyDesignMatrix, fitLMVec)
 
 import qualified Data.Vector           as V
 import qualified Numeric.LinearAlgebra as LA
@@ -49,7 +49,7 @@ main = do
   -- ── OLS (school を無視した単純回帰) ──────────────────────────────────
   let dm     = multiPolyDesignMatrix [(hoursVec, 1)]
       y      = LA.fromList (V.toList scoresVec)
-      olsRes = fitLM dm y
+      olsRes = fitLMVec dm y
       (b0, b1) = case coeffList olsRes of { (a:b:_) -> (a,b); _ -> (0,0) }
 
   putStrLn "╔══════════════════════════════════════════════════════════╗"
@@ -57,7 +57,7 @@ main = do
   putStrLn "╚══════════════════════════════════════════════════════════╝"
   printf "  β₀ (切片)   : %8.3f\n" b0
   printf "  β₁ (hours)  : %8.3f   ← 負! 時間が増えると成績が下がる？\n" b1
-  printf "  R²           : %8.3f\n" (rSquared olsRes)
+  printf "  R²           : %8.3f\n" (rSquared1 olsRes)
   putStrLn "  ↑ Simpson's paradox: schoolベースライン差がhours効果を逆転させている"
 
   -- ── GLMM (school ランダム切片) ────────────────────────────────────────

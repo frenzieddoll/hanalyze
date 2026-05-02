@@ -126,7 +126,10 @@ fitLME x y idx labels sizes =
       ssResF  = residV `LA.dot` residV
       r2      = if ssTot == 0 then 1.0 else 1.0 - ssResF / ssTot
       icc     = su2F / (su2F + s2F)
-      fitRes  = FitResult betaF fittedV residV r2
+      fitRes  = FitResult (LA.asColumn betaF)
+                          (LA.asColumn fittedV)
+                          (LA.asColumn residV)
+                          (LA.fromList [r2])
 
   in GLMMResult fitRes su2F s2F uF labels icc
 
@@ -328,7 +331,10 @@ fitGLMM family link x y idx labels _sizes =
       ssRes     = residLA `LA.dot` residLA
       r2        = if ssTot == 0 then 1.0 else 1.0 - ssRes / ssTot
       icc       = iccApprox family su2F
-      fitRes    = FitResult betaF fittedLA residLA r2
+      fitRes    = FitResult (LA.asColumn betaF)
+                            (LA.asColumn fittedLA)
+                            (LA.asColumn residLA)
+                            (LA.fromList [r2])
 
   in GLMMResult fitRes su2F 1.0 uF labels icc
 

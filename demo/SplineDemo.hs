@@ -14,7 +14,7 @@ import qualified System.Random.MWC.Distributions as MWC
 
 import Model.Spline (SplineKind (..), fitSpline, predictSpline,
                      SplineFit (..), equalSpacedKnots)
-import Model.Core (FitResult (..))
+import Model.Core (rSquared1)
 import Viz.Core (defaultConfig, OutputFormat (..), PlotConfig (..),
                  writeSpec)
 import Graphics.Vega.VegaLite
@@ -46,13 +46,13 @@ main = do
 
   let bsFit = fitSpline (BSpline 3) knots xs ys
       bsCoef = LA.toList (sfBeta bsFit)
-      bsR2 = rSquared (sfResult bsFit)
+      bsR2 = rSquared1 (sfResult bsFit)
   printf "[B-spline cubic, k=3]  係数次元 = %d, R² = %.4f\n"
          (length bsCoef) bsR2
 
   let ncFit = fitSpline NaturalCubic knots xs ys
       ncCoef = LA.toList (sfBeta ncFit)
-      ncR2 = rSquared (sfResult ncFit)
+      ncR2 = rSquared1 (sfResult ncFit)
   printf "[Natural cubic]        係数次元 = %d, R² = %.4f\n"
          (length ncCoef) ncR2
   putStrLn ""

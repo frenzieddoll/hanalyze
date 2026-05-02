@@ -4,7 +4,7 @@ module Main where
 
 import DataIO.CSV        (loadAuto)
 import DataFrame.Core    (DataFrame, columnNames, numRows, getNumeric, getText)
-import Model.Core        (Band (..), rSquared, coeffList, fittedList)
+import Model.Core        (Band (..), rSquared1, coeffList, fittedList)
 import Model.GLM         (Family (..), parseFamily, LinkFn (..), parseLink, canonicalLink,
                           fitGLMWithSmooth, fitGLMFull)
 import Model.GLMM        (GLMMResult (..), fitLMEDataFrame, fitGLMMDataFrame)
@@ -471,7 +471,7 @@ runRegression cfg df fmt xCol1 yCol = do
               ++ "  [" ++ modelLabel dist lnk ++ "]"
       mapM_ (\(lbl, v) -> printf "  %-30s = %9.4f\n" lbl v)
             (zip (multiCoeffLabels colDegs) cs)
-      printf "  %-30s = %9.4f\n" (r2Label dist) (rSquared res)
+      printf "  %-30s = %9.4f\n" (r2Label dist) (rSquared1 res)
 
       let bandLabel = case cfgBand cfg of
             NoBand   -> ""

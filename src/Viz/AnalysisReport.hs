@@ -49,7 +49,8 @@ import qualified Numeric.LinearAlgebra as LA
 
 import DataFrame.Core
 import MCMC.Core    (Chain, chainSamples, chainAccepted, chainTotal)
-import Model.Core   (FitResult (..), coeffList, fittedList)
+import Model.Core   (FitResult (..), coeffList, fittedList,
+                     residualsV, rSquared1)
 import Model.GLM    (Family (..), LinkFn (..))
 import Stat.ModelSelect (WAICResult (..), LOOResult (..))
 import Model.GLMM   (GLMMResult (..))
@@ -106,10 +107,10 @@ mkFitSummary fam lnk colDegs mSmooth res = FitSummary
   { fsModelType    = modelTypeLabel fam lnk
   , fsFormula      = formulaText colDegs
   , fsCoeffs       = zip (coeffLabels colDegs) (coeffList res)
-  , fsR2           = rSquared res
+  , fsR2           = rSquared1 res
   , fsR2Label      = r2Label fam
   , fsFitted       = fittedList res
-  , fsResiduals    = LA.toList (residuals res)
+  , fsResiduals    = LA.toList (residualsV res)
   , fsLinkName     = linkName lnk
   , fsXColDegs     = colDegs
   , fsSmoothData   = mSmooth
@@ -148,7 +149,7 @@ mkGLMMSummary fam lnk colDegs grpCol mSmooth gr = GLMMSummary
   { gsModelType    = glmmTypeLabel fam lnk
   , gsFormula      = formulaText colDegs <> " | " <> grpCol
   , gsFixed        = zip (coeffLabels colDegs) (coeffList (glmmFixed gr))
-  , gsR2           = rSquared (glmmFixed gr)
+  , gsR2           = rSquared1 (glmmFixed gr)
   , gsR2Label      = r2Label fam
   , gsGroupCol     = grpCol
   , gsRandVar      = glmmRandVar gr
@@ -156,7 +157,7 @@ mkGLMMSummary fam lnk colDegs grpCol mSmooth gr = GLMMSummary
   , gsICC          = glmmICC gr
   , gsBLUPs        = zip (V.toList (glmmGroups gr)) (V.toList (glmmBLUPs gr))
   , gsFitted       = fittedList (glmmFixed gr)
-  , gsResiduals    = LA.toList (residuals (glmmFixed gr))
+  , gsResiduals    = LA.toList (residualsV (glmmFixed gr))
   , gsLinkName     = linkName lnk
   , gsXColDegs     = colDegs
   , gsSmoothData   = mSmooth

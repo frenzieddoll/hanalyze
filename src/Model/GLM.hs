@@ -134,7 +134,10 @@ runIRLS family linkFn x y = (mkResult betaFinal, fisherInv betaFinal)
           mu    = safeMu family (LA.cmap gInv (x LA.#> beta))
           resid = y - mu
           r2    = pseudoR2 family y mu
-      in FitResult beta mu resid r2
+      in FitResult (LA.asColumn beta)
+                   (LA.asColumn mu)
+                   (LA.asColumn resid)
+                   (LA.fromList [r2])
 
     fisherInv beta =
       let (_, gInv, gDeriv) = link
@@ -179,7 +182,7 @@ fitGLMWithSmooth family linkFn colDegs band nGrid df yCol = do
       y             = LA.fromList (V.toList yVec)
       (res, fisher) = runIRLS family linkFn dm y
       (_, gInv, _)  = linkFnOf linkFn
-      beta          = coefficients res
+      beta          = coefficientsV res
       n             = LA.rows dm
       p             = LA.cols dm
 
@@ -216,7 +219,8 @@ fitGLMWithSmooth family linkFn colDegs band nGrid df yCol = do
           PI level ->
             -- Gaussian only: add s²·1 term to CI variance
             let dfStat = fromIntegral (n - p) :: Double
-                s2     = (residuals res `LA.dot` residuals res) / dfStat
+                s2     = let resV = residualsV res
+                         in (resV `LA.dot` resV) / dfStat
                 tVal   = quantile (studentT dfStat) ((1 + level) / 2)
                 xtxi   = LA.inv (LA.tr dm LA.<> dm)
                 halfW xi = tVal * sqrt (s2 * (1 + xi `LA.dot` (xtxi LA.#> xi)))
