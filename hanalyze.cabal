@@ -30,6 +30,7 @@ library
     Model.Regularized
     Model.MultiLM
     Model.Multivariate
+    Model.MultiGP
     Design.Factorial
     Design.Block
     Design.Mixed
