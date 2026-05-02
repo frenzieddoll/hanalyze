@@ -269,12 +269,17 @@ renderBlock ls@(l:_)
     isListLine x = "- " `T.isPrefixOf` T.stripStart x
 
 -- | インラインフォーマット: bold/italic/code/link を順に置換。
+-- 数式 ($...$, $$...$$) は MathJax が処理するため、ここでは触らずに保持。
+-- ただし $...$ 内の '*' を italic と誤認しないよう、まず数式部分を退避してから処理する。
 renderInline :: Text -> Text
-renderInline = applyLinks . applyCode . applyBold . applyItalic
+renderInline txt =
+  let (chunks, maths) = extractMath txt
+      processed = applyLinks . applyCode . applyItalic . applyBold $ chunks
+  in restoreMath processed maths
   where
-    applyBold t = pairReplace "**" "<strong>" "</strong>" t
+    applyBold t   = pairReplace "**" "<strong>" "</strong>" t
     applyItalic t = pairReplace "*"  "<em>"     "</em>"     t
-    applyCode t = pairReplace "`"  "<code>"   "</code>"   t
+    applyCode t   = pairReplace "`"  "<code>"   "</code>"   t
     -- [text](url) → <a href="url">text</a>
     applyLinks t = case T.breakOn "[" t of
       (pre, "")   -> pre
@@ -299,6 +304,39 @@ pairReplace marker startTag endTag txt = go txt True
           let tag  = if inOpen then startTag else endTag
               rest' = T.drop (T.length marker) rest
           in pre <> tag <> go rest' (not inOpen)
+
+-- | $...$ や $$...$$ の数式範囲を抽出してプレースホルダ "@@MATHn@@" に置換、
+-- 元の数式テキストをリストで返す。
+extractMath :: Text -> (Text, [Text])
+extractMath = go 0 ""
+  where
+    go n acc t
+      | "$$" `T.isPrefixOf` t =
+          case T.breakOn "$$" (T.drop 2 t) of
+            (math, rest) | not (T.null rest) ->
+              let placeholder = "@@MATH" <> T.pack (show n) <> "@@"
+                  full = "$$" <> math <> "$$"
+                  (txt', maths) = go (n+1) (acc <> placeholder) (T.drop 2 rest)
+              in (txt', full : maths)
+            _ -> (acc <> t, [])
+      | "$" `T.isPrefixOf` t =
+          case T.breakOn "$" (T.drop 1 t) of
+            (math, rest) | not (T.null rest) ->
+              let placeholder = "@@MATH" <> T.pack (show n) <> "@@"
+                  full = "$" <> math <> "$"
+                  (txt', maths) = go (n+1) (acc <> placeholder) (T.drop 1 rest)
+              in (txt', full : maths)
+            _ -> (acc <> t, [])
+      | T.null t = (acc, [])
+      | otherwise =
+          let (chunk, rest) = T.break (== '$') t
+          in go n (acc <> chunk) rest
+
+restoreMath :: Text -> [Text] -> Text
+restoreMath txt maths = foldr replaceOne txt (zip [0::Int ..] maths)
+  where
+    replaceOne (i, m) acc =
+      T.replace ("@@MATH" <> T.pack (show i) <> "@@") m acc
 
 -- ---------------------------------------------------------------------------
 -- MCMC セクションビルダ (Viz.MCMC のラッパ)
@@ -412,6 +450,12 @@ buildHtml cfg sections =
        , "<script>" <> vegaLiteJS  <> "</script>"
        , "<script>" <> vegaEmbedJS <> "</script>"
        , "<script src=\"https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js\"></script>"
+       , "<script>window.MathJax = { tex: {"
+       , "  inlineMath: [['$','$'], ['\\\\(','\\\\)']],"
+       , "  displayMath: [['$$','$$'], ['\\\\[','\\\\]']]"
+       , "}, svg: { fontCache: 'global' } };</script>"
+       , "<script src=\"https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js\""
+       , "        async></script>"
        , "<style>" <> css <> "</style>"
        , "</head>"
        , "<body>"
@@ -449,21 +493,21 @@ mkNavBar cfg pairs =
     isInvisible (SecHtml _ _) = False
     isInvisible _             = False
     shortTitle s = case s of
-      SecDataOverview {}     -> "Data"
-      SecModelOverview t _ _ -> if T.null t then "Model" else t
-      SecCoefficients {}     -> "Coefficients"
-      SecFitScatter {}       -> "Scatter"
-      SecResiduals {}        -> "Residuals"
-      SecBarChart t _        -> if T.null t then "Chart" else t
-      SecVega t _            -> if T.null t then "Chart" else t
-      SecMermaid _           -> "Graph"
-      SecTable t _ _         -> if T.null t then "Table" else t
-      SecKeyValue t _        -> if T.null t then "Stats" else t
-      SecMarkdown t _        -> if T.null t then "Notes" else t
-      SecHtml t _            -> if T.null t then "" else t
-      SecInteractiveLM t _ _ _ _ _ _ -> if T.null t then "Predict" else t
-      SecInteractiveMulti t _        -> if T.null t then "Predict" else t
-      SecCollapsible t _ _   -> if T.null t then "Section" else t
+      SecDataOverview {}     -> "データ"
+      SecModelOverview {}    -> "モデル"
+      SecCoefficients {}     -> "係数"
+      SecFitScatter {}       -> "散布図"
+      SecResiduals {}        -> "残差"
+      SecBarChart t _        -> if T.null t then "図表" else t
+      SecVega t _            -> if T.null t then "図表" else t
+      SecMermaid _           -> "DAG"
+      SecTable t _ _         -> if T.null t then "表" else t
+      SecKeyValue t _        -> if T.null t then "情報" else t
+      SecMarkdown t _        -> if T.null t then "備考" else t
+      SecHtml t _            -> if T.null t then "付録" else t
+      SecInteractiveLM {}    -> "対話的予測"
+      SecInteractiveMulti {} -> "対話的予測"
+      SecCollapsible t _ _   -> if T.null t then "詳細" else t
 
 sectionId :: Int -> Text
 sectionId i = "sec_" <> T.pack (show i)
@@ -520,23 +564,22 @@ renderDataOverview sid df xCols yCol =
       summary = "Rows: <strong>" <> T.pack (show n)
                 <> "</strong>, columns analyzed: <strong>"
                 <> T.pack (show (length allCols)) <> "</strong>"
-      -- ヒストグラム (折りたたみ、デフォルト閉じ)
+      -- ヒストグラム (グループ全体で 1 つのトグル、各列は独立カード)
       histBlocks = T.intercalate "\n"
-        [ "  <details class=\"hist-card\"><summary><strong>"
-          <> c <> "</strong> &mdash; histogram</summary>"
-          <> "<div class=\"vl-wrap\"><div id=\"hist_" <> sid
-          <> "_" <> T.pack (show i) <> "\"></div></div></details>"
+        [ "  <div class=\"hist-card\"><div class=\"hist-title\">" <> c
+          <> "</div><div class=\"vl-wrap\"><div id=\"hist_" <> sid
+          <> "_" <> T.pack (show i) <> "\"></div></div></div>"
         | (i, c, Just (NumericCol _)) <- relevant ]
-  in wrapSection sid "Data overview" $ T.unlines
-       [ "<p>" <> summary <> "</p>"
-       , "<details class=\"stats-card\" open><summary>Statistics</summary>"
+  in wrapSection sid "<span class=\"sec-icon\">&#128202;</span> 1. データの特性" $ T.unlines
+       [ "<p class=\"sec-desc\">" <> summary <> "</p>"
        , "<div class=\"table-scroll\"><table class=\"stats-table\">"
        , "<thead>" <> header <> "</thead>"
        , "<tbody>" <> rows <> "</tbody>"
        , "</table></div>"
-       , "</details>"
-       , "<details class=\"hist-card-group\"><summary>Histograms (per column)</summary>"
+       , "<details class=\"hist-toggle\"><summary>ヒストグラム (列ごと)</summary>"
+       , "<div class=\"hist-grid\">"
        , histBlocks
+       , "</div>"
        , "</details>"
        ]
   where
@@ -621,12 +664,23 @@ renderModelOverview :: Text -> Text -> Text -> Maybe Text -> Text
 renderModelOverview sid ty formula mer =
   let merBlock = case mer of
         Nothing -> ""
-        Just m  -> "<div class=\"mermaid\">" <> m <> "</div>"
-  in wrapSection sid "Model overview" $ T.unlines
-       [ "<div class=\"kv\">"
-       , "<div><span class=\"k\">Type</span><span class=\"v\">" <> ty <> "</span></div>"
-       , "<div><span class=\"k\">Formula</span><span class=\"v\">"
-         <> formula <> "</span></div>"
+        Just m  ->
+          T.unlines
+            [ "<h3>モデル構造 (DAG)</h3>"
+            , "<div class=\"mermaid-wrap\"><div class=\"mermaid\">"
+            , m
+            , "</div></div>"
+            ]
+  in wrapSection sid "<span class=\"sec-icon\">&#9878;</span> モデル概要" $ T.unlines
+       [ "<div class=\"info-grid\">"
+       , "  <div class=\"info-box\">"
+       , "    <div class=\"lbl\">モデル種別</div>"
+       , "    <div class=\"ival\">" <> ty <> "</div>"
+       , "  </div>"
+       , "  <div class=\"info-box\" style=\"flex: 2\">"
+       , "    <div class=\"lbl\">数式</div>"
+       , "    <div class=\"ival\">" <> formula <> "</div>"
+       , "  </div>"
        , "</div>"
        , merBlock
        ]
@@ -832,7 +886,12 @@ interactiveMultiScript sid im =
        , "    }"
        , "    const ext = (pMax - pMin) * 0.5;"
        , "    pMin -= ext; pMax += ext;"
-       , "    const N = 100;"
+       , "    // slider 範囲も外挿に含める"
+       , "    const sMin = parseFloat(document.getElementById('i-" <> sid <> "-s' + pIdx).min);"
+       , "    const sMax = parseFloat(document.getElementById('i-" <> sid <> "-s' + pIdx).max);"
+       , "    pMin = Math.min(pMin, sMin);"
+       , "    pMax = Math.max(pMax, sMax);"
+       , "    const N = 120;"
        , "    const grid = [];"
        , "    for (let i = 0; i < N; i++)"
        , "      grid.push(pMin + i * (pMax - pMin) / (N - 1));"
@@ -845,9 +904,13 @@ interactiveMultiScript sid im =
        , "      return { gx: p, gy: y, lo: y - 1.96 * sigma, hi: y + 1.96 * sigma };"
        , "    });"
        , "    const obs = xMat.map((row, i) => ({ x: row[pIdx], y: yArr[i] }));"
+       , "    // 予測マーカー (slider 位置の現在予測値)"
+       , "    const curEta = predEta(sliderXs);"
+       , "    const curY   = invLink(curEta);"
+       , "    const predPoint = [{ px: sliderXs[pIdx], py: curY }];"
        , "    const layers = ["
        , "      { data: { values: obs },"
-       , "        mark: { type: 'point', opacity: 0.7, size: 50, color: '#4C72B0' },"
+       , "        mark: { type: 'point', opacity: 0.55, size: 50, color: '#5b8bbf' },"
        , "        encoding: {"
        , "          x: { field: 'x', type: 'quantitative', axis: { title: pCol } },"
        , "          y: { field: 'y', type: 'quantitative', axis: { title: yCol } } } }"
@@ -855,7 +918,7 @@ interactiveMultiScript sid im =
        , "    if (hasCI) {"
        , "      layers.push({"
        , "        data: { values: curve },"
-       , "        mark: { type: 'area', opacity: 0.2, color: '#DD5566' },"
+       , "        mark: { type: 'area', opacity: 0.18, color: '#e74c3c' },"
        , "        encoding: {"
        , "          x: { field: 'gx', type: 'quantitative' },"
        , "          y: { field: 'lo', type: 'quantitative' },"
@@ -863,10 +926,18 @@ interactiveMultiScript sid im =
        , "    }"
        , "    layers.push({"
        , "      data: { values: curve },"
-       , "      mark: { type: 'line', color: '#DD5566', strokeWidth: 2.5 },"
+       , "      mark: { type: 'line', color: '#e74c3c', strokeWidth: 2.5 },"
        , "      encoding: {"
        , "        x: { field: 'gx', type: 'quantitative' },"
        , "        y: { field: 'gy', type: 'quantitative' } } });"
+       , "    // 予測マーカー (大きい赤丸)"
+       , "    layers.push({"
+       , "      data: { values: predPoint },"
+       , "      mark: { type: 'point', filled: true, size: 250, color: '#c0392b',"
+       , "              stroke: 'white', strokeWidth: 2 },"
+       , "      encoding: {"
+       , "        x: { field: 'px', type: 'quantitative' },"
+       , "        y: { field: 'py', type: 'quantitative' } } });"
        , "    return { '$schema': 'https://vega.github.io/schema/vega-lite/v4.json',"
        , "             layer: layers, width: 600, height: 320 };"
        , "  };"
@@ -980,24 +1051,25 @@ sectionScript sid sec = case sec of
 interactiveLMScript :: Text -> Text -> Text -> [Double] -> [Double]
                     -> SmoothCurve -> Text
 interactiveLMScript sid xc yc xs ys sc =
-  let baseSpec = fitScatterSpec xc yc xs ys (Just sc)
-      -- 予測点用のオーバーレイ追加: クライアント側で 1 点 (cx, cy) を mark Point
-      -- ここは簡易: vegaEmbed したあと、別 div に readout を表示するのみ
-      json = decodeUtf8 . toStrict . encode . fromVL $ baseSpec
-      gridX = scXs sc
+  let gridX = scXs sc
       gridY = scYs sc
       gridLo = scLower sc
       gridHi = scUpper sc
       hasBand = not (null gridLo) && length gridLo == length gridX
-      -- JS arrays as text
       arr xs0 = "[" <> T.intercalate "," (map showD4 xs0) <> "]"
+      arrObs xs0 ys0 = "[" <> T.intercalate ","
+        [ "{\"x\":" <> showD4 x <> ",\"y\":" <> showD4 y <> "}"
+        | (x, y) <- zip xs0 ys0 ] <> "]"
   in T.unlines
-       [ "vegaEmbed('#vl-" <> sid <> "', " <> json <> ", {actions:false});"
-       , "(() => {"
+       [ "(() => {"
        , "  const gx = " <> arr gridX <> ";"
        , "  const gy = " <> arr gridY <> ";"
        , "  const gl = " <> arr (if hasBand then gridLo else []) <> ";"
        , "  const gh = " <> arr (if hasBand then gridHi else []) <> ";"
+       , "  const obs = " <> arrObs xs ys <> ";"
+       , "  const xc = \"" <> xc <> "\";"
+       , "  const yc = \"" <> yc <> "\";"
+       , "  const hasBand = gl.length > 0;"
        , "  const interp = (x, xs, ys) => {"
        , "    if (xs.length === 0) return null;"
        , "    if (x <= xs[0]) return ys[0];"
@@ -1010,17 +1082,55 @@ interactiveLMScript sid xc yc xs ys sc =
        , "    }"
        , "    return ys[ys.length-1];"
        , "  };"
+       , "  const buildSpec = (curX) => {"
+       , "    const curY = interp(curX, gx, gy);"
+       , "    const layers = ["
+       , "      { data: { values: obs },"
+       , "        mark: { type: 'point', opacity: 0.55, size: 50, color: '#5b8bbf' },"
+       , "        encoding: {"
+       , "          x: { field: 'x', type: 'quantitative', axis: { title: xc } },"
+       , "          y: { field: 'y', type: 'quantitative', axis: { title: yc } } } }"
+       , "    ];"
+       , "    if (hasBand) {"
+       , "      const bandData = gx.map((x, i) => ({ gx: x, lo: gl[i], hi: gh[i] }));"
+       , "      layers.push({"
+       , "        data: { values: bandData },"
+       , "        mark: { type: 'area', opacity: 0.18, color: '#e74c3c' },"
+       , "        encoding: {"
+       , "          x: { field: 'gx', type: 'quantitative' },"
+       , "          y: { field: 'lo', type: 'quantitative' },"
+       , "          y2:{ field: 'hi' } } });"
+       , "    }"
+       , "    const lineData = gx.map((x, i) => ({ gx: x, gy: gy[i] }));"
+       , "    layers.push({"
+       , "      data: { values: lineData },"
+       , "      mark: { type: 'line', color: '#e74c3c', strokeWidth: 2.5 },"
+       , "      encoding: {"
+       , "        x: { field: 'gx', type: 'quantitative' },"
+       , "        y: { field: 'gy', type: 'quantitative' } } });"
+       , "    layers.push({"
+       , "      data: { values: [{ px: curX, py: curY }] },"
+       , "      mark: { type: 'point', filled: true, size: 250, color: '#c0392b',"
+       , "              stroke: 'white', strokeWidth: 2 },"
+       , "      encoding: {"
+       , "        x: { field: 'px', type: 'quantitative' },"
+       , "        y: { field: 'py', type: 'quantitative' } } });"
+       , "    return { '$schema': 'https://vega.github.io/schema/vega-lite/v4.json',"
+       , "             layer: layers, width: 600, height: 320 };"
+       , "  };"
        , "  window.__upd_" <> sid <> " = function(v) {"
        , "    const x = parseFloat(v);"
        , "    document.getElementById('i-" <> sid <> "-x').textContent = x.toFixed(3);"
        , "    const y = interp(x, gx, gy);"
-       , "    document.getElementById('i-" <> sid <> "-y').textContent = y === null ? '—' : y.toFixed(4);"
-       , "    if (gl.length > 0) {"
+       , "    document.getElementById('i-" <> sid <> "-y').textContent ="
+       , "      y === null ? '—' : y.toFixed(4);"
+       , "    if (hasBand) {"
        , "      const lo = interp(x, gx, gl);"
        , "      const hi = interp(x, gx, gh);"
        , "      document.getElementById('i-" <> sid <> "-band').textContent ="
        , "        ' [' + lo.toFixed(3) + ', ' + hi.toFixed(3) + ']';"
        , "    }"
+       , "    vegaEmbed('#vl-" <> sid <> "', buildSpec(x), {actions:false});"
        , "  };"
        , "  // 初期表示"
        , "  const initX = (gx[0] + gx[gx.length-1]) / 2;"
@@ -1200,8 +1310,23 @@ css = T.unlines
   , "            display: flex; flex-direction: column; }"
   , ".kv .k { font-size: .7em; color: #888; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }"
   , ".kv .v { font-size: 1.2em; font-weight: 700; color: #1e3a5c; }"
-  , ".mermaid { text-align: center; margin: 14px 0;"
-  , "           background: #f7fafc; border-radius: 8px; padding: 24px; }"
+  , ".sec-icon { font-size: 1.1em; margin-right: 6px; }"
+  , ".sec-desc { font-size: .88em; color: #666; margin-bottom: 16px; }"
+  , ".info-grid { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }"
+  , ".info-box { background: #f7f9fc; border: 1px solid #e4e9f0; border-radius: 10px;"
+  , "            padding: 12px 18px; min-width: 180px; flex: 1; }"
+  , ".info-box .lbl { font-size: .72em; color: #888; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }"
+  , ".info-box .ival { font-size: .95em; font-weight: 600; color: #1e3a5c; }"
+  , ".mermaid-wrap { background:#f7fafc; border-radius:8px; padding:24px;"
+  , "                margin:12px 0; text-align:center; overflow-x:auto; }"
+  , ".mermaid-wrap .mermaid { display:inline-block; min-width:320px; min-height:200px;"
+  , "                         font-family:'Segoe UI',sans-serif; line-height:1.4; }"
+  , ".mermaid-wrap .mermaid svg { max-width:100%; height:auto; min-height:240px; }"
+  , ".hist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));"
+  , "             gap: 14px; margin-top: 12px; }"
+  , ".hist-card { background: #f7f9fc; border: 1px solid #e4e9f0; border-radius: 8px;"
+  , "             padding: 10px; }"
+  , ".hist-title { font-weight: 600; color: #1e3a5c; margin-bottom: 6px; font-size: .9em; }"
   , "p { line-height: 1.6; color: #444; font-size: .92em; }"
   , ".interactive-controls { margin-bottom: 16px; padding: 16px 18px;"
   , "                         background: #f7f9fc; border: 1px solid #e4e9f0;"

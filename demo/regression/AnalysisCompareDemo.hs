@@ -30,6 +30,7 @@ import Model.Core (residualsV, fittedList, coeffList, rSquared1)
 
 import qualified Viz.AnalysisReport as AR
 import qualified Viz.ReportBuilder  as RB
+import qualified Viz.ModelGraph     as VMG
 
 -- ---------------------------------------------------------------------------
 -- Helpers
@@ -147,20 +148,20 @@ writeRBLM df xVec yVec = do
           cfg   = RB.defaultReportConfig "LM (ReportBuilder)"
           sections =
             [ RB.secDataOverview df ["x"] "y"
-            , RB.secModelOverview "Linear Model (LM)"
-                "y = β₀ + β₁·x  (Gaussian family, identity link)"
+            , RB.secModelOverview "線形回帰 (LM)"
+                "$y = \\beta_0 + \\beta_1 x + \\varepsilon$, $\\varepsilon \\sim \\text{Normal}(0, \\sigma^2)$ (Gaussian, identity link)"
                 Nothing
-            , RB.secInteractiveMulti "Interactive prediction" im
-            , RB.secCollapsible "Regression results" False
+            , RB.secCollapsible "回帰結果 (係数 + 散布 + 残差)" False
                 [ RB.secCoefficients coeffs (Just ("R²", rSquared1 fit))
-                , RB.secKeyValue "Fit summary"
+                , RB.secKeyValue "あてはめの要約"
                     [ ("R²",     T.pack (printf "%.4f" (rSquared1 fit)))
-                    , ("Method", "OLS via QR decomposition")
+                    , ("方法",   "OLS (QR 分解)")
                     , ("σ_hat",  T.pack (printf "%.4f" sd_))
                     ]
                 , RB.secFitScatter "x" "y" xs ys (Just smooth)
                 , RB.secResiduals fitted resid
                 ]
+            , RB.secInteractiveMulti "対話的予測" im
             , appendixSec
             ]
       RB.renderReport "trash/cmp_lm_RB.html" cfg sections
@@ -243,23 +244,23 @@ writeRBGLM df xVec yVec xCol yCol = do
           cfg   = RB.defaultReportConfig "GLM Poisson (ReportBuilder)"
           sections =
             [ RB.secDataOverview df [xCol] yCol
-            , RB.secModelOverview "GLM Poisson/Log"
-                ("log(E[" <> yCol <> "]) = β₀ + β₁·" <> xCol
-                 <> "  (Poisson family, log link)")
+            , RB.secModelOverview "GLM Poisson / log link"
+                ("$\\log E[\\text{" <> yCol <> "}] = \\beta_0 + \\beta_1 \\text{" <> xCol
+                 <> "}$, $\\text{" <> yCol <> "} \\sim \\text{Poisson}(\\lambda)$")
                 Nothing
-            , RB.secInteractiveMulti "Interactive prediction" im
-            , RB.secCollapsible "Regression results" False
+            , RB.secCollapsible "回帰結果 (係数 + 散布 + 残差)" False
                 [ RB.secCoefficients
                     [(T.pack k, v) | (k, v) <- coeffs]
                     (Just ("McFadden R²", rSquared1 fit))
-                , RB.secKeyValue "Fit summary"
-                    [ ("Family", "Poisson")
-                    , ("Link",   "log")
-                    , ("Method", "IRLS")
+                , RB.secKeyValue "あてはめの要約"
+                    [ ("ファミリ", "Poisson")
+                    , ("リンク",   "log")
+                    , ("方法",     "IRLS")
                     ]
                 , RB.secFitScatter xCol yCol xs ys (Just smooth)
                 , RB.secResiduals fitted resid
                 ]
+            , RB.secInteractiveMulti "対話的予測" im
             , appendixSec
             ]
       RB.renderReport "trash/cmp_glm_RB.html" cfg sections
@@ -308,22 +309,23 @@ writeRBGLMM df gr = do
       cfg    = RB.defaultReportConfig "LME (ReportBuilder)"
       sections =
         [ RB.secDataOverview df ["x"] "y"
-        , RB.secModelOverview "Linear Mixed Effects (LME)"
-            ("y_ij = β₀ + β₁·x + u_j + ε,  u_j ~ N(0, σ²_u),  ε ~ N(0, σ²)"
-             <> "  (Gaussian family, identity link)")
+        , RB.secModelOverview "線形混合効果 (LME)"
+            ("$y_{ij} = \\beta_0 + \\beta_1 x + u_j + \\varepsilon$, "
+             <> "$u_j \\sim \\text{Normal}(0, \\sigma^2_u)$, "
+             <> "$\\varepsilon \\sim \\text{Normal}(0, \\sigma^2)$")
             Nothing
-        , RB.secCollapsible "Regression results" False
+        , RB.secCollapsible "回帰結果 (固定効果 + 分散成分 + BLUP)" False
             [ RB.secCoefficients coeffs
-                (Just ("Marginal R²", rSquared1 (GLMM.glmmFixed gr)))
-            , RB.secKeyValue "Variance components"
-                [ ("σ²_u (group)",  T.pack (printf "%.4f" (GLMM.glmmRandVar gr)))
-                , ("σ² (residual)", T.pack (printf "%.4f" (GLMM.glmmResidVar gr)))
+                (Just ("周辺 R²", rSquared1 (GLMM.glmmFixed gr)))
+            , RB.secKeyValue "分散成分"
+                [ ("σ²_u (グループ)",  T.pack (printf "%.4f" (GLMM.glmmRandVar gr)))
+                , ("σ² (残差)",         T.pack (printf "%.4f" (GLMM.glmmResidVar gr)))
                 , ("ICC", T.pack (printf "%.4f (%d%%)"
                                    (GLMM.glmmICC gr)
                                    (round (GLMM.glmmICC gr * 100) :: Int)))
                 ]
-            , RB.secTable "BLUPs (random intercepts)"
-                ["Group", "u_j"]
+            , RB.secTable "BLUP (グループ別ランダム切片)"
+                ["グループ", "u_j"]
                 [ [g, T.pack (printf "%+.4f" u)] | (g, u) <- blups ]
             , RB.secResiduals fitted resid
             ]
@@ -346,7 +348,11 @@ doGPDemo df = do
           p0 = GP.initParamsFromData xs ys
           paramsOpt = GP.optimizeGP GP.RBF xs ys p0
           model = GP.GPModel GP.RBF paramsOpt
-          gridX = makeGrid xVec 100
+          gridX = let lo = V.minimum xVec
+                      hi = V.maximum xVec
+                      ex = (hi - lo) * 0.5
+                  in [ (lo - ex) + fromIntegral i * ((hi - lo) * 2) / 99
+                     | i <- [0..99::Int] ]   -- ±50% 外挿対応
           res = GP.fitGP model xs ys gridX
       writeARGP df xs ys res model paramsOpt
       writeRBGP df xs ys gridX res paramsOpt
@@ -390,21 +396,22 @@ writeRBGP df xs ys gridX res params = do
       cfg   = RB.defaultReportConfig "GP RBF (ReportBuilder)"
       sections =
         [ RB.secDataOverview df ["x"] "y"
-        , RB.secModelOverview "Gaussian Process (RBF kernel)"
-            "f ~ GP(0, K_RBF(x, x'))  (RBF kernel, k(x,x') = σ_f² exp(-(x-x')²/(2ℓ²)))"
+        , RB.secModelOverview "ガウス過程 (RBF カーネル)"
+            ("$f \\sim \\text{GP}(0, k_{\\text{RBF}}(x, x'))$, "
+             <> "$k(x, x') = \\sigma_f^2 \\exp\\!\\left(-(x-x')^2 / (2\\ell^2)\\right)$")
             Nothing
-        , RB.secInteractiveLM "Interactive prediction" "x" "y"
-            xs ys smooth (xMinO - ext, xMaxO + ext)
-        , RB.secCollapsible "Regression results" False
-            [ RB.secKeyValue "Optimized hyperparameters"
-                [ ("ℓ (length scale)", T.pack (printf "%.4f" (GP.gpLengthScale params)))
-                , ("σ_f² (signal var)",T.pack (printf "%.4f" (GP.gpSignalVar params)))
-                , ("σ_n² (noise var)", T.pack (printf "%.4f" (GP.gpNoiseVar params)))
+        , RB.secCollapsible "回帰結果 (ハイパラ + 散布)" False
+            [ RB.secKeyValue "最適化されたハイパラメータ"
+                [ ("ℓ (長さスケール)", T.pack (printf "%.4f" (GP.gpLengthScale params)))
+                , ("σ_f² (信号分散)",T.pack (printf "%.4f" (GP.gpSignalVar params)))
+                , ("σ_n² (ノイズ分散)", T.pack (printf "%.4f" (GP.gpNoiseVar params)))
                 , ("LML", T.pack (printf "%.4f"
                                   (GP.logMarginalLikelihood xs ys GP.RBF params)))
                 ]
             , RB.secFitScatter "x" "y" xs ys (Just smooth)
             ]
+        , RB.secInteractiveLM "対話的予測" "x" "y"
+            xs ys smooth (xMinO - ext, xMaxO + ext)
         , appendixSec
         ]
   RB.renderReport "trash/cmp_gp_RB.html" cfg sections
@@ -446,7 +453,10 @@ makeHBMSmoothAR xs chain =
       betas  = MCMCcore.chainVals "beta"  chain
       xMin   = minimum xs
       xMax   = maximum xs
-      grid   = [ xMin + i * (xMax - xMin) / 99 | i <- [0..99] ]
+      ext    = (xMax - xMin) * 0.5    -- 外挿用に ±50% 拡張
+      gMin   = xMin - ext
+      gMax   = xMax + ext
+      grid   = [ gMin + i * (gMax - gMin) / 99 | i <- [0..99] ]
       qsAt p s =
         let n = length s
         in s !! min (n-1) (max 0 (floor (p * fromIntegral n) :: Int))
@@ -527,30 +537,31 @@ writeRBHBM df xs ys chain = do
       xVec = V.fromList xs
       xMinO = V.minimum xVec
       xMaxO = V.maximum xVec
-      ext   = (xMaxO - xMinO) * 0.3
+      ext   = (xMaxO - xMinO) * 0.5
+      mgDag = VMG.buildMermaid (HBM.buildModelGraph (hbmModel xs ys))
       sections =
         [ RB.secDataOverview df ["x"] "y"
         , RB.secModelOverview "Bayesian Linear Regression (HBM, NUTS)"
-            ("y ~ Normal(α + β·x, σ),  α,β ~ Normal(0,10),  σ ~ Exp(1)"
-             <> "  (Gaussian observation, identity link, NUTS sampler)")
-            Nothing
-        , RB.secInteractiveLM "Interactive prediction (posterior median)"
-            "x" "y" xs ys smoothRB (xMinO - ext, xMaxO + ext)
-        , RB.secCollapsible "Regression results" False
+            ("$y_i \\sim \\text{Normal}(\\alpha + \\beta x_i, \\sigma)$, "
+             <> "$\\alpha, \\beta \\sim \\text{Normal}(0, 10)$, "
+             <> "$\\sigma \\sim \\text{Exponential}(1)$")
+            (Just mgDag)
+        , RB.secCollapsible "回帰結果 (係数 + 事後要約 + MCMC 診断)" False
             [ RB.secCoefficients
                 [ ("α (posterior mean)", aMean)
                 , ("β (posterior mean)", bMean)
                 , ("σ (posterior mean)", sMean)
                 ]
                 Nothing
-            , RB.secPosteriorSummary "Posterior summary" summaryRows
+            , RB.secPosteriorSummary "事後要約" summaryRows
             , RB.secFitScatter "x" "y" xs ys (Just smoothRB)
+            , RB.secMCMCDiagnostics "MCMC 診断 (KDE + トレース)"
+                params chain
+            , RB.secMCMCAutocorr "自己相関" 40 params chain
+            , RB.secMCMCPair "ペア散布図 (α, β)" "alpha" "beta" chain
             ]
-        , RB.secCollapsible "MCMC diagnostics" False
-            [ RB.secMCMCDiagnostics "KDE + trace" params chain
-            , RB.secMCMCAutocorr "Autocorrelation" 40 params chain
-            , RB.secMCMCPair "Pair scatter (α, β)" "alpha" "beta" chain
-            ]
+        , RB.secInteractiveLM "対話的予測 (事後中央値)"
+            "x" "y" xs ys smoothRB (xMinO - ext, xMaxO + ext)
         , appendixSec
         ]
   RB.renderReport "trash/cmp_hbm_RB.html" cfg sections
