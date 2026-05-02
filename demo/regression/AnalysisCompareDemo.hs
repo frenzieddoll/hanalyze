@@ -165,8 +165,6 @@ writeRBLM df xVec yVec = do
                     ]
                 , RB.secCard "係数"
                     [ RB.secCoefficients coeffs (Just ("R²", rSquared1 fit)) ]
-                , RB.secCard "散布図 + 回帰線"
-                    [ RB.secFitScatter "x" "y" xs ys (Just smooth) ]
                 , RB.secCard "残差プロット"
                     [ RB.secResiduals fitted resid ]
                 ]
@@ -464,8 +462,6 @@ writeRBGP df xs ys gridX res params = do
                 , ("RMSE", T.pack (printf "%.4f" rmseV))
                 , ("最大絶対残差", T.pack (printf "%.4f" maxAbsR))
                 ]
-            , RB.secCard "事後平均 + 95% 信用帯"
-                [ RB.secFitScatter "x" "y" xs ys (Just smooth) ]
             , RB.secCard "残差プロット"
                 [ RB.secResiduals yhat resid ]
             ]
