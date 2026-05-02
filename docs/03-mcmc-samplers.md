@@ -1,46 +1,49 @@
-# MCMC サンプラー選択ガイド
+# MCMC Sampler Selection Guide
 
-> 関連デモ:
-> - [`bench-mcmc`](../demo/BenchMCMC.hs) — MH/HMC/NUTS パフォーマンス比較 (易/難 2 ケース)
-> - [`test-hmc-nuts`](../demo/TestHMCNUTS.hs) — 1D ガウスで HMC/NUTS 動作検証
-> - [`hbm-example`](../demo/HBMExample.hs) — 4 チェーン NUTS + R-hat 診断
+> 🌐 **English** | [日本語](03-mcmc-samplers.ja.md)
 
-## サンプラー比較
+> Related demos:
+> - [`bench-mcmc`](../demo/BenchMCMC.hs) — MH/HMC/NUTS performance comparison (easy/hard cases)
+> - [`test-hmc-nuts`](../demo/TestHMCNUTS.hs) — HMC/NUTS sanity check on a 1D Gaussian
+> - [`hbm-example`](../demo/HBMExample.hs) — 4-chain NUTS + R-hat diagnostic
 
-| サンプラー | モジュール | 向いているケース | 主な調整パラメータ |
+## Sampler comparison
+
+| Sampler | Module | Best for | Key tuning knobs |
 |---|---|---|---|
-| Metropolis-Hastings | `MCMC.MH` (`metropolis`) | 動作確認・シンプルモデル | `mcmcStepSizes` (受容率 20-50%) |
-| HMC | `MCMC.HMC` (`hmc`) | 連続パラメータ・中規模 | `hmcStepSize`, `hmcLeapfrogSteps` |
-| **NUTS** | `MCMC.NUTS` (`nuts`) | **ほぼ全ケースで推奨** | `nutsStepSize` (他は dual averaging で自動調整) |
-| Gibbs / ハイブリッド | `MCMC.Gibbs` (`gibbsMH`) | 共役モデル (超高速) | 不要 (直接サンプリング) |
+| Metropolis-Hastings | `MCMC.MH` (`metropolis`) | Quick checks, simple models | `mcmcStepSizes` (target accept 20–50%) |
+| HMC | `MCMC.HMC` (`hmc`) | Continuous parameters, medium scale | `hmcStepSize`, `hmcLeapfrogSteps` |
+| **NUTS** | `MCMC.NUTS` (`nuts`) | **Recommended default** | `nutsStepSize` (others auto-tuned via dual averaging) |
+| Gibbs / hybrid | `MCMC.Gibbs` (`gibbsMH`) | Conjugate models (very fast) | None (direct sampling) |
 
-HMC/NUTS は `Numeric.AD.Mode.Forward` による正確な勾配を使うため、
-数値微分版に比べて精度・速度ともに優れます。
-全サンプラーは多相モデル `ModelP r` を受け取り、制約変換 (PositiveT/UnitIntervalT) を自動適用します。
+HMC/NUTS use exact gradients via `Numeric.AD.Mode.Forward`, which is more accurate
+and faster than numerical-difference variants.
+All samplers accept polymorphic models (`ModelP r`) and apply constraint transforms
+(PositiveT/UnitIntervalT) automatically.
 
 ---
 
-## 制約付きパラメータについて
+## Constrained parameters
 
-HMC / NUTS は制約付き分布を **自動的に unconstrained 空間に変換** します。
+HMC / NUTS automatically map constrained distributions into unconstrained space.
 
-| 分布 | 制約 | 変換 |
+| Distribution | Constraint | Transform |
 |---|---|---|
-| `Exponential(λ)`, `Gamma(α,β)` | 正値 (>0) | 対数変換 u = log(θ) |
-| `Beta(α,β)` | 単位区間 (0,1) | ロジット変換 u = log(θ/(1-θ)) |
-| `Normal(μ,σ)` | 実数全体 | 変換なし |
+| `Exponential(λ)`, `Gamma(α,β)` | positive (>0) | log: u = log(θ) |
+| `Beta(α,β)` | unit interval (0,1) | logit: u = log(θ/(1-θ)) |
+| `Normal(μ,σ)` | real line | none |
 
-初期値は通常の constrained 空間の値で渡してください。
-Jacobian 補正が自動適用されるため、ユーザーは意識する必要はありません。
+Pass initial values in the natural (constrained) space; Jacobian corrections are
+applied automatically.
 
 ---
 
 ## MCMC.MH — Random Walk Metropolis-Hastings
 
-### いつ使うか
-- 動作確認・プロトタイピング
-- パラメータが 1〜3 個程度のシンプルモデル
-- 離散パラメータを含む (HMC/NUTS は勾配が必要なため離散非対応)
+### When to use
+- Sanity checks, prototyping
+- Simple models with 1–3 parameters
+- Models containing discrete parameters (HMC/NUTS need gradients)
 
 ### API
 
@@ -50,17 +53,17 @@ import MCMC.MH
 data MCMCConfig = MCMCConfig
   { mcmcIterations :: Int
   , mcmcBurnIn     :: Int
-  , mcmcStepSizes  :: Map Text Double  -- パラメータごとの提案分布 SD
+  , mcmcStepSizes  :: Map Text Double  -- proposal SD per parameter
   }
 
 defaultMCMCConfig :: [Text] -> MCMCConfig
--- iterations=2000, burnIn=500, stepSize=1.0 (全パラメータ)
+-- iterations=2000, burnIn=500, stepSize=1.0 (all parameters)
 
-metropolis       :: Model a -> MCMCConfig -> Params -> GenIO -> IO Chain
-metropolisChains :: Model a -> MCMCConfig -> Int    -> Params -> GenIO -> IO [Chain]
+metropolis       :: ModelP r -> MCMCConfig -> Params -> GenIO -> IO Chain
+metropolisChains :: ModelP r -> MCMCConfig -> Int    -> Params -> GenIO -> IO [Chain]
 ```
 
-### 例
+### Example
 
 ```haskell
 import MCMC.MH
@@ -70,7 +73,7 @@ let m   = normalMean [1.2, 2.3, 3.1]
     cfg = (defaultMCMCConfig (sampleNames m))
             { mcmcIterations = 5000
             , mcmcBurnIn     = 1000
-            , mcmcStepSizes  = Map.fromList [("mu", 0.5)]  -- 受容率 20-50% を目指す
+            , mcmcStepSizes  = Map.fromList [("mu", 0.5)]  -- aim for 20-50% acceptance
             }
 chain <- metropolis m cfg (Map.fromList [("mu", 0.0)]) gen
 ```
@@ -79,9 +82,9 @@ chain <- metropolis m cfg (Map.fromList [("mu", 0.0)]) gen
 
 ## MCMC.HMC — Hamiltonian Monte Carlo
 
-### いつ使うか
-- 連続パラメータ、10〜数十次元
-- NUTS より細かい軌道制御が必要な研究用途
+### When to use
+- Continuous parameters, ~10 to several dozen dimensions
+- Research use where you want fine-grained trajectory control vs NUTS
 
 ### API
 
@@ -91,42 +94,42 @@ import MCMC.HMC
 data HMCConfig = HMCConfig
   { hmcIterations    :: Int
   , hmcBurnIn        :: Int
-  , hmcStepSize      :: Double  -- リープフロッグのステップ幅 ε
-  , hmcLeapfrogSteps :: Int     -- リープフロッグのステップ数 L
+  , hmcStepSize      :: Double  -- leapfrog step size ε
+  , hmcLeapfrogSteps :: Int     -- number of leapfrog steps L
   }
 
 defaultHMCConfig :: HMCConfig
 -- iterations=2000, burnIn=500, stepSize=0.1, leapfrogSteps=10
 
-hmc       :: Model a -> HMCConfig -> Params -> GenIO -> IO Chain
-hmcChains :: Model a -> HMCConfig -> Int    -> Params -> GenIO -> IO [Chain]
+hmc       :: ModelP r -> HMCConfig -> Params -> GenIO -> IO Chain
+hmcChains :: ModelP r -> HMCConfig -> Int    -> Params -> GenIO -> IO [Chain]
 ```
 
-### 例
+### Example
 
 ```haskell
 import MCMC.HMC
 
 let cfg = defaultHMCConfig
             { hmcIterations    = 3000
-            , hmcStepSize      = 0.1    -- 受容率 60-80% を目指す
-            , hmcLeapfrogSteps = 15     -- 強相関なら増やす (20-50)
+            , hmcStepSize      = 0.1    -- target 60-80% acceptance
+            , hmcLeapfrogSteps = 15     -- raise to 20-50 for strong correlations
             }
 chain <- hmc m cfg initP gen
 ```
 
-### チューニングの目安
-- 受容率 < 60%: `hmcStepSize` を小さくする
-- 受容率 > 90%: `hmcStepSize` を大きくする (効率が出ていない)
-- ESS が低い: `hmcLeapfrogSteps` を増やす
+### Tuning guide
+- Acceptance < 60% → reduce `hmcStepSize`
+- Acceptance > 90% → increase `hmcStepSize` (under-utilized)
+- Low ESS → increase `hmcLeapfrogSteps`
 
 ---
 
-## MCMC.NUTS — No-U-Turn Sampler (推奨)
+## MCMC.NUTS — No-U-Turn Sampler (recommended)
 
-Hoffman & Gelman (2014) Algorithm 3 の実装。
-軌道長を U-Turn 判定で自動決定するため `leapfrogSteps` のチューニングが不要。
-バーンイン中に Dual Averaging でステップ幅を自動調整します。
+Implementation of Hoffman & Gelman (2014) Algorithm 3.
+Tree depth is determined adaptively by the U-turn criterion, so `leapfrogSteps`
+tuning is unnecessary. During burn-in, dual averaging auto-tunes the step size.
 
 ### API
 
@@ -136,38 +139,38 @@ import MCMC.NUTS
 data NUTSConfig = NUTSConfig
   { nutsIterations    :: Int
   , nutsBurnIn        :: Int
-  , nutsStepSize      :: Double  -- 初期 ε (自動調整のシード)
-  , nutsMaxDepth      :: Int     -- ツリー最大深さ (default 10)
-  , nutsAdaptStepSize :: Bool    -- Dual Averaging 自動調整 (default True)
-  , nutsTargetAccept  :: Double  -- 目標受容率 δ (default 0.8)
+  , nutsStepSize      :: Double  -- initial ε (seed for auto-tuning)
+  , nutsMaxDepth      :: Int     -- max tree depth (default 10)
+  , nutsAdaptStepSize :: Bool    -- dual-averaging adaptation (default True)
+  , nutsTargetAccept  :: Double  -- target acceptance δ (default 0.8)
   }
 
 defaultNUTSConfig :: NUTSConfig
 
-nuts       :: Model a -> NUTSConfig -> Params -> GenIO -> IO Chain
-nutsChains :: Model a -> NUTSConfig -> Int    -> Params -> GenIO -> IO [Chain]
+nuts       :: ModelP r -> NUTSConfig -> Params -> GenIO -> IO Chain
+nutsChains :: ModelP r -> NUTSConfig -> Int    -> Params -> GenIO -> IO [Chain]
 ```
 
-### 例: 基本的な使い方
+### Basic usage
 
 ```haskell
 import MCMC.NUTS
 
--- 初期 stepSize だけ渡せばよい (バーンイン中に自動調整される)
+-- Just supply an initial stepSize (it's auto-tuned during burn-in)
 let cfg = defaultNUTSConfig { nutsIterations = 2000, nutsStepSize = 0.1 }
 chain <- nuts m cfg initP gen
 ```
 
-### 例: 4チェーン並列 + R-hat 収束確認
+### 4 chains in parallel + R-hat convergence
 
 ```haskell
 import MCMC.NUTS
 import MCMC.Core  (chainVals)
 import Stat.MCMC  (rhat, ess)
 
-chains <- nutsChains m cfg 4 initP gen  -- +RTS -N4 で OS スレッド並列
+chains <- nutsChains m cfg 4 initP gen  -- +RTS -N4 for OS-thread parallelism
 
--- R-hat < 1.01 で収束
+-- R-hat < 1.01 → converged
 let params = sampleNames m
 forM_ params $ \p -> do
   let r = rhat (map (chainVals p) chains)
@@ -175,47 +178,46 @@ forM_ params $ \p -> do
     (T.unpack p) (show r) (ess (chainVals p (head chains)))
 ```
 
-### ステップサイズの初期値の目安
+### Initial step-size guide
 
-| モデル | 推奨初期 stepSize |
+| Model | Suggested initial stepSize |
 |---|---|
-| 単純正規モデル | 0.3〜1.0 |
-| 階層モデル (2〜3レベル) | 0.05〜0.3 |
-| Beta-Binomial | 0.1〜0.5 |
+| Simple normal model | 0.3–1.0 |
+| Hierarchical (2–3 levels) | 0.05–0.3 |
+| Beta-Binomial | 0.1–0.5 |
 
-`nutsAdaptStepSize = True` (デフォルト) の場合、バーンイン後半には
-自動調整された ε が使われるため、初期値は大まかで問題ありません。
+With `nutsAdaptStepSize = True` (default), the late burn-in switches to the
+auto-tuned ε, so the initial value can be approximate.
 
 ---
 
-## 多チェーン実行の共通パターン
+## Common multi-chain pattern
 
-MH / HMC / NUTS はすべて `<sampler>Chains` 関数で並列チェーン実行できます。
+MH / HMC / NUTS all expose a `<sampler>Chains` function for parallel chains.
 
 ```haskell
--- 4チェーンを非同期並列実行 (async ライブラリ使用)
--- +RTS -N4 でスレッドを割り当てること
+-- 4 chains in parallel (uses async); add +RTS -N4 to allocate threads
 chains <- nutsChains m cfg 4 initP gen
 
--- 収束確認
+-- Check convergence
 let allParams = sampleNames m
-converged = all (\p -> maybe False (< 1.01) (rhat (map (chainVals p) chains))) allParams
+    converged = all (\p -> maybe False (< 1.01) (rhat (map (chainVals p) chains))) allParams
 if converged
-  then putStrLn "収束確認"
-  else putStrLn "警告: 収束していない可能性があります"
+  then putStrLn "Converged"
+  else putStrLn "Warning: not converged"
 ```
 
 ---
 
-## MCMC.Core — Chain 型と統計量
+## MCMC.Core — Chain type & statistics
 
-全サンプラーが返す `Chain` 型の共通インタフェース。
+Common interface returned by all samplers.
 
 ```haskell
 import MCMC.Core
 
 data Chain = Chain
-  { chainSamples  :: [Map Text Double]  -- バーンイン後サンプル
+  { chainSamples  :: [Map Text Double]  -- post-burn-in samples
   , chainAccepted :: Int
   , chainTotal    :: Int
   }
@@ -225,24 +227,24 @@ posteriorMean     :: Text -> Chain -> Maybe Double
 posteriorSD       :: Text -> Chain -> Maybe Double
 posteriorQuantile :: Double -> Text -> Chain -> Maybe Double
 
-chainVals :: Text -> Chain -> [Double]  -- サンプル列 (Stat.MCMC.ess 等に渡す)
+chainVals :: Text -> Chain -> [Double]  -- sample sequence (pass to Stat.MCMC.ess etc.)
 ```
 
 ---
 
-## Stat.MCMC — 診断統計量
+## Stat.MCMC — Diagnostic statistics
 
 ```haskell
 import Stat.MCMC
 
-ess     :: [Double] -> Double          -- 実効サンプルサイズ (Geyer 推定量)
-rhat    :: [[Double]] -> Maybe Double  -- Split R-hat (Vehtari et al. 2021)
-hdi     :: Double -> [Double] -> (Double, Double)   -- 最短区間 HDI
-autocorr :: Int -> [Double] -> [(Int, Double)]       -- 自己相関
-kde     :: Int -> [Double] -> [(Double, Double)]     -- KDE 密度
+ess      :: [Double] -> Double          -- effective sample size (Geyer estimator)
+rhat     :: [[Double]] -> Maybe Double  -- Split R-hat (Vehtari et al. 2021)
+hdi      :: Double -> [Double] -> (Double, Double)  -- shortest HDI
+autocorr :: Int -> [Double] -> [(Int, Double)]      -- autocorrelation
+kde      :: Int -> [Double] -> [(Double, Double)]   -- KDE density
 ```
 
-**R-hat の解釈:**
-- `Just 1.00`: 完全収束
-- `< Just 1.01`: 収束とみなしてよい (Vehtari et al. 推奨閾値)
-- `>= Just 1.01`: 収束不足 — バーンイン増加または stepSize 調整が必要
+**R-hat interpretation:**
+- `Just 1.00`: perfect convergence
+- `< Just 1.01`: converged (Vehtari et al. recommended threshold)
+- `>= Just 1.01`: under-converged — increase burn-in or adjust step size

@@ -1,31 +1,33 @@
-# モデル比較 (Stat.ModelSelect)
+# Model Comparison (Stat.ModelSelect)
 
-> 関連デモ:
-> - [`gibbs-demo`](../demo/GibbsDemo.hs) — WAIC/LOO で 2 モデル比較
-> - [`simpson-paradox`](../demo/SimpsonParadoxDemo.hs) — LM/GLMM/HBM の WAIC を 1 つの HTML に並列表示
-> - [`hbm-random-slope`](../demo/HBMRandomSlopeDemo.hs) — ランダム切片 vs +ランダム傾きの ΔWAIC 比較
+> 🌐 **English** | [日本語](06-model-comparison.ja.md)
+
+> Related demos:
+> - [`gibbs-demo`](../demo/GibbsDemo.hs) — WAIC/LOO comparison of two models
+> - [`simpson-paradox`](../demo/SimpsonParadoxDemo.hs) — LM/GLMM/HBM WAIC side-by-side in one HTML
+> - [`hbm-random-slope`](../demo/HBMRandomSlopeDemo.hs) — random intercept vs +random slope ΔWAIC
 >
-> CLI: `--waic` フラグで LM / GLM / GLMM / HBM レポートに WAIC/LOO を埋め込み。
+> CLI: `--waic` flag embeds WAIC/LOO into LM / GLM / GLMM / HBM reports.
 
-## 概要
+## Overview
 
-`Stat.ModelSelect` は MCMC チェーンを使った情報量規準によるモデル比較を提供します。
+`Stat.ModelSelect` provides information-criterion-based model comparison from MCMC chains.
 
-| 指標 | 関数 | 説明 |
+| Criterion | Functions | Description |
 |---|---|---|
 | WAIC | `waic`, `chainWAIC` | Widely Applicable Information Criterion |
 | PSIS-LOO | `loo`, `chainLOO` | Pareto Smoothed Importance Sampling LOO-CV |
 
-どちらも **小さい値ほど良い** (−2×elpd スケール)。
+Both are on the `−2×elpd` scale — **smaller is better**.
 
 ---
 
-## WAIC (広義適用情報量規準)
+## WAIC (Widely Applicable Information Criterion)
 
-**原理 (Watanabe 2010)**:
-- `lppd = Σᵢ log(E_θ[p(yᵢ|θ)])` — 対数点予測密度
-- `p_waic = Σᵢ Var_θ[log p(yᵢ|θ)]` — 有効パラメータ数
-- `WAIC = −2(lppd − p_waic)` — AIC アナログ
+**Principle (Watanabe 2010):**
+- `lppd = Σᵢ log(E_θ[p(yᵢ|θ)])` — log pointwise predictive density
+- `p_waic = Σᵢ Var_θ[log p(yᵢ|θ)]` — effective number of parameters
+- `WAIC = −2(lppd − p_waic)` — analogous to AIC
 
 ### API
 
@@ -35,34 +37,34 @@ import Stat.ModelSelect
 data WAICResult = WAICResult
   { waicValue :: Double  -- WAIC = −2(lppd − p_waic)
   , waicLppd  :: Double  -- log pointwise predictive density
-  , waicPwaic :: Double  -- 有効パラメータ数 p_waic
-  , waicSE    :: Double  -- WAIC の推定標準誤差
+  , waicPwaic :: Double  -- effective parameter count p_waic
+  , waicSE    :: Double  -- estimated standard error of WAIC
   }
 
--- チェーンから直接計算 (推奨)
-chainWAIC :: Model a -> Chain -> WAICResult
+-- Compute directly from a chain (recommended)
+chainWAIC :: ModelP r -> Chain -> WAICResult
 
--- 対数尤度行列から計算 (行=サンプル, 列=観測値)
+-- From a log-likelihood matrix (rows=samples, cols=observations)
 waic :: [[Double]] -> WAICResult
 
--- 対数尤度行列の生成 (chainWAIC の内部で使用)
-chainLogLikMatrix :: Model a -> Chain -> [[Double]]
+-- Build the log-lik matrix (used internally by chainWAIC)
+chainLogLikMatrix :: ModelP r -> Chain -> [[Double]]
 ```
 
-### 例: 2モデルの比較
+### Example: comparing two models
 
 ```haskell
 import Stat.ModelSelect
 import MCMC.NUTS (nuts, defaultNUTSConfig)
 
--- モデル A: 弱情報事前分布
-modelA :: Model ()
+-- Model A: weakly informative prior
+modelA :: ModelP ()
 modelA = do
   mu <- sample "mu" (Normal 0 10)
   observe "y" (Normal mu 2) obsData
 
--- モデル B: 情報事前分布 (真値 μ=3 から外れた μ=5 を仮定)
-modelB :: Model ()
+-- Model B: informative prior centered away from the truth (true μ=3, prior μ≈5)
+modelB :: ModelP ()
 modelB = do
   mu <- sample "mu" (Normal 5 1)
   observe "y" (Normal mu 2) obsData
@@ -79,103 +81,135 @@ main = do
   let waicA = chainWAIC modelA chainA
       waicB = chainWAIC modelB chainB
 
-  printf "モデル A: WAIC=%.3f  lppd=%.3f  p_waic=%.3f  SE=%.3f\n"
+  printf "Model A: WAIC=%.3f  lppd=%.3f  p_waic=%.3f  SE=%.3f\n"
     (waicValue waicA) (waicLppd waicA) (waicPwaic waicA) (waicSE waicA)
-  printf "モデル B: WAIC=%.3f  lppd=%.3f  p_waic=%.3f  SE=%.3f\n"
+  printf "Model B: WAIC=%.3f  lppd=%.3f  p_waic=%.3f  SE=%.3f\n"
     (waicValue waicB) (waicLppd waicB) (waicPwaic waicB) (waicSE waicB)
 
   let delta = waicValue waicA - waicValue waicB
   printf "ΔWAIC(A−B) = %.3f\n" delta
-  -- delta < -2 ならモデル A が有意に良い
+  -- delta < -2 → Model A is significantly better
 ```
 
 ---
 
 ## PSIS-LOO (Pareto Smoothed Importance Sampling LOO-CV)
 
-**原理 (Vehtari, Gelman, Gabry 2017)**:
-- 各観測値 yᵢ を抜いた LOO 予測密度を IS で近似
-- 重要度重みの裾を Pareto 分布で平滑化
-- **Pareto k̂** で各観測値の推定信頼性を診断
+**Principle (Vehtari, Gelman, Gabry 2017):**
+- Approximate the leave-one-out predictive density via importance sampling
+- Smooth the importance-weight tail with a generalized Pareto distribution
+- **Pareto k̂** diagnoses estimate reliability per observation
 
-### Pareto k̂ の解釈
+### Interpreting Pareto k̂
 
-| k̂ | 診断 |
+| k̂ | Diagnosis |
 |---|---|
-| < 0.5 | 良好 — LOO 推定は信頼できる |
-| 0.5〜0.7 | 許容 — やや不安定だが概ね使える |
-| > 0.7 | 要注意 — LOO が不安定、WAIC を優先するか k̂ > 0.7 の観測値を確認 |
+| < 0.5 | Good — LOO estimate is reliable |
+| 0.5–0.7 | Acceptable — slightly unstable but usable |
+| > 0.7 | Concerning — LOO is unstable; prefer WAIC, or examine those observations |
 
 ### API
 
 ```haskell
 data LOOResult = LOOResult
-  { looValue   :: Double    -- −2 × elpd_loo (小さいほど良い)
+  { looValue   :: Double    -- −2 × elpd_loo (smaller is better)
   , looElpd    :: Double    -- Σᵢ elpd_i
-  , looSE      :: Double    -- 推定標準誤差
-  , looKHat    :: [Double]  -- 観測値ごとの k̂
-  , looKHatBad :: Int       -- k̂ > 0.7 の観測値数
+  , looSE      :: Double    -- standard error
+  , looKHat    :: [Double]  -- per-observation k̂
+  , looKHatBad :: Int       -- count of observations with k̂ > 0.7
   }
 
-chainLOO :: Model a -> Chain -> LOOResult
+chainLOO :: ModelP r -> Chain -> LOOResult
 loo      :: [[Double]] -> LOOResult
 ```
 
-### 例: LOO + k̂ 診断
+### Example: LOO with k̂ diagnostic
 
 ```haskell
 let looRes = chainLOO modelA chainA
-printf "LOO = %.3f  elpd = %.3f  SE = %.3f  k̂>0.7: %d 観測\n"
+printf "LOO = %.3f  elpd = %.3f  SE = %.3f  k̂>0.7: %d obs\n"
   (looValue looRes) (looElpd looRes) (looSE looRes) (looKHatBad looRes)
 
--- 観測値ごとの k̂ を確認
+-- Per-observation k̂
 mapM_ (\(i, k) -> printf "obs %2d: k̂=%.3f  %s\n" (i::Int) k (khatLabel k))
   (zip [1..] (looKHat looRes))
 
 khatLabel :: Double -> String
-khatLabel k | k < 0.5   = "良好"
-             | k < 0.7   = "許容"
-             | otherwise = "要注意"
+khatLabel k | k < 0.5   = "good"
+            | k < 0.7   = "ok"
+            | otherwise = "concerning"
 ```
 
 ---
 
-## WAIC vs LOO の使い分け
+## Posterior helpers for frequentist models
 
-| 状況 | 推奨 |
+For LM / GLM / LME (which don't produce a posterior chain directly), there are
+helpers to draw posterior log-likelihood matrices:
+
+```haskell
+-- Flat-prior conjugate posterior for LM
+lmPosteriorLogLiks
+  :: Matrix Double  -- design matrix X (n×p)
+  -> Vector Double  -- response y (n)
+  -> FitResult      -- OLS fit
+  -> Int            -- number of posterior samples
+  -> GenIO
+  -> IO [[Double]]
+
+-- Laplace approximation around MLE for GLM
+glmPosteriorLogLiks
+  :: Family -> LinkFn -> Matrix Double -> Vector Double
+  -> Matrix Double  -- inverse Fisher information
+  -> FitResult -> Int -> GenIO -> IO [[Double]]
+
+-- Conditional posterior for LME (BLUP fixed)
+lmePosteriorLogLiks
+  :: Matrix Double -> Vector Double
+  -> [Double]       -- BLUP offset per observation
+  -> FitResult -> Int -> GenIO -> IO [[Double]]
+```
+
+The CLI's `--waic` flag uses these internally for LM / GLM / GLMM.
+
+---
+
+## WAIC vs LOO — when to use which
+
+| Situation | Recommendation |
 |---|---|
-| 通常のモデル比較 | WAIC (計算が軽い) |
-| 観測値ごとの診断が必要 | LOO (k̂ 診断付き) |
-| k̂ > 0.7 が多い | 信頼性不足 — サンプル数を増やすか WAIC を使う |
-| モデル比較の標準的な選択 | LOO (Vehtari らが推奨) |
+| Routine model comparison | WAIC (lighter to compute) |
+| Need per-observation diagnostics | LOO (k̂ included) |
+| Many k̂ > 0.7 | LOO unreliable — increase samples or use WAIC |
+| Standard practice for Bayesian model selection | LOO (recommended by Vehtari et al.) |
 
 ---
 
-## 実測比較例
+## Empirical example
 
 ```
-=== Section 2: WAIC モデル比較 ===
-  モデル A: μ ~ Normal(0, 10)  [弱情報事前: 真値 μ=3 を広くカバー]
-  モデル B: μ ~ Normal(5,  1)  [情報事前: μ≈5 を強く仮定、真値からずれ]
+=== Section 2: WAIC model comparison ===
+  Model A: μ ~ Normal(0, 10)  [weak prior; covers true μ=3 broadly]
+  Model B: μ ~ Normal(5,  1)  [informative prior at μ≈5; pulls away from truth]
 
-  モデル A  事後 mean=3.2551 (解析=3.2553)  WAIC=  97.038  lppd= -44.636  p_waic=3.883  SE=5.034
-  モデル B  事後 mean=4.3981 (解析=4.4048)  WAIC= 108.424  lppd= -51.325  p_waic=2.887  SE=5.621
+  Model A  posterior mean=3.2551 (analytical=3.2553)  WAIC= 97.038  lppd=-44.636  p_waic=3.883  SE=5.034
+  Model B  posterior mean=4.3981 (analytical=4.4048)  WAIC=108.424  lppd=-51.325  p_waic=2.887  SE=5.621
 
   ΔWAIC(A − B) = -11.386
-  → モデル A (弱情報事前) の方が良い当てはまり ✓
+  → Model A (weak prior) fits better ✓
 
-=== Section 3: PSIS-LOO 診断 ===
-  モデル A: LOO=97.135  elpd=-48.567  SE=5.047  k̂>0.7: 0 観測
-  モデル B: LOO=108.539 elpd=-54.269  SE=5.638  k̂>0.7: 0 観測
+=== Section 3: PSIS-LOO diagnostic ===
+  Model A: LOO=97.135  elpd=-48.567  SE=5.047  k̂>0.7: 0 obs
+  Model B: LOO=108.539 elpd=-54.269  SE=5.638  k̂>0.7: 0 obs
 
-  Pareto k̂ 診断 (モデル A, 観測値ごと):
-    obs  1: k̂=0.022  良好
-    obs  2: k̂=0.012  良好
+  Pareto k̂ diagnosis (Model A, per obs):
+    obs  1: k̂=0.022  good
+    obs  2: k̂=0.012  good
     ...
-    obs 20: k̂=0.015  良好
+    obs 20: k̂=0.015  good
 ```
 
-**解釈:**
-- ΔWAIC = -11.4 は SE の 2 倍以上 → モデル A が統計的に有意に良い
-- 弱情報事前分布は真値 μ=3 周辺に事後分布を集中させられるが、
-  情報事前分布のモデル B は μ=5 への強い引力でデータとの乖離が大きくなる
+**Interpretation:**
+- ΔWAIC = -11.4 is more than 2× the SE → Model A is significantly better
+- The weak prior allows the posterior to concentrate around the true μ=3, while
+  Model B's informative prior pulls strongly to μ=5, increasing prediction error

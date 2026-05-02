@@ -1,81 +1,82 @@
-# 確率的プログラミング DSL (Model.HBM)
+# Probabilistic Programming DSL (Model.HBM)
 
-> 関連デモ:
-> - [`hbm-example`](../demo/HBMExample.hs) — 階層正規モデル + 4 チェーン NUTS
-> - [`hbm-regression`](../demo/HBMRegressionDemo.hs) — ベイズ単回帰 (AnalysisReport 付き)
-> - [`clinical-trial`](../demo/ClinicalTrial.hs) — Beta-Binomial A/B テスト
-> - [`simpson-paradox`](../demo/SimpsonParadoxDemo.hs) — シンプソン例で LM/GLMM/HBM 比較
-> - [`hbm-random-slope`](../demo/HBMRandomSlopeDemo.hs) — ランダム傾き拡張
+> 🌐 **English** | [日本語](02-probabilistic-model.ja.md)
 
-## 概要
+> Related demos:
+> - [`hbm-example`](../demo/HBMExample.hs) — hierarchical normal model + 4-chain NUTS
+> - [`hbm-regression`](../demo/HBMRegressionDemo.hs) — Bayesian linear regression with AnalysisReport
+> - [`clinical-trial`](../demo/ClinicalTrial.hs) — Beta-Binomial A/B test
+> - [`simpson-paradox`](../demo/SimpsonParadoxDemo.hs) — LM/GLMM/HBM compared on Simpson's paradox
+> - [`hbm-random-slope`](../demo/HBMRandomSlopeDemo.hs) — random slope extension
 
-`Model.HBM` は Free Monad で実装した多相な確率的プログラミング DSL です。
-Stan や PyMC のように宣言的にモデルを書けます。
+## Overview
 
-継続を `forall a. (Floating a, Ord a) => Model a r` として多相化してあるため、
-同一のモデル定義から **4 通りの解釈** を取り出せます:
+`Model.HBM` is a polymorphic probabilistic-programming DSL implemented as a free monad,
+letting you write models declaratively in the style of Stan or PyMC.
 
-| 解釈 | 特殊化 | 用途 |
+Continuations are polymorphic in `forall a. (Floating a, Ord a) => Model a r`, so a single
+model definition supports **four interpretations**:
+
+| Interpretation | Specialization | Use |
 |---|---|---|
-| 構造検査 | `a = Double` | `collectNodes`, `describeModel` |
-| log joint 評価 | `a = Double` | `logJoint`, `logPrior`, `logLikelihood` |
-| AD 勾配 | `a = Forward Double` | `gradAD`, `gradADU` (machine epsilon 精度) |
-| 依存追跡 | `a = Track` | `extractDeps`, `buildModelGraph` (DAG 自動抽出) |
+| Structure inspection | `a = Double` | `collectNodes`, `describeModel` |
+| Log-joint evaluation | `a = Double` | `logJoint`, `logPrior`, `logLikelihood` |
+| AD gradient | `a = Forward Double` | `gradAD`, `gradADU` (machine-epsilon precision) |
+| Dependency tracking | `a = Track` | `extractDeps`, `buildModelGraph` (automatic DAG extraction) |
 
-サンプラー (`MCMC.HMC`/`NUTS`/`Gibbs`) は AD 勾配と自動制約変換を活用します。
+Samplers (`MCMC.HMC`/`NUTS`/`Gibbs`) leverage AD gradients and automatic constraint transforms.
 
 ---
 
-## 基本 API
+## Core API
 
 ```haskell
-import Model.HBM     -- Distribution(..), sample, observe を提供
+import Model.HBM     -- exports Distribution(..), sample, observe
 
--- 多相モデルの型エイリアス
+-- Polymorphic model alias
 type ModelP r = forall a. (Floating a, Ord a) => Model a r
 
--- 潜在変数の宣言 (返り値は a で後続の sample/observe に流れる)
+-- Latent variable (the returned `a` flows into subsequent sample/observe)
 sample  :: Text -> Distribution a -> Model a a
 
--- 観測データへの条件付け (i.i.d. 仮定)
+-- Condition on observed data (i.i.d. assumption)
 observe :: Text -> Distribution a -> [Double] -> Model a ()
 ```
 
-`sample` の返り値は `a` 型 (多相) で、後続の `sample`/`observe` の分布パラメータに
-そのまま流せます (Stan の `~` 構文に相当)。
+The return value of `sample` is polymorphic `a` — pass it directly into downstream
+`sample` / `observe` distributions (the equivalent of Stan's `~`).
 
-> **注**: `ModelP` は rank-2 型のため `let m = schoolModel dat` のような
-> ローカル束縛では monomorphisation 問題が起きます。トップレベル束縛
-> (`m :: ModelP () ; m = schoolModel dat`) を使うか、関数呼び出しで
-> 毎回インライン展開してください。
+> **Note**: `ModelP` is a rank-2 type, so `let m = schoolModel dat` causes a
+> monomorphization issue. Use a top-level binding (`m :: ModelP () ; m = schoolModel dat`)
+> or inline the call at each use site.
 
 ---
 
-## 使用できる分布
+## Available distributions
 
 ```haskell
 data Distribution a
-  = Normal      a a       -- Normal(μ, σ)    — 連続、実数全体
-  | Binomial    Int a     -- Binomial(n, p)  — 離散、[0,n]
-  | Poisson     a         -- Poisson(λ)      — 離散、非負整数
-  | Exponential a         -- Exponential(λ)  — 連続、正値のみ
-  | Gamma       a a       -- Gamma(α, β)     — 連続、正値のみ (rate=β)
-  | Beta        a a       -- Beta(α, β)      — 連続、(0,1)
+  = Normal      a a       -- Normal(μ, σ)    — continuous, real line
+  | Binomial    Int a     -- Binomial(n, p)  — discrete, [0..n]
+  | Poisson     a         -- Poisson(λ)      — discrete, non-negative integers
+  | Exponential a         -- Exponential(λ)  — continuous, positive
+  | Gamma       a a       -- Gamma(α, β)     — continuous, positive (rate=β)
+  | Beta        a a       -- Beta(α, β)      — continuous, (0,1)
 ```
 
-分布パラメータは多相 `a` なので、別の `sample` から得た値をそのまま渡せます
-(例: `Normal mu sigma` で `mu, sigma :: a`)。
+Distribution parameters are polymorphic `a`, so values from one `sample` flow directly
+into another (e.g. `Normal mu sigma` with `mu, sigma :: a`).
 
-HMC/NUTS は制約付き分布 (Exponential/Gamma → 正値、Beta → 単位区間) を
-自動的に unconstrained 空間に変換してサンプリングします。
+HMC/NUTS automatically map constrained distributions (Exponential/Gamma → positive,
+Beta → unit interval) into unconstrained space.
 
 ---
 
-## パターン 1: 単純な正規モデル
+## Pattern 1: Simple normal model
 
 ```haskell
 -- μ ~ Normal(0, 10)
--- y_i ~ Normal(μ, σ=2)  (σ 既知)
+-- y_i ~ Normal(μ, σ=2)  (σ known)
 normalMean :: [Double] -> ModelP ()
 normalMean ys = do
   mu <- sample "mu" (Normal 0 10)
@@ -84,11 +85,11 @@ normalMean ys = do
 
 ---
 
-## パターン 2: 制約付きパラメータ (σ 未知)
+## Pattern 2: Constrained parameter (unknown σ)
 
 ```haskell
 -- μ ~ Normal(0, 10)
--- σ ~ Exponential(1)   ← HMC/NUTS が対数変換で正値を保証
+-- σ ~ Exponential(1)   ← HMC/NUTS use a log transform to enforce σ > 0
 -- y_i ~ Normal(μ, σ)
 normalUnknownSigma :: [Double] -> ModelP ()
 normalUnknownSigma ys = do
@@ -99,11 +100,11 @@ normalUnknownSigma ys = do
 
 ---
 
-## パターン 3: A/B テスト (Beta-Binomial)
+## Pattern 3: A/B test (Beta-Binomial)
 
 ```haskell
--- p_ctrl ~ Beta(1,1),  y_ctrl ~ Binomial(50, p_ctrl), k_ctrl=18 回復
--- p_trt  ~ Beta(1,1),  y_trt  ~ Binomial(50, p_trt),  k_trt =31 回復
+-- p_ctrl ~ Beta(1,1),  y_ctrl ~ Binomial(50, p_ctrl), 18 successes
+-- p_trt  ~ Beta(1,1),  y_trt  ~ Binomial(50, p_trt),  31 successes
 clinicalModel :: ModelP ()
 clinicalModel = do
   pCtrl <- sample "p_ctrl" (Beta 1 1)
@@ -114,9 +115,9 @@ clinicalModel = do
 
 ---
 
-## パターン 4: 階層正規モデル (3校)
+## Pattern 4: Hierarchical normal (3 schools)
 
-do 記法の返り値を使って下位レベルの分布パラメータを上位から受け取れます。
+`do`-notation return values let lower-level distributions take parameters from upstream.
 
 ```haskell
 import Control.Monad (forM_)
@@ -136,23 +137,23 @@ schoolModel groupData = do
 
 schoolData :: [[Double]]
 schoolData =
-  [ [72, 68, 75, 71]   -- 学校 1
-  , [85, 88, 82, 90]   -- 学校 2
-  , [61, 65, 58, 63]   -- 学校 3
+  [ [72, 68, 75, 71]   -- school 1
+  , [85, 88, 82, 90]   -- school 2
+  , [61, 65, 58, 63]   -- school 3
   ]
 ```
 
 ---
 
-## モデル構造の確認
+## Inspecting model structure
 
 ```haskell
--- 潜在変数名リストの取得
+-- List of latent variable names
 sampleNames :: ModelP r -> [Text]
 sampleNames (schoolModel schoolData)
 -- ["mu","tau","theta_1","theta_2","theta_3"]
 
--- 対数密度の評価 (サンプラーのデバッグ用)
+-- Log-density evaluation (useful for debugging samplers)
 logJoint      :: ModelP r -> Params -> Double  -- log p(θ, y)
 logPrior      :: ModelP r -> Params -> Double  -- log p(θ)
 logLikelihood :: ModelP r -> Params -> Double  -- log p(y | θ)
@@ -167,90 +168,91 @@ logJoint (schoolModel schoolData) ps  -- ≈ -52.4
 
 ---
 
-## モデルグラフの生成 (依存自動抽出)
+## Model graph (auto-extracted dependencies)
 
-Mermaid.js の DAG を HTML で可視化します。
-依存関係は `Track` 型による自動微分風の伝播で **自動抽出** されるため、
-エッジを手動で書く必要はありません。
+Visualize the DAG as Mermaid.js HTML.
+Dependencies are **automatically extracted** via `Track`-type propagation through the
+arithmetic operations — you don't need to write edges by hand.
 
 ```haskell
 import Model.HBM      (buildModelGraph, extractDeps)
 import Viz.ModelGraph (renderModelGraph)
 
--- 依存グラフを自動構築 (DSL の Track 型で各ノードの parent を伝播)
+-- Auto-build the dependency DAG (parent variables propagate via Track type)
 let graph = buildModelGraph (schoolModel schoolData)
 renderModelGraph "model.html" "School Model" graph
--- ブラウザで開くと DAG が表示される
+-- Open in browser to see the DAG
 
--- ノード単位の依存抽出も可能
+-- Or inspect dependencies node-by-node
 extractDeps (schoolModel schoolData)
 -- [Node "mu"      LatentN "Normal"      {}
 -- ,Node "tau"     LatentN "Exponential" {}
--- ,Node "theta_1" LatentN "Normal"      {"mu","tau"}    -- mu, tau に依存
--- ,Node "y_1"     (ObservedN 4) "Normal" {"theta_1"}    -- theta_1 に依存
+-- ,Node "theta_1" LatentN "Normal"      {"mu","tau"}    -- depends on mu, tau
+-- ,Node "y_1"     (ObservedN 4) "Normal" {"theta_1"}    -- depends on theta_1
 -- ,...]
 ```
 
-`Viz.Report.MCMCReport` の `reportGraph` フィールドにこの `ModelGraph` を渡すと、
-MCMC レポート HTML 内に DAG が埋め込まれます。
+Pass this `ModelGraph` to `Viz.Report.MCMCReport.reportGraph` to embed the DAG in
+the MCMC report HTML.
 
 ---
 
-## 観測値ごとの対数尤度
+## Per-observation log-likelihoods
 
-WAIC / LOO 計算 (`Stat.ModelSelect`) の内部で使われますが、
-直接呼び出してデバッグにも使えます。
+Used internally by WAIC / LOO (`Stat.ModelSelect`); also useful for debugging.
 
 ```haskell
 perObsLogLiks :: ModelP r -> Params -> [Double]
--- 各 observe ノードの各観測値の logDensity を平坦リストで返す
+-- Returns the logDensity of each observed data point as a flat list
 ```
 
 ```haskell
 perObsLogLiks (schoolModel schoolData) ps
--- [-2.1, -2.3, -1.8, -2.0, ...]  (全観測値分)
+-- [-2.1, -2.3, -1.8, -2.0, ...]  (one entry per observation)
 ```
 
 ---
 
-## AD 勾配 (machine epsilon 精度)
+## AD gradient (machine-epsilon precision)
 
-`Numeric.AD.Mode.Forward` を使った正確な勾配を計算できます。
-HMC/NUTS は内部でこれを使うため、通常はユーザーが直接呼ぶ必要はありません。
+Compute exact gradients via `Numeric.AD.Mode.Forward`.
+HMC/NUTS use this internally, so users typically don't need to call it directly.
 
 ```haskell
 gradAD  :: ModelP r -> [Text] -> [Double] -> [Double]
-gradADU :: ModelP r -> [Text] -> [Transform] -> [Double] -> [Double]  -- 制約変換込み
+gradADU :: ModelP r -> [Text] -> [Transform] -> [Double] -> [Double]  -- with constraint transforms
 
--- ∂log p(θ,y) / ∂θ を θ=(1.5, 1.2) で評価
+-- Evaluate ∂log p(θ,y) / ∂θ at θ=(1.5, 1.2)
 let g = gradAD (normalUnknownSigma obs) ["mu", "sigma"] [1.5, 1.2]
--- 数値微分 (中心差分 h=1e-5) と比較すると相対誤差は ~10⁻¹⁰ に収まる
+-- Relative error vs central-difference numerical (h=1e-5) is ~10⁻¹⁰
 ```
 
-`gradADU` は事前分布から検出した制約変換 (`PositiveT`/`UnitIntervalT`) を適用した
-unconstrained 空間での勾配を返します (HMC/NUTS の内部で使用)。
+`gradADU` returns the gradient in unconstrained space, with constraint transforms
+(`PositiveT` / `UnitIntervalT`) detected from priors automatically applied
+(used internally by HMC/NUTS).
 
 ---
 
-## 多相解釈の仕組み
+## How polymorphic interpretation works
 
-`type ModelP r = forall a. (Floating a, Ord a) => Model a r` という rank-2 型のおかげで、
-同じモデル定義を異なる `a` に特殊化することで複数の解釈が得られます:
+The rank-2 type `type ModelP r = forall a. (Floating a, Ord a) => Model a r`
+lets the same model definition be specialized to different `a` for different purposes:
 
 ```haskell
--- a = Double           → log joint の数値評価
+-- a = Double           → numerical log-joint
 logJoint myModel ps :: Double
 
--- a = Forward s Double → AD 勾配
+-- a = Forward s Double → AD gradient
 gradAD myModel names xs :: [Double]
 
--- a = Track            → 依存グラフ自動抽出
+-- a = Track            → automatic dependency-graph extraction
 extractDeps myModel :: [Node]
 
 -- a = Double (placeholder)
-collectNodes myModel  :: [Node]    -- 構造のみ (依存情報なし)
+collectNodes myModel  :: [Node]    -- structure only (no dependencies)
 ```
 
-`Track` 型は `Floating` インスタンスを持ち、各算術演算で依存集合 `Set Text` を伝播します。
-`Normal mu sigma` を構築すると自動的に「この分布は `mu` と `sigma` に依存する」と記録されるため、
-`buildModelGraph` がエッジを自動構築できます。
+The `Track` type has a `Floating` instance whose arithmetic propagates a dependency
+set `Set Text`. When you build `Normal mu sigma`, it automatically records
+"this distribution depends on `mu` and `sigma`", which is what enables
+`buildModelGraph` to derive edges automatically.

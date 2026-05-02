@@ -1,80 +1,82 @@
-# クイックスタート
+# Quickstart
 
-## ビルドと実行
+> 🌐 **English** | [日本語](01-quickstart.ja.md)
+
+## Build & Run
 
 ```bash
-cabal build           # ライブラリ + 全実行ファイル
-cabal test            # テストスイート
-cabal run hbm-example # 階層ベイズ + 4チェーン NUTS → HTML レポート生成
+cabal build           # library + all executables
+cabal test            # test suite
+cabal run hbm-example # hierarchical Bayes + 4-chain NUTS → HTML report
 ```
 
-バイナリを直接実行する場合 (cabal run が曖昧な時):
+To run a binary directly (when `cabal run` is ambiguous):
 ```
 dist-newstyle/build/x86_64-linux/ghc-9.6.7/hanalyze-0.1.0.0/x/<demo>/build/<demo>/<demo>
 ```
 
-CPU 並列化 (多チェーン実行):
+CPU parallelism (multi-chain):
 ```bash
-cabal run hbm-example -- +RTS -N4   # 4 スレッド
+cabal run hbm-example -- +RTS -N4   # 4 threads
 ```
 
 ---
 
-## 「やりたいこと」逆引き — どのデモ / CLI を使うか
+## "What to do" → which demo / CLI
 
-### 古典的な回帰
+### Classical regression
 
-| やりたいこと | 推奨アプローチ | 例 |
+| Goal | Recommended | Example |
 |---|---|---|
-| 単純な線形回帰 (信頼区間付き) | CLI: `LM` | `hanalyze data.csv x y LM --ci 0.95 --report` |
-| ロジスティック回帰 / ポアソン回帰 | CLI: `GLM` | `hanalyze data.csv x y GLM -d binomial -l logit --report` |
-| 多項式回帰 (列ごとに次数指定) | CLI: `LM --degree -1 2 -2 3` | デモ: `glmm-demo` (LME バリアント) |
-| 混合効果 (LME / GLMM) | CLI: `--group COL` | デモ: `glmm-demo` |
-| ガウス過程回帰 (非線形) | CLI: `GP` / デモ: `gp-demo` | RBF/Matérn/Periodic を自動比較 |
+| Simple linear regression with confidence band | CLI: `LM` | `hanalyze data.csv x y LM --ci 0.95 --report` |
+| Logistic / Poisson regression | CLI: `GLM` | `hanalyze data.csv x y GLM -d binomial -l logit --report` |
+| Polynomial regression (per-column degree) | CLI: `LM --degree -1 2 -2 3` | demo: `glmm-demo` (LME variant) |
+| Mixed effects (LME / GLMM) | CLI: `--group COL` | demo: `glmm-demo` |
+| Gaussian process regression (non-linear) | CLI: `GP` / demo: `gp-demo` | Auto-compares RBF/Matérn/Periodic |
 
-### ベイズ推論
+### Bayesian inference
 
-| やりたいこと | 推奨アプローチ | 例 |
+| Goal | Recommended | Example |
 |---|---|---|
-| 単回帰のベイズ版 (CLI から一発) | CLI: `HBM --report --waic` | `hanalyze data.csv x y HBM --report` |
-| 階層モデル (グループ構造) | デモ: `simpson-paradox` / `hbm-random-slope` | カスタム階層は `Model.HBM` で直接記述 |
-| ランダム傾きモデル | デモ: `hbm-random-slope` | M1 (β 共通) vs M2 (β_g) を WAIC 比較 |
-| ベイズ A/B テスト | デモ: `clinical-trial` | Beta-Binomial、決定理論 |
-| 多チェーン NUTS + R-hat 診断 | デモ: `hbm-example` | 4 チェーン並列、`mcmc_report_multi.html` |
+| One-shot Bayesian linear regression | CLI: `HBM --report --waic` | `hanalyze data.csv x y HBM --report` |
+| Hierarchical model (group structure) | demo: `simpson-paradox` / `hbm-random-slope` | Custom hierarchies via `Model.HBM` |
+| Random slope model | demo: `hbm-random-slope` | M1 (β common) vs M2 (β_g) compared by WAIC |
+| Bayesian A/B test | demo: `clinical-trial` | Beta-Binomial, decision theory |
+| Multi-chain NUTS + R-hat | demo: `hbm-example` | 4-chain parallel, `mcmc_report_multi.html` |
 
-### サンプラー選択 / 性能
+### Sampler choice / performance
 
-| やりたいこと | 推奨アプローチ | 例 |
+| Goal | Recommended | Example |
 |---|---|---|
-| MH/HMC/NUTS の比較 | デモ: `bench-mcmc` | 易/難の 2 ケースで ESS/s を計測 |
-| 共役モデルの高速サンプリング | デモ: `gibbs-hbm-demo` | Gibbs 自動検出、ハイブリッド Gibbs+MH |
-| 変分推論 (大規模・高速近似) | デモ: `vi-demo` | ADVI vs NUTS 精度比較 |
-| サンプラーの精度確認 | デモ: `test-hmc-nuts` | 1D ガウスで HMC/NUTS 動作検証 |
+| MH/HMC/NUTS comparison | demo: `bench-mcmc` | Easy/hard cases with ESS/sec |
+| Fast sampling for conjugate models | demo: `gibbs-hbm-demo` | Auto-detect conjugates, hybrid Gibbs+MH |
+| Variational inference (large/fast) | demo: `vi-demo` | ADVI vs NUTS accuracy |
+| Sampler accuracy verification | demo: `test-hmc-nuts` | 1D Gaussian sanity check |
 
-### モデル比較 / 解釈
+### Model comparison / interpretation
 
-| やりたいこと | 推奨アプローチ | 例 |
+| Goal | Recommended | Example |
 |---|---|---|
-| WAIC / LOO-CV でモデル選択 | CLI: `--waic` または デモ: `gibbs-demo` | LM/GLM/HBM/LME に対応 |
-| 複数モデルを 1 つの HTML で並列比較 | デモ: `simpson-paradox` | LM/GLMM/HBM の係数・予測曲線・WAIC を一覧 |
-| シンプソンのパラドックスを再現 | デモ: `simpson-paradox` | `simpson_compare.html` |
-| HBM 階層拡張の妥当性検証 | デモ: `hbm-random-slope` | ランダム切片のみ vs +ランダム傾き |
+| Model selection via WAIC / LOO-CV | CLI: `--waic` or demo: `gibbs-demo` | LM/GLM/HBM/LME supported |
+| Compare multiple models in one HTML | demo: `simpson-paradox` | Coefficients, prediction overlay, WAIC table |
+| Reproduce Simpson's paradox | demo: `simpson-paradox` | `simpson_compare.html` |
+| Validate hierarchical extensions | demo: `hbm-random-slope` | random intercept only vs +random slope |
 
-### 可視化
+### Visualization
 
-| やりたいこと | 推奨アプローチ | 例 |
+| Goal | Recommended | Example |
 |---|---|---|
-| AnalysisReport (DAG・MCMC 診断・予測曲線統合) | CLI: `--report` | LM/GLM/GLMM/GP/HBM 全対応 |
-| 棒グラフ・ヒストグラム単体 | デモ: `bar-demo` / CLI: `--hist COL` | PNG/SVG 出力可能 |
-| MCMC 単独レポート (KDE + トレース + DAG) | `Viz.Report.renderReport` | デモ: `hbm-example` |
-| プロットを PNG/SVG にエクスポート | CLI: `--format png` | 各 NamedPlot が個別画像化 |
-| モデル DAG 単独 HTML | `Viz.ModelGraph.renderModelGraph` | Track 型による依存自動抽出 |
+| AnalysisReport (DAG / MCMC / curves integrated) | CLI: `--report` | Full LM/GLM/GLMM/GP/HBM support |
+| Standalone bar/histogram | demo: `bar-demo` / CLI: `--hist COL` | PNG/SVG output |
+| Standalone MCMC report (KDE / trace / DAG) | `Viz.Report.renderReport` | demo: `hbm-example` |
+| Export plots as PNG/SVG | CLI: `--format png` | Each NamedPlot as a separate image |
+| Standalone DAG HTML | `Viz.ModelGraph.renderModelGraph` | Auto-derived dependencies via Track type |
 
 ---
 
-## 最小の完全ワークフロー (Haskell から)
+## Minimal end-to-end workflow (Haskell)
 
-5 行で「モデル → NUTS → HTML レポート」まで完結する例:
+Five lines from "model → NUTS → HTML report":
 
 ```haskell
 {-# LANGUAGE OverloadedStrings #-}
@@ -86,7 +88,7 @@ import MCMC.NUTS  (nuts, defaultNUTSConfig)
 import MCMC.Core  (posteriorMean, posteriorSD)
 import Viz.Report (defaultReport, renderReport)
 
--- 1. モデル: μ ~ Normal(0,10), y ~ Normal(μ, σ=2), 観測 5 点
+-- 1. Model: μ ~ Normal(0,10), y ~ Normal(μ, σ=2), 5 observations
 myModel :: ModelP ()
 myModel = do
   mu <- sample "mu" (Normal 0 10)
@@ -95,39 +97,39 @@ myModel = do
 main :: IO ()
 main = do
   gen <- createSystemRandom
-  -- 2. NUTS (AD 勾配 + dual averaging)
+  -- 2. NUTS (AD gradients + dual averaging)
   chain <- nuts myModel defaultNUTSConfig (Map.fromList [("mu", 0.0)]) gen
-  -- 3. 事後統計
+  -- 3. Posterior statistics
   print (posteriorMean "mu" chain)
   print (posteriorSD   "mu" chain)
-  -- 4. HTML レポート (KDE + トレース + 自己相関)
+  -- 4. HTML report (KDE + trace + autocorrelation)
   renderReport "report.html" (defaultReport "My Model" chain ["mu"])
 ```
 
 ---
 
-## モジュール早見表
+## Module quick-reference
 
-| 用途 | モジュール | 主要関数 |
+| Purpose | Module | Key functions |
 |---|---|---|
-| モデル定義 (多相 DSL) | `Model.HBM` | `sample`, `observe`, `ModelP r` |
+| Model definition (polymorphic DSL) | `Model.HBM` | `sample`, `observe`, `ModelP r` |
 | HMC | `MCMC.HMC` | `hmc`, `hmcChains` |
 | NUTS | `MCMC.NUTS` | `nuts`, `nutsChains` |
-| Gibbs (共役自動検出) | `MCMC.Gibbs` | `gibbsMH`, `gibbsFromModel` |
+| Gibbs (auto-conjugate detection) | `MCMC.Gibbs` | `gibbsMH`, `gibbsFromModel` |
 | Random Walk MH | `MCMC.MH` | `metropolis` |
-| 変分推論 | `Stat.VI` | `advi` |
+| Variational inference | `Stat.VI` | `advi` |
 | WAIC / LOO | `Stat.ModelSelect` | `waic`, `loo`, `lmPosteriorLogLiks`, `lmePosteriorLogLiks` |
-| 古典回帰 | `Model.LM` / `Model.GLM` / `Model.GLMM` | `fitPolyWithSmooth`, `fitGLMWithSmooth`, `fitLMEDataFrame` |
-| ガウス過程 | `Model.GP` | `optimizeGP`, `fitGP`, `gpPredData` |
-| MCMC レポート | `Viz.Report` | `defaultReport`, `renderReport` |
-| 多モデル比較レポート | `Viz.AnalysisReport` | `writeAnalysisReport`, `writeComparisonReport` |
-| DAG 可視化 | `Viz.ModelGraph` | `renderModelGraph` |
-| 散布図/棒グラフ/ヒストグラム | `Viz.Scatter` / `Viz.Bar` / `Viz.Histogram` | 各 `*File` 関数 |
+| Classical regression | `Model.LM` / `Model.GLM` / `Model.GLMM` | `fitPolyWithSmooth`, `fitGLMWithSmooth`, `fitLMEDataFrame` |
+| Gaussian Process | `Model.GP` | `optimizeGP`, `fitGP`, `gpPredData` |
+| MCMC report | `Viz.Report` | `defaultReport`, `renderReport` |
+| Multi-model comparison report | `Viz.AnalysisReport` | `writeAnalysisReport`, `writeComparisonReport` |
+| DAG visualization | `Viz.ModelGraph` | `renderModelGraph` |
+| Scatter / bar / histogram | `Viz.Scatter` / `Viz.Bar` / `Viz.Histogram` | each `*File` function |
 
-各機能の詳細は以下を参照:
-- [確率的プログラミング DSL](02-probabilistic-model.md)
-- [MCMC サンプラー選択ガイド](03-mcmc-samplers.md)
-- [Gibbs サンプリング](04-gibbs.md)
-- [変分推論 (ADVI)](05-variational-inference.md)
-- [モデル比較 (WAIC/LOO)](06-model-comparison.md)
-- [可視化](07-visualization.md)
+For deeper details:
+- [Probabilistic Programming DSL](02-probabilistic-model.md)
+- [MCMC Sampler Guide](03-mcmc-samplers.md)
+- [Gibbs Sampling](04-gibbs.md)
+- [Variational Inference (ADVI)](05-variational-inference.md)
+- [Model Comparison (WAIC/LOO)](06-model-comparison.md)
+- [Visualization](07-visualization.md)
