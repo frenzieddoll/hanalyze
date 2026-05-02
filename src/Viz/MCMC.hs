@@ -22,6 +22,8 @@ module Viz.MCMC
   , rankPlot, rankPlotFile
     -- * Posterior predictive check (PyMC `pp_check` 相当)
   , ppcPlot, ppcPlotFile
+    -- * Divergence overlay (NUTS divergent transitions の可視化)
+  , pairScatterDiv, pairScatterDivFile
     -- * Posterior summary table (`az.summary` 相当)
   , SummaryRow (..)
   , posteriorSummary
@@ -824,3 +826,62 @@ ppcPlotFile :: OutputFormat -> FilePath -> PlotConfig
             -> [Double] -> [[Double]] -> Int -> IO ()
 ppcPlotFile fmt path cfg observed predDraws nOverlay =
   writeSpec fmt path (ppcPlot cfg observed predDraws nOverlay)
+
+-- ---------------------------------------------------------------------------
+-- Divergence overlay (NUTS divergent transitions の可視化)
+-- ---------------------------------------------------------------------------
+
+-- | 散布図の上に divergent な反復を赤い X 印で重ね描く。
+--
+-- 引数:
+--   * @xName@, @yName@: ペア散布の軸となる latent パラメタ名
+--   * @divIdx@        : divergent 反復の 0-origin index 列 (バーンイン後)。
+--                       将来 NUTS が `chainDivergences` を返したらそれを渡す。
+--                       Phase F5 では空リストや手動指定で動作確認できる。
+--
+-- パラメタ空間で divergent が局所化していれば、その付近の事後分布が
+-- 病的 (高曲率) であることを示し、reparameterization の検討材料になる。
+pairScatterDiv :: PlotConfig -> Text -> Text -> Chain -> [Int] -> VegaLite
+pairScatterDiv cfg xName yName chain divIdx =
+  let xs       = chainVals xName chain
+      ys       = chainVals yName chain
+      n        = min (length xs) (length ys)
+      validIdx = [ i | i <- divIdx, i >= 0, i < n ]
+      divXs    = [ xs !! i | i <- validIdx ]
+      divYs    = [ ys !! i | i <- validIdx ]
+  in toVegaLite
+      [ title (plotTitle cfg) []
+      , layer
+          [ asSpec  -- 通常の散布
+              [ dataFromColumns []
+                  . dataColumn xName (Numbers xs)
+                  . dataColumn yName (Numbers ys)
+                  $ []
+              , mark Point [MOpacity 0.25, MSize 15, MColor "#4C72B0"]
+              , encoding
+                  . position X [PName xName, PmType Quantitative]
+                  . position Y [PName yName, PmType Quantitative]
+                  $ []
+              ]
+          , asSpec  -- divergent な点を赤 X で重ねる
+              [ dataFromColumns []
+                  . dataColumn xName (Numbers divXs)
+                  . dataColumn yName (Numbers divYs)
+                  $ []
+              , mark Point [ MShape SymCross, MSize 80
+                           , MColor "#DD2222", MStrokeWidth 2.0
+                           , MOpacity 0.9 ]
+              , encoding
+                  . position X [PName xName, PmType Quantitative]
+                  . position Y [PName yName, PmType Quantitative]
+                  $ []
+              ]
+          ]
+      , width  (plotWidth  cfg)
+      , height (plotHeight cfg)
+      ]
+
+pairScatterDivFile :: OutputFormat -> FilePath -> PlotConfig
+                   -> Text -> Text -> Chain -> [Int] -> IO ()
+pairScatterDivFile fmt path cfg xName yName chain divIdx =
+  writeSpec fmt path (pairScatterDiv cfg xName yName chain divIdx)

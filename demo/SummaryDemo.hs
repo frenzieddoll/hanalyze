@@ -12,7 +12,8 @@ import System.Random.MWC (createSystemRandom)
 import MCMC.NUTS (nuts, nutsChains, defaultNUTSConfig, NUTSConfig (..))
 import Model.HBM (ModelP, sample, observe, Distribution (..))
 import Viz.MCMC (printPosteriorSummary, posteriorSummaryFile,
-                 tracePlotHDIFile, rankPlotFile, ppcPlotFile)
+                 tracePlotHDIFile, rankPlotFile, ppcPlotFile,
+                 pairScatterDivFile)
 import Stat.PosteriorPredictive (posteriorPredictive)
 import Viz.Core (defaultConfig, OutputFormat (..), PlotConfig (..))
 
@@ -84,6 +85,14 @@ main = do
                  { plotWidth = 700, plotHeight = 280 }
   ppcPlotFile HTML "ppc.html" ppcCfg obsData yReps 50
   putStrLn "  → ppc.html (PP check, 観測 vs 予測 50 ドロー)"
+
+  -- ── Divergence overlay (Phase F5; Phase G4 で NUTS から自動取得予定) ──
+  -- 現状はモック divergent indices [10, 50, 200, 500] で描画機構を検証。
+  let divCfg = (defaultConfig "Pair plot — divergence overlay (mock)")
+                 { plotWidth = 500, plotHeight = 400 }
+      mockDiv = [10, 50, 200, 500]
+  pairScatterDivFile HTML "pair-div.html" divCfg "mu" "sigma" ch mockDiv
+  putStrLn "  → pair-div.html (4 mock divergent points)"
   putStrLn ""
 
   putStrLn "═══════════════════════════════════════════════════════════════"
