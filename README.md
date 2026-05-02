@@ -13,6 +13,7 @@ Usable both as a CLI tool and as a Haskell library.
 | **Nonlinear & regularized** | B-spline / Natural cubic / Kernel Ridge / Ridge / Lasso / Elastic Net / **RFF (Random Fourier Features)** |
 | **Multi-output models** | Multivariate LM / RRR / PLS / CCA / Multi-output GP |
 | **Time series** | AR(1) / Gaussian Process |
+| **Robust regression** | **Robust GP (StudentT / Cauchy likelihoods + IRLS)** |
 | **Design of Experiments (DOE)** | Full/fractional factorial / Latin square / RCBD / RSM (CCD/Box-Behnken) / D-optimal / ANOVA / power analysis |
 | **Multi-objective optimization** | NSGA-II / Pareto front / HV/IGD / Desirability / Bayesian MOO |
 | **Bayesian / HBM** | Free monad DSL / polymorphic interpretation / 27 distributions / automatic conjugacy detection |
@@ -48,6 +49,17 @@ let fit  = rffGP feats trainX trainY 0.15  -- σ_n=0.15
 ```
 At n=1500, **14× faster** than exact GP with matching accuracy
 (measured by `cabal run rff-demo`).
+
+### Robust GP (heavy-tailed likelihoods for outlier-resistance)
+```haskell
+import Model.GP        (GPParams (..))
+import Model.GPRobust
+let hp = GPParams 0.6 1.0 0.05 1.0
+    fit = fitGPRobust RBF hp (RCauchy 0.5) trainX trainY   -- MAP via IRLS
+    preds = predictGPRobust fit testX                       -- (mean, variance)
+```
+With 3 outliers injected, Gaussian GP gives RMSE=0.44 while Cauchy GP gives
+**0.019 (95.7% improvement)** (measured by `cabal run robust-gp-demo`).
 
 ### Data preprocessing (missing-value imputation, derivations, Parquet/JSON)
 ```haskell
@@ -395,6 +407,7 @@ Stat/
 Model/
   HBM.hs           -- polymorphic probabilistic programming DSL (AD gradients, Track-based dependency extraction)
   RFF.hs           -- Random Fourier Features (O(nD) kernel-method approximation)
+  GPRobust.hs      -- Robust GP (StudentT / Cauchy likelihoods + IRLS MAP)
 
 MCMC/
   Core.hs          -- Chain type and posterior statistics (usable standalone)

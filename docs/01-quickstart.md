@@ -194,6 +194,7 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | **RFF (Random Fourier Features)** | `Model.RFF` | `sampleRFFRBF`, `rffRidge`, `rffGP` |
 | Multivariate LR / RRR / PLS / CCA | `Model.MultiLM` / `Model.Multivariate` | |
 | Gaussian process / Multi-output GP | `Model.GP` / `Model.MultiGP` | `optimizeGP`, `fitGP` |
+| **Robust GP** (StudentT/Cauchy) | `Model.GPRobust` | `fitGPRobust`, `predictGPRobust` |
 
 ### Data I/O & preprocessing
 | Use case | Module | Key functions |

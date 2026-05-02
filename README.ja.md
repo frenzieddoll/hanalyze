@@ -13,6 +13,7 @@ CLI ツールとしても Haskell ライブラリとしても使えます。
 | **非線形・正則化** | B-spline / Natural cubic / Kernel Ridge / Ridge / Lasso / Elastic Net / **RFF (Random Fourier Features)** |
 | **多次元出力モデル** | Multivariate LM / RRR / PLS / CCA / Multi-output GP |
 | **時系列** | AR(1) / Gaussian Process |
+| **ロバスト回帰** | **Robust GP (StudentT / Cauchy 観測 + IRLS)** |
 | **実験計画法 (DOE)** | 完全/部分要因 / ラテン方格 / 乱塊 / RSM (CCD/Box-Behnken) / D-optimal / ANOVA / 検出力解析 |
 | **多目的最適化** | NSGA-II / Pareto front / HV/IGD / Desirability / Bayesian MOO |
 | **ベイズ統計 / HBM** | Free monad DSL / 多相解釈 / 27 種類の確率分布 / 共役自動検出 |
@@ -47,6 +48,17 @@ let fit  = rffGP feats trainX trainY 0.15  -- σ_n=0.15
     pred = predictRFFGP fit testX          -- (mean, variance) per test point
 ```
 n=1500 で厳密 GP と同精度のまま **14 倍高速** (`cabal run rff-demo` で実測)。
+
+### ロバスト GP (外れ値に強い観測尤度)
+```haskell
+import Model.GP        (GPParams (..))
+import Model.GPRobust
+let hp = GPParams 0.6 1.0 0.05 1.0
+    fit = fitGPRobust RBF hp (RCauchy 0.5) trainX trainY   -- IRLS で MAP
+    preds = predictGPRobust fit testX                       -- (mean, variance)
+```
+3 点の外れ値混入データで Gaussian GP の RMSE=0.44 → Cauchy GP で **0.019 (95.7% 改善)**
+(`cabal run robust-gp-demo` で実測)。
 
 ### データ前処理 (欠損値補完・派生列・Parquet/JSON)
 ```haskell
@@ -389,6 +401,7 @@ Stat/
 Model/
   HBM.hs           -- 多相確率的プログラミング DSL (AD 勾配・Track 依存抽出対応)
   RFF.hs           -- Random Fourier Features (カーネル法の O(nD) 近似)
+  GPRobust.hs      -- ロバスト GP (StudentT / Cauchy 観測 + IRLS MAP)
 
 MCMC/
   Core.hs          -- Chain 型・事後統計量 (独立して使用可)
