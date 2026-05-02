@@ -28,6 +28,7 @@ library
     Model.Spline
     Model.Kernel
     Model.Regularized
+    Model.RFF
     Model.MultiLM
     Model.Multivariate
     Model.MultiGP
@@ -211,6 +212,19 @@ executable gp-demo
   build-depends:
       base     >= 4.14 && < 5
     , hanalyze
+
+executable rff-demo
+  import:           warnings
+  main-is:          RFFDemo.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , hmatrix    >= 0.20 && < 0.21
+    , vector     >= 0.12 && < 0.14
+    , mwc-random >= 0.15 && < 0.16
+    , time       >= 1.9  && < 1.13
 
 executable gibbs-hbm-demo
   import:           warnings
