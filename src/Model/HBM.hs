@@ -60,6 +60,7 @@ module Model.HBM
   , runDeterministics
   , augmentChainWithDeterministic
   , nonCenteredNormal
+  , dirichlet
   , mvNormalLogDensity
     -- * 構造検査
   , Node (..)
@@ -902,6 +903,47 @@ nonCenteredNormal :: Num a => Text -> a -> a -> Model a a
 nonCenteredNormal name loc scale = do
   raw <- sample (name <> "_raw") (Normal 0 1)
   deterministic name (loc + scale * raw)
+
+-- | Dirichlet 分布 (PyMC `pm.Dirichlet` 相当) を stick-breaking で展開した
+-- latent ベクトル。
+--
+-- 引数:
+--   * @name@   : ベース名。展開後は @<name>_b<i>@ (i=0..K-2) が Beta 由来の
+--                棒折り変数、@<name>_<i>@ (i=0..K-1) が deterministic で
+--                記録された π 成分。
+--   * @alphas@ : 集中度ベクトル α = (α_1,...,α_K)。長さ K ≥ 2。
+--
+-- アルゴリズム:
+--   k = 1..K-1 で β_k ~ Beta(α_k, Σ_{j>k} α_j) を sample する。
+--   π_1 = β_1,  π_k = β_k Π_{j<k} (1 − β_j),  π_K = Π_{j<K} (1 − β_j)
+--
+-- これは π ~ Dirichlet(α) と厳密に等価なので、追加の Jacobian 補正は不要。
+-- HMC/NUTS では β_k が UnitIntervalT (logit) で自動的に
+-- (0,1) ↔ ℝ 変換されるので、シンプレックス制約は満たされる。
+dirichlet :: forall a. (Floating a, Ord a) => Text -> [a] -> Model a [a]
+dirichlet name alphas = do
+  let k = length alphas
+  if k < 2
+    then error "dirichlet: 長さ 2 未満のベクトルは未対応"
+    else do
+      let -- α_k+1..K の累積和 (右から)。長さ K (最後の要素は 0)
+          tailSums = scanr (+) 0 alphas
+      -- β_0..β_{K-2} を sample
+      betas <- mapM
+        (\i -> sample (name <> "_b" <> T.pack (show i))
+                      (Beta (alphas !! i) (tailSums !! (i + 1))))
+        [0 .. k - 2]
+      -- 残り棒の累積積 prods[i] = Π_{j<i} (1 - β_j),  prods[0] = 1
+      let prods = scanl (\acc b -> acc * (1 - b)) (1 :: a) betas
+          -- π_i = β_i * prods[i] for i < K-1, π_{K-1} = prods[K-1]
+          pis = [ if i < length betas
+                    then (betas !! i) * (prods !! i)
+                    else prods !! i
+                | i <- [0 .. k - 1] ]
+      -- 各 π_i を deterministic として保存し戻り値にも返す
+      mapM (\(i, p) ->
+              deterministic (name <> "_" <> T.pack (show i)) p)
+           (zip [0 :: Int ..] pis)
 
 -- ---------------------------------------------------------------------------
 -- 構造検査
