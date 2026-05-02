@@ -397,8 +397,10 @@ renderReport path cfg sections =
 
 buildHtml :: ReportConfig -> [ReportSection] -> Text
 buildHtml cfg sections =
-  let body = T.intercalate "\n" (zipWith (renderSection . sectionId) [0..] sections)
-      scripts = T.intercalate "\n" (zipWith (sectionScript . sectionId) [0..] sections)
+  let pairs   = zip (map sectionId [0..]) sections
+      body    = T.intercalate "\n" [ renderSection sid s | (sid, s) <- pairs ]
+      scripts = T.intercalate "\n" [ sectionScript sid s | (sid, s) <- pairs ]
+      navBar  = mkNavBar cfg pairs
   in T.unlines
        [ "<!DOCTYPE html>"
        , "<html lang=\"ja\">"
@@ -413,20 +415,55 @@ buildHtml cfg sections =
        , "<style>" <> css <> "</style>"
        , "</head>"
        , "<body>"
-       , "<header><h1>" <> rcTitle cfg <> "</h1>"
-       , if T.null (rcSubtitle cfg) then ""
-         else "<div class=\"subtitle\">" <> rcSubtitle cfg <> "</div>"
-       , "</header>"
+       , navBar
        , "<main>"
        , body
        , "</main>"
        , "<script>"
        , "mermaid.initialize({ startOnLoad: true, theme: 'default' });"
        , scripts
+       , "document.querySelectorAll('.nav-link').forEach(a => {"
+       , "  a.addEventListener('click', e => {"
+       , "    const target = document.querySelector(a.getAttribute('href'));"
+       , "    if (target) { e.preventDefault();"
+       , "      target.scrollIntoView({ behavior: 'smooth' }); }"
+       , "  });"
+       , "});"
        , "</script>"
        , "</body>"
        , "</html>"
        ]
+
+-- | ナビバーを構築。各 section のタイトルから生成。
+mkNavBar :: ReportConfig -> [(Text, ReportSection)] -> Text
+mkNavBar cfg pairs =
+  let links = [ "  <a class=\"nav-link\" href=\"#" <> sid <> "\">"
+                <> shortTitle s <> "</a>"
+              | (sid, s) <- pairs
+              , not (isInvisible s) ]
+  in T.unlines $
+       [ "<nav>"
+       , "  <h1>&#128202; " <> rcTitle cfg <> "</h1>"
+       ] ++ links ++ [ "</nav>" ]
+  where
+    isInvisible (SecHtml _ _) = False
+    isInvisible _             = False
+    shortTitle s = case s of
+      SecDataOverview {}     -> "Data"
+      SecModelOverview t _ _ -> if T.null t then "Model" else t
+      SecCoefficients {}     -> "Coefficients"
+      SecFitScatter {}       -> "Scatter"
+      SecResiduals {}        -> "Residuals"
+      SecBarChart t _        -> if T.null t then "Chart" else t
+      SecVega t _            -> if T.null t then "Chart" else t
+      SecMermaid _           -> "Graph"
+      SecTable t _ _         -> if T.null t then "Table" else t
+      SecKeyValue t _        -> if T.null t then "Stats" else t
+      SecMarkdown t _        -> if T.null t then "Notes" else t
+      SecHtml t _            -> if T.null t then "" else t
+      SecInteractiveLM t _ _ _ _ _ _ -> if T.null t then "Predict" else t
+      SecInteractiveMulti t _        -> if T.null t then "Predict" else t
+      SecCollapsible t _ _   -> if T.null t then "Section" else t
 
 sectionId :: Int -> Text
 sectionId i = "sec_" <> T.pack (show i)
@@ -1133,45 +1170,55 @@ showD4 d = T.pack (showFFloat (Just 4) d "")
 css :: Text
 css = T.unlines
   [ "* { box-sizing: border-box; margin: 0; padding: 0; }"
-  , "body { font-family: 'Segoe UI', -apple-system, sans-serif; background: #f0f2f5; color: #333; }"
-  , "header { background: #2c3e50; color: #ecf0f1; padding: 18px 30px; }"
-  , "header h1 { font-size: 1.2em; font-weight: 600; }"
-  , ".subtitle { color: #bdc3c7; font-size: .85em; margin-top: 4px; }"
-  , "main { max-width: 1100px; margin: 0 auto; padding: 30px 20px; }"
-  , "section { background: white; border-radius: 10px; padding: 24px;"
-  , "          margin-bottom: 22px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }"
-  , "h2 { font-size: 1.05em; color: #2c3e50; margin-bottom: 14px;"
-  , "     border-bottom: 2px solid #e8ecf0; padding-bottom: 6px; }"
-  , "table { width: 100%; border-collapse: collapse; font-size: .9em; }"
+  , "body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f2f5;"
+  , "       color: #333; line-height: 1.6; }"
+  , "nav { position: sticky; top: 0; z-index: 100; background: #1e3a5c;"
+  , "      padding: 10px 28px; display: flex; gap: 18px; align-items: center;"
+  , "      box-shadow: 0 2px 6px rgba(0,0,0,.25); flex-wrap: wrap; }"
+  , "nav h1 { color: #ecf0f1; font-size: 1em; font-weight: 600; flex: 1; min-width: 250px; }"
+  , ".nav-link { color: #9ab; text-decoration: none; font-size: .82em; white-space: nowrap; }"
+  , ".nav-link:hover { color: #fff; }"
+  , "main { max-width: 1160px; margin: 0 auto; padding: 32px 20px; }"
+  , "section { background: white; border-radius: 12px; padding: 26px 28px;"
+  , "          margin-bottom: 28px; box-shadow: 0 2px 10px rgba(0,0,0,.07); }"
+  , "h2 { font-size: 1.05em; font-weight: 700; color: #1e3a5c; margin-bottom: 18px;"
+  , "     border-bottom: 2px solid #e4e9f0; padding-bottom: 8px; }"
+  , "h3 { font-size: .92em; font-weight: 600; color: #2a5298; margin: 18px 0 10px; }"
+  , "table { width: 100%; border-collapse: collapse; font-size: .88em; margin-bottom: 8px; }"
   , "table.narrow { max-width: 480px; }"
-  , "th { background: #f0f2f5; text-align: right; padding: 8px 14px;"
-  , "     font-weight: 600; color: #555; }"
-  , "th:first-child { text-align: left; }"
-  , "td { padding: 7px 14px; border-bottom: 1px solid #f0f2f5; text-align: right; }"
-  , "td:first-child { text-align: left; font-family: monospace; }"
-  , ".num { font-family: monospace; }"
+  , "thead tr { background: #f0f4f8; }"
+  , "th { padding: 8px 14px; text-align: left; font-weight: 600; color: #444; }"
+  , "td { padding: 7px 14px; border-bottom: 1px solid #f0f2f5; font-family: monospace; }"
+  , "td:first-child { font-family: inherit; font-weight: 500; }"
   , "tr:last-child td { border-bottom: none; }"
   , "tfoot td { border-top: 2px solid #ddd; }"
-  , ".vl-wrap { overflow-x: auto; }"
-  , ".kv { display: flex; flex-wrap: wrap; gap: 12px 20px; }"
-  , ".kv > div { display: flex; flex-direction: column; min-width: 140px; }"
-  , ".kv .k { font-size: .75em; color: #888; text-transform: uppercase; }"
-  , ".kv .v { font-size: 1.1em; font-weight: 600; color: #2c3e50; margin-top: 2px; }"
-  , ".mermaid { text-align: center; margin: 14px 0; }"
+  , ".num { font-family: monospace; }"
+  , ".vl-wrap { overflow-x: auto; margin-bottom: 8px; }"
+  , ".kv { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }"
+  , ".kv > div { background: #f7f9fc; border: 1px solid #e4e9f0; border-radius: 10px;"
+  , "            padding: 12px 16px; min-width: 140px; text-align: center;"
+  , "            display: flex; flex-direction: column; }"
+  , ".kv .k { font-size: .7em; color: #888; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }"
+  , ".kv .v { font-size: 1.2em; font-weight: 700; color: #1e3a5c; }"
+  , ".mermaid { text-align: center; margin: 14px 0;"
+  , "           background: #f7fafc; border-radius: 8px; padding: 24px; }"
   , "p { line-height: 1.6; color: #444; font-size: .92em; }"
-  , ".interactive-controls { margin-bottom: 16px; padding: 14px; background: #f8f9fa; border-radius: 8px; }"
-  , ".interactive-controls input[type='range'] { width: 360px; vertical-align: middle; margin: 0 10px; }"
-  , ".interactive-controls label { display: block; margin-bottom: 8px; }"
+  , ".interactive-controls { margin-bottom: 16px; padding: 16px 18px;"
+  , "                         background: #f7f9fc; border: 1px solid #e4e9f0;"
+  , "                         border-radius: 10px; }"
+  , ".interactive-controls input[type='range'] { width: 360px; vertical-align: middle;"
+  , "                                            margin: 0 10px; accent-color: #1e3a5c; }"
+  , ".interactive-controls label { display: block; margin-bottom: 8px; font-size: .9em; }"
   , ".pred-readout { font-size: 1em; }"
-  , ".pred-readout strong { color: #2c3e50; }"
+  , ".pred-readout strong { color: #1e3a5c; }"
   , ".band-readout { color: #888; font-size: .9em; }"
   , "details { margin: 8px 0; }"
-  , "details summary { cursor: pointer; padding: 8px 12px;"
-  , "                  background: #eef2f7; border-radius: 6px;"
-  , "                  font-weight: 600; color: #2c3e50; user-select: none; }"
+  , "details summary { cursor: pointer; padding: 10px 14px;"
+  , "                  background: #f0f4f8; border-radius: 8px;"
+  , "                  font-weight: 600; color: #1e3a5c; user-select: none; }"
   , "details summary h2 { display: inline; font-size: 1.05em; border: none;"
-  , "                     padding: 0; margin: 0; }"
-  , "details[open] summary { background: #dde3eb; }"
+  , "                     padding: 0; margin: 0; color: inherit; }"
+  , "details[open] summary { background: #dce6f0; }"
   , "details summary::-webkit-details-marker { color: #888; }"
   , ".collapsible-wrap { padding: 0; background: transparent; box-shadow: none; }"
   , ".collapsible-body { padding: 14px 0 0 0; }"
