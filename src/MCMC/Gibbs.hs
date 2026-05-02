@@ -159,6 +159,7 @@ distParams (HalfCauchy s)     = [s]
 distParams (LogNormal mu s)   = [mu, s]
 distParams (Bernoulli p)      = [p]
 distParams (Categorical ps)   = ps
+distParams (Mixture ws _)     = ws  -- 共役検出には使えない (重みのみ)
 
 -- 各潜在変数が Observe ノードのどの (obsIndex, slotIndex) に影響するかを検出。
 detectObsDeps :: ModelP r -> [Text] -> Map Text [(Int, Int)]

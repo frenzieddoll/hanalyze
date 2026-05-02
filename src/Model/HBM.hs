@@ -142,6 +142,9 @@ data Distribution a
   | LogNormal   a a       -- ^ LogNormal(μ log-mean, σ log-sd) — support: x > 0
   | Bernoulli   a         -- ^ Bernoulli(p) — observed: 0 or 1
   | Categorical [a]       -- ^ Categorical(probs) — observed: 0..K-1
+  | Mixture [a] [Distribution a]
+    -- ^ Mixture(weights, components) — log p(x) = logsumexp(log w_k + log p_k(x))
+    -- 重みは正の値で渡し、内部で自動正規化される。
   deriving (Show, Functor)
 
 distName :: Distribution a -> Text
@@ -159,6 +162,7 @@ distName HalfCauchy{}  = "HalfCauchy"
 distName LogNormal{}   = "LogNormal"
 distName Bernoulli{}   = "Bernoulli"
 distName Categorical{} = "Categorical"
+distName Mixture{}     = "Mixture"
 
 -- | サンプル値 (型 @a@) に対する事前分布の対数密度。
 logDensity :: (Floating a, Ord a) => Distribution a -> a -> a
@@ -228,6 +232,14 @@ logDensity (Bernoulli p) _
   | p <= 0 || p >= 1 = negInf
   | otherwise        = 0  -- 構造のみ (離散なので連続 prior 評価には使わない)
 logDensity (Categorical _) _ = 0  -- 同上
+logDensity (Mixture ws comps) x
+  | null ws || length ws /= length comps = negInf
+  | otherwise =
+      let total      = sum ws
+          logTotal   = log total
+          -- log(w_k / Σw) + log p_k(x)
+          logTerms   = zipWith (\w d -> log w - logTotal + logDensity d x) ws comps
+      in logSumExpA logTerms
 
 -- | 観測値 (Double 定数) に対する尤度の対数密度。
 -- 観測は @[Double]@ で渡されるので、@Floating a@ 制約のみで計算可能。
@@ -332,9 +344,25 @@ logDensityObs (Categorical probs) y =
          in if pk <= 0 || total <= 0
               then negInf
               else log pk - log total
+logDensityObs (Mixture ws comps) y
+  | null ws || length ws /= length comps = negInf
+  | otherwise =
+      let total    = sum ws
+          logTotal = log total
+          logTerms = zipWith (\w d -> log w - logTotal + logDensityObs d y) ws comps
+      in logSumExpA logTerms
 
 negInf :: Floating a => a
 negInf = -1/0
+
+-- | 多相 log-sum-exp。AD でも Track でも使えるよう Floating + Ord で書く。
+-- @logSumExpA xs = log (Σ exp x)@ を最大値シフトで安定化。
+logSumExpA :: (Floating a, Ord a) => [a] -> a
+logSumExpA []  = negInf
+logSumExpA [x] = x
+logSumExpA xs  =
+  let m = maximum xs
+  in m + log (sum (map (\x -> exp (x - m)) xs))
 
 -- ---------------------------------------------------------------------------
 -- 分布からのサンプリング (事前/事後予測用)
@@ -395,6 +423,19 @@ sampleDist (Categorical probs) gen = do
         let acc' = acc + p / total
         in if u < acc' then 0 else 1 + go acc' ps
   return (go 0 probs)
+sampleDist (Mixture ws comps) gen
+  | null ws || length ws /= length comps = return (0/0)  -- NaN: 不正
+  | otherwise = do
+      -- 1) 重みに比例して成分 k を選ぶ
+      u <- MWCBase.uniform gen :: IO Double
+      let total = sum ws
+          pickIdx _ [] = length ws - 1
+          pickIdx acc (w:rest) =
+            let acc' = acc + w / total
+            in if u < acc' then 0 else 1 + pickIdx acc' rest
+          k = pickIdx 0 ws
+      -- 2) 選んだ成分からサンプリング
+      sampleDist (comps !! k) gen
 
 -- | Knuth のアルゴリズムで Poisson(λ) サンプル。λ < 30 程度なら十分高速。
 samplePoissonKnuth :: Double -> GenIO -> IO Double
@@ -691,6 +732,7 @@ getTransforms m = Map.fromList
     transformFor "Uniform"     = UnconstrainedT  -- 注: 真の制約変換は logit-on-(lo,hi) だが現状は未実装
     transformFor "Bernoulli"   = UnitIntervalT   -- p ∈ (0,1)
     transformFor "Categorical" = UnconstrainedT  -- ベクトル制約は未対応 (Dirichlet で別途)
+    transformFor "Mixture"     = UnconstrainedT  -- 混合分布の潜在は通常 unconstrained
     transformFor _             = UnconstrainedT
 
 -- | unconstrained 空間における log-joint (Jacobian 補正込み)。
@@ -815,6 +857,7 @@ distDepsT (HalfCauchy s)     = trackDeps s
 distDepsT (LogNormal mu s)   = trackDeps mu <> trackDeps s
 distDepsT (Bernoulli p)      = trackDeps p
 distDepsT (Categorical ps)   = mconcat (map trackDeps ps)
+distDepsT (Mixture ws ds)    = mconcat (map trackDeps ws) <> mconcat (map distDepsT ds)
 
 -- | Track でモデルを評価する (log joint も依存集合付きで計算)。
 runTrack :: forall r. ModelP r -> Map Text Track -> Track
