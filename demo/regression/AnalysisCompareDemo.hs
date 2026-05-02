@@ -462,6 +462,15 @@ writeRBGP df xs ys gridX res params = do
                 , ("RMSE", T.pack (printf "%.4f" rmseV))
                 , ("最大絶対残差", T.pack (printf "%.4f" maxAbsR))
                 ]
+            , RB.secCard "ハイパーパラメータ (周辺尤度最大化で推定)"
+                [ RB.secCoefficients
+                    [ ("ℓ (length scale)", GP.gpLengthScale params)
+                    , ("σ_f² (signal variance)", GP.gpSignalVar params)
+                    , ("σ_n² (noise variance)", GP.gpNoiseVar params)
+                    ]
+                    (Just ("log p(y|X,θ)",
+                           GP.logMarginalLikelihood xs ys GP.RBF params))
+                ]
             , RB.secCard "残差プロット"
                 [ RB.secResiduals yhat resid ]
             ]
