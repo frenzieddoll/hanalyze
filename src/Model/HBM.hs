@@ -67,6 +67,7 @@ module Model.HBM
   , mvNormalLatent
   , mvNormalLogDensity
   , multinomialLogDensity
+  , lkjCorrCholesky
     -- * 構造検査
   , Node (..)
   , NodeKind (..)
@@ -1078,6 +1079,58 @@ mvNormalLatent name muVec covMatrix = do
   mapM
     (\(i, x) -> deterministic (name <> "_" <> T.pack (show i)) x)
     (zip [0 :: Int ..] xs)
+
+-- | LKJ 相関行列の Cholesky factor (PyMC `LKJCholeskyCov` 相当)。
+--
+-- LKJ(η) 事前: p(R) ∝ |R|^(η-1)。η = 1 で uniform、η > 1 で I に集中。
+--
+-- 実装は canonical partial correlations (CPC) 法:
+--   z_ij ~ scaled Beta(α_i, α_i) on (-1, 1),  α_i = η + (K - i - 1) / 2
+--     (i = 1..K-1, j = 0..i-1)
+--
+-- 各 z_ij は @<name>_pc<i>_<j>@ (Beta latent in (0,1)、内部で 2u-1 に変換)
+-- として保存。Cholesky factor の各要素は派生量 @<name>_L<i>_<j>@。
+--
+-- 戻り値: K×K 下三角行列 L (R = L Lᵀ となる相関の Cholesky)。
+-- 対角は √(1 - Σ z_{i,k}²)、対角下は z_ij × √(Π_{k<j}(1-z_{i,k}²))。
+lkjCorrCholesky :: forall a. (Floating a, Ord a)
+                => Text -> Int -> a -> Model a [[a]]
+lkjCorrCholesky name k eta
+  | k < 2     = error "lkjCorrCholesky: dimension must be >= 2"
+  | otherwise = do
+      -- 各 (i, j) で 1 <= j < i <= K-1 の partial correlation を sample
+      let pcIndices = [(i, j) | i <- [1 .. k - 1], j <- [0 .. i - 1]]
+      pcs <- mapM
+        (\(i, j) -> do
+            let alpha = eta + fromIntegral (k - i - 1) / 2
+                tag   = T.pack (show i) <> "_" <> T.pack (show j)
+            u <- sample (name <> "_u" <> tag) (Beta alpha alpha)
+            deterministic (name <> "_pc" <> tag) (2 * u - 1))
+        pcIndices
+      -- (i,j) → z_ij マップ
+      let pcMap = zip pcIndices pcs
+          lookupPC i j = head [v | ((ii, jj), v) <- pcMap, ii == i, jj == j]
+      -- Cholesky factor を構築 (下三角)
+      let lRow i =
+            [ if j > i then 0
+              else if i == 0 && j == 0 then 1
+              else if j == i  -- 対角
+                   then sqrt (1 - sum [ let z = lookupPC i kk
+                                        in z * z | kk <- [0 .. i - 1] ])
+              else            -- 対角下 j < i
+                let z       = lookupPC i j
+                    factor2 = product [ let z' = lookupPC i kk
+                                        in 1 - z' * z' | kk <- [0 .. j - 1] ]
+                in z * sqrt factor2
+            | j <- [0 .. k - 1] ]
+          lMat = [lRow i | i <- [0 .. k - 1]]
+      -- L 各要素を deterministic として保存
+      _ <- mapM
+        (\(i, j) ->
+          deterministic (name <> "_L" <> T.pack (show i) <> "_" <> T.pack (show j))
+                        ((lMat !! i) !! j))
+        [(i, j) | i <- [0 .. k - 1], j <- [0 .. i]]
+      return lMat
 
 -- | 非中心化 (non-centered) 正規分布。
 --
