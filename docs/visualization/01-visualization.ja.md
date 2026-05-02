@@ -1,6 +1,6 @@
 # 可視化ガイド (Viz.*)
 
-> 🌐 [English](07-visualization.md) | **日本語**
+> 🌐 [English](01-visualization.md) | **日本語**
 
 > 関連デモ:
 > - [`hbm-example`](../demo/HBMExample.hs) — `Viz.Report` (KDE/トレース/DAG/ペア散布)
