@@ -11,6 +11,8 @@ import System.Random.MWC (createSystemRandom)
 import Optim.NSGA   (Solution (..), NSGAConfig (..), defaultNSGAConfig,
                      nsga2)
 import Optim.Pareto (hypervolume, igd)
+import Viz.Pareto   (paretoCompareFile, parallelCoordinatesFile)
+import Viz.Core     (defaultConfig, OutputFormat (..), PlotConfig (..))
 
 -- ---------------------------------------------------------------------------
 -- ZDT1 (Zitzler-Deb-Thiele 2000):
@@ -87,6 +89,24 @@ main = do
          (show (round2 (head (sortBy12 objs2))))
   printf "  端点 (f2 最小): %s\n"
          (show (round2 (last (sortBy12 objs2))))
+  putStrLn ""
+
+  -- ── 可視化 ──
+  let cmpCfg t = (defaultConfig t)
+                   { plotWidth = 600, plotHeight = 400 }
+  paretoCompareFile HTML "nsga-schaffer.html"
+    (cmpCfg "Schaffer — NSGA-II 推定 vs 真の Pareto front")
+    (schafferTrueFront 100) front1
+  paretoCompareFile HTML "nsga-zdt1.html"
+    (cmpCfg "ZDT1 (10D) — NSGA-II 推定 vs 真の Pareto front")
+    (zdt1TrueFront 200) front2
+  putStrLn "  → nsga-schaffer.html / nsga-zdt1.html"
+
+  parallelCoordinatesFile HTML "nsga-zdt1-parallel.html"
+    ((defaultConfig "ZDT1 final population — parallel coordinates")
+       { plotWidth = 700, plotHeight = 350 })
+    ["f1", "f2"] front2
+  putStrLn "  → nsga-zdt1-parallel.html (並行座標)"
   putStrLn ""
 
   putStrLn "═══════════════════════════════════════════════════════════════"
