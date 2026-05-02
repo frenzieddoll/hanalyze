@@ -44,6 +44,9 @@ module Viz.ReportBuilder
   , secMarkdown
   , secHtml
   , secCollapsible
+    -- * Markdown ファイル読込 (appendix 用)
+  , secAppendixFromMd
+  , renderSimpleMarkdown
     -- * MCMC / 事後分布関連 (Phase F)
   , secMCMCDiagnostics
   , secMCMCDiagnosticsMulti
@@ -202,6 +205,100 @@ secHtml = SecHtml
 -- | 折りたたみ可能グループ。
 secCollapsible :: Text -> Bool -> [ReportSection] -> ReportSection
 secCollapsible = SecCollapsible
+
+-- ---------------------------------------------------------------------------
+-- Markdown appendix
+-- ---------------------------------------------------------------------------
+
+-- | 指定の md ファイルを読み込み、簡易 markdown パーサで HTML 化して
+-- appendix セクションとして返す。
+--
+-- サポートする markdown 機能:
+-- - 見出し: @# H1@, @## H2@, @### H3@
+-- - 段落: 空行で区切られた連続行
+-- - 箇条書き: @- item@
+-- - インライン: @**bold**@, @*italic*@, @\`code\`@
+-- - リンク: @[text](url)@
+-- - インラインコード周辺は等幅フォント
+secAppendixFromMd :: Text -> FilePath -> IO ReportSection
+secAppendixFromMd title path = do
+  contents <- TIO.readFile path
+  let html = renderSimpleMarkdown contents
+  return (SecHtml title $ "<section class=\"appendix-md\"><h2>" <> title
+                          <> "</h2><div class=\"md-body\">" <> html
+                          <> "</div></section>")
+
+-- | 簡易 markdown → HTML 変換。フル機能ではない。
+renderSimpleMarkdown :: Text -> Text
+renderSimpleMarkdown txt =
+  let lns      = T.lines txt
+      blocks   = groupBlocks lns
+      htmlBlks = map renderBlock blocks
+  in T.intercalate "\n" htmlBlks
+
+-- | 行群を「ブロック」に分割。空行で区切る。
+groupBlocks :: [Text] -> [[Text]]
+groupBlocks = filter (not . all T.null) . splitOn T.null
+  where
+    splitOn _ [] = []
+    splitOn p xs =
+      let (chunk, rest) = break p xs
+          rest' = dropWhile p rest
+      in chunk : splitOn p rest'
+
+-- | ブロック (連続行のリスト) を HTML 化。
+renderBlock :: [Text] -> Text
+renderBlock []       = ""
+renderBlock ls@(l:_)
+  | "# "  `T.isPrefixOf` l =
+      "<h3>"  <> renderInline (T.drop 2 l) <> "</h3>"
+  | "## " `T.isPrefixOf` l =
+      "<h4>"  <> renderInline (T.drop 3 l) <> "</h4>"
+  | "### " `T.isPrefixOf` l =
+      "<h5>" <> renderInline (T.drop 4 l) <> "</h5>"
+  | all isListLine ls =
+      "<ul>" <> T.intercalate "\n"
+                 [ "<li>" <> renderInline (T.drop 2 li) <> "</li>"
+                 | li <- ls
+                 , let li' = T.stripStart li
+                 , let _ = li' ]  -- ダミー (li 自体を使う)
+             <> "</ul>"
+  | otherwise =
+      "<p>" <> renderInline (T.intercalate " " ls) <> "</p>"
+  where
+    isListLine x = "- " `T.isPrefixOf` T.stripStart x
+
+-- | インラインフォーマット: bold/italic/code/link を順に置換。
+renderInline :: Text -> Text
+renderInline = applyLinks . applyCode . applyBold . applyItalic
+  where
+    applyBold t = pairReplace "**" "<strong>" "</strong>" t
+    applyItalic t = pairReplace "*"  "<em>"     "</em>"     t
+    applyCode t = pairReplace "`"  "<code>"   "</code>"   t
+    -- [text](url) → <a href="url">text</a>
+    applyLinks t = case T.breakOn "[" t of
+      (pre, "")   -> pre
+      (pre, rest) ->
+        case T.breakOn "](" (T.drop 1 rest) of
+          (lbl, "") -> pre <> rest
+          (lbl, rest1) ->
+            case T.breakOn ")" (T.drop 2 rest1) of
+              (url, "") -> pre <> rest
+              (url, rest2) ->
+                pre <> "<a href=\"" <> url <> "\">" <> lbl <> "</a>"
+                    <> applyLinks (T.drop 1 rest2)
+
+-- | 開始/終了マーカーが交互に対になるとして置換。簡易版。
+pairReplace :: Text -> Text -> Text -> Text -> Text
+pairReplace marker startTag endTag txt = go txt True
+  where
+    go t inOpen =
+      case T.breakOn marker t of
+        (pre, "")   -> pre
+        (pre, rest) ->
+          let tag  = if inOpen then startTag else endTag
+              rest' = T.drop (T.length marker) rest
+          in pre <> tag <> go rest' (not inOpen)
 
 -- ---------------------------------------------------------------------------
 -- MCMC セクションビルダ (Viz.MCMC のラッパ)
@@ -1102,4 +1199,15 @@ css = T.unlines
   , "@media (max-width: 700px) {"
   , "  .interactive-multi { grid-template-columns: 1fr; }"
   , "}"
+  , ".appendix-md { background: #fafbfc; }"
+  , ".md-body h3 { font-size: 1em; color: #2c3e50; margin: 12px 0 6px; }"
+  , ".md-body h4 { font-size: .95em; color: #34495e; margin: 10px 0 4px; }"
+  , ".md-body h5 { font-size: .9em; color: #555; margin: 8px 0 4px; }"
+  , ".md-body p { margin: 8px 0; }"
+  , ".md-body ul { margin: 6px 0 6px 20px; }"
+  , ".md-body code { background: #eef2f7; padding: 1px 5px; border-radius: 3px;"
+  , "                font-family: monospace; font-size: .92em; }"
+  , ".md-body strong { color: #2c3e50; }"
+  , ".md-body a { color: #2980b9; text-decoration: none; }"
+  , ".md-body a:hover { text-decoration: underline; }"
   ]

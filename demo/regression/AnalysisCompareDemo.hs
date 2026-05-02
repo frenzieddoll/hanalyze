@@ -116,6 +116,8 @@ writeARLM df = do
 
 writeRBLM :: DataFrame -> V.Vector Double -> V.Vector Double -> IO ()
 writeRBLM df xVec yVec = do
+  appendixSec <- RB.secAppendixFromMd "Appendix: model principle"
+                   "docs/principles/lm.ja.md"
   case LM.fitPolyWithSmooth (Core.CI 0.95) 100 df "x" "y" of
     Just (fit, sf) -> do
       let beta   = coeffList fit
@@ -159,8 +161,7 @@ writeRBLM df xVec yVec = do
                 , RB.secFitScatter "x" "y" xs ys (Just smooth)
                 , RB.secResiduals fitted resid
                 ]
-            , RB.secMarkdown "About"
-                "OLS minimizes RSS. The 95% band is the confidence interval of the mean response."
+            , appendixSec
             ]
       RB.renderReport "trash/cmp_lm_RB.html" cfg sections
       putStrLn "  RB: trash/cmp_lm_RB.html"
@@ -210,6 +211,8 @@ writeARGLM df xCol yCol = do
 writeRBGLM :: DataFrame -> V.Vector Double -> V.Vector Double
            -> T.Text -> T.Text -> IO ()
 writeRBGLM df xVec yVec xCol yCol = do
+  appendixSec <- RB.secAppendixFromMd "Appendix: model principle"
+                   "docs/principles/glm.ja.md"
   case GLM.fitGLMWithSmooth GLM.Poisson GLM.Log [(xCol, 1)]
                               Core.NoBand 100 df yCol of
     Just (fit, mSmooth) -> do
@@ -257,8 +260,7 @@ writeRBGLM df xVec yVec xCol yCol = do
                 , RB.secFitScatter xCol yCol xs ys (Just smooth)
                 , RB.secResiduals fitted resid
                 ]
-            , RB.secMarkdown "About"
-                "Poisson GLM with log link models the rate λ = exp(β₀ + β₁ x). IRLS reweights observations by their fitted variance."
+            , appendixSec
             ]
       RB.renderReport "trash/cmp_glm_RB.html" cfg sections
       putStrLn "  RB: trash/cmp_glm_RB.html"
@@ -295,6 +297,8 @@ writeARGLMM df gr = do
 
 writeRBGLMM :: DataFrame -> GLMM.GLMMResult -> IO ()
 writeRBGLMM df gr = do
+  appendixSec <- RB.secAppendixFromMd "Appendix: model principle"
+                   "docs/principles/glmm.ja.md"
   let fixedB = coeffList (GLMM.glmmFixed gr)
       coeffs = zip ["β₀ (intercept)", "β₁ (x)"] fixedB
       blups  = zip (V.toList (GLMM.glmmGroups gr))
@@ -323,8 +327,7 @@ writeRBGLMM df gr = do
                 [ [g, T.pack (printf "%+.4f" u)] | (g, u) <- blups ]
             , RB.secResiduals fitted resid
             ]
-        , RB.secMarkdown "About"
-            "LME fits fixed effects β (population-level) and random effects u_j (group-specific intercepts) jointly via exact EM. The ICC measures how much variation is between vs within groups."
+        , appendixSec
         ]
   RB.renderReport "trash/cmp_glmm_RB.html" cfg sections
   putStrLn "  RB: trash/cmp_glmm_RB.html"
@@ -376,6 +379,8 @@ writeARGP df xs ys res model params = do
 writeRBGP :: DataFrame -> [Double] -> [Double] -> [Double]
           -> GP.GPResult -> GP.GPParams -> IO ()
 writeRBGP df xs ys gridX res params = do
+  appendixSec <- RB.secAppendixFromMd "Appendix: model principle"
+                   "docs/principles/gp.ja.md"
   let smooth = RB.SmoothCurve gridX (GP.gpMean res)
                               (GP.gpLower res) (GP.gpUpper res)
       xVec = V.fromList xs
@@ -400,8 +405,7 @@ writeRBGP df xs ys gridX res params = do
                 ]
             , RB.secFitScatter "x" "y" xs ys (Just smooth)
             ]
-        , RB.secMarkdown "About"
-            "GP regression with RBF kernel. Shaded band is the 95% credible interval (mean ± 2σ). Hyperparameters are optimized by maximizing the log marginal likelihood."
+        , appendixSec
         ]
   RB.renderReport "trash/cmp_gp_RB.html" cfg sections
   putStrLn "  RB: trash/cmp_gp_RB.html"
@@ -501,6 +505,8 @@ mkPosteriorRows chain =
 
 writeRBHBM :: DataFrame -> [Double] -> [Double] -> MCMCcore.Chain -> IO ()
 writeRBHBM df xs ys chain = do
+  appendixSec <- RB.secAppendixFromMd "Appendix: model principle"
+                   "docs/principles/hbm.ja.md"
   let aMean = maybe 0 id (MCMCcore.posteriorMean "alpha" chain)
       bMean = maybe 0 id (MCMCcore.posteriorMean "beta"  chain)
       sMean = maybe 0 id (MCMCcore.posteriorMean "sigma" chain)
@@ -545,8 +551,7 @@ writeRBHBM df xs ys chain = do
             , RB.secMCMCAutocorr "Autocorrelation" 40 params chain
             , RB.secMCMCPair "Pair scatter (α, β)" "alpha" "beta" chain
             ]
-        , RB.secMarkdown "About"
-            "Bayesian linear regression with NUTS. Posterior summary shows credible intervals (2.5%/97.5%) and ESS. The shaded band on the scatter is the 95% posterior credible interval. The pair scatter visualizes the joint posterior of (α, β)."
+        , appendixSec
         ]
   RB.renderReport "trash/cmp_hbm_RB.html" cfg sections
   putStrLn "  RB: trash/cmp_hbm_RB.html"
