@@ -12,7 +12,8 @@ import System.Random.MWC (createSystemRandom)
 import MCMC.NUTS (nuts, nutsChains, defaultNUTSConfig, NUTSConfig (..))
 import Model.HBM (ModelP, sample, observe, Distribution (..))
 import Viz.MCMC (printPosteriorSummary, posteriorSummaryFile,
-                 tracePlotHDIFile, rankPlotFile)
+                 tracePlotHDIFile, rankPlotFile, ppcPlotFile)
+import Stat.PosteriorPredictive (posteriorPredictive)
 import Viz.Core (defaultConfig, OutputFormat (..), PlotConfig (..))
 
 cfg :: NUTSConfig
@@ -22,13 +23,16 @@ cfg = defaultNUTSConfig
         , nutsStepSize   = 0.1
         }
 
+obsData :: [Double]
+obsData =
+  [1.2, 0.9, 1.4, 0.7, 1.1, 1.0, 1.3, 0.95, 1.05, 1.15,
+   0.85, 1.25, 0.95, 1.18, 1.02]
+
 simpleModel :: ModelP ()
 simpleModel = do
   mu  <- sample "mu"    (Normal 0 5)
   sig <- sample "sigma" (HalfNormal 2)
-  observe "y" (Normal mu sig)
-    [1.2, 0.9, 1.4, 0.7, 1.1, 1.0, 1.3, 0.95, 1.05, 1.15,
-     0.85, 1.25, 0.95, 1.18, 1.02]
+  observe "y" (Normal mu sig) obsData
 
 main :: IO ()
 main = do
@@ -72,6 +76,14 @@ main = do
                   { plotWidth = 700, plotHeight = 100 }
   rankPlotFile HTML "rank.html" rankCfg 20 ["mu", "sigma"] chs
   putStrLn "  → rank.html (Rank plot, 4 chains)"
+
+  -- ── Posterior predictive check ──
+  preds <- posteriorPredictive simpleModel ch gen
+  let yReps = [Map.findWithDefault [] "y" m | m <- preds]
+  let ppcCfg = (defaultConfig "Posterior predictive check (y)")
+                 { plotWidth = 700, plotHeight = 280 }
+  ppcPlotFile HTML "ppc.html" ppcCfg obsData yReps 50
+  putStrLn "  → ppc.html (PP check, 観測 vs 予測 50 ドロー)"
   putStrLn ""
 
   putStrLn "═══════════════════════════════════════════════════════════════"

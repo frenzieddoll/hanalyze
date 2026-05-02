@@ -20,6 +20,8 @@ module Viz.MCMC
   , energyPlot, energyPlotFile
     -- * Rank plot (多チェーン収束診断)
   , rankPlot, rankPlotFile
+    -- * Posterior predictive check (PyMC `pp_check` 相当)
+  , ppcPlot, ppcPlotFile
     -- * Posterior summary table (`az.summary` 相当)
   , SummaryRow (..)
   , posteriorSummary
@@ -734,3 +736,91 @@ rankPlotFile :: OutputFormat -> FilePath -> PlotConfig
              -> Int -> [Text] -> [Chain] -> IO ()
 rankPlotFile fmt path cfg nBins names chains =
   writeSpec fmt path (rankPlot cfg nBins names chains)
+
+-- ---------------------------------------------------------------------------
+-- Posterior predictive check (pp_check 相当)
+-- ---------------------------------------------------------------------------
+
+-- | 事後予測チェック: 観測値の KDE と、posteriorPredictive で得られた
+-- K 件の予測サンプル KDE をスパゲッティ式に重ね描き、平均予測 KDE を太線で
+-- 重ねる。観測 (青) と予測の中心線 (オレンジ) が一致しなければモデル誤指定。
+--
+-- 引数:
+--   * @observed@ — 元観測 y のリスト
+--   * @predDraws@ — `posteriorPredictive` 出力の各サンプル (各要素は元データと
+--                   同じ長さの y_rep)
+--   * @nOverlay@ — 描画する個別予測ドローの本数 (典型 50)
+ppcPlot :: PlotConfig -> [Double] -> [[Double]] -> Int -> VegaLite
+ppcPlot cfg observed predDraws nOverlay =
+  let nDraws        = length predDraws
+      step          = max 1 (nDraws `div` max 1 nOverlay)
+      thinned       = [ predDraws !! i
+                      | i <- [0, step .. nDraws - 1]
+                      , i < nDraws ]
+      -- 個別ドローごとの KDE (id, x, y)
+      drawSpecs     = concat
+        [ [ (i :: Int, x, y) | (x, y) <- kde 100 d ]
+        | (i, d) <- zip [0 ..] thinned
+        , length d >= 2 ]
+      drawIds       = [ T.pack (show i)            | (i, _, _) <- drawSpecs ]
+      drawXs        = [ x                          | (_, x, _) <- drawSpecs ]
+      drawYs        = [ y                          | (_, _, y) <- drawSpecs ]
+      -- 全予測平均の KDE
+      flatPred      = concat predDraws
+      meanKde       = kde 200 flatPred
+      (mxs, mys)    = unzip meanKde
+      -- 観測の KDE
+      obsKde        = kde 200 observed
+      (oxs, oys)    = unzip obsKde
+  in toVegaLite
+      [ title (plotTitle cfg) []
+      , layer
+          [ -- スパゲッティ (個別予測ドロー)
+            asSpec
+              [ dataFromColumns []
+                  . dataColumn "x"  (Numbers drawXs)
+                  . dataColumn "y"  (Numbers drawYs)
+                  . dataColumn "id" (Strings drawIds)
+                  $ []
+              , mark Line [MColor "#FF8C42", MOpacity 0.15, MStrokeWidth 0.8]
+              , encoding
+                  . position X [PName "x", PmType Quantitative,
+                                PAxis [AxTitle "y"]]
+                  . position Y [PName "y", PmType Quantitative,
+                                PAxis [AxTitle "Density"]]
+                  . detail [DName "id", DmType Nominal]
+                  $ []
+              ]
+          , -- 予測平均
+            asSpec
+              [ dataFromColumns []
+                  . dataColumn "x" (Numbers mxs)
+                  . dataColumn "y" (Numbers mys)
+                  $ []
+              , mark Line [MColor "#FF8C42", MStrokeWidth 2.5]
+              , encoding
+                  . position X [PName "x", PmType Quantitative]
+                  . position Y [PName "y", PmType Quantitative]
+                  $ []
+              ]
+          , -- 観測 KDE
+            asSpec
+              [ dataFromColumns []
+                  . dataColumn "x" (Numbers oxs)
+                  . dataColumn "y" (Numbers oys)
+                  $ []
+              , mark Line [MColor "#1F77B4", MStrokeWidth 3.0]
+              , encoding
+                  . position X [PName "x", PmType Quantitative]
+                  . position Y [PName "y", PmType Quantitative]
+                  $ []
+              ]
+          ]
+      , width  (plotWidth cfg)
+      , height (plotHeight cfg)
+      ]
+
+ppcPlotFile :: OutputFormat -> FilePath -> PlotConfig
+            -> [Double] -> [[Double]] -> Int -> IO ()
+ppcPlotFile fmt path cfg observed predDraws nOverlay =
+  writeSpec fmt path (ppcPlot cfg observed predDraws nOverlay)
