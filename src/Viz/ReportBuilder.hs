@@ -33,6 +33,7 @@ module Viz.ReportBuilder
     -- * セクションビルダ (smart constructors)
   , secDataOverview
   , secModelOverview
+  , secModelOverviewLink
   , secKeyValue
   , secCoefficients
   , secFitScatter
@@ -132,8 +133,8 @@ data InteractiveModel = InteractiveModel
 data ReportSection
   = -- | データ概要: 列ごとの型/N/min/max/mean/SD + ヒストグラム
     SecDataOverview DataFrame [Text] Text
-    -- | モデル概要: タイトル / 説明 / オプションの Mermaid DAG
-  | SecModelOverview Text Text (Maybe Text)
+    -- | モデル概要: タイトル / 数式 / リンク関数 (オプション) / Mermaid DAG (オプション)
+  | SecModelOverview Text Text (Maybe Text) (Maybe Text)
     -- | 係数表: ラベル/値 + オプションの (R² ラベル, 値)
   | SecCoefficients [(Text, Double)] (Maybe (Text, Double))
     -- | 散布図 + 滑らか曲線 (信頼帯あれば描画)
@@ -176,8 +177,17 @@ data ReportSection
 secDataOverview :: DataFrame -> [Text] -> Text -> ReportSection
 secDataOverview = SecDataOverview
 
+-- | モデル概要 (リンク関数なし)。LM / HBM / GP 用。
 secModelOverview :: Text -> Text -> Maybe Text -> ReportSection
-secModelOverview = SecModelOverview
+secModelOverview ty fm mer = SecModelOverview ty fm Nothing mer
+
+-- | モデル概要 + リンク関数。GLM / GLMM 等で使用。
+secModelOverviewLink :: Text       -- ^ モデル種別
+                     -> Text       -- ^ 数式 (HTML 可)
+                     -> Text       -- ^ リンク関数 (例: "log" / "logit" / "identity")
+                     -> Maybe Text -- ^ Mermaid DAG
+                     -> ReportSection
+secModelOverviewLink ty fm link mer = SecModelOverview ty fm (Just link) mer
 
 secKeyValue :: Text -> [(Text, Text)] -> ReportSection
 secKeyValue = SecKeyValue
@@ -547,7 +557,7 @@ sectionId i = "sec_" <> T.pack (show i)
 renderSection :: Text -> ReportSection -> Text
 renderSection sid sec = case sec of
   SecDataOverview df xs y     -> renderDataOverview sid df xs y
-  SecModelOverview ty fm mer  -> renderModelOverview sid ty fm mer
+  SecModelOverview ty fm mLk mer -> renderModelOverview sid ty fm mLk mer
   SecCoefficients cs mr2      -> renderCoefficients sid cs mr2
   SecFitScatter xc yc xs ys s -> renderFitScatter sid xc yc xs ys s
   SecResiduals fit res        -> renderResiduals sid fit res
@@ -711,8 +721,8 @@ histogramSpec col vals =
 
 -- モデル概要 -----------------------------------------------------------------
 
-renderModelOverview :: Text -> Text -> Text -> Maybe Text -> Text
-renderModelOverview sid ty formula mer =
+renderModelOverview :: Text -> Text -> Text -> Maybe Text -> Maybe Text -> Text
+renderModelOverview sid ty formula mLink mer =
   let merBlock = case mer of
         Nothing -> ""
         Just m  ->
@@ -722,6 +732,14 @@ renderModelOverview sid ty formula mer =
             , m
             , "</div></div>"
             ]
+      linkBox = case mLink of
+        Nothing -> ""
+        Just l  -> T.unlines
+          [ "  <div class=\"info-box\">"
+          , "    <div class=\"lbl\">リンク関数</div>"
+          , "    <div class=\"ival\">" <> l <> "</div>"
+          , "  </div>"
+          ]
   in collapsibleSection sid "<span class=\"sec-icon\">&#9878;</span> モデル概要" True $
        T.unlines
          [ "<div class=\"info-grid\">"
@@ -729,6 +747,7 @@ renderModelOverview sid ty formula mer =
          , "    <div class=\"lbl\">モデル種別</div>"
          , "    <div class=\"ival\">" <> ty <> "</div>"
          , "  </div>"
+         , linkBox
          , "  <div class=\"info-box\" style=\"flex: 2\">"
          , "    <div class=\"lbl\">数式</div>"
          , "    <div class=\"ival\">" <> formula <> "</div>"

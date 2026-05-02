@@ -256,9 +256,10 @@ writeRBGLM df xVec yVec xCol yCol = do
           maxAbsR = maximum (0 : map abs resid)
           sections =
             [ RB.secDataOverview df [xCol] yCol
-            , RB.secModelOverview "GLM(Poisson, log)"
+            , RB.secModelOverviewLink "GLM(Poisson)"
                 ("$" <> yCol <> "_i \\sim \\text{Poisson}(\\lambda_i)$<br>"
                  <> "$\\log \\lambda_i = \\beta_0 + \\beta_1 " <> xCol <> "_i$")
+                "log (Poisson の標準リンク)"
                 Nothing
             , RB.secCollapsible "回帰結果" True
                 [ RB.secStatRow
@@ -326,12 +327,33 @@ writeRBGLMM df gr = do
       rmseV   = sqrt (sum [ r ^ (2::Int) | r <- resid ]
                       / fromIntegral (max 1 (length resid)))
       maxAbsR = maximum (0 : map abs resid)
+      -- Interactive prediction (固定効果のみ、ランダム効果は 0)
+      Just xVec = getNumeric "x" df
+      Just yVec = getNumeric "y" df
+      xs   = V.toList xVec
+      ys   = V.toList yVec
+      xMin = V.minimum xVec
+      xMax = V.maximum xVec
+      ext  = (xMax - xMin) * 0.5
+      sigmaResid = sqrt (GLMM.glmmResidVar gr)
+      im = RB.InteractiveModel
+             { RB.imXCols     = ["x"]
+             , RB.imYCol      = "y"
+             , RB.imXValues   = [[x] | x <- xs]
+             , RB.imYValues   = ys
+             , RB.imIntercept = head fixedB
+             , RB.imBetas     = drop 1 fixedB
+             , RB.imLink      = "identity"
+             , RB.imSlider    = [(xMin - ext, (xMin + xMax) / 2, xMax + ext)]
+             , RB.imCISigma   = Just sigmaResid
+             }
       sections =
         [ RB.secDataOverview df ["x"] "y"
-        , RB.secModelOverview "LME"
+        , RB.secModelOverviewLink "LME"
             ("$y_{ij} = \\beta_0 + \\beta_1 x_{ij} + u_j + \\varepsilon_{ij}$<br>"
              <> "$u_j \\sim \\text{Normal}(0, \\sigma^2_u)$<br>"
              <> "$\\varepsilon_{ij} \\sim \\text{Normal}(0, \\sigma^2)$")
+            "identity (Gaussian の標準リンク)"
             Nothing
         , RB.secCollapsible "回帰結果" True
             [ RB.secStatRow
@@ -352,6 +374,8 @@ writeRBGLMM df gr = do
             , RB.secCard "残差プロット"
                 [ RB.secResiduals fitted resid ]
             ]
+        , RB.secInteractiveMulti
+            "対話的予測 (固定効果のみ、ランダム効果 = 0)" im
         , appendixSec
         ]
   RB.renderReport "trash/cmp_glmm_RB.html" cfg sections
