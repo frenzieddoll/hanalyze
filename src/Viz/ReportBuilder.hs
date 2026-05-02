@@ -388,7 +388,7 @@ secPosteriorSummary
   -> [(Text, Double, Double, Double, Double, Double, Maybe Double)]
   -> ReportSection
 secPosteriorSummary title rows =
-  let headers = ["Parameter", "Mean", "SD", "2.5%", "97.5%", "ESS", "R-hat"]
+  let headers = ["パラメータ", "事後平均", "SD", "2.5%", "97.5%", "ESS", "R-hat"]
       body    = [ [ p
                   , T.pack (printf "%.4f" m)
                   , T.pack (printf "%.4f" sd)
@@ -563,6 +563,22 @@ wrapSection sid title inner = T.unlines
   , "</section>"
   ]
 
+-- | 折りたたみ可能な section 箱 (white bg、h2 をクリックで折りたたみ)。
+-- データの特性 / モデル概要などで使う。
+collapsibleSection :: Text -> Text -> Bool -> Text -> Text
+collapsibleSection sid title open inner =
+  let attr = if open then " open" else ""
+  in T.unlines
+       [ "<section id=\"" <> sid <> "\" class=\"collapsible-wrap\">"
+       , "  <details" <> attr <> ">"
+       , "    <summary><h2>" <> title <> "</h2></summary>"
+       , "    <div class=\"collapsible-body\">"
+       , inner
+       , "    </div>"
+       , "  </details>"
+       , "</section>"
+       ]
+
 -- データ概要 -----------------------------------------------------------------
 
 renderDataOverview :: Text -> DataFrame -> [Text] -> Text -> Text
@@ -573,16 +589,16 @@ renderDataOverview sid df xCols yCol =
       header   =
         T.concat
           [ "<tr>"
-          , "<th>Column</th><th>Type</th><th>N</th>"
-          , "<th>Missing</th>"
-          , "<th>Min</th><th>Q1</th><th>Median</th><th>Q3</th><th>Max</th>"
-          , "<th>Mean</th><th>SD</th>"
-          , "<th>Skew</th><th>Kurtosis</th>"
+          , "<th>列</th><th>型</th><th>N</th>"
+          , "<th>欠損</th>"
+          , "<th>最小</th><th>Q1</th><th>中央</th><th>Q3</th><th>最大</th>"
+          , "<th>平均</th><th>SD</th>"
+          , "<th>歪度</th><th>尖度</th>"
           , "</tr>"
           ]
       rows = T.intercalate "\n" (map renderColRow relevant)
-      summary = "Rows: <strong>" <> T.pack (show n)
-                <> "</strong>, columns analyzed: <strong>"
+      summary = "行数: <strong>" <> T.pack (show n)
+                <> "</strong>, 解析対象列: <strong>"
                 <> T.pack (show (length allCols)) <> "</strong>"
       -- ヒストグラム (グループ全体で 1 つのトグル、各列は独立カード)
       histBlocks = T.intercalate "\n"
@@ -590,18 +606,20 @@ renderDataOverview sid df xCols yCol =
           <> "</div><div class=\"vl-wrap\"><div id=\"hist_" <> sid
           <> "_" <> T.pack (show i) <> "\"></div></div></div>"
         | (i, c, Just (NumericCol _)) <- relevant ]
-  in wrapSection sid "<span class=\"sec-icon\">&#128202;</span> 1. データの特性" $ T.unlines
-       [ "<p class=\"sec-desc\">" <> summary <> "</p>"
-       , "<div class=\"table-scroll\"><table class=\"stats-table\">"
-       , "<thead>" <> header <> "</thead>"
-       , "<tbody>" <> rows <> "</tbody>"
-       , "</table></div>"
-       , "<details class=\"hist-toggle\"><summary>ヒストグラム (列ごと)</summary>"
-       , "<div class=\"hist-grid\">"
-       , histBlocks
-       , "</div>"
-       , "</details>"
-       ]
+      title = "<span class=\"sec-icon\">&#128202;</span> データの特性"
+      body  = T.unlines
+        [ "<p class=\"sec-desc\">" <> summary <> "</p>"
+        , "<div class=\"table-scroll\"><table class=\"stats-table\">"
+        , "<thead>" <> header <> "</thead>"
+        , "<tbody>" <> rows <> "</tbody>"
+        , "</table></div>"
+        , "<details class=\"hist-toggle\"><summary>ヒストグラム (列ごと)</summary>"
+        , "<div class=\"hist-grid\">"
+        , histBlocks
+        , "</div>"
+        , "</details>"
+        ]
+  in collapsibleSection sid title True body
   where
     renderColRow (_, c, Just (NumericCol v)) =
       let xs = V.toList v
@@ -691,19 +709,20 @@ renderModelOverview sid ty formula mer =
             , m
             , "</div></div>"
             ]
-  in wrapSection sid "<span class=\"sec-icon\">&#9878;</span> モデル概要" $ T.unlines
-       [ "<div class=\"info-grid\">"
-       , "  <div class=\"info-box\">"
-       , "    <div class=\"lbl\">モデル種別</div>"
-       , "    <div class=\"ival\">" <> ty <> "</div>"
-       , "  </div>"
-       , "  <div class=\"info-box\" style=\"flex: 2\">"
-       , "    <div class=\"lbl\">数式</div>"
-       , "    <div class=\"ival\">" <> formula <> "</div>"
-       , "  </div>"
-       , "</div>"
-       , merBlock
-       ]
+  in collapsibleSection sid "<span class=\"sec-icon\">&#9878;</span> モデル概要" True $
+       T.unlines
+         [ "<div class=\"info-grid\">"
+         , "  <div class=\"info-box\">"
+         , "    <div class=\"lbl\">モデル種別</div>"
+         , "    <div class=\"ival\">" <> ty <> "</div>"
+         , "  </div>"
+         , "  <div class=\"info-box\" style=\"flex: 2\">"
+         , "    <div class=\"lbl\">数式</div>"
+         , "    <div class=\"ival\">" <> formula <> "</div>"
+         , "  </div>"
+         , "</div>"
+         , merBlock
+         ]
 
 -- 係数表 -------------------------------------------------------------------
 
@@ -718,9 +737,9 @@ renderCoefficients sid coeffs mR2 =
           "<tfoot><tr><td><strong>" <> lbl <> "</strong></td><td class=\"num\"><strong>"
           <> showD4 v <> "</strong></td></tr></tfoot>"
         Nothing -> ""
-  in wrapSection sid "Coefficients" $ T.unlines
+  in wrapSection sid "係数" $ T.unlines
        [ "<table class=\"narrow\">"
-       , "<thead><tr><th>Parameter</th><th>Value</th></tr></thead>"
+       , "<thead><tr><th>パラメータ</th><th>値</th></tr></thead>"
        , "<tbody>" <> rows <> "</tbody>"
        , r2Row
        , "</table>"
@@ -731,14 +750,14 @@ renderCoefficients sid coeffs mR2 =
 renderFitScatter :: Text -> Text -> Text -> [Double] -> [Double]
                  -> Maybe SmoothCurve -> Text
 renderFitScatter sid _xc _yc _xs _ys _msc =
-  wrapSection sid "Scatter and fit" $
+  wrapSection sid "散布図 + 適合曲線" $
     "<div class=\"vl-wrap\"><div id=\"vl-" <> sid <> "\"></div></div>"
 
 -- 残差 -----------------------------------------------------------------------
 
 renderResiduals :: Text -> [Double] -> [Double] -> Text
 renderResiduals sid _fitted _resids =
-  wrapSection sid "Residuals" $
+  wrapSection sid "残差" $
     "<div class=\"vl-wrap\"><div id=\"vl-" <> sid <> "\"></div></div>"
 
 -- 棒グラフ -------------------------------------------------------------------
@@ -1417,6 +1436,8 @@ css = T.unlines
   , ".collapsible-body > section { background: transparent; border: none;"
   , "                              box-shadow: none; padding: 6px 0; margin: 0; }"
   , ".collapsible-body > section > h2 { display: none; }"
+  , ".collapsible-body > .table-scroll { margin: 0; }"
+  , ".collapsible-body > .info-grid { margin-top: 0; }"
   -- Card (淡い背景の囲み)
   , ".result-card { background: #f7f9fc; border: 1px solid #e4e9f0;"
   , "               border-radius: 10px; padding: 14px 16px; margin: 12px 0; }"

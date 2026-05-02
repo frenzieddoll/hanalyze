@@ -117,7 +117,7 @@ writeARLM df = do
 
 writeRBLM :: DataFrame -> V.Vector Double -> V.Vector Double -> IO ()
 writeRBLM df xVec yVec = do
-  appendixSec <- RB.secAppendixFromMd "Appendix: model principle"
+  appendixSec <- RB.secAppendixFromMd "付録: モデルの原理"
                    "docs/principles/lm.ja.md"
   case LM.fitPolyWithSmooth (Core.CI 0.95) 100 df "x" "y" of
     Just (fit, sf) -> do
@@ -156,19 +156,17 @@ writeRBLM df xVec yVec = do
                  <> "$\\varepsilon_i \\sim \\text{Normal}(0, \\sigma^2)$")
                 Nothing
             , RB.secCollapsible "回帰結果" True
-                [ RB.secCard "係数"
-                    [ RB.secCoefficients coeffs (Just ("R²", rSquared1 fit)) ]
-                , RB.secStatRow
-                    [ ("R²",     T.pack (printf "%.4f" (rSquared1 fit)))
-                    , ("方法",   "OLS (QR)")
-                    , ("σ_hat",  T.pack (printf "%.4f" sd_))
-                    ]
-                , RB.secCard "散布図 + 回帰線"
-                    [ RB.secFitScatter "x" "y" xs ys (Just smooth) ]
-                , RB.secStatRow
-                    [ ("RMSE",        T.pack (printf "%.4f" rmseV))
+                [ RB.secStatRow
+                    [ ("R²",         T.pack (printf "%.4f" (rSquared1 fit)))
+                    , ("方法",       "OLS (QR)")
+                    , ("σ_hat",      T.pack (printf "%.4f" sd_))
+                    , ("RMSE",       T.pack (printf "%.4f" rmseV))
                     , ("最大絶対残差", T.pack (printf "%.4f" maxAbsR))
                     ]
+                , RB.secCard "係数"
+                    [ RB.secCoefficients coeffs (Just ("R²", rSquared1 fit)) ]
+                , RB.secCard "散布図 + 回帰線"
+                    [ RB.secFitScatter "x" "y" xs ys (Just smooth) ]
                 , RB.secCard "残差プロット"
                     [ RB.secResiduals fitted resid ]
                 ]
@@ -223,7 +221,7 @@ writeARGLM df xCol yCol = do
 writeRBGLM :: DataFrame -> V.Vector Double -> V.Vector Double
            -> T.Text -> T.Text -> IO ()
 writeRBGLM df xVec yVec xCol yCol = do
-  appendixSec <- RB.secAppendixFromMd "Appendix: model principle"
+  appendixSec <- RB.secAppendixFromMd "付録: モデルの原理"
                    "docs/principles/glm.ja.md"
   case GLM.fitGLMWithSmooth GLM.Poisson GLM.Log [(xCol, 1)]
                               Core.NoBand 100 df yCol of
@@ -263,20 +261,18 @@ writeRBGLM df xVec yVec xCol yCol = do
                  <> "$\\log \\lambda_i = \\beta_0 + \\beta_1 " <> xCol <> "_i$")
                 Nothing
             , RB.secCollapsible "回帰結果" True
-                [ RB.secCard "係数"
+                [ RB.secStatRow
+                    [ ("McFadden R²", T.pack (printf "%.4f" (rSquared1 fit)))
+                    , ("方法",        "IRLS")
+                    , ("RMSE",        T.pack (printf "%.4f" rmseV))
+                    , ("最大絶対残差", T.pack (printf "%.4f" maxAbsR))
+                    ]
+                , RB.secCard "係数"
                     [ RB.secCoefficients
                         [(T.pack k, v) | (k, v) <- coeffs]
                         (Just ("McFadden R²", rSquared1 fit)) ]
-                , RB.secStatRow
-                    [ ("McFadden R²", T.pack (printf "%.4f" (rSquared1 fit)))
-                    , ("方法",        "IRLS")
-                    ]
                 , RB.secCard "散布図 + 回帰線"
                     [ RB.secFitScatter xCol yCol xs ys (Just smooth) ]
-                , RB.secStatRow
-                    [ ("RMSE",         T.pack (printf "%.4f" rmseV))
-                    , ("最大絶対残差", T.pack (printf "%.4f" maxAbsR))
-                    ]
                 , RB.secCard "残差プロット"
                     [ RB.secResiduals fitted resid ]
                 ]
@@ -318,7 +314,7 @@ writeARGLMM df gr = do
 
 writeRBGLMM :: DataFrame -> GLMM.GLMMResult -> IO ()
 writeRBGLMM df gr = do
-  appendixSec <- RB.secAppendixFromMd "Appendix: model principle"
+  appendixSec <- RB.secAppendixFromMd "付録: モデルの原理"
                    "docs/principles/glmm.ja.md"
   let fixedB = coeffList (GLMM.glmmFixed gr)
       coeffs = zip ["β₀ (intercept)", "β₁ (x)"] fixedB
@@ -338,22 +334,21 @@ writeRBGLMM df gr = do
              <> "$\\varepsilon_{ij} \\sim \\text{Normal}(0, \\sigma^2)$")
             Nothing
         , RB.secCollapsible "回帰結果" True
-            [ RB.secCard "固定効果"
+            [ RB.secStatRow
+                [ ("周辺 R²", T.pack (printf "%.4f" (rSquared1 (GLMM.glmmFixed gr))))
+                , ("σ²_u",     T.pack (printf "%.4f" (GLMM.glmmRandVar gr)))
+                , ("σ²",       T.pack (printf "%.4f" (GLMM.glmmResidVar gr)))
+                , ("ICC",      T.pack (printf "%.4f" (GLMM.glmmICC gr)))
+                , ("RMSE",     T.pack (printf "%.4f" rmseV))
+                , ("最大絶対残差", T.pack (printf "%.4f" maxAbsR))
+                ]
+            , RB.secCard "固定効果"
                 [ RB.secCoefficients coeffs
                     (Just ("周辺 R²", rSquared1 (GLMM.glmmFixed gr))) ]
-            , RB.secStatRow
-                [ ("σ²_u",  T.pack (printf "%.4f" (GLMM.glmmRandVar gr)))
-                , ("σ²",    T.pack (printf "%.4f" (GLMM.glmmResidVar gr)))
-                , ("ICC",   T.pack (printf "%.4f" (GLMM.glmmICC gr)))
-                ]
             , RB.secCard "BLUP (グループ別ランダム切片)"
                 [ RB.secTable ""
                     ["グループ", "u_j"]
                     [ [g, T.pack (printf "%+.4f" u)] | (g, u) <- blups ] ]
-            , RB.secStatRow
-                [ ("RMSE",        T.pack (printf "%.4f" rmseV))
-                , ("最大絶対残差", T.pack (printf "%.4f" maxAbsR))
-                ]
             , RB.secCard "残差プロット"
                 [ RB.secResiduals fitted resid ]
             ]
@@ -413,7 +408,7 @@ writeARGP df xs ys res model params = do
 writeRBGP :: DataFrame -> [Double] -> [Double] -> [Double]
           -> GP.GPResult -> GP.GPParams -> IO ()
 writeRBGP df xs ys gridX res params = do
-  appendixSec <- RB.secAppendixFromMd "Appendix: model principle"
+  appendixSec <- RB.secAppendixFromMd "付録: モデルの原理"
                    "docs/principles/gp.ja.md"
   let smooth = RB.SmoothCurve gridX (GP.gpMean res)
                               (GP.gpLower res) (GP.gpUpper res)
@@ -436,18 +431,16 @@ writeRBGP df xs ys gridX res params = do
             Nothing
         , RB.secCollapsible "回帰結果" True
             [ RB.secStatRow
-                [ ("ℓ",  T.pack (printf "%.4f" (GP.gpLengthScale params)))
+                [ ("ℓ",   T.pack (printf "%.4f" (GP.gpLengthScale params)))
                 , ("σ_f²", T.pack (printf "%.4f" (GP.gpSignalVar params)))
                 , ("σ_n²", T.pack (printf "%.4f" (GP.gpNoiseVar params)))
-                , ("LML", T.pack (printf "%.2f"
-                                   (GP.logMarginalLikelihood xs ys GP.RBF params)))
+                , ("LML",  T.pack (printf "%.2f"
+                                    (GP.logMarginalLikelihood xs ys GP.RBF params)))
+                , ("RMSE", T.pack (printf "%.4f" rmseV))
+                , ("最大絶対残差", T.pack (printf "%.4f" maxAbsR))
                 ]
             , RB.secCard "事後平均 + 95% 信用帯"
                 [ RB.secFitScatter "x" "y" xs ys (Just smooth) ]
-            , RB.secStatRow
-                [ ("RMSE",         T.pack (printf "%.4f" rmseV))
-                , ("最大絶対残差", T.pack (printf "%.4f" maxAbsR))
-                ]
             , RB.secCard "残差プロット"
                 [ RB.secResiduals yhat resid ]
             ]
@@ -556,7 +549,7 @@ mkPosteriorRows chain =
 
 writeRBHBM :: DataFrame -> [Double] -> [Double] -> MCMCcore.Chain -> IO ()
 writeRBHBM df xs ys chain = do
-  appendixSec <- RB.secAppendixFromMd "Appendix: model principle"
+  appendixSec <- RB.secAppendixFromMd "付録: モデルの原理"
                    "docs/principles/hbm.ja.md"
   let aMean = maybe 0 id (MCMCcore.posteriorMean "alpha" chain)
       bMean = maybe 0 id (MCMCcore.posteriorMean "beta"  chain)
@@ -600,21 +593,20 @@ writeRBHBM df xs ys chain = do
              <> "$\\sigma \\sim \\text{Exponential}(1)$")
             (Just mgDag)
         , RB.secCollapsible "回帰結果" True
-            [ RB.secCard "事後要約"
-                [ RB.secPosteriorSummary "" summaryRows ]
-            , RB.secStatRow
-                [ ("R²",       T.pack (printf "%.4f" r2))
+            [ RB.secStatRow
+                [ ("R²",         T.pack (printf "%.4f" r2))
                 , ("サンプル数", T.pack (show nSamp))
-                , ("受容率",    T.pack (printf "%.1f%%" (acc * 100)))
+                , ("チェーン数", "1")
+                , ("受容率",     T.pack (printf "%.1f%%" (acc * 100)))
+                , ("RMSE",       T.pack (printf "%.4f" rmseV))
+                , ("最大絶対残差", T.pack (printf "%.4f" maxAbsR))
                 ]
+            , RB.secCard "事後要約"
+                [ RB.secPosteriorSummary "" summaryRows ]
             , RB.secCard "MCMC 診断"
                 [ RB.secMCMCDiagnostics "" params chain
                 , RB.secMCMCAutocorr "" 40 params chain
                 , RB.secMCMCPair "" "alpha" "beta" chain
-                ]
-            , RB.secStatRow
-                [ ("RMSE",         T.pack (printf "%.4f" rmseV))
-                , ("最大絶対残差", T.pack (printf "%.4f" maxAbsR))
                 ]
             , RB.secCard "残差プロット"
                 [ RB.secResiduals fitted resid ]
