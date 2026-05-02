@@ -362,18 +362,20 @@ cabal run hanalyze -- hist data.csv counts --fit poisson 3 --format png --out hi
 
 ```bash
 # Regularized regression (--penalty ridge|lasso|elasticnet, --lambda L, --alpha A)
-hanalyze ridge data.csv "x1 x2 x3" y --penalty lasso --lambda 0.05
+hanalyze ridge data.csv "x1 x2 x3" y --penalty lasso --lambda 0.05 --report
 
 # Kernel regression (--method nw|kr|rff, --kernel gaussian|... , --bandwidth, --features)
-hanalyze kernel data.csv x y --method kr --bandwidth 0.5
-hanalyze kernel data.csv x y --method rff --features 200
+hanalyze kernel data.csv x y --method kr --bandwidth 0.5 --report
+hanalyze kernel data.csv x y --method rff --features 200 --report
 
 # Spline (--type bspline|natural, --knots, --degree)
-hanalyze spline data.csv x y --type natural --knots 8
+hanalyze spline data.csv x y --type natural --knots 8 --report
 ```
 
 Each subcommand exposes the main hyperparameters (bandwidth/lambda/knots/...)
 directly, and writes a scatter+fit plot to `--out` (HTML/PNG/SVG).
+With `--report [FILE]` it also produces a self-contained HTML report combining
+**data overview + model overview + coefficients/hyperparameters + scatter+fit + residuals**.
 
 ### `doe` — generate experimental designs from orthogonal arrays Lₙ
 
@@ -499,6 +501,8 @@ Viz/
   MCMC.hs          -- diagnostic plots (KDE / trace / autocorr / pair scatter)
   Report.hs        -- integrated HTML report (multi-chain with R-hat)
   Taguchi.hs       -- Taguchi-analysis HTML report (factor-effect bar charts + optimum table)
+  ReportBuilder.hs -- compositional reports (ReportSection + Reportable typeclass)
+  ReportInstances.hs -- Reportable RegFit/SplineFit/KernelRidgeFit/RFFRidgeFit/RobustGPFit
   ModelGraph.hs    -- Mermaid.js DAG
   Bar.hs           -- bar charts (vertical / horizontal / stacked / grouped)
   Histogram.hs     -- histograms (with optional theoretical-density overlay)

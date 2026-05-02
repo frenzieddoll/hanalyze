@@ -361,18 +361,20 @@ cabal run hanalyze -- hist data.csv counts --fit poisson 3 --format png --out hi
 
 ```bash
 # 正則化回帰 (--penalty ridge|lasso|elasticnet, --lambda L, --alpha A)
-hanalyze ridge data.csv "x1 x2 x3" y --penalty lasso --lambda 0.05
+hanalyze ridge data.csv "x1 x2 x3" y --penalty lasso --lambda 0.05 --report
 
 # カーネル回帰 (--method nw|kr|rff, --kernel gaussian|... , --bandwidth, --features)
-hanalyze kernel data.csv x y --method kr --bandwidth 0.5
-hanalyze kernel data.csv x y --method rff --features 200
+hanalyze kernel data.csv x y --method kr --bandwidth 0.5 --report
+hanalyze kernel data.csv x y --method rff --features 200 --report
 
 # スプライン (--type bspline|natural, --knots, --degree)
-hanalyze spline data.csv x y --type natural --knots 8
+hanalyze spline data.csv x y --type natural --knots 8 --report
 ```
 
 各サブコマンドは bandwidth/lambda/knots 等の主要ハイパラを直接調整可能。
 全て scatter+fit プロットを `--out` に出力 (HTML/PNG/SVG)。
+`--report [FILE]` で **データ概要 + モデル概要 + 係数/ハイパラ + 散布図 + 残差**
+を統合した自己完結 HTML レポートを生成。
 
 ### `doe` — 直交表 Lₙ で実験計画を生成
 
@@ -493,6 +495,8 @@ Viz/
   MCMC.hs          -- 診断プロット (KDE / トレース / 自己相関 / ペア散布図)
   Report.hs        -- 統合 HTML レポート (R-hat 付き多チェーン対応)
   Taguchi.hs       -- タグチ分析 HTML レポート (要因効果バーチャート + 最良水準テーブル)
+  ReportBuilder.hs -- コンポジション型レポート (ReportSection + Reportable typeclass)
+  ReportInstances.hs -- Reportable RegFit/SplineFit/KernelRidgeFit/RFFRidgeFit/RobustGPFit
   ModelGraph.hs    -- Mermaid.js DAG
   Bar.hs           -- 棒グラフ (縦 / 横 / 積み上げ / グループ)
   Histogram.hs     -- ヒストグラム (理論分布重ね書き対応)
