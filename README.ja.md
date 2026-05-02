@@ -51,6 +51,10 @@ myModel = do
 | [学習資料 3 — MCMC の原理](docs/learn/03-mcmc-foundations.ja.md) | マルコフ連鎖、エルゴード性、MH、Gibbs、Slice、収束診断 |
 | [学習資料 4 — HMC / NUTS](docs/learn/04-hmc-nuts.ja.md) | Hamiltonian、leapfrog、制約変換、NUTS、dual averaging、BFMI、divergence、非中心化 |
 | [学習資料 5 — VI / モデル選択 / 高度トピック](docs/learn/05-vi-modelselect-advanced.ja.md) | ELBO、ADVI、WAIC、PSIS-LOO、Mixture、LKJ、AR、Censored 等の理論と使い分け |
+| [回帰拡張 (Spline / Kernel / Regularized)](docs/10-regression-extensions.ja.md) | B-spline / Natural cubic / Kernel Ridge / Ridge / Lasso / ElasticNet の使い方 |
+| [実験計画法 (DOE)](docs/11-design-of-experiments.ja.md) | 完全/部分要因 / ラテン方格 / 乱塊 / RSM / D-optimal / ANOVA / Power 解析 |
+| [学習資料 6 — 回帰拡張の理論](docs/learn/06-regression-extensions.ja.md) | スプライン基底、カーネルメソッド、L1/L2 正則化、bias-variance tradeoff |
+| [学習資料 7 — 実験計画法の理論](docs/learn/07-doe-foundations.ja.md) | 直交性、効率指標、RSM、検出力、サンプルサイズ、DOE の実務手順 |
 
 ---
 
@@ -127,6 +131,22 @@ cabal test               # テスト
 | `newdistribs-demo`  | InverseGamma / Weibull / Pareto / BetaBinomial / VonMises を一括検証 | 5 つの新規分布 |
 | `ar1-demo`          | AR(1) 状態空間モデル (ϕ=0.7 を 30 ステップ系列から推定) | 時系列 |
 | `slice-demo`        | Slice sampler を MH/NUTS と比較 (調整不要、勾配不要、高 ESS) | Slice 法 |
+
+### 回帰拡張 (LM 派生モデル)
+
+| デモ | 内容 | 主に学べること |
+|---|---|---|
+| `spline-demo`       | B-spline (k=3, 10 係数) と Natural cubic spline を sin 関数 + ノイズに fit (RMSE 0.05) | 非線形平滑化 |
+| `kernel-demo`       | Nadaraya-Watson + Kernel Ridge、LOO-CV で bandwidth 選定 | 非パラメトリック回帰 |
+| `regularized-demo`  | OLS / Ridge / Lasso / Elastic Net を sparse β=[3,-2,0,0,1.5,0,…] で比較 | 正則化と変数選択 |
+
+### 実験計画法 (DOE)
+
+| デモ | 内容 | 主に学べること |
+|---|---|---|
+| `doe-demo`          | 完全/部分要因 / ラテン方格 / 乱塊 / ANOVA / Power 解析 / 質指標を一括検証 | DOE 基本セット |
+| `rsm-demo`          | CCD (rotatable/face-centered) + Box-Behnken + 二次回帰、極値推定 (0.975, -0.517, 5.06 ≈ 真値 1, -0.5, 5) | 応答曲面法 |
+| `optimaldoe-demo`   | Fedorov 交換で D-optimal を構築 (D-eff=1.0、ランダム比 1.7x 改善) | 最適計画 |
 
 > 📊 **PyMC 機能比較とロードマップ**: 詳細は [docs/08-pymc-comparison.ja.md](docs/08-pymc-comparison.ja.md) を参照。
 > 全カテゴリの実装状況の棒グラフは `cabal run pymc-status-demo` で `pymc-status.html` として出力できる。
