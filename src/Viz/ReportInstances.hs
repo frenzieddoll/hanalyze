@@ -28,6 +28,9 @@ module Viz.ReportInstances
   ( LMReport (..)
   , GLMReport (..)
   , RFReport (..)
+  , GLMMReport (..)
+  , GPReport (..)
+  , HBMLinearReport (..)
   ) where
 
 import Data.Text (Text)
@@ -51,6 +54,9 @@ import Model.GPRobust   (RobustGPFit (..), RobustLikelihood (..))
 import Model.Quantile   (QRFit (..))
 import Model.GAM        (GAMFit (..), predictGAMComponent)
 import Model.RandomForest (RandomForest (..), featureImportance)
+import qualified Model.GLMM as GLMM
+import qualified Model.GP   as GP
+import qualified MCMC.Core  as MC
 import Viz.ReportBuilder
 
 -- ---------------------------------------------------------------------------
@@ -644,3 +650,291 @@ instance Reportable RFReport where
        , secModelOverview "Random Forest (regression)" formula Nothing
        , resultSec
        ]
+
+-- ---------------------------------------------------------------------------
+-- GLMM (axis-1 C, Phase A残)
+-- ---------------------------------------------------------------------------
+
+-- | GLMM (LME / non-Gaussian GLMM) レポート用ラッパ。
+data GLMMReport = GLMMReport
+  { glmmrResult   :: GLMM.GLMMResult
+  , glmmrFamily   :: Family
+  , glmmrLink     :: LinkFn
+  , glmmrGroupCol :: Text
+  } deriving Show
+
+instance Reportable GLMMReport where
+  toReport _cfg df xCols yCol (GLMMReport gr fam lk grpCol) =
+    let fixed   = GLMM.glmmFixed gr
+        beta    = coeffList fixed
+        coefLabels = "β₀ (intercept)"
+                   : [ "β" <> T.pack (show (i :: Int)) <> " (" <> x <> ")"
+                     | (i, x) <- zip [1 ..] xCols ]
+        coeffs   = zip coefLabels beta
+        fitted   = fittedList fixed
+        resid    = LA.toList (residualsV fixed)
+        p        = length beta
+        (_sigmaH, rmse, maxAbs) = residStats resid p
+
+        groups   = V.toList (GLMM.glmmGroups gr)
+        blups    = V.toList (GLMM.glmmBLUPs  gr)
+        blupRows = [ [g, T.pack (printf "%+.4f" u)] | (g, u) <- zip groups blups ]
+
+        xVecs    = [ v | c <- xCols, Just v <- [getNumeric c df] ]
+        yVecMb   = getNumeric yCol df
+
+        modelType = case fam of
+          Gaussian -> "LME (linear mixed effects)"
+          _        -> "GLMM(" <> familyLabel fam <> ")"
+        linkTxt  = linkLabel lk
+
+        formula =
+          "$" <> yCol <> "_{ij} = \\beta_0 + \\sum \\beta_j x_{ij} + u_j "
+          <> "+ \\varepsilon_{ij}$<br>"
+          <> "$u_j \\sim \\text{Normal}(0, \\sigma^2_u),\\quad "
+          <> "\\varepsilon_{ij} \\sim \\text{Normal}(0, \\sigma^2)$"
+
+        interactiveSec
+          | length xVecs == length xCols, not (null xVecs)
+          , Just yv <- yVecMb =
+              let im = mkInteractive xCols yCol xVecs (V.toList yv)
+                                     (head beta) (drop 1 beta)
+                                     linkTxt (Just (sqrt (GLMM.glmmResidVar gr)))
+              in [secInteractiveMulti
+                    "対話的予測 (固定効果のみ、ランダム効果 = 0)" im]
+          | otherwise = []
+
+        statRow =
+          secStatRow
+            [ ("周辺 R²",  T.pack (printf "%.4f" (rSquared1 fixed)))
+            , ("σ²_u",     T.pack (printf "%.4f" (GLMM.glmmRandVar gr)))
+            , ("σ²",       T.pack (printf "%.4f" (GLMM.glmmResidVar gr)))
+            , ("ICC",      T.pack (printf "%.4f" (GLMM.glmmICC gr)))
+            , ("RMSE",     T.pack (printf "%.4f" rmse))
+            , ("最大絶対残差", T.pack (printf "%.4f" maxAbs))
+            ]
+
+        resultSec =
+          secCollapsible "<span class=\"sec-icon\">&#128200;</span> 回帰結果" True
+            [ statRow
+            , secCard "固定効果"
+                [secCoefficients coeffs (Just ("周辺 R²", rSquared1 fixed))]
+            , secCard ("BLUP (" <> grpCol <> " 別ランダム切片)")
+                [secTable "" ["グループ", "u_j"] blupRows]
+            , secCard "残差プロット" [secResiduals fitted resid]
+            ]
+    in [ secDataOverview df xCols yCol
+       , secModelOverviewLink modelType formula linkTxt Nothing
+       , resultSec
+       ] ++ interactiveSec
+
+-- ---------------------------------------------------------------------------
+-- GP (axis-1 C, Phase A残)
+-- ---------------------------------------------------------------------------
+
+-- | GP レポート用ラッパ。
+--
+-- `gprResult` は予測グリッド (`gprGridX`) 上の事後平均と 95% 信用帯を保持。
+-- ライブラリ利用者は `Model.GP.fitGP` で外挿域も含めた grid を渡すと
+-- 対話的予測の信頼帯がそのまま使える。
+data GPReport = GPReport
+  { gprKernel  :: GP.Kernel
+  , gprParams  :: GP.GPParams
+  , gprResult  :: GP.GPResult
+  , gprGridX   :: [Double]
+  , gprTrainX  :: [Double]
+  , gprTrainY  :: [Double]
+  , gprLML     :: Double
+  } deriving Show
+
+instance Reportable GPReport where
+  toReport _cfg df xCols yCol rep =
+    let xs   = gprTrainX rep
+        ys   = gprTrainY rep
+        params = gprParams rep
+        kern   = gprKernel rep
+        gridX  = gprGridX rep
+        res    = gprResult rep
+        lml    = gprLML rep
+
+        smooth = SmoothCurve gridX (GP.gpMean res) (GP.gpLower res) (GP.gpUpper res)
+
+        -- 学習点での残差: 観測 vs 各 x の事後平均
+        yHat   = GP.gpMean (GP.fitGP (GP.GPModel kern params) xs ys xs)
+        resid  = zipWith (-) ys yHat
+        (_sigmaH, rmse, maxAbs) = residStats resid 1
+
+        kernLbl = T.pack (show kern)
+        formula =
+          "$f \\sim \\text{GP}(0, k(x, x'))$<br>"
+          <> "$y_i = f_i + \\varepsilon_i,\\quad "
+          <> "\\varepsilon_i \\sim \\text{Normal}(0, \\sigma_n^2)$"
+
+        statRow =
+          secStatRow
+            [ ("ℓ",    T.pack (printf "%.4f" (GP.gpLengthScale params)))
+            , ("σ_f²", T.pack (printf "%.4f" (GP.gpSignalVar params)))
+            , ("σ_n²", T.pack (printf "%.4f" (GP.gpNoiseVar params)))
+            , ("LML",  T.pack (printf "%.2f"  lml))
+            , ("RMSE", T.pack (printf "%.4f" rmse))
+            , ("最大絶対残差", T.pack (printf "%.4f" maxAbs))
+            ]
+
+        resultSec =
+          secCollapsible "<span class=\"sec-icon\">&#128200;</span> 回帰結果" True
+            [ statRow
+            , secCard "ハイパーパラメータ (周辺尤度最大化で推定)"
+                [ secCoefficients
+                    [ ("ℓ (length scale)",      GP.gpLengthScale params)
+                    , ("σ_f² (signal variance)", GP.gpSignalVar params)
+                    , ("σ_n² (noise variance)",  GP.gpNoiseVar params)
+                    ]
+                    (Just ("log p(y|X,θ)", lml))
+                ]
+            , secCard "残差プロット" [secResiduals yHat resid]
+            ]
+
+        sliderRange = case xs of
+          [] -> (0, 1)
+          _  ->
+            let lo = minimum xs
+                hi = maximum xs
+                ext = (hi - lo) * 0.5
+            in (lo - ext, hi + ext)
+
+        xc = case xCols of { (c:_) -> c; _ -> "x" }
+
+    in [ secDataOverview df xCols yCol
+       , secModelOverviewExtras "GP" formula
+           [("カーネル", kernLbl)] Nothing
+       , resultSec
+       , secInteractiveLM "対話的予測" xc yCol xs ys smooth sliderRange
+       ]
+
+-- ---------------------------------------------------------------------------
+-- HBM (Bayesian Linear Regression) (axis-1 C, Phase A残)
+-- ---------------------------------------------------------------------------
+
+-- | ベイズ単回帰 (`y ~ Normal(α + β x, σ)`) の HBM レポート用ラッパ。
+--
+-- 一般的な HBM (任意の構造) は section を直接構築するか、用途別ラッパを別途定義する。
+-- ここでは「α + β·x」という最も典型的なパターンに特化。
+data HBMLinearReport = HBMLinearReport
+  { hbmrChain     :: MC.Chain
+  , hbmrXs        :: [Double]
+  , hbmrYs        :: [Double]
+  , hbmrAlphaName :: Text     -- ^ 例: "alpha"
+  , hbmrBetaName  :: Text     -- ^ 例: "beta"
+  , hbmrSigmaName :: Text     -- ^ 例: "sigma"
+  , hbmrGraph     :: Maybe Text  -- ^ Mermaid DAG (`Viz.ModelGraph` で構築)
+  }
+
+-- | x の各点での α + β·x の事後分位点 (中央値, 2.5%, 97.5%)。
+hbmRibbonAt :: [Double] -> [Double] -> [Double] -> ([Double], [Double], [Double])
+hbmRibbonAt grid alphas betas =
+  let qsAt p s =
+        let n = length s
+        in if n == 0 then 0 else s !! min (n - 1) (max 0 (floor (p * fromIntegral n)))
+      atX x =
+        let s  = sortByList (zipWith (\a b -> a + b * x) alphas betas)
+        in (qsAt 0.5 s, qsAt 0.025 s, qsAt 0.975 s)
+      preds = map atX grid
+      (m, lo, hi) = unzip3 preds
+  in (m, lo, hi)
+
+sortByList :: Ord a => [a] -> [a]
+sortByList = sortBy compare
+
+instance Reportable HBMLinearReport where
+  toReport _cfg df xCols yCol rep =
+    let chain   = hbmrChain rep
+        xs      = hbmrXs rep
+        ys      = hbmrYs rep
+        aName   = hbmrAlphaName rep
+        bName   = hbmrBetaName  rep
+        sName   = hbmrSigmaName rep
+        params  = [aName, bName, sName]
+
+        alphas  = MC.chainVals aName chain
+        betas   = MC.chainVals bName chain
+        sigmas  = MC.chainVals sName chain
+        aMean   = mean0 alphas
+        bMean   = mean0 betas
+        sMean   = mean0 sigmas
+
+        fitted  = [ aMean + bMean * x | x <- xs ]
+        resid   = zipWith (-) ys fitted
+        n       = length ys
+        meanY   = if n == 0 then 0 else sum ys / fromIntegral n
+        ssTot   = sum [ (y - meanY) ^ (2 :: Int) | y <- ys ]
+        ssRes   = sum [ r * r | r <- resid ]
+        r2      = if ssTot > 1e-12 then 1 - ssRes / ssTot else 0
+        (_sH, rmse, maxAbs) = residStats resid 2
+
+        xMin    = if null xs then 0 else minimum xs
+        xMax    = if null xs then 1 else maximum xs
+        ext     = (xMax - xMin) * 0.5
+        gMin    = xMin - ext
+        gMax    = xMax + ext
+        grid    = if null xs then []
+                  else [ gMin + i * (gMax - gMin) / 99 | i <- [0 .. 99] ]
+        (mid, lo, hi) = hbmRibbonAt grid alphas betas
+        smooth  = SmoothCurve grid mid lo hi
+
+        formula =
+          "$" <> yCol <> "_i \\sim \\text{Normal}(\\alpha + \\beta x_i, \\sigma)$<br>"
+          <> "$\\alpha \\sim \\text{Normal}(0, 10),\\ "
+          <> "\\beta \\sim \\text{Normal}(0, 10),\\ "
+          <> "\\sigma \\sim \\text{Exponential}(1)$"
+
+        accept = MC.chainAccepted chain
+        total  = max 1 (MC.chainTotal chain)
+        accRate :: Double
+        accRate = fromIntegral accept / fromIntegral total
+
+        statRow =
+          secStatRow
+            [ ("R²",         T.pack (printf "%.4f" r2))
+            , ("サンプル数", T.pack (show total))
+            , ("受容率",     T.pack (printf "%.1f%%" (accRate * 100)))
+            , ("RMSE",       T.pack (printf "%.4f" rmse))
+            , ("最大絶対残差", T.pack (printf "%.4f" maxAbs))
+            ]
+
+        coeffsCard = secCard "事後平均係数"
+          [ secCoefficients
+              [ ("α (intercept)", aMean)
+              , ("β (slope)",      bMean)
+              , ("σ",              sMean)
+              ]
+              (Just ("R²", r2))
+          ]
+
+        diagCard = secCard "MCMC 診断"
+          [ secMCMCDiagnostics "Posterior + trace" params chain
+          , secMCMCAutocorr   "自己相関 (max lag 40)" 40 params chain
+          , secMCMCPair        "ペア散布 (α, β)" aName bName chain
+          ]
+
+        residCard = secCard "残差プロット" [ secResiduals fitted resid ]
+
+        resultSec =
+          secCollapsible "<span class=\"sec-icon\">&#128200;</span> 回帰結果" True
+            [ statRow
+            , coeffsCard
+            , diagCard
+            , residCard
+            ]
+
+        xc = case xCols of { (c:_) -> c; _ -> "x" }
+
+    in [ secDataOverview df xCols yCol
+       , secModelOverviewExtras "HBM(NUTS)" formula
+           [("サンプラー", "NUTS")] (hbmrGraph rep)
+       , resultSec
+       , secInteractiveLM "対話的予測 (信用区間付)" xc yCol xs ys smooth (gMin, gMax)
+       ]
+
+mean0 :: [Double] -> Double
+mean0 [] = 0
+mean0 xs = sum xs / fromIntegral (length xs)

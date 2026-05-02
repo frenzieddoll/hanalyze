@@ -153,6 +153,9 @@ class Reportable a where
 |---|---|---|
 | `LMReport`       | `Viz.ReportInstances` | DataOverview / ModelOverview / Collapsible(回帰結果: StatRow + 係数 + 散布図 + 残差) / InteractiveMulti |
 | `GLMReport`      | `Viz.ReportInstances` | DataOverview / ModelOverviewLink / Collapsible(回帰結果: StatRow + 係数 + 散布図 + 残差) / InteractiveMulti |
+| `GLMMReport`     | `Viz.ReportInstances` | DataOverview / ModelOverviewLink / Collapsible(R²/σ²_u/σ²/ICC + 固定効果 + **BLUP 表** + 残差) / InteractiveMulti |
+| `GPReport`       | `Viz.ReportInstances` | DataOverview / ModelOverviewExtras (カーネル) / Collapsible(ハイパーパラメータ + LML + 残差) / InteractiveLM (信頼帯付き) |
+| `HBMLinearReport`| `Viz.ReportInstances` | DataOverview / ModelOverviewExtras (サンプラー + DAG) / Collapsible(R²/受容率 + 事後平均係数 + **MCMC 診断 (KDE/トレース/自己相関/ペア)** + 残差) / InteractiveLM (信用区間付き) |
 | `QRFit`          | `Model.Quantile`    | DataOverview / ModelOverview / Collapsible(τ-分位点 + Pseudo R¹ + Pinball + 係数 + 散布図 + 残差) |
 | `GAMFit`         | `Model.GAM`         | DataOverview / ModelOverview / Collapsible(R²/degree/knots + **特徴ごとの partial effect カード** + 残差) |
 | `RFReport`       | `Viz.ReportInstances` | DataOverview / ModelOverview / Collapsible(R² + Trees/Features + **Feature importance** + 残差) |
@@ -554,11 +557,12 @@ renderReport "out.html" cfg (baseSections ++ extra)
 
 ### 移行ロードマップ
 
-1. **Phase 1 (進行中)**: `Reportable` instance を LM/GLM/GLMM/GP/HBM に追加 (sum-type なしで CLI 同等のレポートを生成)
-   - ✅ `LMReport` / `GLMReport` (Cycle 2 で追加)
-   - ⏳ `GLMMReport` / `GPReport` / `HBMReport` (次サイクル)
-2. **Phase 2**: CLI `regress --report` を ReportBuilder 経路に切り替え
-3. **Phase 3**: `Viz.AnalysisReport` を削除
+1. **Phase 1 (完了)**: `Reportable` instance を LM/GLM/GLMM/GP/HBM に追加 (sum-type なしで CLI 同等のレポートを生成)
+   - ✅ `LMReport` / `GLMReport` (Cycle 2)
+   - ✅ `QRFit` / `GAMFit` / `RFReport` (Cycle 3 — 横展開)
+   - ✅ `GLMMReport` / `GPReport` / `HBMLinearReport` (Cycle 4)
+2. **Phase 2**: CLI `regress --report` を ReportBuilder 経路に切り替え (次サイクル)
+3. **Phase 3**: `Viz.AnalysisReport` を削除 (Phase 2 後)
 
 ---
 

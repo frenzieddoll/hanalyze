@@ -218,69 +218,11 @@ writeRBGLMM :: DataFrame -> GLMM.GLMMResult -> IO ()
 writeRBGLMM df gr = do
   appendixSec <- RB.secAppendixFromMd "付録: モデルの原理"
                    "docs/principles/glmm.ja.md"
-  let fixedB = coeffList (GLMM.glmmFixed gr)
-      coeffs = zip ["β₀ (intercept)", "β₁ (x)"] fixedB
-      blups  = zip (V.toList (GLMM.glmmGroups gr))
-                   (V.toList (GLMM.glmmBLUPs gr))
-      fitted = fittedList (GLMM.glmmFixed gr)
-      resid  = LA.toList (residualsV (GLMM.glmmFixed gr))
-      cfg     = RB.defaultReportConfig "LME (ReportBuilder)"
-      rmseV   = sqrt (sum [ r ^ (2::Int) | r <- resid ]
-                      / fromIntegral (max 1 (length resid)))
-      maxAbsR = maximum (0 : map abs resid)
-      -- Interactive prediction (固定効果のみ、ランダム効果は 0)
-      Just xVec = getNumeric "x" df
-      Just yVec = getNumeric "y" df
-      xs   = V.toList xVec
-      ys   = V.toList yVec
-      xMin = V.minimum xVec
-      xMax = V.maximum xVec
-      ext  = (xMax - xMin) * 0.5
-      sigmaResid = sqrt (GLMM.glmmResidVar gr)
-      im = RB.InteractiveModel
-             { RB.imXCols     = ["x"]
-             , RB.imYCol      = "y"
-             , RB.imXValues   = [[x] | x <- xs]
-             , RB.imYValues   = ys
-             , RB.imIntercept = head fixedB
-             , RB.imBetas     = drop 1 fixedB
-             , RB.imLink      = "identity"
-             , RB.imSlider    = [(xMin - ext, (xMin + xMax) / 2, xMax + ext)]
-             , RB.imCISigma   = Just sigmaResid
-             }
-      sections =
-        [ RB.secDataOverview df ["x"] "y"
-        , RB.secModelOverviewLink "LME"
-            ("$y_{ij} = \\beta_0 + \\beta_1 x_{ij} + u_j + \\varepsilon_{ij}$<br>"
-             <> "$u_j \\sim \\text{Normal}(0, \\sigma^2_u)$<br>"
-             <> "$\\varepsilon_{ij} \\sim \\text{Normal}(0, \\sigma^2)$")
-            "identity (Gaussian の標準リンク)"
-            Nothing
-        , RB.secCollapsible "<span class=\"sec-icon\">&#128200;</span> 回帰結果" True
-            [ RB.secStatRow
-                [ ("周辺 R²", T.pack (printf "%.4f" (rSquared1 (GLMM.glmmFixed gr))))
-                , ("σ²_u",     T.pack (printf "%.4f" (GLMM.glmmRandVar gr)))
-                , ("σ²",       T.pack (printf "%.4f" (GLMM.glmmResidVar gr)))
-                , ("ICC",      T.pack (printf "%.4f" (GLMM.glmmICC gr)))
-                , ("RMSE",     T.pack (printf "%.4f" rmseV))
-                , ("最大絶対残差", T.pack (printf "%.4f" maxAbsR))
-                ]
-            , RB.secCard "固定効果"
-                [ RB.secCoefficients coeffs
-                    (Just ("周辺 R²", rSquared1 (GLMM.glmmFixed gr))) ]
-            , RB.secCard "BLUP (グループ別ランダム切片)"
-                [ RB.secTable ""
-                    ["グループ", "u_j"]
-                    [ [g, T.pack (printf "%+.4f" u)] | (g, u) <- blups ] ]
-            , RB.secCard "残差プロット"
-                [ RB.secResiduals fitted resid ]
-            ]
-        , RB.secInteractiveMulti
-            "対話的予測 (固定効果のみ、ランダム効果 = 0)" im
-        , appendixSec
-        ]
+  let cfg      = RB.defaultReportConfig "LME (ReportBuilder)"
+      rep      = RI.GLMMReport gr GLM.Gaussian GLM.Identity "group"
+      sections = RB.toReport cfg df ["x"] "y" rep ++ [appendixSec]
   RB.renderReport "trash/cmp_glmm_RB.html" cfg sections
-  putStrLn "  RB: trash/cmp_glmm_RB.html"
+  putStrLn "  RB: trash/cmp_glmm_RB.html (Reportable GLMMReport instance)"
 
 -- ---------------------------------------------------------------------------
 -- GP
@@ -335,54 +277,12 @@ writeRBGP :: DataFrame -> [Double] -> [Double] -> [Double]
 writeRBGP df xs ys gridX res params = do
   appendixSec <- RB.secAppendixFromMd "付録: モデルの原理"
                    "docs/principles/gp.ja.md"
-  let smooth = RB.SmoothCurve gridX (GP.gpMean res)
-                              (GP.gpLower res) (GP.gpUpper res)
-      xVec = V.fromList xs
-      xMinO = V.minimum xVec
-      xMaxO = V.maximum xVec
-      ext   = (xMaxO - xMinO) * 0.5    -- gridX (±50%) と一致させる
-      cfg     = RB.defaultReportConfig "GP RBF (ReportBuilder)"
-      yhat    = GP.gpMean (GP.fitGP (GP.GPModel GP.RBF params) xs ys xs)
-      resid   = zipWith (-) ys yhat
-      rmseV   = sqrt (sum [ r ^ (2::Int) | r <- resid ]
-                      / fromIntegral (max 1 (length resid)))
-      maxAbsR = maximum (0 : map abs resid)
-      sections =
-        [ RB.secDataOverview df ["x"] "y"
-        , RB.secModelOverviewExtras "GP"
-            ("$f \\sim \\text{GP}(0, k(x, x'))$<br>"
-             <> "$k(x, x') = \\sigma_f^2 \\exp\\!\\left(-(x-x')^2 / (2\\ell^2)\\right)$<br>"
-             <> "$y_i = f_i + \\varepsilon_i, \\quad \\varepsilon_i \\sim \\text{Normal}(0, \\sigma_n^2)$")
-            [("カーネル", "RBF (二乗指数)")]
-            Nothing
-        , RB.secCollapsible "<span class=\"sec-icon\">&#128200;</span> 回帰結果" True
-            [ RB.secStatRow
-                [ ("ℓ",   T.pack (printf "%.4f" (GP.gpLengthScale params)))
-                , ("σ_f²", T.pack (printf "%.4f" (GP.gpSignalVar params)))
-                , ("σ_n²", T.pack (printf "%.4f" (GP.gpNoiseVar params)))
-                , ("LML",  T.pack (printf "%.2f"
-                                    (GP.logMarginalLikelihood xs ys GP.RBF params)))
-                , ("RMSE", T.pack (printf "%.4f" rmseV))
-                , ("最大絶対残差", T.pack (printf "%.4f" maxAbsR))
-                ]
-            , RB.secCard "ハイパーパラメータ (周辺尤度最大化で推定)"
-                [ RB.secCoefficients
-                    [ ("ℓ (length scale)", GP.gpLengthScale params)
-                    , ("σ_f² (signal variance)", GP.gpSignalVar params)
-                    , ("σ_n² (noise variance)", GP.gpNoiseVar params)
-                    ]
-                    (Just ("log p(y|X,θ)",
-                           GP.logMarginalLikelihood xs ys GP.RBF params))
-                ]
-            , RB.secCard "残差プロット"
-                [ RB.secResiduals yhat resid ]
-            ]
-        , RB.secInteractiveLM "対話的予測" "x" "y"
-            xs ys smooth (xMinO - ext, xMaxO + ext)
-        , appendixSec
-        ]
+  let cfg      = RB.defaultReportConfig "GP RBF (ReportBuilder)"
+      lml      = GP.logMarginalLikelihood xs ys GP.RBF params
+      rep      = RI.GPReport GP.RBF params res gridX xs ys lml
+      sections = RB.toReport cfg df ["x"] "y" rep ++ [appendixSec]
   RB.renderReport "trash/cmp_gp_RB.html" cfg sections
-  putStrLn "  RB: trash/cmp_gp_RB.html"
+  putStrLn "  RB: trash/cmp_gp_RB.html (Reportable GPReport instance)"
 
 -- ---------------------------------------------------------------------------
 -- HBM (Bayesian linear regression via NUTS)
@@ -484,70 +384,17 @@ writeRBHBM :: DataFrame -> [Double] -> [Double] -> MCMCcore.Chain -> IO ()
 writeRBHBM df xs ys chain = do
   appendixSec <- RB.secAppendixFromMd "付録: モデルの原理"
                    "docs/principles/hbm.ja.md"
-  let aMean = maybe 0 id (MCMCcore.posteriorMean "alpha" chain)
-      bMean = maybe 0 id (MCMCcore.posteriorMean "beta"  chain)
-      sMean = maybe 0 id (MCMCcore.posteriorMean "sigma" chain)
-      smoothAR = makeHBMSmoothAR xs chain
-      smoothRB = RB.SmoothCurve (AR.sdXs smoothAR) (AR.sdYs smoothAR)
-                                (AR.sdLower smoothAR) (AR.sdUpper smoothAR)
-      params = ["alpha", "beta", "sigma"]
-      summaryRows =
-        [ (p,
-           maybe 0 id (MCMCcore.posteriorMean p chain),
-           maybe 0 id (MCMCcore.posteriorSD p chain),
-           maybe 0 id (MCMCcore.posteriorQuantile 0.025 p chain),
-           maybe 0 id (MCMCcore.posteriorQuantile 0.975 p chain),
-           StatMCMC.ess (MCMCcore.chainVals p chain),
-           Nothing :: Maybe Double)
-        | p <- params ]
-      cfg = RB.defaultReportConfig "HBM (ReportBuilder)"
-      xVec = V.fromList xs
-      xMinO = V.minimum xVec
-      xMaxO = V.maximum xVec
-      ext   = (xMaxO - xMinO) * 0.5
+  let cfg   = RB.defaultReportConfig "HBM (ReportBuilder)"
       mgDag = VMG.buildMermaid (HBM.buildModelGraph (hbmModel xs ys))
-      -- 統計量
-      fitted  = [aMean + bMean * x | x <- xs]
-      resid   = zipWith (-) ys fitted
-      rmseV   = sqrt (sum [ r ^ (2::Int) | r <- resid ]
-                      / fromIntegral (max 1 (length resid)))
-      maxAbsR = maximum (0 : map abs resid)
-      yBar    = sum ys / fromIntegral (length ys)
-      tss     = sum [ (y - yBar) ^ (2::Int) | y <- ys ]
-      rss     = sum [ r ^ (2::Int) | r <- resid ]
-      r2      = if tss < 1e-12 then 0 else 1 - rss / tss
-      acc     = MCMCcore.acceptanceRate chain
-      nSamp   = length (MCMCcore.chainSamples chain)
-      sections =
-        [ RB.secDataOverview df ["x"] "y"
-        , RB.secModelOverviewExtras "HBM"
-            ("$y_i \\sim \\text{Normal}(\\alpha + \\beta x_i, \\sigma)$<br>"
-             <> "$\\alpha, \\beta \\sim \\text{Normal}(0, 10)$<br>"
-             <> "$\\sigma \\sim \\text{Exponential}(1)$")
-            [("サンプラー", "NUTS (No-U-Turn Sampler)")]
-            (Just mgDag)
-        , RB.secCollapsible "<span class=\"sec-icon\">&#128200;</span> 回帰結果" True
-            [ RB.secStatRow
-                [ ("R²",         T.pack (printf "%.4f" r2))
-                , ("サンプル数", T.pack (show nSamp))
-                , ("チェーン数", "1")
-                , ("受容率",     T.pack (printf "%.1f%%" (acc * 100)))
-                , ("RMSE",       T.pack (printf "%.4f" rmseV))
-                , ("最大絶対残差", T.pack (printf "%.4f" maxAbsR))
-                ]
-            , RB.secCard "事後要約"
-                [ RB.secPosteriorSummary "" summaryRows ]
-            , RB.secCard "MCMC 診断"
-                [ RB.secMCMCDiagnostics "" params chain
-                , RB.secMCMCAutocorr "" 40 params chain
-                , RB.secMCMCPair "" "alpha" "beta" chain
-                ]
-            , RB.secCard "残差プロット"
-                [ RB.secResiduals fitted resid ]
-            ]
-        , RB.secInteractiveLM "対話的予測 (事後中央値)"
-            "x" "y" xs ys smoothRB (xMinO - ext, xMaxO + ext)
-        , appendixSec
-        ]
+      rep   = RI.HBMLinearReport
+                { RI.hbmrChain     = chain
+                , RI.hbmrXs        = xs
+                , RI.hbmrYs        = ys
+                , RI.hbmrAlphaName = "alpha"
+                , RI.hbmrBetaName  = "beta"
+                , RI.hbmrSigmaName = "sigma"
+                , RI.hbmrGraph     = Just mgDag
+                }
+      sections = RB.toReport cfg df ["x"] "y" rep ++ [appendixSec]
   RB.renderReport "trash/cmp_hbm_RB.html" cfg sections
-  putStrLn "  RB: trash/cmp_hbm_RB.html"
+  putStrLn "  RB: trash/cmp_hbm_RB.html (Reportable HBMLinearReport instance)"
