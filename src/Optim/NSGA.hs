@@ -28,12 +28,15 @@ module Optim.NSGA
   , defaultNSGAConfig
     -- * 高レベル API (Phase S で実装)
   , nsga2
-    -- * 構成要素 (Phase S1〜S3 で実装)
+    -- * 構成要素
   , dominates
+  , paretoDominates
   , nonDominatedSort
   , crowdingDistance
   ) where
 
+import Data.List (sortBy)
+import Data.Ord  (comparing)
 import System.Random.MWC (GenIO)
 
 -- ---------------------------------------------------------------------------
@@ -85,24 +88,137 @@ nsga2 :: NSGAConfig
       -> IO [Solution]
 nsga2 _cfg _f _bounds _gen = error "Optim.NSGA.nsga2: not yet implemented (Phase S3)"
 
--- | 個体 a が個体 b を **支配** するか (Pareto dominance)。
+-- | 個体 a が個体 b を **支配** するか (制約付き Pareto dominance)。
 --
--- a dominates b ⇔ ∀ i: a_i ≤ b_i かつ ∃ j: a_j < b_j
--- 制約付きの場合: 実行可能性が優先される。
---
--- TODO Phase S1 で実装。
+-- 制約 (Deb 2000 "constrained-domination"):
+--   1. a が実行可能 (violation = 0) かつ b が不実行可能 → a が支配
+--   2. 両方不実行可能 → violation の小さい方が支配
+--   3. 両方実行可能 → 通常の Pareto dominance
+--      (∀ i: a_i ≤ b_i) かつ (∃ j: a_j < b_j)
 dominates :: Solution -> Solution -> Bool
-dominates _a _b = error "Optim.NSGA.dominates: not yet implemented (Phase S1)"
+dominates a b
+  | va == 0 && vb >  0 = True
+  | va >  0 && vb == 0 = False
+  | va >  0 && vb >  0 = va < vb
+  | otherwise          = paretoDominates (solObjectives a) (solObjectives b)
+  where
+    va = solViolation a
+    vb = solViolation b
+
+-- | 通常の (制約無視) Pareto dominance: a dominates b ⇔
+-- ∀ i: aᵢ ≤ bᵢ かつ ∃ j: aⱼ < bⱼ。
+paretoDominates :: [Double] -> [Double] -> Bool
+paretoDominates as bs =
+  all (\(x, y) -> x <= y) zipped
+    && any (\(x, y) -> x <  y) zipped
+  where
+    zipped = zip as bs
 
 -- | 非優越ソート (Deb 2002 fast nondominated sort)。
--- 母集団を front F_1, F_2, ... に分割し、front の rank 列を返す。
+-- 母集団を Pareto front に分割: F_1 (最も非優越), F_2, ...
 --
--- TODO Phase S1 で実装。
+-- アルゴリズム (O(MN²)):
+--
+--   for each p in P:
+--     n_p = |{q : q dominates p}|        -- p を支配する数
+--     S_p = {q : p dominates q}          -- p が支配する集合
+--     if n_p = 0: p ∈ F_1
+--   for i = 1, 2, ...:
+--     for each p in F_i, each q in S_p:
+--       n_q -= 1
+--       if n_q = 0: q ∈ F_{i+1}
 nonDominatedSort :: [Solution] -> [[Solution]]
-nonDominatedSort _pop = error "Optim.NSGA.nonDominatedSort: not yet implemented (Phase S1)"
+nonDominatedSort [] = []
+nonDominatedSort pop =
+  let n = length pop
+      idxs = [0 .. n - 1]
+      ps   = pop                 -- インデックスでアクセス
+      -- (S_p, n_p) を計算
+      domInfo i =
+        let pi = ps !! i
+            (sp, np) = foldr step ([], 0 :: Int) idxs
+            step j (s, c)
+              | i == j               = (s, c)
+              | dominates pi (ps !! j) = (j : s, c)
+              | dominates (ps !! j) pi = (s, c + 1)
+              | otherwise              = (s, c)
+        in (sp, np)
+      info = [domInfo i | i <- idxs]   -- [(S_i, n_i)]
+      -- F_1 の構築
+      front1 = [i | (i, (_, np)) <- zip idxs info, np == 0]
+      -- 反復で次の front を作る
+      go currentFront acc remaining =
+        if null currentFront then reverse acc
+        else
+          let -- currentFront の S_p 集合から各 q について n_q を 1 減らし、
+              -- 0 になったものを次の front に
+              decrements = concat [ fst (info !! i) | i <- currentFront ]
+              counts'    = foldr (\j m -> updateAt j (subtract 1) m) remaining decrements
+              nextF      = [j | j <- [0 .. length counts' - 1]
+                              , counts' !! j == 0
+                              , j `elem` candidatePool]
+              candidatePool = [j | j <- [0 .. n - 1]
+                                 , j `notElem` concat (currentFront : acc)]
+          in go nextF (currentFront : acc) counts'
+      -- mutable-style update on list
+      updateAt :: Int -> (a -> a) -> [a] -> [a]
+      updateAt _ _ [] = []
+      updateAt 0 f (x:xs) = f x : xs
+      updateAt k f (x:xs) = x : updateAt (k - 1) f xs
+      initialCounts = map snd info
+      idxFronts = go front1 [] initialCounts
+  in map (map (ps !!)) idxFronts
 
--- | 各 front 内で crowding distance を計算し、降順にソートする。
+-- | 各 front 内で crowding distance (Deb 2002) を計算し、距離降順にソート。
 --
--- TODO Phase S1 で実装。
+-- アルゴリズム (O(MN log N)):
+--
+--   for each m in objectives:
+--     sort I by f_m
+--     I[0].dist = I[l-1].dist = ∞
+--     for i = 1..l-2:
+--       I[i].dist += (f_m(i+1) - f_m(i-1)) / (f_max_m - f_min_m)
+--
+-- 戻り値: 距離の降順 (= 多様性が高い個体が先頭)。NSGA-II の選別で使う。
 crowdingDistance :: [Solution] -> [Solution]
-crowdingDistance _front = error "Optim.NSGA.crowdingDistance: not yet implemented (Phase S1)"
+crowdingDistance front
+  | length front <= 2 = front           -- 全員 ∞ 扱いなので順序不問
+  | otherwise =
+      let l    = length front
+          m    = length (solObjectives (head front))
+          ps   = zip [0 ..] front       -- index 付き
+          -- 各目的について寄与を計算
+          contributions :: Int -> [(Int, Double)]
+          contributions objIdx =
+            let sorted = sortBy
+                          (comparing (\(_, s) -> solObjectives s !! objIdx)) ps
+                vals   = map (\(_, s) -> solObjectives s !! objIdx) sorted
+                fMin   = minimum vals
+                fMax   = maximum vals
+                rng    = fMax - fMin
+            in if rng == 0
+                 then [(idx, 0) | (idx, _) <- sorted]
+                 else
+                   let n = length sorted
+                       go k acc
+                         | k <  0      = acc
+                         | k == 0      = go (k + 1) ((fst (sorted !! k), inf) : acc)
+                         | k == n - 1  = (fst (sorted !! k), inf) : acc
+                         | otherwise   =
+                             let prev = vals !! (k - 1)
+                                 next = vals !! (k + 1)
+                                 d    = (next - prev) / rng
+                             in go (k + 1) ((fst (sorted !! k), d) : acc)
+                   in go 0 []
+          -- 全目的の寄与を合算
+          totalDist :: Int -> Double
+          totalDist origIdx =
+            sum [ d | objIdx <- [0 .. m - 1]
+                    , (i, d) <- contributions objIdx
+                    , i == origIdx ]
+          withDist = [(totalDist i, s) | (i, s) <- ps]
+          -- 距離降順にソート
+          sortedDesc = sortBy (\(d1, _) (d2, _) -> compare d2 d1) withDist
+      in map snd sortedDesc
+  where
+    inf = 1 / 0  -- ∞
