@@ -43,6 +43,7 @@ module Viz.ReportBuilder
   , secTable
   , secMarkdown
   , secHtml
+  , secCollapsible
     -- * MCMC / 事後分布関連 (Phase F)
   , secMCMCDiagnostics
   , secMCMCDiagnosticsMulti
@@ -130,6 +131,9 @@ data ReportSection
     -- | 単変数 LM/GLM の対話的予測 (スライダー + リアルタイム scatter)。
     --   フィールド: title / xCol / yCol / xs / ys / smooth / (xSliderMin, xSliderMax)
   | SecInteractiveLM Text Text Text [Double] [Double] SmoothCurve (Double, Double)
+    -- | 折りたたみ可能なグループ。子セクションを 1 つの details で囲む。
+    --   フィールド: title / openByDefault / 子セクション
+  | SecCollapsible Text Bool [ReportSection]
 
 -- ---------------------------------------------------------------------------
 -- ビルダ
@@ -171,6 +175,10 @@ secMarkdown = SecMarkdown
 
 secHtml :: Text -> Text -> ReportSection
 secHtml = SecHtml
+
+-- | 折りたたみ可能グループ。
+secCollapsible :: Text -> Bool -> [ReportSection] -> ReportSection
+secCollapsible = SecCollapsible
 
 -- ---------------------------------------------------------------------------
 -- MCMC セクションビルダ (Viz.MCMC のラッパ)
@@ -318,6 +326,8 @@ renderSection sid sec = case sec of
   SecMarkdown t txt           -> renderMarkdown sid t txt
   SecHtml _ html              -> wrapSection sid "" html
   SecInteractiveLM t xc yc xs ys sc rng -> renderInteractiveLM sid t xc yc xs ys sc rng
+  SecCollapsible t open children ->
+    renderCollapsible sid t open children
 
 wrapSection :: Text -> Text -> Text -> Text
 wrapSection sid title inner = T.unlines
@@ -332,58 +342,116 @@ wrapSection sid title inner = T.unlines
 renderDataOverview :: Text -> DataFrame -> [Text] -> Text -> Text
 renderDataOverview sid df xCols yCol =
   let allCols  = xCols ++ [yCol]
-      relevant = [ (c, getColumn c df) | c <- allCols ]
+      relevant = [ (i, c, getColumn c df) | (i, c) <- zip [0::Int ..] allCols ]
       n        = numRows df
-      header   = "<tr><th>Column</th><th>Type</th><th>N</th><th>Min</th>"
-                 <> "<th>Max</th><th>Mean</th><th>Median</th><th>SD</th></tr>"
+      header   =
+        T.concat
+          [ "<tr>"
+          , "<th>Column</th><th>Type</th><th>N</th>"
+          , "<th>Missing</th>"
+          , "<th>Min</th><th>Q1</th><th>Median</th><th>Q3</th><th>Max</th>"
+          , "<th>Mean</th><th>SD</th>"
+          , "<th>Skew</th><th>Kurtosis</th>"
+          , "</tr>"
+          ]
       rows = T.intercalate "\n" (map renderColRow relevant)
       summary = "Rows: <strong>" <> T.pack (show n)
                 <> "</strong>, columns analyzed: <strong>"
                 <> T.pack (show (length allCols)) <> "</strong>"
+      -- ヒストグラム (折りたたみ、デフォルト閉じ)
+      histBlocks = T.intercalate "\n"
+        [ "  <details class=\"hist-card\"><summary><strong>"
+          <> c <> "</strong> &mdash; histogram</summary>"
+          <> "<div class=\"vl-wrap\"><div id=\"hist_" <> sid
+          <> "_" <> T.pack (show i) <> "\"></div></div></details>"
+        | (i, c, Just (NumericCol _)) <- relevant ]
   in wrapSection sid "Data overview" $ T.unlines
        [ "<p>" <> summary <> "</p>"
-       , "<table>"
+       , "<details class=\"stats-card\" open><summary>Statistics</summary>"
+       , "<div class=\"table-scroll\"><table class=\"stats-table\">"
        , "<thead>" <> header <> "</thead>"
        , "<tbody>" <> rows <> "</tbody>"
-       , "</table>"
+       , "</table></div>"
+       , "</details>"
+       , "<details class=\"hist-card-group\"><summary>Histograms (per column)</summary>"
+       , histBlocks
+       , "</details>"
        ]
   where
-    renderColRow (c, Just (NumericCol v)) =
+    renderColRow (_, c, Just (NumericCol v)) =
       let xs = V.toList v
-          m  = length xs
-          mean = sum xs / fromIntegral m
-          ss   = sort xs
-          mn = if m == 0 then 0 else minimum xs
-          mx = if m == 0 then 0 else maximum xs
-          med = if m == 0 then 0 else ss !! (m `div` 2)
-          var = if m <= 1 then 0
-                else sum [(x - mean) ^ (2 :: Int) | x <- xs] / fromIntegral (m - 1)
-          sdv = sqrt var
+          m  = V.length v
+          ss = sort xs
+          mn = if m == 0 then 0 else V.minimum v
+          mx = if m == 0 then 0 else V.maximum v
+          mean = if m == 0 then 0 else sum xs / fromIntegral m
+          q1   = if m == 0 then 0 else ss !! (m `div` 4)
+          med  = if m == 0 then 0 else ss !! (m `div` 2)
+          q3   = if m == 0 then 0 else ss !! (3 * m `div` 4)
+          var  = if m <= 1 then 0
+                 else sum [(x - mean) ^ (2 :: Int) | x <- xs]
+                       / fromIntegral (m - 1)
+          sdv  = sqrt var
+          skew = if sdv <= 1e-12 then 0
+                 else sum [((x - mean) / sdv) ^ (3 :: Int) | x <- xs]
+                      / fromIntegral m
+          kurt = if sdv <= 1e-12 then 0
+                 else sum [((x - mean) / sdv) ^ (4 :: Int) | x <- xs]
+                      / fromIntegral m - 3
       in "<tr>" <> T.intercalate ""
-           [ td c
-           , td "numeric"
-           , td (T.pack (show m))
-           , td (showD4 mn)
-           , td (showD4 mx)
-           , td (showD4 mean)
-           , td (showD4 med)
-           , td (showD4 sdv)
+           [ td c, td "numeric", td (T.pack (show m)), td "0"
+           , td (showD4 mn), td (showD4 q1), td (showD4 med)
+           , td (showD4 q3), td (showD4 mx)
+           , td (showD4 mean), td (showD4 sdv)
+           , td (showD4 skew), td (showD4 kurt)
            ] <> "</tr>"
-    renderColRow (c, Just (TextCol v)) =
+    renderColRow (_, c, Just (TextCol v)) =
       let xs = V.toList v
           m  = length xs
           uniq = length (unique xs)
       in "<tr>" <> T.intercalate ""
-           [ td c
-           , td "text"
-           , td (T.pack (show m))
-           , td "—" , td "—" , td "—" , td "—"
+           [ td c, td "text", td (T.pack (show m))
+           , td "0"
+           , td "—", td "—", td "—", td "—", td "—", td "—"
            , td ("unique=" <> T.pack (show uniq))
+           , td "—"
            ] <> "</tr>"
-    renderColRow (c, Nothing) =
-      "<tr><td>" <> c <> "</td><td colspan=7>(missing)</td></tr>"
+    renderColRow (_, c, Nothing) =
+      "<tr><td>" <> c <> "</td><td colspan=12>(missing)</td></tr>"
     td x = "<td>" <> x <> "</td>"
     unique = foldr (\x acc -> if x `elem` acc then acc else x : acc) []
+
+-- | データ概要セクションのスクリプト: 各 numeric 列のヒストグラムを embed。
+dataOverviewScript :: Text -> DataFrame -> [Text] -> Text -> Text
+dataOverviewScript sid df xCols yCol =
+  let allCols = xCols ++ [yCol]
+      pairs = [ (i, c, getNumeric c df)
+              | (i, c) <- zip [0::Int ..] allCols ]
+      embed i v =
+        let json = decodeUtf8 . toStrict . encode . fromVL $
+                    histogramSpec (allCols !! i) (V.toList v)
+        in "vegaEmbed('#hist_" <> sid <> "_" <> T.pack (show i)
+           <> "', " <> json <> ", {actions:false});"
+  in T.intercalate "\n"
+       [ embed i v | (i, _, Just v) <- pairs ]
+
+-- | 単純なヒストグラム Vega-Lite spec。
+histogramSpec :: Text -> [Double] -> VegaLite
+histogramSpec col vals =
+  toVegaLite
+    [ dataFromColumns []
+        . dataColumn col (Numbers vals)
+        $ []
+    , mark Bar [MOpacity 0.85, MColor "#4C72B0"]
+    , encoding
+        . position X [PName col, PmType Quantitative,
+                      PBin [], PAxis [AxTitle col]]
+        . position Y [PAggregate Count, PmType Quantitative,
+                      PAxis [AxTitle "Count"]]
+        $ []
+    , width 320
+    , height 160
+    ]
 
 -- モデル概要 -----------------------------------------------------------------
 
@@ -491,6 +559,28 @@ renderMarkdown :: Text -> Text -> Text -> Text
 renderMarkdown sid title txt =
   wrapSection sid title $ "<p>" <> txt <> "</p>"
 
+-- Collapsible group ---------------------------------------------------------
+
+childId :: Text -> Int -> Text
+childId sid i = sid <> "_c" <> T.pack (show i)
+
+renderCollapsible :: Text -> Text -> Bool -> [ReportSection] -> Text
+renderCollapsible sid title open children =
+  let childHtml = T.intercalate "\n"
+        [ renderSection (childId sid i) c
+        | (i, c) <- zip [0::Int ..] children ]
+      attr = if open then " open" else ""
+  in T.unlines
+       [ "<section id=\"" <> sid <> "\" class=\"collapsible-wrap\">"
+       , "  <details" <> attr <> ">"
+       , "    <summary><h2>" <> title <> "</h2></summary>"
+       , "    <div class=\"collapsible-body\">"
+       , childHtml
+       , "    </div>"
+       , "  </details>"
+       , "</section>"
+       ]
+
 -- Interactive LM ------------------------------------------------------------
 
 renderInteractiveLM :: Text -> Text -> Text -> Text
@@ -534,6 +624,12 @@ sectionScript sid sec = case sec of
     embed sid spec
   SecInteractiveLM _ xc yc xs ys sc _ ->
     interactiveLMScript sid xc yc xs ys sc
+  SecCollapsible _ _ children ->
+    T.intercalate "\n"
+      [ sectionScript (childId sid i) child
+      | (i, child) <- zip [0::Int ..] children ]
+  SecDataOverview df xCols yCol ->
+    dataOverviewScript sid df xCols yCol
   _ -> ""
   where
     embed s spec =
@@ -767,4 +863,24 @@ css = T.unlines
   , ".pred-readout { font-size: 1em; }"
   , ".pred-readout strong { color: #2c3e50; }"
   , ".band-readout { color: #888; font-size: .9em; }"
+  , "details { margin: 8px 0; }"
+  , "details summary { cursor: pointer; padding: 8px 12px;"
+  , "                  background: #eef2f7; border-radius: 6px;"
+  , "                  font-weight: 600; color: #2c3e50; user-select: none; }"
+  , "details summary h2 { display: inline; font-size: 1.05em; border: none;"
+  , "                     padding: 0; margin: 0; }"
+  , "details[open] summary { background: #dde3eb; }"
+  , "details summary::-webkit-details-marker { color: #888; }"
+  , ".collapsible-wrap { padding: 0; background: transparent; box-shadow: none; }"
+  , ".collapsible-body { padding: 14px 0 0 0; }"
+  , ".collapsible-body section { border: 1px solid #e0e6ee; box-shadow: none; }"
+  , ".stats-card, .hist-card-group { margin: 10px 0; }"
+  , ".stats-card[open] summary, .hist-card-group[open] summary { background: #d6e4f0; }"
+  , ".hist-card { border: 1px solid #e0e6ee; border-radius: 6px;"
+  , "             padding: 4px 8px; margin: 6px 0; }"
+  , ".hist-card summary { background: transparent; padding: 4px 0; }"
+  , ".hist-card summary strong { color: #2c3e50; }"
+  , ".table-scroll { overflow-x: auto; }"
+  , ".stats-table { font-size: .85em; }"
+  , ".stats-table th, .stats-table td { padding: 5px 10px; }"
   ]

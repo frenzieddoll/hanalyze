@@ -132,16 +132,20 @@ writeRBLM df xVec yVec = do
           cfg   = RB.defaultReportConfig "LM (ReportBuilder)"
           sections =
             [ RB.secDataOverview df ["x"] "y"
-            , RB.secModelOverview "Linear Model (LM)" "y = β₀ + β₁·x" Nothing
-            , RB.secCoefficients coeffs (Just ("R²", rSquared1 fit))
-            , RB.secKeyValue "Fit summary"
-                [ ("R²",     T.pack (printf "%.4f" (rSquared1 fit)))
-                , ("Method", "OLS via QR decomposition")
-                ]
-            , RB.secFitScatter "x" "y" xs ys (Just smooth)
+            , RB.secModelOverview "Linear Model (LM)"
+                "y = β₀ + β₁·x  (Gaussian family, identity link)"
+                Nothing
             , RB.secInteractiveLM "Interactive prediction" "x" "y"
                 xs ys smooth (xMinO - ext, xMaxO + ext)
-            , RB.secResiduals fitted resid
+            , RB.secCollapsible "Regression results" False
+                [ RB.secCoefficients coeffs (Just ("R²", rSquared1 fit))
+                , RB.secKeyValue "Fit summary"
+                    [ ("R²",     T.pack (printf "%.4f" (rSquared1 fit)))
+                    , ("Method", "OLS via QR decomposition")
+                    ]
+                , RB.secFitScatter "x" "y" xs ys (Just smooth)
+                , RB.secResiduals fitted resid
+                ]
             , RB.secMarkdown "About"
                 "OLS minimizes RSS. The 95% band is the confidence interval of the mean response."
             ]
@@ -213,19 +217,23 @@ writeRBGLM df xVec yVec xCol yCol = do
           sections =
             [ RB.secDataOverview df [xCol] yCol
             , RB.secModelOverview "GLM Poisson/Log"
-                ("log(E[" <> yCol <> "]) = β₀ + β₁·" <> xCol) Nothing
-            , RB.secCoefficients
-                [(T.pack k, v) | (k, v) <- coeffs]
-                (Just ("McFadden R²", rSquared1 fit))
-            , RB.secKeyValue "Fit summary"
-                [ ("Family", "Poisson")
-                , ("Link",   "log")
-                , ("Method", "IRLS")
-                ]
-            , RB.secFitScatter xCol yCol xs ys (Just smooth)
+                ("log(E[" <> yCol <> "]) = β₀ + β₁·" <> xCol
+                 <> "  (Poisson family, log link)")
+                Nothing
             , RB.secInteractiveLM "Interactive prediction" xCol yCol
                 xs ys smooth (xMinO - ext, xMaxO + ext)
-            , RB.secResiduals fitted resid
+            , RB.secCollapsible "Regression results" False
+                [ RB.secCoefficients
+                    [(T.pack k, v) | (k, v) <- coeffs]
+                    (Just ("McFadden R²", rSquared1 fit))
+                , RB.secKeyValue "Fit summary"
+                    [ ("Family", "Poisson")
+                    , ("Link",   "log")
+                    , ("Method", "IRLS")
+                    ]
+                , RB.secFitScatter xCol yCol xs ys (Just smooth)
+                , RB.secResiduals fitted resid
+                ]
             , RB.secMarkdown "About"
                 "Poisson GLM with log link models the rate λ = exp(β₀ + β₁ x). IRLS reweights observations by their fitted variance."
             ]
@@ -274,21 +282,24 @@ writeRBGLMM df gr = do
       sections =
         [ RB.secDataOverview df ["x"] "y"
         , RB.secModelOverview "Linear Mixed Effects (LME)"
-            "y_ij = β₀ + β₁·x + u_j + ε,  u_j ~ N(0, σ²_u),  ε ~ N(0, σ²)"
+            ("y_ij = β₀ + β₁·x + u_j + ε,  u_j ~ N(0, σ²_u),  ε ~ N(0, σ²)"
+             <> "  (Gaussian family, identity link)")
             Nothing
-        , RB.secCoefficients coeffs
-            (Just ("Marginal R²", rSquared1 (GLMM.glmmFixed gr)))
-        , RB.secKeyValue "Variance components"
-            [ ("σ²_u (group)",  T.pack (printf "%.4f" (GLMM.glmmRandVar gr)))
-            , ("σ² (residual)", T.pack (printf "%.4f" (GLMM.glmmResidVar gr)))
-            , ("ICC", T.pack (printf "%.4f (%d%%)"
-                               (GLMM.glmmICC gr)
-                               (round (GLMM.glmmICC gr * 100) :: Int)))
+        , RB.secCollapsible "Regression results" False
+            [ RB.secCoefficients coeffs
+                (Just ("Marginal R²", rSquared1 (GLMM.glmmFixed gr)))
+            , RB.secKeyValue "Variance components"
+                [ ("σ²_u (group)",  T.pack (printf "%.4f" (GLMM.glmmRandVar gr)))
+                , ("σ² (residual)", T.pack (printf "%.4f" (GLMM.glmmResidVar gr)))
+                , ("ICC", T.pack (printf "%.4f (%d%%)"
+                                   (GLMM.glmmICC gr)
+                                   (round (GLMM.glmmICC gr * 100) :: Int)))
+                ]
+            , RB.secTable "BLUPs (random intercepts)"
+                ["Group", "u_j"]
+                [ [g, T.pack (printf "%+.4f" u)] | (g, u) <- blups ]
+            , RB.secResiduals fitted resid
             ]
-        , RB.secTable "BLUPs (random intercepts)"
-            ["Group", "u_j"]
-            [ [g, T.pack (printf "%+.4f" u)] | (g, u) <- blups ]
-        , RB.secResiduals fitted resid
         , RB.secMarkdown "About"
             "LME fits fixed effects β (population-level) and random effects u_j (group-specific intercepts) jointly via exact EM. The ICC measures how much variation is between vs within groups."
         ]
@@ -352,17 +363,20 @@ writeRBGP df xs ys gridX res params = do
       sections =
         [ RB.secDataOverview df ["x"] "y"
         , RB.secModelOverview "Gaussian Process (RBF kernel)"
-            "f ~ GP(0, K_RBF(x, x'))" Nothing
-        , RB.secKeyValue "Optimized hyperparameters"
-            [ ("ℓ (length scale)", T.pack (printf "%.4f" (GP.gpLengthScale params)))
-            , ("σ_f² (signal var)",T.pack (printf "%.4f" (GP.gpSignalVar params)))
-            , ("σ_n² (noise var)", T.pack (printf "%.4f" (GP.gpNoiseVar params)))
-            , ("LML", T.pack (printf "%.4f"
-                              (GP.logMarginalLikelihood xs ys GP.RBF params)))
-            ]
-        , RB.secFitScatter "x" "y" xs ys (Just smooth)
+            "f ~ GP(0, K_RBF(x, x'))  (RBF kernel, k(x,x') = σ_f² exp(-(x-x')²/(2ℓ²)))"
+            Nothing
         , RB.secInteractiveLM "Interactive prediction" "x" "y"
             xs ys smooth (xMinO - ext, xMaxO + ext)
+        , RB.secCollapsible "Regression results" False
+            [ RB.secKeyValue "Optimized hyperparameters"
+                [ ("ℓ (length scale)", T.pack (printf "%.4f" (GP.gpLengthScale params)))
+                , ("σ_f² (signal var)",T.pack (printf "%.4f" (GP.gpSignalVar params)))
+                , ("σ_n² (noise var)", T.pack (printf "%.4f" (GP.gpNoiseVar params)))
+                , ("LML", T.pack (printf "%.4f"
+                                  (GP.logMarginalLikelihood xs ys GP.RBF params)))
+                ]
+            , RB.secFitScatter "x" "y" xs ys (Just smooth)
+            ]
         , RB.secMarkdown "About"
             "GP regression with RBF kernel. Shaded band is the 95% credible interval (mean ± 2σ). Hyperparameters are optimized by maximizing the log marginal likelihood."
         ]
@@ -488,22 +502,26 @@ writeRBHBM df xs ys chain = do
       sections =
         [ RB.secDataOverview df ["x"] "y"
         , RB.secModelOverview "Bayesian Linear Regression (HBM, NUTS)"
-            "y ~ Normal(α + β·x, σ),  α,β ~ Normal(0,10),  σ ~ Exp(1)"
+            ("y ~ Normal(α + β·x, σ),  α,β ~ Normal(0,10),  σ ~ Exp(1)"
+             <> "  (Gaussian observation, identity link, NUTS sampler)")
             Nothing
-        , RB.secCoefficients
-            [ ("α (posterior mean)", aMean)
-            , ("β (posterior mean)", bMean)
-            , ("σ (posterior mean)", sMean)
-            ]
-            Nothing
-        , RB.secPosteriorSummary "Posterior summary" summaryRows
-        , RB.secMCMCDiagnostics "MCMC diagnostics (KDE + trace)"
-            params chain
-        , RB.secMCMCAutocorr "Autocorrelation" 40 params chain
-        , RB.secMCMCPair "Pair scatter (α, β)" "alpha" "beta" chain
-        , RB.secFitScatter "x" "y" xs ys (Just smoothRB)
         , RB.secInteractiveLM "Interactive prediction (posterior median)"
             "x" "y" xs ys smoothRB (xMinO - ext, xMaxO + ext)
+        , RB.secCollapsible "Regression results" False
+            [ RB.secCoefficients
+                [ ("α (posterior mean)", aMean)
+                , ("β (posterior mean)", bMean)
+                , ("σ (posterior mean)", sMean)
+                ]
+                Nothing
+            , RB.secPosteriorSummary "Posterior summary" summaryRows
+            , RB.secFitScatter "x" "y" xs ys (Just smoothRB)
+            ]
+        , RB.secCollapsible "MCMC diagnostics" False
+            [ RB.secMCMCDiagnostics "KDE + trace" params chain
+            , RB.secMCMCAutocorr "Autocorrelation" 40 params chain
+            , RB.secMCMCPair "Pair scatter (α, β)" "alpha" "beta" chain
+            ]
         , RB.secMarkdown "About"
             "Bayesian linear regression with NUTS. Posterior summary shows credible intervals (2.5%/97.5%) and ESS. The shaded band on the scatter is the 95% posterior credible interval. The pair scatter visualizes the joint posterior of (α, β)."
         ]
