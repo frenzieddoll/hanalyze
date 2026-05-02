@@ -160,6 +160,16 @@ cabal test               # テスト
 `cabal run <demo-name>` で実行 (HTML/PNG が生成されカレントディレクトリに出力)。
 詳しい用途別の使い分けは [docs/01-quickstart.ja.md](docs/01-quickstart.ja.md) を参照。
 
+ソースは README の構成に合わせて `demo/` 以下にジャンル分けされています:
+
+| ディレクトリ | 内容 | ファイル数 |
+|---|---|---|
+| `demo/regression/`    | LM/GLM/GP/Spline/Kernel/RFF/RobustGP 等 | 8 |
+| `demo/doe-optim/`     | DOE/RSM/Optimal/NSGA/Pareto/BayesOpt | 9 |
+| `demo/bayesian/`      | HBM/MCMC/Gibbs/VI/PPC + 確率分布 | 42 |
+| `demo/visualization/` | Bar/Histogram 等 | 1 |
+| `demo/io/`            | DataIO 系 (Preprocess / External) | 2 |
+
 ### 入門 (まずはこれ)
 
 | デモ | 内容 | 主に学べること |
@@ -261,9 +271,9 @@ cabal run hanalyze -- <file> <xcols> <ycols> [LM|GLM|...] [opts]   # legacy = re
 | `hist`       | ヒストグラム単体生成 | ✅ 実装 |
 | `doe`        | 直交表 Lₙ (L4/L8/L9/L12/L16/L18) | ✅ 実装 (Phase E1) |
 | `taguchi`    | タグチメソッド (SN 比 + 要因効果 + 内/外配置) | ✅ 実装 (Phase E2) |
-| `ridge`      | Ridge / Lasso / Elastic Net | 計画中 |
-| `kernel`     | カーネル回帰 / RFF 近似 | 計画中 |
-| `spline`     | B-spline / Natural cubic | 計画中 |
+| `ridge`      | Ridge / Lasso / Elastic Net | ✅ 実装 |
+| `kernel`     | カーネル回帰 / RFF 近似 | ✅ 実装 |
+| `spline`     | B-spline / Natural cubic | ✅ 実装 |
 | `help`       | サブコマンド一覧表示 | ✅ |
 
 ### `regress` (= bare 呼び出し)
@@ -339,6 +349,23 @@ cabal run hanalyze -- hist data.csv score --fit normal 0 1
 cabal run hanalyze -- hist data.csv counts --fit poisson 3 --format png --out hist.png
 ```
 
+### `ridge` / `kernel` / `spline` — その他の回帰モデル
+
+```bash
+# 正則化回帰 (--penalty ridge|lasso|elasticnet, --lambda L, --alpha A)
+hanalyze ridge data.csv "x1 x2 x3" y --penalty lasso --lambda 0.05
+
+# カーネル回帰 (--method nw|kr|rff, --kernel gaussian|... , --bandwidth, --features)
+hanalyze kernel data.csv x y --method kr --bandwidth 0.5
+hanalyze kernel data.csv x y --method rff --features 200
+
+# スプライン (--type bspline|natural, --knots, --degree)
+hanalyze spline data.csv x y --type natural --knots 8
+```
+
+各サブコマンドは bandwidth/lambda/knots 等の主要ハイパラを直接調整可能。
+全て scatter+fit プロットを `--out` に出力 (HTML/PNG/SVG)。
+
 ### `doe` — 直交表 Lₙ で実験計画を生成
 
 ```
@@ -409,6 +436,11 @@ cabal run hanalyze -- taguchi cross L9 L4 \
     -f temp=150,180,210 -f time=10,20,30 -f catalyst=A,B,C \
     --noise humidity=low,high --noise vibration=on,off \
     --out cross.csv
+
+# HTML レポート出力 (要因効果バーチャート + 最良水準テーブル)
+cabal run hanalyze -- taguchi analyze L9 \
+    -f temp=150,180,210 -f time=10,20,30 -f catalyst=A,B,C \
+    --csv runs.csv --sntype smaller --report taguchi.html
 ```
 
 ---
@@ -452,6 +484,7 @@ Design/
 Viz/
   MCMC.hs          -- 診断プロット (KDE / トレース / 自己相関 / ペア散布図)
   Report.hs        -- 統合 HTML レポート (R-hat 付き多チェーン対応)
+  Taguchi.hs       -- タグチ分析 HTML レポート (要因効果バーチャート + 最良水準テーブル)
   ModelGraph.hs    -- Mermaid.js DAG
   Bar.hs           -- 棒グラフ (縦 / 横 / 積み上げ / グループ)
   Histogram.hs     -- ヒストグラム (理論分布重ね書き対応)

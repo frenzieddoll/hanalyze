@@ -161,6 +161,16 @@ cabal test               # tests
 Run with `cabal run <demo-name>` (HTML/PNG output is written to the current directory).
 For task-oriented guidance, see [docs/01-quickstart.md](docs/01-quickstart.md).
 
+Sources are organized into genre-based subdirectories under `demo/` mirroring the README structure:
+
+| Directory | Contents | Files |
+|---|---|---|
+| `demo/regression/`    | LM/GLM/GP/Spline/Kernel/RFF/RobustGP, etc. | 8 |
+| `demo/doe-optim/`     | DOE/RSM/Optimal/NSGA/Pareto/BayesOpt | 9 |
+| `demo/bayesian/`      | HBM/MCMC/Gibbs/VI/PPC + probability distributions | 42 |
+| `demo/visualization/` | Bar/Histogram, etc. | 1 |
+| `demo/io/`            | DataIO (Preprocess / External) | 2 |
+
 ### Getting started (start here)
 
 | Demo | Contents | What you learn |
@@ -262,9 +272,9 @@ cabal run hanalyze -- <file> <xcols> <ycols> [LM|GLM|...] [opts]   # legacy = re
 | `hist`       | Standalone histogram (with optional density overlay) | ✅ implemented |
 | `doe`        | Orthogonal arrays Lₙ (L4/L8/L9/L12/L16/L18) | ✅ implemented (Phase E1) |
 | `taguchi`    | Taguchi method (SN ratio + factor effects + inner/outer) | ✅ implemented (Phase E2) |
-| `ridge`      | Ridge / Lasso / Elastic Net | planned |
-| `kernel`     | Kernel regression / RFF approximation | planned |
-| `spline`     | B-spline / natural cubic | planned |
+| `ridge`      | Ridge / Lasso / Elastic Net | ✅ implemented |
+| `kernel`     | Kernel regression / RFF approximation | ✅ implemented |
+| `spline`     | B-spline / natural cubic | ✅ implemented |
 | `help`       | List subcommands | ✅ |
 
 ### `regress` (= bare form)
@@ -339,6 +349,23 @@ cabal run hanalyze -- hist data.csv score --fit normal 0 1
 # Compare against Poisson and export as PNG
 cabal run hanalyze -- hist data.csv counts --fit poisson 3 --format png --out hist.png
 ```
+
+### `ridge` / `kernel` / `spline` — additional regression models
+
+```bash
+# Regularized regression (--penalty ridge|lasso|elasticnet, --lambda L, --alpha A)
+hanalyze ridge data.csv "x1 x2 x3" y --penalty lasso --lambda 0.05
+
+# Kernel regression (--method nw|kr|rff, --kernel gaussian|... , --bandwidth, --features)
+hanalyze kernel data.csv x y --method kr --bandwidth 0.5
+hanalyze kernel data.csv x y --method rff --features 200
+
+# Spline (--type bspline|natural, --knots, --degree)
+hanalyze spline data.csv x y --type natural --knots 8
+```
+
+Each subcommand exposes the main hyperparameters (bandwidth/lambda/knots/...)
+directly, and writes a scatter+fit plot to `--out` (HTML/PNG/SVG).
 
 ### `doe` — generate experimental designs from orthogonal arrays Lₙ
 
@@ -415,6 +442,11 @@ cabal run hanalyze -- taguchi cross L9 L4 \
     -f temp=150,180,210 -f time=10,20,30 -f catalyst=A,B,C \
     --noise humidity=low,high --noise vibration=on,off \
     --out cross.csv
+
+# Generate an HTML report (factor-effect bar charts + optimum table)
+cabal run hanalyze -- taguchi analyze L9 \
+    -f temp=150,180,210 -f time=10,20,30 -f catalyst=A,B,C \
+    --csv runs.csv --sntype smaller --report taguchi.html
 ```
 
 ---
@@ -458,6 +490,7 @@ Design/
 Viz/
   MCMC.hs          -- diagnostic plots (KDE / trace / autocorr / pair scatter)
   Report.hs        -- integrated HTML report (multi-chain with R-hat)
+  Taguchi.hs       -- Taguchi-analysis HTML report (factor-effect bar charts + optimum table)
   ModelGraph.hs    -- Mermaid.js DAG
   Bar.hs           -- bar charts (vertical / horizontal / stacked / grouped)
   Histogram.hs     -- histograms (with optional theoretical-density overlay)
