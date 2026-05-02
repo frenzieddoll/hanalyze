@@ -1,0 +1,163 @@
+{-# LANGUAGE OverloadedStrings #-}
+-- | Generalized Additive Model (GAM)。
+--
+-- y = β₀ + Σ_j s_j(x_j) + ε  with s_j(x_j) = B_j(x_j) γ_j (B-spline 基底)
+--
+-- 設計:
+-- - 各説明変数 x_j について B-spline 基底 B_j (n × m_j) を構築
+-- - 統合計画行列 X = [1 | B_1 | B_2 | ... | B_p]  (列数 = 1 + Σ m_j)
+-- - Ridge 正則化付き OLS: β = (XᵀX + λ I)⁻¹ Xᵀ y
+--   (各 spline 基底に同じ λ を適用、smoothness のための安定化)
+-- - 予測: per-feature 寄与 s_j(x_j) を分解して取得可能 → 各因子の効果を可視化
+--
+-- 注: 識別性のため、各 spline 基底は中央化 (列平均を引く) する。
+-- これで β₀ は y の平均、s_j は変動成分のみを表す。
+module Model.GAM
+  ( GAMFit (..)
+  , fitGAM
+  , predictGAM
+  , predictGAMComponent
+  ) where
+
+import qualified Data.Vector as V
+import qualified Numeric.LinearAlgebra as LA
+import Model.Spline (bsplineBasis)
+
+-- ---------------------------------------------------------------------------
+-- 型
+-- ---------------------------------------------------------------------------
+
+data GAMFit = GAMFit
+  { gamDegree    :: Int
+  , gamKnots     :: [[Double]]            -- ^ 各説明変数の内部ノット
+  , gamBetas     :: [LA.Vector Double]    -- ^ 各説明変数の spline 係数 γ_j
+  , gamColMeans  :: [LA.Vector Double]    -- ^ 各 B_j の列平均 (中央化用)
+  , gamIntercept :: Double
+  , gamYHat      :: LA.Vector Double
+  , gamResid     :: LA.Vector Double
+  , gamR2        :: Double
+  , gamLambda    :: Double
+  } deriving (Show)
+
+-- ---------------------------------------------------------------------------
+-- フィット
+-- ---------------------------------------------------------------------------
+
+-- | GAM をフィットする。
+--
+-- 引数:
+--   * @degree@ — B-spline の次数 (通常 3 = cubic)
+--   * @nKnots@ — 各特徴の内部ノット数 (両端含めず)
+--   * @lambda@ — Ridge 正則化強度 (0 で純 OLS)
+--   * @xs@     — 説明変数 (各 V.Vector)
+--   * @y@      — 応答
+fitGAM :: Int                    -- ^ B-spline degree (3 推奨)
+       -> Int                    -- ^ 内部ノット数 (例: 5)
+       -> Double                 -- ^ Ridge λ
+       -> [V.Vector Double]      -- ^ 説明変数群 [x₁, x₂, ...]
+       -> V.Vector Double        -- ^ 応答 y
+       -> GAMFit
+fitGAM degree nKnots lambda xss y =
+  let n         = V.length y
+      -- 各列のノット (両端含めて nKnots+2 点、等間隔)
+      mkKnots xs =
+        let lo = V.minimum xs
+            hi = V.maximum xs
+            -- 両端 + 内部 nKnots 点 = nKnots + 2 個 (B-spline には clamping)
+            step = (hi - lo) / fromIntegral (nKnots + 1)
+        in [ lo + fromIntegral i * step | i <- [0 .. nKnots + 1] ]
+      knotsList = map mkKnots xss
+
+      -- 各 B_j (n × m_j) を構築 + 列平均で中央化
+      basisRaw = zipWith (\k xs -> bsplineBasis degree k xs) knotsList xss
+      colMeans = [ LA.fromList
+                     [ LA.sumElements (LA.flatten (b LA.¿ [j])) / fromIntegral n
+                     | j <- [0 .. LA.cols b - 1] ]
+                 | b <- basisRaw ]
+      basisCent = zipWith centerCols basisRaw colMeans
+
+      -- 統合計画行列 X = [1 | B_1 | B_2 | ...]
+      ones = LA.asColumn (LA.konst 1 n)
+      x    = foldl1 (LA.|||) (ones : basisCent)
+      yLA  = LA.fromList (V.toList y)
+      p    = LA.cols x
+
+      -- Ridge: β = (XᵀX + λ I')⁻¹ Xᵀ y  (intercept 列はペナルティ免除)
+      pen  = LA.diag (LA.fromList (0 : replicate (p - 1) lambda))
+      xtx  = LA.tr x LA.<> x + pen
+      xty  = LA.tr x LA.#> yLA
+      beta = LA.flatten (xtx LA.<\> LA.asColumn xty)
+
+      -- intercept = β[0]、各特徴の γ_j を切り出す
+      mSizes = [ LA.cols b | b <- basisRaw ]
+      starts = scanl (+) 1 mSizes        -- intercept は 0
+      betas  = [ LA.subVector (starts !! j) (mSizes !! j) beta
+               | j <- [0 .. length xss - 1] ]
+      intercept = beta LA.! 0
+
+      yhat  = x LA.#> beta
+      resid = yLA - yhat
+      yMean = LA.sumElements yLA / fromIntegral n
+      tss   = LA.sumElements (LA.cmap (\v -> (v - yMean) ^ (2 :: Int)) yLA)
+      rss   = LA.sumElements (LA.cmap (^ (2 :: Int)) resid)
+      r2    = if tss < 1e-12 then 0 else 1 - rss / tss
+  in GAMFit
+       { gamDegree    = degree
+       , gamKnots     = knotsList
+       , gamBetas     = betas
+       , gamColMeans  = colMeans
+       , gamIntercept = intercept
+       , gamYHat      = yhat
+       , gamResid     = resid
+       , gamR2        = r2
+       , gamLambda    = lambda
+       }
+  where
+    -- 列平均を引いて中央化
+    centerCols :: LA.Matrix Double -> LA.Vector Double -> LA.Matrix Double
+    centerCols m mu =
+      let cols = LA.toColumns m
+          centered = zipWith (\c muVal -> LA.cmap (\v -> v - muVal) c)
+                       cols (LA.toList mu)
+      in LA.fromColumns centered
+
+-- ---------------------------------------------------------------------------
+-- 予測
+-- ---------------------------------------------------------------------------
+
+-- | 新しい説明変数群に対する予測。
+predictGAM :: GAMFit -> [V.Vector Double] -> V.Vector Double
+predictGAM fit xss =
+  let n = if null xss then 0 else V.length (head xss)
+      contributions = zipWith3 (componentVec fit)
+                        [0 .. length xss - 1]
+                        xss
+                        (gamColMeans fit)
+      total = foldl' (V.zipWith (+)) (V.replicate n (gamIntercept fit))
+                contributions
+  in total
+  where
+    foldl' f z [] = z
+    foldl' f z (x:xs) = let !z' = f z x in foldl' f z' xs
+    componentVec :: GAMFit -> Int -> V.Vector Double -> LA.Vector Double
+                 -> V.Vector Double
+    componentVec g j xs mu =
+      let b      = bsplineBasis (gamDegree g) (gamKnots g !! j) xs
+          gamma  = gamBetas g !! j
+          n'     = LA.rows b
+          ys     = b LA.#> gamma
+          shiftV = LA.dot mu gamma
+      in V.fromList [ ys LA.! i - shiftV | i <- [0 .. n' - 1] ]
+
+-- | j 番目の特徴の寄与 s_j(x) のみ (intercept 除く)。
+predictGAMComponent :: GAMFit -> Int -> V.Vector Double -> V.Vector Double
+predictGAMComponent fit j xs
+  | j < 0 || j >= length (gamBetas fit) = V.empty
+  | otherwise =
+      let b      = bsplineBasis (gamDegree fit) (gamKnots fit !! j) xs
+          gamma  = gamBetas fit !! j
+          mu     = gamColMeans fit !! j
+          ys     = b LA.#> gamma
+          shiftV = LA.dot mu gamma
+          n      = LA.rows b
+      in V.fromList [ ys LA.! i - shiftV | i <- [0 .. n - 1] ]

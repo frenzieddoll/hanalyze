@@ -30,6 +30,7 @@ import qualified Graphics.Vega.VegaLite as VL
 import Graphics.Vega.VegaLite (VegaLite, VLProperty, VLSpec)
 import qualified Model.Kernel as Kern
 import qualified Model.Regularized as Reg
+import qualified Model.GAM as GAM
 import qualified Model.Quantile as QR
 import qualified Model.RFF as RFF
 import qualified Model.Spline as Spl
@@ -317,6 +318,7 @@ helpMsg = unlines
   , "  kernel    Kernel regression / RFF approximation                      [implemented]"
   , "  spline    B-spline / natural cubic regression                        [implemented]"
   , "  quantile  Quantile regression (τ-quantile, MM-IRLS)                  [implemented]"
+  , "  gam       Generalized Additive Model (additive B-splines + Ridge)   [implemented]"
   , "  doe       Orthogonal arrays (L_n) for experimental designs           [implemented]"
   , "  taguchi   Taguchi method (SN ratio + factor effects + inner/outer)   [implemented]"
   , ""
@@ -356,6 +358,7 @@ dispatch ("ridge":rest)               = runRidgeCmd rest
 dispatch ("kernel":rest)              = runKernelCmd rest
 dispatch ("spline":rest)              = runSplineCmd rest
 dispatch ("quantile":rest)            = runQuantileCmd rest
+dispatch ("gam":rest)                 = runGAMCmd rest
 dispatch (cmd:_) | isFutureSubcommand cmd = do
   hPutStrLn stderr $ "hanalyze: " ++ stubMessage cmd
   hPutStrLn stderr "  Run 'hanalyze help' to see implemented subcommands."
@@ -2429,3 +2432,172 @@ multiLineLayer xc yc grid curves =
                      VL.MScale [VL.SScheme "tableau10" []]]
          $ []
      ]
+
+-- ---------------------------------------------------------------------------
+-- gam subcommand
+-- ---------------------------------------------------------------------------
+
+gamUsage :: String
+gamUsage = unlines
+  [ "Usage: hanalyze gam <file> <xcols> <ycol> [options]"
+  , ""
+  , "  <xcols>  x column names; quote multiple: \"x1 x2 x3\""
+  , "  <ycol>   y column name"
+  , ""
+  , "Options:"
+  , "  --knots N        per-feature internal knot count (default: 5)"
+  , "  --degree D       B-spline degree (default: 3 = cubic)"
+  , "  --lambda L       Ridge regularization on spline coefficients (default: 0.01)"
+  , "  --report [FILE]  build composite HTML report with per-feature partials"
+  , ""
+  , "Example:"
+  , "  hanalyze gam data.csv \"x1 x2 x3\" y --knots 8 --lambda 0.05 --report"
+  ]
+
+data GAMOpts = GAMOpts
+  { goKnots  :: Int
+  , goDegree :: Int
+  , goLambda :: Double
+  , goReport :: Maybe FilePath
+  }
+
+defaultGAMOpts :: GAMOpts
+defaultGAMOpts = GAMOpts 5 3 0.01 Nothing
+
+runGAMCmd :: [String] -> IO ()
+runGAMCmd (file : xColsStr : yColStr : rest) =
+  case parseGAMOpts rest defaultGAMOpts of
+    Left err   -> hPutStrLn stderr ("gam: " ++ err)
+    Right opts -> doGAM file xColsStr yColStr opts
+runGAMCmd _ = putStrLn gamUsage
+
+parseGAMOpts :: [String] -> GAMOpts -> Either String GAMOpts
+parseGAMOpts [] acc = Right acc
+parseGAMOpts (flag:rest) acc
+  | flag == "--knots" = case rest of
+      (v:rs) -> case reads v :: [(Int,String)] of
+        [(d,"")] -> parseGAMOpts rs (acc { goKnots = d })
+        _ -> Left ("invalid --knots '" ++ v ++ "'")
+      [] -> Left "--knots requires a value"
+  | flag == "--degree" = case rest of
+      (v:rs) -> case reads v :: [(Int,String)] of
+        [(d,"")] -> parseGAMOpts rs (acc { goDegree = d })
+        _ -> Left ("invalid --degree '" ++ v ++ "'")
+      [] -> Left "--degree requires a value"
+  | flag == "--lambda" = case rest of
+      (v:rs) -> case reads v :: [(Double,String)] of
+        [(d,"")] -> parseGAMOpts rs (acc { goLambda = d })
+        _ -> Left ("invalid --lambda '" ++ v ++ "'")
+      [] -> Left "--lambda requires a value"
+  | flag == "--report" = case rest of
+      (v:rs) | not (null v) && head v /= '-' ->
+        parseGAMOpts rs (acc { goReport = Just v })
+      _ -> parseGAMOpts rest (acc { goReport = Just "gam.html" })
+  | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
+
+doGAM :: FilePath -> String -> String -> GAMOpts -> IO ()
+doGAM file xColsStr yColStr opts = do
+  let xCols = map T.pack (words xColsStr)
+      yCol  = T.pack yColStr
+  result <- loadXY file xCols yCol
+  case result of
+    Left err -> hPutStrLn stderr err
+    Right (df, xVecs, yVec) -> do
+      let fit = GAM.fitGAM (goDegree opts) (goKnots opts) (goLambda opts)
+                            xVecs yVec
+          n = V.length yVec
+          ys = V.toList yVec
+          yhat = LA.toList (GAM.gamYHat fit)
+          resid = LA.toList (GAM.gamResid fit)
+      printf "Loaded %d rows from %s\n" n file
+      printf "GAM: degree=%d, knots=%d/feature, lambda=%g\n"
+             (goDegree opts) (goKnots opts) (goLambda opts)
+      printf "Features: %d (%s)\n" (length xCols)
+             (T.unpack (T.intercalate ", " xCols))
+      printf "Intercept: %.4f\n" (GAM.gamIntercept fit)
+      printf "R²:        %.4f\n" (GAM.gamR2 fit)
+      let rmseVal = sqrt (sum [ r ^ (2 :: Int) | r <- resid ]
+                          / fromIntegral n)
+      printf "RMSE (in-sample): %.4f\n" rmseVal
+
+      case goReport opts of
+        Nothing -> return ()
+        Just rpath -> do
+          let modelLbl = "Generalized Additive Model"
+              formula = yCol <> " = β₀ + " <> T.intercalate " + "
+                          [ "s(" <> c <> ")" | c <- xCols ]
+              cfg = RB.defaultReportConfig
+                      ("GAM — " <> yCol <> " ~ s("
+                       <> T.intercalate ") + s(" xCols <> ")")
+              partialSecs =
+                [ RB.secVega ("Partial effect: s(" <> c <> ")")
+                    (gamPartialSpec c xVec fit j)
+                | (j, c, xVec) <- zip3 [0..] xCols xVecs ]
+              sections =
+                [ RB.secDataOverview df xCols yCol
+                , RB.secModelOverview modelLbl formula Nothing
+                , RB.secKeyValue "Fit summary"
+                    [ ("Degree",   T.pack (show (goDegree opts)))
+                    , ("Knots",    T.pack (show (goKnots opts)))
+                    , ("Lambda",   T.pack (printf "%g" (goLambda opts)))
+                    , ("Intercept",T.pack (printf "%.4f"
+                                             (GAM.gamIntercept fit)))
+                    , ("R²",       T.pack (printf "%.4f" (GAM.gamR2 fit)))
+                    , ("RMSE",     T.pack (printf "%.4f" rmseVal))
+                    ]
+                ] ++ partialSecs ++
+                [ RB.secResiduals yhat resid ]
+              _ = ys
+          RB.renderReport rpath cfg sections
+          putStrLn ("Report: " ++ rpath)
+          openInBrowser rpath
+
+-- 1 特徴の partial effect s_j(x_j) を Vega-Lite 散布+曲線で
+gamPartialSpec :: T.Text -> V.Vector Double -> GAM.GAMFit -> Int -> VegaLite
+gamPartialSpec col xVec fit j =
+  let xs = V.toList xVec
+      lo = V.minimum xVec
+      hi = V.maximum xVec
+      grid = [ lo + fromIntegral i * (hi - lo) / 99 | i <- [0..99::Int]]
+      gridV = V.fromList grid
+      sj = V.toList (GAM.predictGAMComponent fit j gridV)
+      -- partial residuals: resid + s_j(x_i) (説明用にプロット)
+      partialAtData = V.toList (GAM.predictGAMComponent fit j xVec)
+      residList = LA.toList (GAM.gamResid fit)
+      partials = zipWith (+) residList partialAtData
+  in VL.toVegaLite
+       [ VL.layer
+           [ VL.asSpec
+               [ VL.dataFromColumns []
+                   . VL.dataColumn col (VL.Numbers xs)
+                   . VL.dataColumn "partial" (VL.Numbers partials)
+                   $ []
+               , VL.mark VL.Point
+                   [VL.MOpacity 0.5, VL.MSize 40, VL.MColor "#888888"]
+               , VL.encoding
+                   . VL.position VL.X
+                       [VL.PName col, VL.PmType VL.Quantitative,
+                        VL.PAxis [VL.AxTitle col]]
+                   . VL.position VL.Y
+                       [VL.PName "partial", VL.PmType VL.Quantitative,
+                        VL.PAxis [VL.AxTitle "Partial residual"]]
+                   $ []
+               ]
+           , VL.asSpec
+               [ VL.dataFromColumns []
+                   . VL.dataColumn col (VL.Numbers grid)
+                   . VL.dataColumn "s_j" (VL.Numbers sj)
+                   $ []
+               , VL.mark VL.Line
+                   [VL.MStrokeWidth 2.5, VL.MColor "#DD5566"]
+               , VL.encoding
+                   . VL.position VL.X
+                       [VL.PName col, VL.PmType VL.Quantitative]
+                   . VL.position VL.Y
+                       [VL.PName "s_j", VL.PmType VL.Quantitative]
+                   $ []
+               ]
+           ]
+       , VL.width 500
+       , VL.height 240
+       ]

@@ -33,6 +33,7 @@ library
     Model.RFF
     Model.GPRobust
     Model.Quantile
+    Model.GAM
     Model.MultiLM
     Model.Multivariate
     Model.MultiGP
