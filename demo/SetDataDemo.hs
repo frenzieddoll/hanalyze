@@ -18,7 +18,7 @@ import qualified Data.Map.Strict as Map
 import System.Random.MWC (createSystemRandom)
 
 import MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
-import Model.HBM (ModelP, sample, observe, dataNamed,
+import Model.HBM (ModelP, sample, observe, dataNamed, withData,
                   Distribution (..))
 import Stat.PosteriorPredictive (posteriorPredictive)
 import Viz.MCMC (printPosteriorSummary, ppcPlotFile)
@@ -64,8 +64,11 @@ main = do
   putStrLn ""
 
   -- ── 同じモデル構造をテストデータで適用 (pm.set_data に相当) ──
-  putStrLn "[2] 同モデルにテストデータ (μ=1.5 由来) を渡して PP check"
-  preds <- posteriorPredictive (mkModel testData) ch gen
+  -- Phase H5: withData が直接 ModelP に適用できるようになった。
+  putStrLn "[2] withData でテストデータに直接差し替え (Rank-2 多相対応版)"
+  let testModel :: ModelP ()
+      testModel = withData "y" testData (mkModel trainData)
+  preds <- posteriorPredictive testModel ch gen
   let yReps = [Map.findWithDefault [] "y" m | m <- preds]
   let ppcCfg = (defaultConfig "PP check — train posterior on test data")
                  { plotWidth = 700, plotHeight = 280 }
@@ -77,6 +80,6 @@ main = do
   putStrLn ""
 
   putStrLn "═══════════════════════════════════════════════════════════════"
-  putStrLn "  ✓ データを引数にとるモデル関数で pm.set_data 相当を実現"
-  putStrLn "    DSL 内では dataNamed / withData も使用可能 (型注釈が要る)"
+  putStrLn "  ✓ withData が ModelP r → ModelP r に対応 (Phase H5)"
+  putStrLn "    型注釈 :: ModelP () を let に付ければそのまま使える"
   putStrLn "═══════════════════════════════════════════════════════════════"

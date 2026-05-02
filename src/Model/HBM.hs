@@ -1037,16 +1037,23 @@ dataNamed n ys = liftF (Data n ys id)
 --
 -- 型シグネチャは @Model a r@ なので、ユーザーが @ModelP r@ から呼ぶ場合
 -- そのまま多相的に使える (各 @a@ で個別に適用される)。
-withData :: Text -> [Double] -> Model a r -> Model a r
-withData _ _   (Pure r) = Pure r
-withData n new (Free f) = Free (case f of
-  Data n' ys k
-    | n == n'   -> Data n' new (\d -> withData n new (k d))
-    | otherwise -> Data n' ys  (\d -> withData n new (k d))
-  Sample nm d k         -> Sample nm d (\v -> withData n new (k v))
-  Observe nm d ys nx    -> Observe nm d ys (withData n new nx)
-  Potential nm v nx     -> Potential nm v (withData n new nx)
-  Deterministic nm v k  -> Deterministic nm v (\v' -> withData n new (k v')))
+withData :: forall r. Text -> [Double] -> ModelP r -> ModelP r
+withData n new m = mPoly
+  where
+    -- 戻り値を多相モデルとして再構築。各 @a@ 個別に元の m を走査する。
+    mPoly :: forall a. (Floating a, Ord a) => Model a r
+    mPoly = go m
+      where
+        go :: Model a r -> Model a r
+        go (Pure r) = Pure r
+        go (Free f) = Free (case f of
+          Data n' ys k
+            | n == n'   -> Data n' new (\d -> go (k d))
+            | otherwise -> Data n' ys  (\d -> go (k d))
+          Sample nm d k        -> Sample nm d (\v -> go (k v))
+          Observe nm d ys nx   -> Observe nm d ys (go nx)
+          Potential nm v nx    -> Potential nm v (go nx)
+          Deterministic nm v k -> Deterministic nm v (\v' -> go (k v')))
 
 -- | 多変量正規分布の latent ベクトル (PyMC `pm.MvNormal` の latent 用法)。
 --
