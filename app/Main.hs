@@ -3,6 +3,7 @@
 module Main where
 
 import DataIO.CSV        (loadAuto)
+import qualified DataIO.Preprocess as Pp
 import DataFrame.Core    (DataFrame, Column (..), columnNames, numRows,
                           getColumn, getNumeric, getText)
 import Model.Core        (Band (..), rSquared1, coeffList, fittedList)
@@ -396,12 +397,16 @@ printColInfo df name = case getColumn name df of
   Just (TextCol v) -> do
     let xs   = V.toList v
         m    = length xs
+        nMiss = V.length (V.filter Pp.isNAString v)
         uniq = Set.size (Set.fromList xs)
         topN = take 3 (countTop xs)
         topStr = intercalate ", "
                    [ T.unpack k ++ "(" ++ show c ++ ")" | (k, c) <- topN ]
-    printf "  %-20s %-7s %5d  unique=%-3d top: %s\n"
-           (T.unpack name) ("text" :: String) m uniq topStr
+        missStr = if nMiss > 0
+                    then "  NA=" ++ show nMiss
+                    else ""
+    printf "  %-20s %-7s %5d  unique=%-3d top: %s%s\n"
+           (T.unpack name) ("text" :: String) m uniq topStr missStr
   Nothing -> return ()
 
 -- | Count occurrences and return descending list.
