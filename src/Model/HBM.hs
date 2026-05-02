@@ -45,6 +45,7 @@ module Model.HBM
   , distName
   , logDensity
   , logDensityObs
+  , sampleDist
     -- * 多相モデル
   , Model
   , ModelP
@@ -90,6 +91,9 @@ import Data.Set (Set)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Numeric.AD.Mode.Forward (grad)
+import qualified System.Random.MWC as MWCBase
+import qualified System.Random.MWC.Distributions as MWC
+import System.Random.MWC (GenIO)
 
 import Stat.Distribution (Transform (..))
 
@@ -330,6 +334,78 @@ logDensityObs (Categorical probs) y =
 
 negInf :: Floating a => a
 negInf = -1/0
+
+-- ---------------------------------------------------------------------------
+-- 分布からのサンプリング (事前/事後予測用)
+-- ---------------------------------------------------------------------------
+
+-- | 'Distribution Double' から 1 サンプル生成する。
+-- 事前予測サンプリング、事後予測サンプリング、観測値の生成に使う。
+--
+-- mwc-random が直接提供しない分布はここで実装する (Cauchy, HalfCauchy, etc.)。
+sampleDist :: Distribution Double -> GenIO -> IO Double
+sampleDist (Normal mu sig) gen = MWC.normal mu sig gen
+sampleDist (Exponential rate) gen = do
+  u <- MWCBase.uniform gen :: IO Double
+  return (-log u / rate)
+sampleDist (Gamma shape rate) gen =
+  -- mwc-random の gamma は scale パラメタ化なので 1/rate を渡す
+  MWC.gamma shape (1 / rate) gen
+sampleDist (Beta a b) gen = do
+  x <- MWC.gamma a 1 gen
+  y <- MWC.gamma b 1 gen
+  return (x / (x + y))
+sampleDist (Poisson lam) gen = samplePoissonKnuth lam gen
+sampleDist (Binomial n p) gen = do
+  -- n 回のベルヌーイ試行
+  let go 0 acc = return acc
+      go k acc = do
+        u <- MWCBase.uniform gen :: IO Double
+        go (k - 1) (if u < p then acc + 1 else acc)
+  fmap fromIntegral (go n (0 :: Int))
+sampleDist (Uniform lo hi) gen = do
+  u <- MWCBase.uniform gen :: IO Double
+  return (lo + u * (hi - lo))
+sampleDist (StudentT df mu sig) gen = do
+  -- t = mu + sig * Normal(0,1) / sqrt(Chi2(df) / df)
+  z    <- MWC.standard gen
+  chi2 <- MWC.gamma (df / 2) 2 gen   -- Chi2(df) = Gamma(df/2, scale=2)
+  return (mu + sig * z / sqrt (chi2 / df))
+sampleDist (Cauchy loc sc) gen = do
+  u <- MWCBase.uniform gen :: IO Double
+  return (loc + sc * tan (pi * (u - 0.5)))
+sampleDist (HalfNormal sig) gen = do
+  z <- MWC.standard gen
+  return (abs (sig * z))
+sampleDist (HalfCauchy sc) gen = do
+  u <- MWCBase.uniform gen :: IO Double
+  return (sc * abs (tan (pi * (u - 0.5))))
+sampleDist (LogNormal mu sig) gen = do
+  z <- MWC.standard gen
+  return (exp (mu + sig * z))
+sampleDist (Bernoulli p) gen = do
+  u <- MWCBase.uniform gen :: IO Double
+  return (if u < p then 1.0 else 0.0)
+sampleDist (Categorical probs) gen = do
+  u <- MWCBase.uniform gen :: IO Double
+  let total = sum probs
+      go _   []     = fromIntegral (length probs - 1)
+      go acc (p:ps) =
+        let acc' = acc + p / total
+        in if u < acc' then 0 else 1 + go acc' ps
+  return (go 0 probs)
+
+-- | Knuth のアルゴリズムで Poisson(λ) サンプル。λ < 30 程度なら十分高速。
+samplePoissonKnuth :: Double -> GenIO -> IO Double
+samplePoissonKnuth lam gen = do
+  let l = exp (-lam)
+      go k p = do
+        u <- MWCBase.uniform gen :: IO Double
+        let p' = p * u
+        if p' < l
+          then return (fromIntegral k)
+          else go (k + 1) p'
+  go 0 (1.0 :: Double)
 
 -- ---------------------------------------------------------------------------
 -- 多相モデル (Free monad)

@@ -36,6 +36,7 @@ library
     Stat.ModelSelect
     Stat.AD
     Stat.VI
+    Stat.PosteriorPredictive
     Viz.MCMC
     Viz.ModelGraph
     Viz.Report
@@ -187,6 +188,18 @@ executable gp-demo
 executable gibbs-hbm-demo
   import:           warnings
   main-is:          GibbsHBMDemo.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , text       >= 1.2  && < 2.2
+    , containers >= 0.6  && < 0.8
+    , mwc-random >= 0.15 && < 0.16
+
+executable ppc-demo
+  import:           warnings
+  main-is:          PPCDemo.hs
   hs-source-dirs:   demo
   default-language: GHC2021
   build-depends:
