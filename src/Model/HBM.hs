@@ -145,6 +145,14 @@ data Distribution a
   | Mixture [a] [Distribution a]
     -- ^ Mixture(weights, components) — log p(x) = logsumexp(log w_k + log p_k(x))
     -- 重みは正の値で渡し、内部で自動正規化される。
+  | Truncated (Distribution a) (Maybe a) (Maybe a)
+    -- ^ Truncated(d, lo, hi): d の台を [lo, hi] に切り詰める。
+    --   範囲外の観測は負の無限大。 Nothing は -∞ / +∞ の意味。
+    --   元分布は CDF を持つもの (Normal/Exponential/LogNormal/Uniform) のみ対応。
+  | Censored  (Distribution a) (Maybe a) (Maybe a)
+    -- ^ Censored(d, lo, hi): y ≤ lo / y ≥ hi で打ち切り。
+    --   観測 y_i がしきい値ちょうどなら左/右打ち切りとして CDF/SF を使う。
+    --   Tobit 風モデルなどで使用。元分布は CDF を持つものに限る。
   deriving (Show, Functor)
 
 distName :: Distribution a -> Text
@@ -163,6 +171,8 @@ distName LogNormal{}   = "LogNormal"
 distName Bernoulli{}   = "Bernoulli"
 distName Categorical{} = "Categorical"
 distName Mixture{}     = "Mixture"
+distName Truncated{}   = "Truncated"
+distName Censored{}    = "Censored"
 
 -- | サンプル値 (型 @a@) に対する事前分布の対数密度。
 logDensity :: (Floating a, Ord a) => Distribution a -> a -> a
@@ -240,6 +250,18 @@ logDensity (Mixture ws comps) x
           -- log(w_k / Σw) + log p_k(x)
           logTerms   = zipWith (\w d -> log w - logTotal + logDensity d x) ws comps
       in logSumExpA logTerms
+logDensity (Truncated d mLo mHi) x =
+  -- 範囲外なら 0 (=> log で −∞)
+  let outOfRange = case (mLo, mHi) of
+        (Just lo, _      ) | x < lo  -> True
+        (_,       Just hi) | x > hi  -> True
+        _                            -> False
+  in if outOfRange
+       then negInf
+       else logDensity d x - logCDFInterval d mLo mHi
+logDensity (Censored d _ _) x =
+  -- prior 評価では通常の密度を使う (打ち切りは観測時のみ意味を持つ)
+  logDensity d x
 
 -- | 観測値 (Double 定数) に対する尤度の対数密度。
 -- 観測は @[Double]@ で渡されるので、@Floating a@ 制約のみで計算可能。
@@ -351,6 +373,24 @@ logDensityObs (Mixture ws comps) y
           logTotal = log total
           logTerms = zipWith (\w d -> log w - logTotal + logDensityObs d y) ws comps
       in logSumExpA logTerms
+logDensityObs (Truncated d mLo mHi) y =
+  let yA = realToFrac y :: a
+      outOfRange = case (mLo, mHi) of
+        (Just lo, _      ) | yA < lo  -> True
+        (_,       Just hi) | yA > hi  -> True
+        _                             -> False
+  in if outOfRange
+       then negInf
+       else logDensityObs d y - logCDFInterval d mLo mHi
+logDensityObs (Censored d mLo mHi) y =
+  -- 観測値 y が境界 lo / hi に等しい場合は左/右打ち切り尤度
+  let yA = realToFrac y :: a
+      eps = 1e-9 :: a
+      isAt v target = abs (v - target) < eps
+  in case (mLo, mHi) of
+       (Just lo, _) | yA <= lo || isAt yA lo -> logCDF d lo                -- 左打ち切り
+       (_, Just hi) | yA >= hi || isAt yA hi -> logSF  d hi                -- 右打ち切り
+       _                                     -> logDensityObs d y          -- 通常観測
 
 negInf :: Floating a => a
 negInf = -1/0
@@ -363,6 +403,82 @@ logSumExpA [x] = x
 logSumExpA xs  =
   let m = maximum xs
   in m + log (sum (map (\x -> exp (x - m)) xs))
+
+-- ---------------------------------------------------------------------------
+-- 多相 CDF / log-CDF (Truncated / Censored 用)
+-- ---------------------------------------------------------------------------
+
+-- | 多相 erf 近似 (Abramowitz & Stegun 7.1.26)。誤差 < 1.5e-7。
+-- AD でも Track でも動く。
+erfA :: (Floating a, Ord a) => a -> a
+erfA x =
+  let p   = 0.3275911
+      a1  = 0.254829592
+      a2  = -0.284496736
+      a3  = 1.421413741
+      a4  = -1.453152027
+      a5  = 1.061405429
+      sgn = if x < 0 then -1 else 1
+      ax  = abs x
+      t   = 1 / (1 + p * ax)
+      poly = a1*t + a2*t*t + a3*t*t*t + a4*t*t*t*t + a5*t*t*t*t*t
+  in sgn * (1 - poly * exp (- ax * ax))
+
+-- | 標準正規 CDF Φ(x)。
+phiCdfA :: (Floating a, Ord a) => a -> a
+phiCdfA x = 0.5 * (1 + erfA (x / sqrt 2))
+
+-- | 'Distribution' の CDF F(x) = P(Y ≤ x)。CDF を持たない分布では 'Nothing'。
+distCDF :: (Floating a, Ord a) => Distribution a -> a -> Maybe a
+distCDF (Normal mu sig) x
+  | sig <= 0  = Nothing
+  | otherwise = Just (phiCdfA ((x - mu) / sig))
+distCDF (Exponential rate) x
+  | rate <= 0 = Nothing
+  | x <= 0    = Just 0
+  | otherwise = Just (1 - exp (-rate * x))
+distCDF (LogNormal mu sig) x
+  | sig <= 0 || x <= 0 = Nothing
+  | otherwise = Just (phiCdfA ((log x - mu) / sig))
+distCDF (Uniform lo hi) x
+  | hi <= lo  = Nothing
+  | x <= lo   = Just 0
+  | x >= hi   = Just 1
+  | otherwise = Just ((x - lo) / (hi - lo))
+distCDF (HalfNormal sig) x
+  | sig <= 0 = Nothing
+  | x <= 0   = Just 0
+  | otherwise = Just (erfA (x / (sig * sqrt 2)))
+distCDF _ _ = Nothing  -- 他の分布は未対応
+
+-- | log F(x) (CDF の対数) — 端では値が 0 や 1 に近づくため log(F) で計算。
+logCDF :: (Floating a, Ord a) => Distribution a -> a -> a
+logCDF d x = case distCDF d x of
+  Nothing -> negInf
+  Just c | c <= 0    -> negInf
+         | c >= 1    -> 0
+         | otherwise -> log c
+
+-- | log(1 - F(x)) — 右側生存関数の対数。
+logSF :: (Floating a, Ord a) => Distribution a -> a -> a
+logSF d x = case distCDF d x of
+  Nothing -> negInf
+  Just c | c <= 0    -> 0
+         | c >= 1    -> negInf
+         | otherwise -> log (1 - c)
+
+-- | log(F(hi) − F(lo)) — Truncated の正規化定数。
+logCDFInterval :: (Floating a, Ord a) => Distribution a -> Maybe a -> Maybe a -> a
+logCDFInterval d mLo mHi = case (mLo, mHi) of
+  (Nothing, Nothing) -> 0  -- log(1)
+  (Just lo, Nothing) -> logSF d lo
+  (Nothing, Just hi) -> logCDF d hi
+  (Just lo, Just hi) ->
+    case (distCDF d lo, distCDF d hi) of
+      (Just cl, Just ch)
+        | ch <= cl  -> negInf
+        | otherwise -> log (ch - cl)
+      _ -> negInf
 
 -- ---------------------------------------------------------------------------
 -- 分布からのサンプリング (事前/事後予測用)
@@ -436,6 +552,21 @@ sampleDist (Mixture ws comps) gen
           k = pickIdx 0 ws
       -- 2) 選んだ成分からサンプリング
       sampleDist (comps !! k) gen
+sampleDist (Truncated d mLo mHi) gen =
+  -- 単純なリジェクション・サンプリング (範囲が極めて狭いと収束遅い)
+  let inRange y = case (mLo, mHi) of
+        (Just lo, _      ) | y < lo  -> False
+        (_,       Just hi) | y > hi  -> False
+        _                            -> True
+      tryOnce maxAttempts
+        | maxAttempts <= 0 = return (0/0)  -- 諦め
+        | otherwise = do
+            y <- sampleDist d gen
+            if inRange y then return y else tryOnce (maxAttempts - 1)
+  in tryOnce (10000 :: Int)
+sampleDist (Censored d _ _) gen =
+  -- 元分布から普通にサンプリング (打ち切りは「観測過程」の話で生成側ではない)
+  sampleDist d gen
 
 -- | Knuth のアルゴリズムで Poisson(λ) サンプル。λ < 30 程度なら十分高速。
 samplePoissonKnuth :: Double -> GenIO -> IO Double
@@ -733,6 +864,8 @@ getTransforms m = Map.fromList
     transformFor "Bernoulli"   = UnitIntervalT   -- p ∈ (0,1)
     transformFor "Categorical" = UnconstrainedT  -- ベクトル制約は未対応 (Dirichlet で別途)
     transformFor "Mixture"     = UnconstrainedT  -- 混合分布の潜在は通常 unconstrained
+    transformFor "Truncated"   = UnconstrainedT  -- 簡易: 範囲制約は logDensity 内で扱う
+    transformFor "Censored"    = UnconstrainedT
     transformFor _             = UnconstrainedT
 
 -- | unconstrained 空間における log-joint (Jacobian 補正込み)。
@@ -858,6 +991,10 @@ distDepsT (LogNormal mu s)   = trackDeps mu <> trackDeps s
 distDepsT (Bernoulli p)      = trackDeps p
 distDepsT (Categorical ps)   = mconcat (map trackDeps ps)
 distDepsT (Mixture ws ds)    = mconcat (map trackDeps ws) <> mconcat (map distDepsT ds)
+distDepsT (Truncated d mLo mHi) =
+  distDepsT d <> maybe mempty trackDeps mLo <> maybe mempty trackDeps mHi
+distDepsT (Censored  d mLo mHi) =
+  distDepsT d <> maybe mempty trackDeps mLo <> maybe mempty trackDeps mHi
 
 -- | Track でモデルを評価する (log joint も依存集合付きで計算)。
 runTrack :: forall r. ModelP r -> Map Text Track -> Track
