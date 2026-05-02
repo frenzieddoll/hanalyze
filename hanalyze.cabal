@@ -25,6 +25,7 @@ library
     Model.LM
     Model.GLM
     Model.GLMM
+    Model.Spline
     Model.HBM
     MCMC.Core
     MCMC.MH
@@ -209,6 +210,19 @@ executable newdistribs-demo
     , hanalyze
     , text       >= 1.2  && < 2.2
     , containers >= 0.6  && < 0.8
+    , mwc-random >= 0.15 && < 0.16
+
+executable spline-demo
+  import:           warnings
+  main-is:          SplineDemo.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , vector     >= 0.12 && < 0.14
+    , hmatrix    >= 0.20 && < 0.22
+    , hvega      >= 0.12 && < 0.13
     , mwc-random >= 0.15 && < 0.16
 
 executable integrated-demo
