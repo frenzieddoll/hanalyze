@@ -1,5 +1,12 @@
 # モデル比較 (Stat.ModelSelect)
 
+> 関連デモ:
+> - [`gibbs-demo`](../demo/GibbsDemo.hs) — WAIC/LOO で 2 モデル比較
+> - [`simpson-paradox`](../demo/SimpsonParadoxDemo.hs) — LM/GLMM/HBM の WAIC を 1 つの HTML に並列表示
+> - [`hbm-random-slope`](../demo/HBMRandomSlopeDemo.hs) — ランダム切片 vs +ランダム傾きの ΔWAIC 比較
+>
+> CLI: `--waic` フラグで LM / GLM / GLMM / HBM レポートに WAIC/LOO を埋め込み。
+
 ## 概要
 
 `Stat.ModelSelect` は MCMC チェーンを使った情報量規準によるモデル比較を提供します。

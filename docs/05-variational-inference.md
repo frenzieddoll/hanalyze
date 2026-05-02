@@ -1,5 +1,8 @@
 # 変分推論 (Stat.VI — ADVI)
 
+> 関連デモ:
+> - [`vi-demo`](../demo/VIDemo.hs) — VI vs NUTS の精度・速度比較
+
 ## 概要と原理
 
 **ADVI (Automatic Differentiation Variational Inference)**

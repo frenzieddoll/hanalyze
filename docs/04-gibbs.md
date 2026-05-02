@@ -1,5 +1,9 @@
 # Gibbs サンプリング (MCMC.Gibbs)
 
+> 関連デモ:
+> - [`gibbs-demo`](../demo/GibbsDemo.hs) — Gibbs + WAIC/LOO モデル比較
+> - [`gibbs-hbm-demo`](../demo/GibbsHBMDemo.hs) — HBM DSL × Gibbs (共役自動検出)
+
 ## 概要と原理
 
 Gibbs サンプリングは、各パラメータを **他の全パラメータを固定した条件付き事後分布** から

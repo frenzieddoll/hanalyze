@@ -1,5 +1,12 @@
 # 確率的プログラミング DSL (Model.HBM)
 
+> 関連デモ:
+> - [`hbm-example`](../demo/HBMExample.hs) — 階層正規モデル + 4 チェーン NUTS
+> - [`hbm-regression`](../demo/HBMRegressionDemo.hs) — ベイズ単回帰 (AnalysisReport 付き)
+> - [`clinical-trial`](../demo/ClinicalTrial.hs) — Beta-Binomial A/B テスト
+> - [`simpson-paradox`](../demo/SimpsonParadoxDemo.hs) — シンプソン例で LM/GLMM/HBM 比較
+> - [`hbm-random-slope`](../demo/HBMRandomSlopeDemo.hs) — ランダム傾き拡張
+
 ## 概要
 
 `Model.HBM` は Free Monad で実装した多相な確率的プログラミング DSL です。

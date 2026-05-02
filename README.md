@@ -35,7 +35,7 @@ myModel = do
 
 | ページ | 内容 |
 |---|---|
-| [クイックスタート](docs/01-quickstart.md) | ビルド・最小ワークフロー・全機能早見表 |
+| [クイックスタート](docs/01-quickstart.md) | ビルド・最小ワークフロー・**やりたい事 → どのデモ**早見表 |
 | [確率的プログラミング DSL](docs/02-probabilistic-model.md) | Model.HBM のパターン集 (Beta-Binomial / 階層正規 / 多相解釈・依存自動抽出) |
 | [MCMC サンプラー選択ガイド](docs/03-mcmc-samplers.md) | MH / HMC / NUTS の使い分け・チューニング・R-hat |
 | [Gibbs サンプリング](docs/04-gibbs.md) | 共役アップデート・ESS/s 比較 |
@@ -50,20 +50,52 @@ myModel = do
 ```bash
 cabal build              # ライブラリ + 全実行ファイル
 cabal test               # テスト
-cabal run hbm-example    # HBM + 4チェーン NUTS デモ → mcmc_report*.html を生成
-cabal run vi-demo        # 変分推論 (VI vs NUTS) デモ
-cabal run gibbs-demo     # Gibbs + WAIC/LOO モデル比較デモ
-cabal run bench-mcmc     # MH / HMC / NUTS パフォーマンス比較
-cabal run test-hmc-nuts  # HMC / NUTS 精度テスト
-cabal run glmm-demo      # GLMM デモ
 ```
+
+## デモ一覧
+
+`cabal run <demo-name>` で実行 (HTML/PNG が生成されカレントディレクトリに出力)。
+詳しい用途別の使い分けは [docs/01-quickstart.md](docs/01-quickstart.md) を参照。
+
+### 入門 (まずはこれ)
+
+| デモ | 内容 | 主に学べること |
+|---|---|---|
+| `hbm-example`     | 階層正規モデル + 4 チェーン NUTS → `mcmc_report*.html` | HBM DSL の書き方、MCMC レポート |
+| `hbm-regression`  | ベイズ単回帰 + AnalysisReport (DAG・MCMC・信用区間) | HBM 回帰の AnalysisReport 統合 |
+| `gp-demo`         | GP 回帰 (RBF/Matérn/Periodic) + LML 比較 | カーネル選択、GP の使い方 |
+
+### モデル比較・パラドックス
+
+| デモ | 内容 | 主に学べること |
+|---|---|---|
+| `simpson-paradox` | LM/GLMM/HBM をシンプソンのパラドックスで比較 → 4 つの HTML | 階層構造の重要性、モデル選択 |
+| `hbm-random-slope`| ランダム切片 vs ランダム切片+ランダム傾き (M1 vs M2) を WAIC で比較 | 階層モデル拡張、WAIC によるモデル選択 |
+| `clinical-trial`  | ベイズ A/B テスト (臨床試験 Beta-Binomial) | 二群比較、決定理論 |
+
+### サンプラー深堀り
+
+| デモ | 内容 | 主に学べること |
+|---|---|---|
+| `bench-mcmc`     | MH / HMC / NUTS のパフォーマンス比較 | サンプラー選択、ESS/s |
+| `test-hmc-nuts`  | HMC/NUTS 精度テスト (1D ガウスで動作確認) | サンプラー検証 |
+| `gibbs-demo`     | Gibbs + WAIC/LOO モデル比較 | 共役更新、モデル比較 |
+| `gibbs-hbm-demo` | Gibbs × HBM DSL 統合 (共役自動検出) | 共役検出、ハイブリッド Gibbs+MH |
+| `vi-demo`        | 変分推論 (ADVI) vs NUTS | VI の速度と限界 |
+
+### 古典的回帰・可視化
+
+| デモ | 内容 | 主に学べること |
+|---|---|---|
+| `glmm-demo`     | LME / GLMM (ランダム切片) | 混合効果モデル |
+| `bar-demo`      | Viz.Bar (棒グラフ・積み上げ) + PNG/SVG 出力 | 可視化、画像エクスポート |
 
 ---
 
 ## CLI ツールとして使う
 
 ```
-cabal run hanalyze -- <file> <xcols> <ycols> [LM|GLM|NoReg] [options]
+cabal run hanalyze -- <file> <xcols> <ycols> [LM|GLM|NoReg|GP|HBM] [options]
 ```
 
 | オプション | 説明 |
@@ -76,19 +108,31 @@ cabal run hanalyze -- <file> <xcols> <ycols> [LM|GLM|NoReg] [options]
 | `--group COL` | 混合効果モデル (LME / GLMM) |
 | `--hist COL` | ヒストグラム表示 |
 | `--fit DIST` | 理論分布の密度を重ね書き |
+| `--report [FILE]` | HTML 分析レポート生成 (default: `report.html`) |
+| `--waic` | WAIC / LOO-CV を計算してレポートに表示 |
+| `--format FMT` | `html` / `png` / `svg`。`png/svg` はレポート内のプロットも画像化 |
 
 ```bash
-# 線形回帰 + 信頼区間
-cabal run hanalyze -- data.tsv x y LM --ci 0.95
+# 線形回帰 + 信頼区間 + AnalysisReport
+cabal run hanalyze -- data.tsv x y LM --ci 0.95 --report
 
-# ポアソン GLM (列ごとに多項式次数を指定)
-cabal run hanalyze -- data.tsv "x1 x2" y GLM -d poisson -l log --degree -1 2 -2 3
+# ポアソン GLM (列ごとに多項式次数を指定) + WAIC
+cabal run hanalyze -- data.tsv "x1 x2" y GLM -d poisson -l log --degree -1 2 -2 3 --waic --report
 
-# 混合効果モデル
-cabal run hanalyze -- data.tsv x y LM --group school
+# 混合効果モデル (LME) + WAIC
+cabal run hanalyze -- data.tsv x y LM --group school --waic --report
+
+# ベイズ線形回帰 (HBM): NUTS で α/β/σ の事後を推定 → AnalysisReport
+cabal run hanalyze -- data.csv x y HBM --report --waic
+
+# ガウス過程回帰 (RBF/Matérn/Periodic 比較)
+cabal run hanalyze -- data.csv x y GP --report
 
 # ヒストグラム + 正規分布フィット
 cabal run hanalyze -- data.csv x y NoReg --hist score --fit normal
+
+# レポート + プロット PNG エクスポート
+cabal run hanalyze -- data.csv x y LM --report --format png
 ```
 
 ---

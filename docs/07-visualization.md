@@ -1,5 +1,14 @@
 # 可視化ガイド (Viz.*)
 
+> 関連デモ:
+> - [`hbm-example`](../demo/HBMExample.hs) — `Viz.Report` (KDE/トレース/DAG/ペア散布)
+> - [`hbm-regression`](../demo/HBMRegressionDemo.hs) — `Viz.AnalysisReport` の HBMFit (DAG + MCMC + 信用区間付き予測)
+> - [`simpson-paradox`](../demo/SimpsonParadoxDemo.hs) — `writeComparisonReport` で複数モデル並列比較
+> - [`bar-demo`](../demo/BarDemo.hs) — `Viz.Bar` + PNG/SVG エクスポート
+> - [`gp-demo`](../demo/GPDemo.hs) — GP 専用レポート
+>
+> CLI: `--report` で AnalysisReport 生成、`--format png|svg` で個別プロットも画像化。
+
 ## 出力形式
 
 全ての可視化関数は以下の形式に対応しています:

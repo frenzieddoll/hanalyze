@@ -1,5 +1,10 @@
 # MCMC サンプラー選択ガイド
 
+> 関連デモ:
+> - [`bench-mcmc`](../demo/BenchMCMC.hs) — MH/HMC/NUTS パフォーマンス比較 (易/難 2 ケース)
+> - [`test-hmc-nuts`](../demo/TestHMCNUTS.hs) — 1D ガウスで HMC/NUTS 動作検証
+> - [`hbm-example`](../demo/HBMExample.hs) — 4 チェーン NUTS + R-hat 診断
+
 ## サンプラー比較
 
 | サンプラー | モジュール | 向いているケース | 主な調整パラメータ |
