@@ -33,6 +33,10 @@ data Chain = Chain
   , chainEnergy   :: [Double]
     -- ^ 各反復の Hamiltonian エネルギー H = -log p(θ) + 0.5|p|² (バーンイン後)。
     --   HMC/NUTS のみ意味を持つ; MH/Gibbs などは空リスト。BFMI / energy plot 用。
+  , chainDivergences :: [Int]
+    -- ^ NUTS で divergent transition が起きた反復の 0-origin index 列
+    --   (バーンイン後)。Stan 同様 |H_proposal - H_initial| > 1000 を判定基準
+    --   とする。多ければ事後分布が病的で、reparameterization が必要。
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------

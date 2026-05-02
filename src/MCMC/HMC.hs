@@ -195,6 +195,7 @@ hmc m cfg initC gen = do
     , chainAccepted = accepted
     , chainTotal    = total
     , chainEnergy   = energies
+    , chainDivergences = []
     }
 
 -- | hmc を numChains 本並列実行する (+RTS -N で CPU 並列)。

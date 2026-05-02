@@ -83,6 +83,7 @@ metropolis model cfg init_ gen = do
     , chainAccepted = accepted
     , chainTotal    = total
     , chainEnergy   = []
+    , chainDivergences = []
     }
 
 -- | Metropolis を numChains 本並列実行する。

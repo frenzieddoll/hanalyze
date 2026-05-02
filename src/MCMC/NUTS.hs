@@ -106,6 +106,8 @@ data NUTSTree = NUTSTree
   , ntThPrime :: Params
   , ntN       :: Int
   , ntS       :: Bool
+  , ntDiv     :: Bool
+    -- ^ サブツリー中で divergent (|ΔH| > deltaMax) が発生したか
   }
 
 deltaMax :: Double
@@ -139,10 +141,13 @@ buildTree gradFn logPiFn names eps theta r logU dir depth gen
           h'  = -(logPiFn theta') + kinetic r'
           n'  = if logU <= -h' then 1 else 0
           s'  = logU < deltaMax - h'
+          -- divergent: エネルギー保存違反 (s' を False にする原因が deltaMax 超過)
+          divergent = not s'
       return NUTSTree
         { ntThMinus = theta', ntRMinus = r'
         , ntThPlus  = theta', ntRPlus  = r'
         , ntThPrime = theta', ntN = n', ntS = s'
+        , ntDiv = divergent
         }
   | otherwise = do
       t1 <- buildTree gradFn logPiFn names eps theta r logU dir (depth - 1) gen
@@ -169,6 +174,7 @@ buildTree gradFn logPiFn names eps theta r logU dir depth gen
           { ntThMinus = minus', ntRMinus = rMinus'
           , ntThPlus  = plus',  ntRPlus  = rPlus'
           , ntThPrime = thPrime', ntN = n1 + n2, ntS = s'
+          , ntDiv = ntDiv t1 || ntDiv t2
           }
 
 -- ---------------------------------------------------------------------------
@@ -206,6 +212,7 @@ nuts m cfg initC gen = do
 
   samplesRef  <- newIORef []
   energyRef   <- newIORef ([] :: [Double])
+  divergenceRef <- newIORef ([] :: [Int])
   acceptedRef <- newIORef (0 :: Int)
   daRef       <- newIORef (initDualAvg (nutsStepSize cfg))
 
@@ -218,6 +225,7 @@ nuts m cfg initC gen = do
               { ntThMinus = currentU, ntRMinus = r0
               , ntThPlus  = currentU, ntRPlus  = r0
               , ntThPrime = currentU, ntN = 1, ntS = True
+              , ntDiv = False
               }
         let doubleTree tree j =
               if not (ntS tree) then return tree
@@ -247,6 +255,7 @@ nuts m cfg initC gen = do
                   { ntThMinus = minus', ntRMinus = rMinus'
                   , ntThPlus  = plus',  ntRPlus  = rPlus'
                   , ntThPrime = thPrime', ntN = n1 + n2, ntS = s'
+                  , ntDiv = ntDiv tree || ntDiv subtree
                   }
         finalTree <- foldM doubleTree tree0 [0 .. nutsMaxDepth cfg - 1]
         let proposedU = ntThPrime finalTree
@@ -254,11 +263,11 @@ nuts m cfg initC gen = do
             hOne   = -(logPiFn thetaOne) + kinetic rOne
             alpha  = min 1.0 (exp (h0 - hOne))
         when (proposedU /= currentU) $ modifyIORef' acceptedRef (+1)
-        return (proposedU, alpha, h0)
+        return (proposedU, alpha, h0, ntDiv finalTree)
 
   let loop 0 currentU _eps = return currentU
       loop i currentU eps = do
-        (nextU, alpha, h0) <- step eps currentU
+        (nextU, alpha, h0, divergent) <- step eps currentU
         let isBurnIn = i > nutsIterations cfg
         eps' <- if doAdapt && isBurnIn
           then do
@@ -276,18 +285,25 @@ nuts m cfg initC gen = do
           then do
             modifyIORef' samplesRef (toConstrained nextU :)
             modifyIORef' energyRef  (h0 :)
+            -- divergent ならバーンイン後の 0-origin index を記録
+            -- (i は残り反復数なので、観測順 index = nutsIterations - i)
+            when divergent $
+              modifyIORef' divergenceRef
+                ((nutsIterations cfg - i) :)
           else return ()
         loop (i - 1) nextU eps'
 
   _ <- loop total initU (nutsStepSize cfg)
   samples  <- fmap reverse (readIORef samplesRef)
   energies <- fmap reverse (readIORef energyRef)
+  divs     <- fmap reverse (readIORef divergenceRef)
   accepted <- readIORef acceptedRef
   return Chain
-    { chainSamples  = samples
-    , chainAccepted = accepted
-    , chainTotal    = total
-    , chainEnergy   = energies
+    { chainSamples     = samples
+    , chainAccepted    = accepted
+    , chainTotal       = total
+    , chainEnergy      = energies
+    , chainDivergences = divs
     }
 
 -- | NUTS を numChains 本並列実行する。

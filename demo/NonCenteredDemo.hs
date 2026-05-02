@@ -19,14 +19,14 @@ import Data.Maybe (fromMaybe)
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import MCMC.Core (chainEnergy)
+import MCMC.Core (chainEnergy, chainDivergences)
 import MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
 import Model.HBM (ModelP, sample, Distribution (..),
                   nonCenteredNormal, augmentChainWithDeterministic)
 import Stat.MCMC (bfmi)
 import Viz.Core  (defaultConfig, OutputFormat (..), PlotConfig (..))
 import Viz.MCMC  (energyPlotFile, posteriorSummaryFile,
-                  printPosteriorSummary)
+                  printPosteriorSummary, pairScatterDivFile)
 
 cfg :: NUTSConfig
 cfg = defaultNUTSConfig
@@ -95,6 +95,21 @@ main = do
   posteriorSummaryFile "funnel-noncenter.html" "Non-centered funnel"
     ["v", "x_raw", "x"] [ch2]
   putStrLn "  → funnel-centered.html / funnel-noncenter.html"
+
+  -- ── Divergence overlay ──
+  let divs1 = chainDivergences ch1
+      divs2 = chainDivergences ch2raw
+  printf "  Centered     divergences: %d 件\n" (length divs1)
+  printf "  Non-centered divergences: %d 件\n" (length divs2)
+  let divCfg t = (defaultConfig t)
+                   { plotWidth = 500, plotHeight = 400 }
+  pairScatterDivFile HTML "funnel-centered-pair.html"
+    (divCfg "Centered funnel — pair (divergences in red)")
+    "v" "x" ch1 divs1
+  pairScatterDivFile HTML "funnel-noncenter-pair.html"
+    (divCfg "Non-centered — pair (v vs x_raw, divergences in red)")
+    "v" "x_raw" ch2raw divs2
+  putStrLn "  → funnel-centered-pair.html / funnel-noncenter-pair.html"
   putStrLn ""
 
   putStrLn "═══════════════════════════════════════════════════════════════"

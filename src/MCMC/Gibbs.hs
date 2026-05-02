@@ -134,6 +134,7 @@ gibbs updates cfg initP gen = do
     , chainAccepted = accepted
     , chainTotal    = total * nUpd
     , chainEnergy   = []
+    , chainDivergences = []
     }
 
 gibbsChains :: [GibbsUpdate] -> GibbsConfig -> Int -> Params -> GenIO -> IO [Chain]
@@ -295,6 +296,7 @@ gibbsMH model cfg mhSteps initP gen = do
     , chainAccepted = accepted
     , chainTotal    = total
     , chainEnergy   = []
+    , chainDivergences = []
     }
 
 gibbsMHChains
