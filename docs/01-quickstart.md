@@ -24,6 +24,29 @@ CPU parallelism (multi-chain MCMC, etc.):
 cabal run hbm-example -- +RTS -N4   # 4 threads
 ```
 
+## CLI subcommands (Phase C onward)
+
+`hanalyze` can be invoked via subcommands (the bare form
+`hanalyze <file> <xcols> <ycols> ...` is preserved as a legacy alias of
+`regress`):
+
+```bash
+cabal run hanalyze -- help              # list subcommands
+cabal run hanalyze -- info data.csv     # column types and basic statistics
+cabal run hanalyze -- hist data.csv col --fit normal 0 1  # histogram + density
+cabal run hanalyze -- regress data.csv x y LM --report    # regression (= bare form)
+```
+
+| Subcommand | Status | Purpose |
+|---|---|---|
+| `regress` / bare | ✅ | LM/GLM/GLMM/GP/HBM regression |
+| `info` | ✅ | Per-column type / stats (n / min / max / mean / median / sd / unique) |
+| `hist` | ✅ | Standalone histogram (`--fit`/`--format`/`--out`) |
+| `ridge` / `kernel` | planned | Regularized / kernel regression (Phase A: RFF) |
+| `spline` | planned | Spline regression |
+| `doe` | planned | Orthogonal arrays Lₙ / RSM / D-optimal (Phase E1) |
+| `taguchi` | planned | Taguchi method (OA + SN ratio + inner/outer arrays) (Phase E2) |
+
 ---
 
 ## "What do you want to do?" — pick the demo / CLI

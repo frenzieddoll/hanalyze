@@ -23,6 +23,28 @@ CPU 並列化 (多チェーン MCMC など):
 cabal run hbm-example -- +RTS -N4   # 4 スレッド
 ```
 
+## CLI サブコマンド (Phase C 以降)
+
+`hanalyze` はサブコマンド形式で呼び出せます (bare 形式 `hanalyze <file> <xcols> <ycols> ...`
+は `regress` の legacy エイリアスとして残置):
+
+```bash
+cabal run hanalyze -- help              # サブコマンド一覧
+cabal run hanalyze -- info data.csv     # 列の型と基本統計量
+cabal run hanalyze -- hist data.csv col --fit normal 0 1  # ヒストグラム + 理論密度
+cabal run hanalyze -- regress data.csv x y LM --report    # 既存の回帰 (= bare 形式)
+```
+
+| サブコマンド | 状態 | 機能 |
+|---|---|---|
+| `regress` / bare | ✅ | LM/GLM/GLMM/GP/HBM 回帰 |
+| `info` | ✅ | 列ごとの型・基本統計 (n / min / max / mean / median / sd / unique) |
+| `hist` | ✅ | ヒストグラム単体 (`--fit`/`--format`/`--out`) |
+| `ridge` / `kernel` | 計画中 | 正則化・カーネル回帰 (Phase A: RFF) |
+| `spline` | 計画中 | スプライン回帰 |
+| `doe` | 計画中 | 直交表 Lₙ / RSM / D-optimal (Phase E1) |
+| `taguchi` | 計画中 | タグチメソッド (OA + SN 比 + 内/外配置) (Phase E2) |
+
 ---
 
 ## 「やりたいこと」逆引き — どのデモ / CLI を使うか

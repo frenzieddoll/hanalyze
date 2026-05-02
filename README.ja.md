@@ -214,8 +214,32 @@ cabal test               # テスト
 
 ## CLI ツールとして使う
 
+サブコマンド形式 (推奨) または bare 形式 (legacy = `regress`) で呼び出せます:
+
 ```
-cabal run hanalyze -- <file> <xcols> <ycols> [LM|GLM|NoReg|GP|HBM] [options]
+cabal run hanalyze -- <subcommand> [args...]
+cabal run hanalyze -- <file> <xcols> <ycols> [LM|GLM|...] [opts]   # legacy = regress
+```
+
+### サブコマンド一覧
+
+| サブコマンド | 機能 | 状態 |
+|---|---|---|
+| `regress`    | 古典/ベイズ回帰 (LM/GLM/GLMM/GP/HBM) | ✅ 実装 |
+| `info`       | 列ごとの型と基本統計量を表示 | ✅ 実装 |
+| `hist`       | ヒストグラム単体生成 | ✅ 実装 |
+| `ridge`      | Ridge / Lasso / Elastic Net | 計画中 (Phase A) |
+| `kernel`     | カーネル回帰 / RFF 近似 | 計画中 (Phase A) |
+| `spline`     | B-spline / Natural cubic | 計画中 |
+| `doe`        | 実験計画 (factorial / OA Lₙ / RSM / D-opt) | 計画中 (Phase E1) |
+| `taguchi`    | タグチメソッド (OA + SN 比 + 内/外配置) | 計画中 (Phase E2) |
+| `help`       | サブコマンド一覧表示 | ✅ |
+
+### `regress` (= bare 呼び出し)
+
+```
+hanalyze regress <file> <xcols> <ycols> [LM|GLM|NoReg|GP|HBM] [options]
+hanalyze         <file> <xcols> <ycols> [LM|GLM|NoReg|GP|HBM] [options]   # 同等
 ```
 
 | オプション | 説明 |
@@ -226,33 +250,60 @@ cabal run hanalyze -- <file> <xcols> <ycols> [LM|GLM|NoReg|GP|HBM] [options]
 | `--ci [LEVEL]` | 信頼区間 (デフォルト 0.95) |
 | `--pi [LEVEL]` | 予測区間 (Gaussian のみ) |
 | `--group COL` | 混合効果モデル (LME / GLMM) |
-| `--hist COL` | ヒストグラム表示 |
-| `--fit DIST` | 理論分布の密度を重ね書き |
 | `--report [FILE]` | HTML 分析レポート生成 (default: `report.html`) |
 | `--waic` | WAIC / LOO-CV を計算してレポートに表示 |
 | `--format FMT` | `html` / `png` / `svg`。`png/svg` はレポート内のプロットも画像化 |
 
 ```bash
 # 線形回帰 + 信頼区間 + AnalysisReport
-cabal run hanalyze -- data.tsv x y LM --ci 0.95 --report
+cabal run hanalyze -- regress data.tsv x y LM --ci 0.95 --report
 
 # ポアソン GLM (列ごとに多項式次数を指定) + WAIC
-cabal run hanalyze -- data.tsv "x1 x2" y GLM -d poisson -l log --degree -1 2 -2 3 --waic --report
+cabal run hanalyze -- regress data.tsv "x1 x2" y GLM -d poisson -l log --degree -1 2 -2 3 --waic --report
 
 # 混合効果モデル (LME) + WAIC
-cabal run hanalyze -- data.tsv x y LM --group school --waic --report
+cabal run hanalyze -- regress data.tsv x y LM --group school --waic --report
 
 # ベイズ線形回帰 (HBM): NUTS で α/β/σ の事後を推定 → AnalysisReport
-cabal run hanalyze -- data.csv x y HBM --report --waic
+cabal run hanalyze -- regress data.csv x y HBM --report --waic
 
 # ガウス過程回帰 (RBF/Matérn/Periodic 比較)
-cabal run hanalyze -- data.csv x y GP --report
+cabal run hanalyze -- regress data.csv x y GP --report
 
-# ヒストグラム + 正規分布フィット
-cabal run hanalyze -- data.csv x y NoReg --hist score --fit normal
-
-# レポート + プロット PNG エクスポート
+# bare 形式 (subcommand 省略 = regress)
 cabal run hanalyze -- data.csv x y LM --report --format png
+```
+
+### `info` — データの中身を確認
+
+```bash
+cabal run hanalyze -- info data.csv
+# File:    data.csv
+# Rows:    100
+# Columns: 3
+#
+#   name                 type        n        min        max       mean     median         sd
+#   ------------------------------------------------------------------------------------------
+#   group                text      100  unique=3   top: A(40), B(35), C(25)
+#   x                    numeric   100    -2.34       3.45       0.12       0.10       1.04
+#   y                    numeric   100    -1.20       8.71       3.45       3.21       1.95
+```
+
+### `hist` — ヒストグラム単体
+
+```
+hanalyze hist <file> <col> [--fit DIST PARAMS] [--format FMT] [--out FILE]
+```
+
+```bash
+# 純粋なヒストグラム
+cabal run hanalyze -- hist data.csv score
+
+# 正規分布の理論密度を重ね書き
+cabal run hanalyze -- hist data.csv score --fit normal 0 1
+
+# Poisson と比較しつつ PNG で出力
+cabal run hanalyze -- hist data.csv counts --fit poisson 3 --format png --out hist.png
 ```
 
 ---

@@ -214,8 +214,32 @@ For task-oriented guidance, see [docs/01-quickstart.md](docs/01-quickstart.md).
 
 ## Using as a CLI tool
 
+Invoke either via subcommands (recommended) or in the bare form (legacy = `regress`):
+
 ```
-cabal run hanalyze -- <file> <xcols> <ycols> [LM|GLM|NoReg|GP|HBM] [options]
+cabal run hanalyze -- <subcommand> [args...]
+cabal run hanalyze -- <file> <xcols> <ycols> [LM|GLM|...] [opts]   # legacy = regress
+```
+
+### Subcommands
+
+| Subcommand | Purpose | Status |
+|---|---|---|
+| `regress`    | Classical / Bayesian regression (LM/GLM/GLMM/GP/HBM) | ✅ implemented |
+| `info`       | Per-column type and basic statistics | ✅ implemented |
+| `hist`       | Standalone histogram (with optional density overlay) | ✅ implemented |
+| `ridge`      | Ridge / Lasso / Elastic Net | planned (Phase A) |
+| `kernel`     | Kernel regression / RFF approximation | planned (Phase A) |
+| `spline`     | B-spline / natural cubic | planned |
+| `doe`        | Design of Experiments (factorial / OA Lₙ / RSM / D-opt) | planned (Phase E1) |
+| `taguchi`    | Taguchi method (OA + SN ratio + inner/outer arrays) | planned (Phase E2) |
+| `help`       | List subcommands | ✅ |
+
+### `regress` (= bare form)
+
+```
+hanalyze regress <file> <xcols> <ycols> [LM|GLM|NoReg|GP|HBM] [options]
+hanalyze         <file> <xcols> <ycols> [LM|GLM|NoReg|GP|HBM] [options]   # equivalent
 ```
 
 | Option | Description |
@@ -226,33 +250,60 @@ cabal run hanalyze -- <file> <xcols> <ycols> [LM|GLM|NoReg|GP|HBM] [options]
 | `--ci [LEVEL]` | Confidence interval (default 0.95) |
 | `--pi [LEVEL]` | Prediction interval (Gaussian only) |
 | `--group COL` | Mixed-effects model (LME / GLMM) |
-| `--hist COL` | Histogram view |
-| `--fit DIST` | Overlay theoretical density |
 | `--report [FILE]` | Generate HTML analysis report (default: `report.html`) |
 | `--waic` | Compute WAIC / LOO-CV and include in the report |
 | `--format FMT` | `html` / `png` / `svg`; for `png/svg` plots inside the report are rendered as images |
 
 ```bash
 # Linear regression + confidence interval + AnalysisReport
-cabal run hanalyze -- data.tsv x y LM --ci 0.95 --report
+cabal run hanalyze -- regress data.tsv x y LM --ci 0.95 --report
 
 # Poisson GLM (per-column polynomial degree) + WAIC
-cabal run hanalyze -- data.tsv "x1 x2" y GLM -d poisson -l log --degree -1 2 -2 3 --waic --report
+cabal run hanalyze -- regress data.tsv "x1 x2" y GLM -d poisson -l log --degree -1 2 -2 3 --waic --report
 
 # Mixed-effects model (LME) + WAIC
-cabal run hanalyze -- data.tsv x y LM --group school --waic --report
+cabal run hanalyze -- regress data.tsv x y LM --group school --waic --report
 
 # Bayesian linear regression (HBM): NUTS posteriors for α/β/σ → AnalysisReport
-cabal run hanalyze -- data.csv x y HBM --report --waic
+cabal run hanalyze -- regress data.csv x y HBM --report --waic
 
 # Gaussian process regression (RBF/Matérn/Periodic comparison)
-cabal run hanalyze -- data.csv x y GP --report
+cabal run hanalyze -- regress data.csv x y GP --report
 
-# Histogram + normal fit
-cabal run hanalyze -- data.csv x y NoReg --hist score --fit normal
-
-# Report + plot PNG export
+# Bare form (subcommand omitted = regress)
 cabal run hanalyze -- data.csv x y LM --report --format png
+```
+
+### `info` — inspect a dataset
+
+```bash
+cabal run hanalyze -- info data.csv
+# File:    data.csv
+# Rows:    100
+# Columns: 3
+#
+#   name                 type        n        min        max       mean     median         sd
+#   ------------------------------------------------------------------------------------------
+#   group                text      100  unique=3   top: A(40), B(35), C(25)
+#   x                    numeric   100    -2.34       3.45       0.12       0.10       1.04
+#   y                    numeric   100    -1.20       8.71       3.45       3.21       1.95
+```
+
+### `hist` — standalone histogram
+
+```
+hanalyze hist <file> <col> [--fit DIST PARAMS] [--format FMT] [--out FILE]
+```
+
+```bash
+# Plain histogram
+cabal run hanalyze -- hist data.csv score
+
+# Overlay a normal density
+cabal run hanalyze -- hist data.csv score --fit normal 0 1
+
+# Compare against Poisson and export as PNG
+cabal run hanalyze -- hist data.csv counts --fit poisson 3 --format png --out hist.png
 ```
 
 ---
