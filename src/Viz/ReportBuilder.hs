@@ -43,6 +43,14 @@ module Viz.ReportBuilder
   , secTable
   , secMarkdown
   , secHtml
+    -- * MCMC / 事後分布関連 (Phase F)
+  , secMCMCDiagnostics
+  , secMCMCDiagnosticsMulti
+  , secMCMCAutocorr
+  , secMCMCPair
+  , secPosteriorSummary
+    -- * 対話的予測 (LM/GLM 用)
+  , secInteractiveLM
     -- * レンダリング
   , renderReport
     -- * Reportable typeclass
@@ -61,9 +69,13 @@ import Data.Text.Encoding (decodeUtf8)
 import Graphics.Vega.VegaLite hiding (filter, name)
 import Numeric (showFFloat)
 import qualified Data.Vector as V
+import Text.Printf (printf)
 
 import DataFrame.Core
+import MCMC.Core (Chain)
 import Viz.Assets (vegaJS, vegaLiteJS, vegaEmbedJS)
+import Viz.Core (PlotConfig (..), defaultConfig)
+import qualified Viz.MCMC as VM
 
 -- ---------------------------------------------------------------------------
 -- 設定
@@ -115,6 +127,9 @@ data ReportSection
   | SecMarkdown Text Text
     -- | raw HTML 本体 (escape hatch)
   | SecHtml Text Text
+    -- | 単変数 LM/GLM の対話的予測 (スライダー + リアルタイム scatter)。
+    --   フィールド: title / xCol / yCol / xs / ys / smooth / (xSliderMin, xSliderMax)
+  | SecInteractiveLM Text Text Text [Double] [Double] SmoothCurve (Double, Double)
 
 -- ---------------------------------------------------------------------------
 -- ビルダ
@@ -156,6 +171,77 @@ secMarkdown = SecMarkdown
 
 secHtml :: Text -> Text -> ReportSection
 secHtml = SecHtml
+
+-- ---------------------------------------------------------------------------
+-- MCMC セクションビルダ (Viz.MCMC のラッパ)
+-- ---------------------------------------------------------------------------
+
+-- | 単一チェーンの MCMC 診断 (KDE + トレース)。
+secMCMCDiagnostics :: Text       -- ^ セクションタイトル
+                   -> [Text]     -- ^ パラメータ名
+                   -> Chain
+                   -> ReportSection
+secMCMCDiagnostics title params chain =
+  SecVega title (VM.mcmcDiagnostics (defaultConfig title) params chain)
+
+-- | 多チェーン MCMC 診断 (KDE 合算 + 色分けトレース)。
+secMCMCDiagnosticsMulti :: Text -> [Text] -> [Chain] -> ReportSection
+secMCMCDiagnosticsMulti title params chains =
+  SecVega title (VM.mcmcDiagnosticsMulti (defaultConfig title) params chains)
+
+-- | 自己相関プロット。
+secMCMCAutocorr :: Text -> Int -> [Text] -> Chain -> ReportSection
+secMCMCAutocorr title maxLag params chain =
+  SecVega title (VM.autocorrPlot (defaultConfig title) maxLag params chain)
+
+-- | ペアスキャッタープロット。
+secMCMCPair :: Text -> Text -> Text -> Chain -> ReportSection
+secMCMCPair title pa pb chain =
+  SecVega title (VM.pairScatter (defaultConfig title) pa pb chain)
+
+-- | 事後要約テーブル (mean / SD / 2.5% / 97.5% / ESS / R-hat)。
+-- 入力: パラメータごとに (name, mean, sd, q025, q975, ess, rhat)。
+secPosteriorSummary
+  :: Text                                                    -- title
+  -> [(Text, Double, Double, Double, Double, Double, Maybe Double)]
+  -> ReportSection
+secPosteriorSummary title rows =
+  let headers = ["Parameter", "Mean", "SD", "2.5%", "97.5%", "ESS", "R-hat"]
+      body    = [ [ p
+                  , T.pack (printf "%.4f" m)
+                  , T.pack (printf "%.4f" sd)
+                  , T.pack (printf "%.4f" lo)
+                  , T.pack (printf "%.4f" hi)
+                  , T.pack (printf "%.0f" ess)
+                  , maybe "—" (T.pack . printf "%.3f") rhat
+                  ]
+                | (p, m, sd, lo, hi, ess, rhat) <- rows ]
+  in SecTable title headers body
+
+-- ---------------------------------------------------------------------------
+-- 対話的予測 (LM/GLM 単変数)
+-- ---------------------------------------------------------------------------
+
+-- | 単変数 LM/GLM の対話的予測セクション。
+-- 与えられた x グリッド + 予測 y + バンドから埋め込み JS を生成し、
+-- スライダーで予測点をリアルタイム移動できる scatter+chart を表示。
+--
+-- 引数:
+--   * title         — セクション見出し
+--   * xCol / yCol   — 軸ラベル
+--   * xs / ys       — 観測データ
+--   * sc            — グリッド + 予測曲線 (信頼帯付きなら band も描画)
+--   * (xMin, xMax)  — スライダー範囲 (データ範囲 ±50% 推奨)
+secInteractiveLM
+  :: Text             -- title
+  -> Text             -- x 列名
+  -> Text             -- y 列名
+  -> [Double]         -- xs
+  -> [Double]         -- ys
+  -> SmoothCurve      -- 予測曲線 (信頼帯あれば band)
+  -> (Double, Double) -- スライダー範囲 (xMin, xMax)
+  -> ReportSection
+secInteractiveLM = SecInteractiveLM
 
 -- ---------------------------------------------------------------------------
 -- Reportable typeclass
@@ -231,6 +317,7 @@ renderSection sid sec = case sec of
   SecKeyValue t kvs           -> renderKeyValue sid t kvs
   SecMarkdown t txt           -> renderMarkdown sid t txt
   SecHtml _ html              -> wrapSection sid "" html
+  SecInteractiveLM t xc yc xs ys sc rng -> renderInteractiveLM sid t xc yc xs ys sc rng
 
 wrapSection :: Text -> Text -> Text -> Text
 wrapSection sid title inner = T.unlines
@@ -404,6 +491,33 @@ renderMarkdown :: Text -> Text -> Text -> Text
 renderMarkdown sid title txt =
   wrapSection sid title $ "<p>" <> txt <> "</p>"
 
+-- Interactive LM ------------------------------------------------------------
+
+renderInteractiveLM :: Text -> Text -> Text -> Text
+                    -> [Double] -> [Double]
+                    -> SmoothCurve -> (Double, Double) -> Text
+renderInteractiveLM sid title xc yc _xs _ys _sc (xMin, xMax) =
+  let mid  = (xMin + xMax) / 2
+      step = (xMax - xMin) / 200
+  in wrapSection sid (if T.null title then "Interactive prediction" else title) $
+       T.unlines
+         [ "<div class=\"interactive-controls\">"
+         , "  <label>" <> xc <> ": "
+         , "    <input type=\"range\" id=\"i-" <> sid <> "-slider\""
+         , "      min=\"" <> showD4 xMin <> "\""
+         , "      max=\"" <> showD4 xMax <> "\""
+         , "      step=\"" <> showD4 step <> "\""
+         , "      value=\"" <> showD4 mid <> "\""
+         , "      oninput=\"window.__upd_" <> sid <> "(this.value)\">"
+         , "    <span id=\"i-" <> sid <> "-x\">" <> showD4 mid <> "</span>"
+         , "  </label>"
+         , "  <span class=\"pred-readout\"><strong>Predicted " <> yc
+           <> ":</strong> <span id=\"i-" <> sid <> "-y\">—</span>"
+         , "    <span id=\"i-" <> sid <> "-band\" class=\"band-readout\"></span></span>"
+         , "</div>"
+         , "<div class=\"vl-wrap\"><div id=\"vl-" <> sid <> "\"></div></div>"
+         ]
+
 -- ---------------------------------------------------------------------------
 -- Vega-Lite spec 埋め込みスクリプト
 -- ---------------------------------------------------------------------------
@@ -418,11 +532,66 @@ sectionScript sid sec = case sec of
     embed sid (barChartSpec t vs)
   SecVega _ spec ->
     embed sid spec
+  SecInteractiveLM _ xc yc xs ys sc _ ->
+    interactiveLMScript sid xc yc xs ys sc
   _ -> ""
   where
     embed s spec =
       let json = decodeUtf8 . toStrict . encode . fromVL $ spec
       in "vegaEmbed('#vl-" <> s <> "', " <> json <> ", {actions:false});"
+
+-- | Interactive LM の JS: scatter+曲線を描画し、スライダーで予測点を更新。
+-- グリッド (sc) で線形補間して予測値を計算する (モデル係数を JS に渡さなくて済む)。
+interactiveLMScript :: Text -> Text -> Text -> [Double] -> [Double]
+                    -> SmoothCurve -> Text
+interactiveLMScript sid xc yc xs ys sc =
+  let baseSpec = fitScatterSpec xc yc xs ys (Just sc)
+      -- 予測点用のオーバーレイ追加: クライアント側で 1 点 (cx, cy) を mark Point
+      -- ここは簡易: vegaEmbed したあと、別 div に readout を表示するのみ
+      json = decodeUtf8 . toStrict . encode . fromVL $ baseSpec
+      gridX = scXs sc
+      gridY = scYs sc
+      gridLo = scLower sc
+      gridHi = scUpper sc
+      hasBand = not (null gridLo) && length gridLo == length gridX
+      -- JS arrays as text
+      arr xs0 = "[" <> T.intercalate "," (map showD4 xs0) <> "]"
+  in T.unlines
+       [ "vegaEmbed('#vl-" <> sid <> "', " <> json <> ", {actions:false});"
+       , "(() => {"
+       , "  const gx = " <> arr gridX <> ";"
+       , "  const gy = " <> arr gridY <> ";"
+       , "  const gl = " <> arr (if hasBand then gridLo else []) <> ";"
+       , "  const gh = " <> arr (if hasBand then gridHi else []) <> ";"
+       , "  const interp = (x, xs, ys) => {"
+       , "    if (xs.length === 0) return null;"
+       , "    if (x <= xs[0]) return ys[0];"
+       , "    if (x >= xs[xs.length-1]) return ys[ys.length-1];"
+       , "    for (let i = 1; i < xs.length; i++) {"
+       , "      if (x <= xs[i]) {"
+       , "        const t = (x - xs[i-1]) / (xs[i] - xs[i-1]);"
+       , "        return ys[i-1] + t * (ys[i] - ys[i-1]);"
+       , "      }"
+       , "    }"
+       , "    return ys[ys.length-1];"
+       , "  };"
+       , "  window.__upd_" <> sid <> " = function(v) {"
+       , "    const x = parseFloat(v);"
+       , "    document.getElementById('i-" <> sid <> "-x').textContent = x.toFixed(3);"
+       , "    const y = interp(x, gx, gy);"
+       , "    document.getElementById('i-" <> sid <> "-y').textContent = y === null ? '—' : y.toFixed(4);"
+       , "    if (gl.length > 0) {"
+       , "      const lo = interp(x, gx, gl);"
+       , "      const hi = interp(x, gx, gh);"
+       , "      document.getElementById('i-" <> sid <> "-band').textContent ="
+       , "        ' [' + lo.toFixed(3) + ', ' + hi.toFixed(3) + ']';"
+       , "    }"
+       , "  };"
+       , "  // 初期表示"
+       , "  const initX = (gx[0] + gx[gx.length-1]) / 2;"
+       , "  window.__upd_" <> sid <> "(initX);"
+       , "})();"
+       ]
 
 fitScatterSpec :: Text -> Text -> [Double] -> [Double]
                -> Maybe SmoothCurve -> VegaLite
@@ -592,4 +761,10 @@ css = T.unlines
   , ".kv .v { font-size: 1.1em; font-weight: 600; color: #2c3e50; margin-top: 2px; }"
   , ".mermaid { text-align: center; margin: 14px 0; }"
   , "p { line-height: 1.6; color: #444; font-size: .92em; }"
+  , ".interactive-controls { margin-bottom: 16px; padding: 14px; background: #f8f9fa; border-radius: 8px; }"
+  , ".interactive-controls input[type='range'] { width: 360px; vertical-align: middle; margin: 0 10px; }"
+  , ".interactive-controls label { display: block; margin-bottom: 8px; }"
+  , ".pred-readout { font-size: 1em; }"
+  , ".pred-readout strong { color: #2c3e50; }"
+  , ".band-readout { color: #888; font-size: .9em; }"
   ]
