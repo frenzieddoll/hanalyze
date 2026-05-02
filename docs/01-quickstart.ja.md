@@ -207,6 +207,7 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | CSV / TSV / SSV (cassava) | `DataIO.CSV` | `loadAuto`, `loadCSV`, `loadTSV` |
 | Parquet / JSON / 高度型推論 | `DataIO.External` | `loadCSVExt`, `loadParquet`, `loadJSON` |
 | 欠損補完 / フィルタ / 派生列 | `DataIO.Preprocess` | `imputeMean`, `imputeMedian`, `dropMissingRows`, `filterRowsByNumeric`, `deriveNumeric`, `mapNumeric` |
+| groupBy / aggregate | `DataIO.Preprocess` | `groupByMean`, `groupBySum`, `groupByMin`, `groupByMax`, `groupByMedian`, `groupByCount`, `groupByAggregate` |
 
 ### 実験計画法
 | 用途 | モジュール | 主要関数 |

@@ -209,6 +209,7 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | CSV / TSV / SSV (cassava) | `DataIO.CSV` | `loadAuto`, `loadCSV`, `loadTSV` |
 | Parquet / JSON / advanced typing | `DataIO.External` | `loadCSVExt`, `loadParquet`, `loadJSON` |
 | Imputation / filter / derived columns | `DataIO.Preprocess` | `imputeMean`, `imputeMedian`, `dropMissingRows`, `filterRowsByNumeric`, `deriveNumeric`, `mapNumeric` |
+| groupBy / aggregate | `DataIO.Preprocess` | `groupByMean`, `groupBySum`, `groupByMin`, `groupByMax`, `groupByMedian`, `groupByCount`, `groupByAggregate` |
 
 ### Design of Experiments
 | Use case | Module | Key functions |

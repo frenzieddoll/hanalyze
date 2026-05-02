@@ -61,13 +61,15 @@ let hp = GPParams 0.6 1.0 0.05 1.0
 3 点の外れ値混入データで Gaussian GP の RMSE=0.44 → Cauchy GP で **0.019 (95.7% 改善)**
 (`cabal run robust-gp-demo` で実測)。
 
-### データ前処理 (欠損値補完・派生列・Parquet/JSON)
+### データ前処理 (欠損値補完・派生列・groupBy・Parquet/JSON)
 ```haskell
 import DataIO.External    (loadCSVExt, loadParquet, loadJSON)
-import DataIO.Preprocess  (countMissing, imputeMean, deriveNumeric, filterRowsByNumeric)
+import DataIO.Preprocess  (countMissing, imputeMean, deriveNumeric,
+                           filterRowsByNumeric, groupByMean, groupByCount)
 Right df0 <- loadCSVExt "data.csv"   -- dataframe lib 経由 (型推論↑、欠損→"NA")
-let Just df1 = imputeMean "score" df0   -- TextCol → NumericCol with mean fill
-    df2      = filterRowsByNumeric "score" (>= 50) df1
+let Just df1     = imputeMean "score" df0           -- TextCol → NumericCol
+    df2          = filterRowsByNumeric "score" (>= 50) df1
+    Just summary = groupByMean "category" "score" df2  -- グループ別平均
 ```
 
 ### 実験計画法

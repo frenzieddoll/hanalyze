@@ -62,13 +62,15 @@ let hp = GPParams 0.6 1.0 0.05 1.0
 With 3 outliers injected, Gaussian GP gives RMSE=0.44 while Cauchy GP gives
 **0.019 (95.7% improvement)** (measured by `cabal run robust-gp-demo`).
 
-### Data preprocessing (missing-value imputation, derivations, Parquet/JSON)
+### Data preprocessing (missing-value imputation, derivations, groupBy, Parquet/JSON)
 ```haskell
 import DataIO.External    (loadCSVExt, loadParquet, loadJSON)
-import DataIO.Preprocess  (countMissing, imputeMean, deriveNumeric, filterRowsByNumeric)
+import DataIO.Preprocess  (countMissing, imputeMean, deriveNumeric,
+                           filterRowsByNumeric, groupByMean, groupByCount)
 Right df0 <- loadCSVExt "data.csv"   -- via dataframe lib (better type inference, NA → "NA")
-let Just df1 = imputeMean "score" df0   -- TextCol → NumericCol with mean fill
-    df2      = filterRowsByNumeric "score" (>= 50) df1
+let Just df1     = imputeMean "score" df0           -- TextCol → NumericCol with mean fill
+    df2          = filterRowsByNumeric "score" (>= 50) df1
+    Just summary = groupByMean "category" "score" df2  -- per-group mean
 ```
 
 ### Design of Experiments
