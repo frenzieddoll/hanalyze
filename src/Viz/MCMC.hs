@@ -37,7 +37,8 @@ import qualified Data.Text as T
 import Graphics.Vega.VegaLite
 
 import MCMC.Core  (Chain (..), chainVals)
-import Stat.MCMC  (autocorr, hdi, kde, bfmi, ess, rhat)
+import Stat.MCMC    (autocorr, hdi, kde, bfmi)
+import Stat.Summary (SummaryRow (..), posteriorSummary)
 import Data.List   (sortBy)
 import Data.Maybe (fromMaybe)
 import Text.Printf (printf)
@@ -540,37 +541,8 @@ energyPlotFile fmt path cfg chain =
 -- Posterior summary table  (az.summary 相当)
 -- ---------------------------------------------------------------------------
 
--- | パラメタ 1 行分の事後要約。
-data SummaryRow = SummaryRow
-  { srName  :: Text
-  , srMean  :: Double
-  , srSD    :: Double
-  , srHdiLo :: Double  -- ^ 94% HDI 下限
-  , srHdiHi :: Double  -- ^ 94% HDI 上限
-  , srEssV  :: Double
-  , srRhat  :: Maybe Double  -- ^ 単一チェーンなら Nothing
-  } deriving (Show)
-
--- | 事後要約を計算する。チェーン 1 本なら R-hat は Nothing、
--- 2 本以上なら全チェーンを連結した値で mean/sd/HDI/ESS を計算し、
--- R-hat だけ split-R-hat で算出する。
-posteriorSummary :: [Text] -> [Chain] -> [SummaryRow]
-posteriorSummary params chains =
-  let multi = length chains > 1
-      mkRow p =
-        let perChain = map (chainVals p) chains
-            allVals  = concat perChain
-            n        = length allVals
-            mu       = if n == 0 then 0
-                       else sum allVals / fromIntegral n
-            sd_      = if n < 2 then 0
-                       else sqrt (sum [(x - mu) ^ (2::Int) | x <- allVals]
-                                  / fromIntegral (n - 1))
-            (lo, hi) = hdi 0.94 allVals
-            essV     = ess allVals
-            rh       = if multi then rhat perChain else Nothing
-        in SummaryRow p mu sd_ lo hi essV rh
-  in map mkRow params
+-- SummaryRow / posteriorSummary は Stat.Summary に移管 (Phase H6)。
+-- 後方互換のため Viz.MCMC からも export 経由で参照可能。
 
 -- | HTML 1 ページとして出力するスタンドアロンテーブル。
 posteriorSummaryHtml :: Text -> [SummaryRow] -> Text

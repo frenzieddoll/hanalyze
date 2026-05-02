@@ -28,6 +28,7 @@ import Graphics.Vega.VegaLite (fromVL)
 import Model.HBM        (ModelGraph)
 import MCMC.Core        (Chain (..), chainVals, posteriorMean, posteriorSD, posteriorQuantile)
 import Stat.MCMC        (ess, rhat)
+import Stat.Summary     (SummaryRow (..), posteriorSummary)
 import Viz.Assets       (vegaJS, vegaLiteJS, vegaEmbedJS)
 import Viz.MCMC         (mcmcDiagnostics, mcmcDiagnosticsMulti, autocorrPlot, pairScatter)
 import Viz.ModelGraph   (buildMermaid)
@@ -220,27 +221,23 @@ summarySection rpt =
       multiChain = length (reportChains rpt) > 1
       allChains  = if multiChain then reportChains rpt else [chain]
 
-      tableRow p =
-        let mean_ = get posteriorMean p
-            sd_   = get posteriorSD   p
-            lo    = get (posteriorQuantile 0.025) p
-            hi    = get (posteriorQuantile 0.975) p
-            ess_  = ess (chainVals p chain)
-            rhatV = rhat (map (chainVals p) allChains)
-            rhatCell
-              | multiChain = case rhatV of
-                  Nothing -> "<td>—</td>"
-                  Just r  -> "<td style=\"color:" <> (if r < 1.01 then "#2a9d2a" else "#cc2222") <> "\">"
-                             <> fmt4 r <> "</td>"
-              | otherwise  = ""
+      -- Stat.Summary に統合 (Phase H6): mean/sd/HDI/ESS/R-hat を一括取得
+      rows = posteriorSummary params allChains
+
+      tableRow row =
+        let rhatCell = case srRhat row of
+              Nothing -> if multiChain then "<td>—</td>" else ""
+              Just r  -> "<td style=\"color:"
+                       <> (if r < 1.01 then "#2a9d2a" else "#cc2222")
+                       <> "\">" <> fmt4 r <> "</td>"
         in T.unlines
           [ "      <tr>"
-          , "        <td>" <> p <> "</td>"
-          , "        <td>" <> fmt4 mean_ <> "</td>"
-          , "        <td>" <> fmt4 sd_   <> "</td>"
-          , "        <td>" <> fmt4 lo    <> "</td>"
-          , "        <td>" <> fmt4 hi    <> "</td>"
-          , "        <td>" <> T.pack (show (round ess_ :: Int)) <> "</td>"
+          , "        <td>" <> srName row <> "</td>"
+          , "        <td>" <> fmt4 (srMean row) <> "</td>"
+          , "        <td>" <> fmt4 (srSD   row) <> "</td>"
+          , "        <td>" <> fmt4 (srHdiLo row) <> "</td>"
+          , "        <td>" <> fmt4 (srHdiHi row) <> "</td>"
+          , "        <td>" <> T.pack (show (round (srEssV row) :: Int)) <> "</td>"
           , rhatCell
           , "      </tr>"
           ]
@@ -258,10 +255,10 @@ summarySection rpt =
     , "  <table>"
     , "    <thead><tr>"
     , "      <th>Parameter</th><th>Mean</th><th>SD</th>"
-    , "      <th>2.5%</th><th>97.5%</th><th>ESS</th>" <> rhatHeader
+    , "      <th>HDI 3%</th><th>HDI 97%</th><th>ESS</th>" <> rhatHeader
     , "    </tr></thead>"
     , "    <tbody>"
-    , T.concat (map tableRow params)
+    , T.concat (map tableRow rows)
     , "    </tbody>"
     , "  </table>"
     , "</section>"

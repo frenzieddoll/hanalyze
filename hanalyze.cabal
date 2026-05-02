@@ -37,6 +37,7 @@ library
     Stat.AD
     Stat.VI
     Stat.PosteriorPredictive
+    Stat.Summary
     Viz.MCMC
     Viz.ModelGraph
     Viz.Report
