@@ -59,6 +59,7 @@ module Model.HBM
   , deterministic
   , runDeterministics
   , augmentChainWithDeterministic
+  , nonCenteredNormal
   , mvNormalLogDensity
     -- * 構造検査
   , Node (..)
@@ -883,6 +884,24 @@ potential nm v = liftF (Potential nm v ())
 -- > tau <- deterministic "tau" (1 / (sigma * sigma))
 deterministic :: Text -> a -> Model a a
 deterministic nm v = liftF (Deterministic nm v id)
+
+-- | 非中心化 (non-centered) 正規分布。
+--
+-- @x ~ Normal(loc, scale)@ を直接サンプリングする代わりに、
+--
+-- > raw <- sample (name <> "_raw") (Normal 0 1)
+-- > deterministic name (loc + scale * raw)
+--
+-- に展開する。loc / scale が他の latent に依存するとき、centered
+-- パラメタ化は HMC の posterior が病的になりやすいので、それを
+-- 緩和するヘルパ。Neal's funnel が代表例。
+--
+-- 戻り値は constrained な値 @loc + scale * raw@。Chain には
+-- @<name>_raw@ (latent) と @<name>@ (derived) の両方が保存される。
+nonCenteredNormal :: Num a => Text -> a -> a -> Model a a
+nonCenteredNormal name loc scale = do
+  raw <- sample (name <> "_raw") (Normal 0 1)
+  deterministic name (loc + scale * raw)
 
 -- ---------------------------------------------------------------------------
 -- 構造検査
