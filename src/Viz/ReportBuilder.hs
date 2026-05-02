@@ -297,7 +297,7 @@ buildHtml cfg sections =
        ]
 
 sectionId :: Int -> Text
-sectionId i = "sec-" <> T.pack (show i)
+sectionId i = "sec_" <> T.pack (show i)
 
 -- ---------------------------------------------------------------------------
 -- セクション → HTML
