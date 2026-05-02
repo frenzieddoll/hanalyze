@@ -24,6 +24,11 @@ import Viz.AnalysisReport (AnalysisReportConfig (..), ModelFit (..), NamedPlot (
                            writeAnalysisReport, writeAnalysisReportPlots)
 import qualified Design.Orthogonal as OA
 import qualified Design.Taguchi as TG
+import qualified Model.Kernel as Kern
+import qualified Model.Regularized as Reg
+import qualified Model.RFF as RFF
+import qualified Model.Spline as Spl
+import Model.LM (SmoothFit (..))
 import qualified Model.HBM as HBMod
 import qualified MCMC.NUTS as HBMnuts
 import qualified MCMC.Core as MCMCcore
@@ -303,9 +308,9 @@ helpMsg = unlines
   , "  regress   Classical/Bayesian regression (LM/GLM/GLMM/GP/HBM)         [implemented]"
   , "  info      Print per-column type and basic statistics                 [implemented]"
   , "  hist      Plot a histogram (optionally with theoretical density)     [implemented]"
-  , "  ridge     Regularized regression (Ridge/Lasso/Elastic Net)           [planned: Phase A]"
-  , "  kernel    Kernel regression / RFF approximation                      [planned: Phase A]"
-  , "  spline    B-spline / natural cubic regression                        [planned]"
+  , "  ridge     Regularized regression (Ridge/Lasso/Elastic Net)           [implemented]"
+  , "  kernel    Kernel regression / RFF approximation                      [implemented]"
+  , "  spline    B-spline / natural cubic regression                        [implemented]"
   , "  doe       Orthogonal arrays (L_n) for experimental designs           [implemented]"
   , "  taguchi   Taguchi method (SN ratio + factor effects + inner/outer)   [implemented]"
   , ""
@@ -317,9 +322,7 @@ helpMsg = unlines
 
 futureSubcommands :: [(String, String)]
 futureSubcommands =
-  [ ("ridge",   "Phase A (RFF/regularized) implementation pending")
-  , ("kernel",  "Phase A (RFF/kernel) implementation pending")
-  , ("spline",  "Spline subcommand implementation pending")
+  [
   ]
 
 isFutureSubcommand :: String -> Bool
@@ -343,6 +346,9 @@ dispatch ("hist":rest)                = runHistCmd rest
 dispatch ("regress":rest)             = runRegressCmd rest
 dispatch ("doe":rest)                 = runDoeCmd rest
 dispatch ("taguchi":rest)             = runTaguchiCmd rest
+dispatch ("ridge":rest)               = runRidgeCmd rest
+dispatch ("kernel":rest)              = runKernelCmd rest
+dispatch ("spline":rest)              = runSplineCmd rest
 dispatch (cmd:_) | isFutureSubcommand cmd = do
   hPutStrLn stderr $ "hanalyze: " ++ stubMessage cmd
   hPutStrLn stderr "  Run 'hanalyze help' to see implemented subcommands."
@@ -1529,3 +1535,474 @@ doTaguchiCross innerOA outerOA opts = do
       let io = TG.makeInnerOuter ai ao
           csv = TG.renderInnerOuterCSV io
       emitText csv (tcOut opts)
+
+-- ---------------------------------------------------------------------------
+-- ridge / kernel / spline 共通ヘルパ
+-- ---------------------------------------------------------------------------
+
+-- | CSV を読み、x 列(複数可) と y 列(1) を numeric vector で取り出す。
+loadXY :: FilePath -> [T.Text] -> T.Text
+       -> IO (Either String (DataFrame, [V.Vector Double], V.Vector Double))
+loadXY path xCols yCol = do
+  result <- loadAuto path
+  case result of
+    Left err -> return (Left err)
+    Right df -> case (mapM (\c -> getNumeric c df) xCols, getNumeric yCol df) of
+      (Just xs, Just y) -> return (Right (df, xs, y))
+      _ -> return (Left $ "Numeric column(s) not found: x="
+                    ++ T.unpack (T.intercalate "," xCols)
+                    ++ ", y=" ++ T.unpack yCol)
+
+-- | RMSE 計算。
+rmseV :: [Double] -> [Double] -> Double
+rmseV ys yhat =
+  let n = length ys
+      sse = sum [ (a - b) ^ (2 :: Int) | (a, b) <- zip ys yhat ]
+  in sqrt (sse / fromIntegral (max 1 n))
+
+-- | 散布図 + 滑らか曲線 を出力。
+writeSmoothPlot :: OutputFormat -> FilePath -> T.Text
+                -> DataFrame -> T.Text -> T.Text -> SmoothFit -> IO ()
+writeSmoothPlot fmt path titleSuffix df xc yc sf =
+  scatterWithSmoothFile fmt path
+    (defaultConfig (xc <> " vs " <> yc <> "  [" <> titleSuffix <> "]"))
+    Nothing df xc yc sf
+
+-- | xMin/xMax から評価グリッドを作る。
+makeGrid :: V.Vector Double -> Int -> [Double]
+makeGrid xs n =
+  let lo = V.minimum xs
+      hi = V.maximum xs
+  in [ lo + fromIntegral i * (hi - lo) / fromIntegral (n - 1)
+     | i <- [0 .. n - 1] ]
+
+-- ---------------------------------------------------------------------------
+-- ridge subcommand (Ridge / Lasso / Elastic Net)
+-- ---------------------------------------------------------------------------
+
+ridgeUsage :: String
+ridgeUsage = unlines
+  [ "Usage: hanalyze ridge <file> <xcols> <ycol> [options]"
+  , ""
+  , "  <xcols>   x column name(s); quote multiple: \"x1 x2\""
+  , "  <ycol>    y column name (single)"
+  , ""
+  , "Options:"
+  , "  --penalty TYPE   ridge|lasso|elasticnet (default: ridge)"
+  , "  --lambda L       regularization strength (default: 0.1)"
+  , "  --alpha A        ElasticNet L1 mixing in [0,1] (default: 0.5; only with --penalty elasticnet)"
+  , "  --format FMT     html|png|svg (default: html)"
+  , "  --out FILE       scatter+fit output path (default: ridge.html; single x only)"
+  , ""
+  , "Examples:"
+  , "  hanalyze ridge data.csv x y --lambda 0.1"
+  , "  hanalyze ridge data.csv \"x1 x2 x3\" y --penalty lasso --lambda 0.05"
+  , "  hanalyze ridge data.csv \"x1 x2\" y --penalty elasticnet --lambda 0.1 --alpha 0.5"
+  ]
+
+data RidgeOpts = RidgeOpts
+  { roPenalty :: T.Text   -- "ridge" / "lasso" / "elasticnet"
+  , roLambda  :: Double
+  , roAlpha   :: Double
+  , roFormat  :: OutputFormat
+  , roOut     :: FilePath
+  }
+
+defaultRidgeOpts :: RidgeOpts
+defaultRidgeOpts = RidgeOpts "ridge" 0.1 0.5 HTML "ridge.html"
+
+runRidgeCmd :: [String] -> IO ()
+runRidgeCmd (file : xColsStr : yColStr : rest) =
+  case parseRidgeOpts rest defaultRidgeOpts of
+    Left err   -> hPutStrLn stderr ("ridge: " ++ err)
+    Right opts -> doRidge file xColsStr yColStr opts
+runRidgeCmd _ = putStrLn ridgeUsage
+
+parseRidgeOpts :: [String] -> RidgeOpts -> Either String RidgeOpts
+parseRidgeOpts [] acc = Right acc
+parseRidgeOpts (flag : rest) acc
+  | flag == "--penalty" = case rest of
+      (v : rs) | v `elem` ["ridge","lasso","elasticnet"] ->
+        parseRidgeOpts rs (acc { roPenalty = T.pack v })
+      (v : _) -> Left ("unknown penalty '" ++ v ++ "'")
+      []      -> Left "--penalty requires an argument"
+  | flag == "--lambda" = case rest of
+      (v:rs) -> case reads v :: [(Double, String)] of
+        [(d,"")] -> parseRidgeOpts rs (acc { roLambda = d })
+        _        -> Left ("invalid --lambda value '" ++ v ++ "'")
+      []     -> Left "--lambda requires a value"
+  | flag == "--alpha" = case rest of
+      (v:rs) -> case reads v :: [(Double, String)] of
+        [(d,"")] -> parseRidgeOpts rs (acc { roAlpha = d })
+        _        -> Left ("invalid --alpha value '" ++ v ++ "'")
+      []     -> Left "--alpha requires a value"
+  | flag `elem` ["-f","--format"] = case rest of
+      (v:rs) -> case parseFormat v of
+        Right f -> parseRidgeOpts rs (acc { roFormat = f })
+        Left e  -> Left e
+      []     -> Left "--format requires an argument"
+  | flag == "--out" = case rest of
+      (v:rs) -> parseRidgeOpts rs (acc { roOut = v })
+      []     -> Left "--out requires a file path"
+  | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
+
+doRidge :: FilePath -> String -> String -> RidgeOpts -> IO ()
+doRidge file xColsStr yColStr opts = do
+  let xCols = map T.pack (words xColsStr)
+      yCol  = T.pack yColStr
+  result <- loadXY file xCols yCol
+  case result of
+    Left err -> hPutStrLn stderr err
+    Right (df, xVecs, yVec) -> do
+      let n        = V.length yVec
+          intercept = LA.konst 1 n
+          xMat     = LA.fromColumns
+                       (intercept : map (LA.fromList . V.toList) xVecs)
+          yLA      = LA.fromList (V.toList yVec)
+          pen      = case roPenalty opts of
+            "ridge"      -> Reg.L2 (roLambda opts)
+            "lasso"      -> Reg.L1 (roLambda opts)
+            "elasticnet" -> Reg.ElasticNet
+                             (roLambda opts * roAlpha opts)
+                             (roLambda opts * (1 - roAlpha opts))
+            _            -> Reg.L2 (roLambda opts)
+          fit      = Reg.fitRegularized pen xMat yLA
+          beta     = LA.toList (Reg.rfBeta fit)
+          yhat     = LA.toList (Reg.rfYHat fit)
+          ys       = V.toList yVec
+          rmseVal  = rmseV ys yhat
+      printf "Loaded %d rows from %s\n" n file
+      printf "Penalty: %s, lambda=%g%s\n"
+             (T.unpack (roPenalty opts)) (roLambda opts)
+             (if roPenalty opts == "elasticnet"
+                then ", alpha=" ++ show (roAlpha opts) else "")
+      putStrLn ""
+      putStrLn "Coefficients:"
+      printf "  %-30s = %9.4f\n" ("intercept" :: String) (head beta)
+      mapM_ (\(i, c, b) ->
+        printf "  %-30s = %9.4f\n"
+               ("β_" ++ show (i :: Int) ++ " (" ++ T.unpack c ++ ")") b)
+        (zip3 [1..] xCols (tail beta))
+      printf "R²  = %.4f\n" (Reg.rfR2 fit)
+      printf "|β| > 1e-8: %d / %d (sparsity)\n"
+             (Reg.rfNonZero fit) (length beta)
+      printf "RMSE (in-sample) = %.4f\n" rmseVal
+      -- 単純散布図 + 予測曲線 (1 変数のみ)
+      case xCols of
+        [xc1] -> do
+          let xs = V.toList (head xVecs)
+              grid = makeGrid (head xVecs) 100
+              gridMat = LA.fromColumns
+                          [ LA.konst 1 100
+                          , LA.fromList grid ]
+              gridY = LA.toList (Reg.predictRegularized fit gridMat)
+              sf = SmoothFit
+                     { sfX = grid
+                     , sfFit = gridY
+                     , sfLower = []
+                     , sfUpper = []
+                     , sfHasBand = False
+                     }
+              _ = xs
+          writeSmoothPlot (roFormat opts) (roOut opts)
+            (T.pack ("Regularized: " ++ T.unpack (roPenalty opts)))
+            df xc1 yCol sf
+          putStrLn ("Plot: " ++ roOut opts)
+          openInBrowser (roOut opts)
+        _ -> putStrLn "(scatter plot skipped for multiple x columns)"
+
+-- ---------------------------------------------------------------------------
+-- kernel subcommand (Nadaraya-Watson / Kernel Ridge / RFF)
+-- ---------------------------------------------------------------------------
+
+kernelUsage :: String
+kernelUsage = unlines
+  [ "Usage: hanalyze kernel <file> <xcol> <ycol> [options]"
+  , ""
+  , "Options:"
+  , "  --method M        nw|kr|rff (default: kr)"
+  , "                    nw  = Nadaraya-Watson"
+  , "                    kr  = Kernel Ridge"
+  , "                    rff = Random Fourier Features (RBF)"
+  , "  --kernel KIND     gaussian|epanechnikov|triangular|tricube|uniform"
+  , "                    (default: gaussian; ignored for --method rff)"
+  , "  --bandwidth H     kernel bandwidth h (default: auto via LOO-CV grid)"
+  , "  --lambda L        ridge regularization (default: 0.01; for kr / rff only)"
+  , "  --features D      RFF feature dimension (default: 200; --method rff only)"
+  , "  --format FMT      html|png|svg (default: html)"
+  , "  --out FILE        scatter+fit output path (default: kernel.html)"
+  , ""
+  , "Examples:"
+  , "  hanalyze kernel data.csv x y --method kr --bandwidth 0.5"
+  , "  hanalyze kernel data.csv x y --method nw   # auto-bandwidth via LOO-CV"
+  , "  hanalyze kernel data.csv x y --method rff --features 200"
+  ]
+
+data KernelOpts = KernelOpts
+  { koMethod    :: T.Text       -- "nw" / "kr" / "rff"
+  , koKernel    :: Kern.Kernel  -- Gaussian / Epanechnikov / ...
+  , koBandwidth :: Maybe Double
+  , koLambda    :: Double
+  , koFeatures  :: Int
+  , koFormat    :: OutputFormat
+  , koOut       :: FilePath
+  }
+
+defaultKernelOpts :: KernelOpts
+defaultKernelOpts = KernelOpts
+  { koMethod    = "kr"
+  , koKernel    = Kern.Gaussian
+  , koBandwidth = Nothing
+  , koLambda    = 0.01
+  , koFeatures  = 200
+  , koFormat    = HTML
+  , koOut       = "kernel.html"
+  }
+
+parseKernelKind :: String -> Either String Kern.Kernel
+parseKernelKind s = case s of
+  "gaussian"     -> Right Kern.Gaussian
+  "epanechnikov" -> Right Kern.Epanechnikov
+  "triangular"   -> Right Kern.Triangular
+  "tricube"      -> Right Kern.TriCube
+  "uniform"      -> Right Kern.Uniform
+  _              -> Left ("unknown kernel '" ++ s ++ "'")
+
+runKernelCmd :: [String] -> IO ()
+runKernelCmd (file : xColStr : yColStr : rest) =
+  case parseKernelOpts rest defaultKernelOpts of
+    Left err   -> hPutStrLn stderr ("kernel: " ++ err)
+    Right opts -> doKernel file xColStr yColStr opts
+runKernelCmd _ = putStrLn kernelUsage
+
+parseKernelOpts :: [String] -> KernelOpts -> Either String KernelOpts
+parseKernelOpts [] acc = Right acc
+parseKernelOpts (flag : rest) acc
+  | flag == "--method" = case rest of
+      (v:rs) | v `elem` ["nw","kr","rff"] ->
+        parseKernelOpts rs (acc { koMethod = T.pack v })
+      (v:_) -> Left ("unknown method '" ++ v ++ "'")
+      []    -> Left "--method requires an argument"
+  | flag == "--kernel" = case rest of
+      (v:rs) -> case parseKernelKind v of
+        Right k -> parseKernelOpts rs (acc { koKernel = k })
+        Left e  -> Left e
+      []     -> Left "--kernel requires an argument"
+  | flag == "--bandwidth" = case rest of
+      (v:rs) -> case reads v :: [(Double, String)] of
+        [(d,"")] -> parseKernelOpts rs (acc { koBandwidth = Just d })
+        _        -> Left ("invalid --bandwidth '" ++ v ++ "'")
+      []     -> Left "--bandwidth requires a value"
+  | flag == "--lambda" = case rest of
+      (v:rs) -> case reads v :: [(Double, String)] of
+        [(d,"")] -> parseKernelOpts rs (acc { koLambda = d })
+        _        -> Left ("invalid --lambda '" ++ v ++ "'")
+      []     -> Left "--lambda requires a value"
+  | flag == "--features" = case rest of
+      (v:rs) -> case reads v :: [(Int, String)] of
+        [(d,"")] -> parseKernelOpts rs (acc { koFeatures = d })
+        _        -> Left ("invalid --features '" ++ v ++ "'")
+      []     -> Left "--features requires a value"
+  | flag `elem` ["-f","--format"] = case rest of
+      (v:rs) -> case parseFormat v of
+        Right f -> parseKernelOpts rs (acc { koFormat = f })
+        Left e  -> Left e
+      []     -> Left "--format requires an argument"
+  | flag == "--out" = case rest of
+      (v:rs) -> parseKernelOpts rs (acc { koOut = v })
+      []     -> Left "--out requires a file path"
+  | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
+
+doKernel :: FilePath -> String -> String -> KernelOpts -> IO ()
+doKernel file xColStr yColStr opts = do
+  let xCol = T.pack xColStr
+      yCol = T.pack yColStr
+  result <- loadXY file [xCol] yCol
+  case result of
+    Left err -> hPutStrLn stderr err
+    Right (df, [xVec], yVec) ->
+      runKernelOn df xCol yCol xVec yVec opts
+    Right _ -> hPutStrLn stderr "kernel: expected single x column"
+
+runKernelOn :: DataFrame -> T.Text -> T.Text -> V.Vector Double -> V.Vector Double
+            -> KernelOpts -> IO ()
+runKernelOn df xCol yCol xVec yVec opts = do
+  let n = V.length xVec
+      method = koMethod opts
+      ker    = koKernel opts
+      grid   = makeGrid xVec 100
+      gridV  = V.fromList grid
+  printf "Loaded %d rows; method=%s, kernel=%s\n"
+         n (T.unpack method) (show ker)
+
+  -- Bandwidth selection
+  h <- case koBandwidth opts of
+    Just hVal -> do
+      printf "Bandwidth (specified): h = %.4f\n" hVal
+      return hVal
+    Nothing -> do
+      let xMin = V.minimum xVec
+          xMax = V.maximum xVec
+          range = xMax - xMin
+          hCands = [range/40, range/20, range/10, range/5, range/2.5]
+          (bestH, bestRMSE) = Kern.gridSearchBandwidth ker xVec yVec hCands
+      printf "Bandwidth (LOO-CV best): h = %.4f  (CV-RMSE = %.4f)\n"
+             bestH bestRMSE
+      return bestH
+
+  -- Fit + predict on grid
+  (gridY, sumStr) <- case method of
+    "nw" -> do
+      let ys = Kern.nwRegression ker h xVec yVec gridV
+      return (V.toList ys, "Nadaraya-Watson, h=" ++ show h)
+    "kr" -> do
+      let lam = koLambda opts
+          fit = Kern.kernelRidge ker h lam xVec yVec
+          ys  = Kern.predictKernelRidge fit gridV
+      return (V.toList ys
+             , "Kernel Ridge, h=" ++ show h ++ ", lambda=" ++ show lam)
+    "rff" -> do
+      gen   <- createSystemRandom
+      feats <- RFF.sampleRFFRBF (koFeatures opts) h 1.0 gen
+      let lam = koLambda opts
+          fit = RFF.rffRidge feats (V.toList xVec) (V.toList yVec) lam
+          ys  = RFF.predictRFFRidge fit grid
+      return (ys, "RFF, D=" ++ show (koFeatures opts)
+                  ++ ", h=" ++ show h ++ ", lambda=" ++ show lam)
+    _ -> error "unreachable"
+
+  -- In-sample RMSE
+  let predictX :: V.Vector Double -> [Double]
+      predictX xs = case method of
+        "nw" -> V.toList (Kern.nwRegression ker h xVec yVec xs)
+        "kr" -> V.toList (Kern.predictKernelRidge
+                          (Kern.kernelRidge ker h (koLambda opts) xVec yVec) xs)
+        _    -> []        -- rff requires gen; skip in-sample for now
+      ys = V.toList yVec
+  case method of
+    "rff" -> printf "Predictions on %d test points; in-sample RMSE skipped (RFF re-samples)\n"
+                    (length grid)
+    _     -> printf "RMSE (in-sample) = %.4f\n" (rmseV ys (predictX xVec))
+  putStrLn $ "(" ++ sumStr ++ ")"
+
+  -- Plot
+  let sf = SmoothFit
+             { sfX = grid
+             , sfFit = gridY
+             , sfLower = []
+             , sfUpper = []
+             , sfHasBand = False
+             }
+  writeSmoothPlot (koFormat opts) (koOut opts)
+    (T.pack ("Kernel: " ++ T.unpack method)) df xCol yCol sf
+  putStrLn ("Plot: " ++ koOut opts)
+  openInBrowser (koOut opts)
+
+-- ---------------------------------------------------------------------------
+-- spline subcommand
+-- ---------------------------------------------------------------------------
+
+splineUsage :: String
+splineUsage = unlines
+  [ "Usage: hanalyze spline <file> <xcol> <ycol> [options]"
+  , ""
+  , "Options:"
+  , "  --type T          bspline|natural (default: bspline)"
+  , "  --knots N         number of internal knots (default: 5)"
+  , "  --degree D        B-spline degree (default: 3 = cubic)"
+  , "  --format FMT      html|png|svg (default: html)"
+  , "  --out FILE        scatter+fit output path (default: spline.html)"
+  , ""
+  , "Examples:"
+  , "  hanalyze spline data.csv x y --knots 8"
+  , "  hanalyze spline data.csv x y --type natural"
+  , "  hanalyze spline data.csv x y --type bspline --degree 3 --knots 10"
+  ]
+
+data SplineOpts = SplineOpts
+  { soType   :: T.Text
+  , soKnots  :: Int
+  , soDegree :: Int
+  , soFormat :: OutputFormat
+  , soOut    :: FilePath
+  }
+
+defaultSplineOpts :: SplineOpts
+defaultSplineOpts = SplineOpts "bspline" 5 3 HTML "spline.html"
+
+runSplineCmd :: [String] -> IO ()
+runSplineCmd (file : xColStr : yColStr : rest) =
+  case parseSplineOpts rest defaultSplineOpts of
+    Left err   -> hPutStrLn stderr ("spline: " ++ err)
+    Right opts -> doSpline file xColStr yColStr opts
+runSplineCmd _ = putStrLn splineUsage
+
+parseSplineOpts :: [String] -> SplineOpts -> Either String SplineOpts
+parseSplineOpts [] acc = Right acc
+parseSplineOpts (flag : rest) acc
+  | flag == "--type" = case rest of
+      (v:rs) | v `elem` ["bspline","natural"] ->
+        parseSplineOpts rs (acc { soType = T.pack v })
+      (v:_) -> Left ("unknown spline type '" ++ v ++ "'")
+      []    -> Left "--type requires an argument"
+  | flag == "--knots" = case rest of
+      (v:rs) -> case reads v :: [(Int, String)] of
+        [(d,"")] -> parseSplineOpts rs (acc { soKnots = d })
+        _        -> Left ("invalid --knots '" ++ v ++ "'")
+      []     -> Left "--knots requires a value"
+  | flag == "--degree" = case rest of
+      (v:rs) -> case reads v :: [(Int, String)] of
+        [(d,"")] -> parseSplineOpts rs (acc { soDegree = d })
+        _        -> Left ("invalid --degree '" ++ v ++ "'")
+      []     -> Left "--degree requires a value"
+  | flag `elem` ["-f","--format"] = case rest of
+      (v:rs) -> case parseFormat v of
+        Right f -> parseSplineOpts rs (acc { soFormat = f })
+        Left e  -> Left e
+      []     -> Left "--format requires an argument"
+  | flag == "--out" = case rest of
+      (v:rs) -> parseSplineOpts rs (acc { soOut = v })
+      []     -> Left "--out requires a file path"
+  | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
+
+doSpline :: FilePath -> String -> String -> SplineOpts -> IO ()
+doSpline file xColStr yColStr opts = do
+  let xCol = T.pack xColStr
+      yCol = T.pack yColStr
+  result <- loadXY file [xCol] yCol
+  case result of
+    Left err -> hPutStrLn stderr err
+    Right (df, [xVec], yVec) -> do
+      let kind = case soType opts of
+            "natural" -> Spl.NaturalCubic
+            _         -> Spl.BSpline (soDegree opts)
+          k    = soKnots opts
+          xMin = V.minimum xVec
+          xMax = V.maximum xVec
+          knots = [ xMin + fromIntegral i * (xMax - xMin) / fromIntegral (k + 1)
+                  | i <- [1 .. k] ]
+          fit   = Spl.fitSpline kind knots xVec yVec
+          grid  = makeGrid xVec 100
+          gridV = V.fromList grid
+          gridY = V.toList (Spl.predictSpline fit gridV)
+          n     = V.length xVec
+          ys    = V.toList yVec
+          yhatIn = V.toList (Spl.predictSpline fit xVec)
+          rmseVal = rmseV ys yhatIn
+      printf "Loaded %d rows; type=%s, knots=%d%s\n"
+             n (T.unpack (soType opts)) k
+             (if soType opts == "bspline"
+                then ", degree=" ++ show (soDegree opts) else "")
+      printf "RMSE (in-sample) = %.4f\n" rmseVal
+      let sf = SmoothFit
+                 { sfX = grid
+                 , sfFit = gridY
+                 , sfLower = []
+                 , sfUpper = []
+                 , sfHasBand = False
+                 }
+      writeSmoothPlot (soFormat opts) (soOut opts)
+        (T.pack ("Spline: " ++ T.unpack (soType opts))) df xCol yCol sf
+      putStrLn ("Plot: " ++ soOut opts)
+      openInBrowser (soOut opts)
+    Right _ -> hPutStrLn stderr "spline: expected single x column"
