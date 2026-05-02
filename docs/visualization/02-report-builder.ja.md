@@ -155,6 +155,16 @@ class Reportable a where
 | `RFFRidgeFit`    | `Model.RFF`         | DataOverview / ModelOverview / KeyValue (D/ℓ/σ_f/λ) / FitScatter / Residuals |
 | `RobustGPFit`    | `Model.GPRobust`    | DataOverview / ModelOverview / KeyValue (kernel/likelihood/IRLS iter) |
 
+### 折りたたみ・グループ化
+
+| 関数 | 内容 |
+|---|---|
+| `secCollapsible title open children`              | 子セクションを `<details>` で囲む。`open=False` で初期閉。回帰結果や MCMC 診断のように「普段は閉じておく」項目に使う。 |
+
+データ概要セクション (`secDataOverview`) も自動で折りたたみ式:
+- Statistics (デフォルト開) — n/min/Q1/median/Q3/max/mean/SD/**Skew/Kurtosis/Missing**
+- Histograms per column (デフォルト閉) — 各 numeric 列の Vega-Lite ヒストグラム
+
 ### MCMC / 事後分布関連セクション
 
 | 関数 | 内容 |
@@ -165,11 +175,37 @@ class Reportable a where
 | `secMCMCPair title pa pb chain`                   | 2 パラメータのペアスキャッター |
 | `secPosteriorSummary title rows`                  | mean/SD/2.5%/97.5%/ESS/R-hat テーブル |
 
+### Markdown appendix
+
+| 関数 | 内容 |
+|---|---|
+| `secAppendixFromMd title path`                    | 指定の md ファイルを読込、簡易パーサで HTML 化、appendix セクションに |
+| `renderSimpleMarkdown txt`                        | 自前 markdown→HTML パーサ (見出し/段落/list/bold/italic/code/link 対応) |
+
+`docs/principles/{lm,glm,glmm,gp,hbm}.ja.md` に各モデルの短い原理解説を
+配置済み。比較デモが自動的に読み込んで appendix セクション化する。
+
 ### 対話的予測
 
 | 関数 | 内容 |
 |---|---|
-| `secInteractiveLM title xc yc xs ys smooth (xMin, xMax)` | スライダーで x を変えるとリアルタイム予測値 + 信頼帯を表示 (LM/GLM/GP/HBM の単変数で利用可能)。グリッドからの線形補間で予測値を計算する JS が埋め込まれる。 |
+| `secInteractiveLM title xc yc xs ys smooth (xMin, xMax)` | **単変数** 用。スライダーで x を変えるとグリッド線形補間で予測値 + 信頼帯を表示。GP/HBM のような非線形・MCMC 経由の予測曲線でも使える。 |
+| `secInteractiveMulti title im` | **多変量** 用。`InteractiveModel` (係数+リンク関数) を渡すと、左側に各 x_j の slider + 主軸 dropdown、右側に scatter + 予測曲線。slider 変化のたび JS で β₀ + Σβ_j x_j → invLink で y_hat 再計算 + scatter 再描画。CI は σ_hat ± 1.96 で帯描画。 |
+
+`InteractiveModel`:
+```haskell
+data InteractiveModel = InteractiveModel
+  { imXCols     :: [Text]               -- 説明変数名
+  , imYCol      :: Text                  -- 応答名
+  , imXValues   :: [[Double]]           -- 観測 (n × p)
+  , imYValues   :: [Double]
+  , imIntercept :: Double                -- β₀
+  , imBetas     :: [Double]              -- [β_j]
+  , imLink      :: Text                  -- "identity" | "log" | "logit" | "sqrt"
+  , imSlider    :: [(Double, Double, Double)]  -- (min, mid, max) per x
+  , imCISigma   :: Maybe Double          -- 残差 σ_hat (CI 用、Nothing で帯なし)
+  }
+```
 
 ### LM/GLM/GLMM/GP/HBM の比較デモ
 
