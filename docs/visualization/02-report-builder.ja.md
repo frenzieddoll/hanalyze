@@ -3,7 +3,9 @@
 > 🌐 [English](02-report-builder.md) | **日本語**
 
 > 関連: [01-visualization.ja.md](01-visualization.ja.md) (棒グラフ・ヒストグラム等の単発プロット),
-> `Viz.AnalysisReport` (LM/GLM/GLMM/GP/HBM 専用の詳細レポート)
+> `Viz.AnalysisReport` (**非推奨** — LM/GLM/GLMM/GP/HBM 専用 sum-type ベース、CLI `regress --report` 互換のため残置)
+>
+> **状態**: `Viz.ReportBuilder` が今後の標準。`Viz.AnalysisReport` は非推奨化済み (`{-# DEPRECATED #-}`) で、機能パリティが取れたら削除予定。新規モデル/可視化はすべて ReportBuilder で実装する。
 
 ## 目次
 
@@ -33,7 +35,7 @@
 | **フォーマット非依存** | 内部で Vega-Lite spec を JSON 化し、HTML テンプレに埋め込む。Mermaid DAG も対応。|
 | **モデル拡張容易** | 新しいモデル/分析を追加したら `Reportable` instance を 1 つ書くだけ。|
 | **既存資産の流用** | `hvega` (Vega-Lite spec)、`Viz.Assets` (オフライン JS バンドル) を再利用。|
-| **既存 AnalysisReport と並存** | LM/GLM/GLMM/GP/HBM の詳細レポートは従来の `Viz.AnalysisReport` に残す。新規モデル (ridge/kernel/spline/RFF/RobustGP/quantile/gam/rf) は ReportBuilder で対応。|
+| **AnalysisReport の後継** | `Viz.AnalysisReport` (非推奨) を置き換える今後の標準。LM/GLM/GLMM/GP/HBM 含む全モデルの詳細レポートは ReportBuilder + `Reportable` instance で構築する方針。|
 
 ### なぜ別モジュールが必要だったか
 
@@ -174,6 +176,15 @@ class Reportable a where
 | `secMCMCAutocorr title maxLag params chain`       | 自己相関バーチャート |
 | `secMCMCPair title pa pb chain`                   | 2 パラメータのペアスキャッター |
 | `secPosteriorSummary title rows`                  | mean/SD/2.5%/97.5%/ESS/R-hat テーブル |
+
+### モデル比較・診断セクション (Cycle 1 で追加)
+
+| 関数 | 内容 |
+|---|---|
+| `secComparisonTable title headers rows mBest`   | モデル比較テーブル。`mBest = Just i` でその行 (0-based) を黄色背景でハイライト。WAIC/LOO/RMSE 等の最良モデル強調に使用。 |
+| `secForestPlot title rows`                       | Forest plot — `[(name, lower, mean, upper)]` から HDI/CI 横棒 + 中央値点を描画。階層モデルの BLUP やベイズ係数比較に。 |
+| `secFeatureImportance title items`               | 特徴量重要度バー — `[(label, value)]` を **降順ソート** して `secBarChart` 化。RF / GBM の importance 表示用。 |
+| `secPPC title observed reps`                     | Posterior Predictive Check — 観測 KDE (太線) + 各 replicate KDE (薄線) を重ね描き。`reps :: [[Double]]` は事後予測サンプル群。 |
 
 ### Markdown appendix
 
@@ -460,21 +471,29 @@ renderReport "out.html" cfg (baseSections ++ extra)
 
 ## 8. 既存 `Viz.AnalysisReport` との関係
 
-| 項目 | `Viz.AnalysisReport` | `Viz.ReportBuilder` |
+`Viz.AnalysisReport` は **非推奨 (deprecated)**。`{-# DEPRECATED #-}` プラグマ付きで、import すると GHC 警告が出る。
+今後の標準は `Viz.ReportBuilder`。
+
+| 項目 | `Viz.AnalysisReport` (非推奨) | `Viz.ReportBuilder` (★ 標準) |
 |---|---|---|
-| 対象 | LM / GLM / GLMM / GP / HBM | ridge / kernel / spline / RFF / RobustGP / quantile / gam / rf |
-| 設計 | sum-type `ModelFit` ベース | section 並び (リスト) ベース |
-| 拡張 | 新モデル = ModelFit に variant 追加 + 各 section ハンドラ書き直し | 新モデル = `Reportable` instance を 1 つ書くだけ |
+| 対象 | LM / GLM / GLMM / GP / HBM 専用 | 全モデル (RegFit/Spline/Kernel/RFF/RobustGP に instance 済み + LM/GLM/GLMM/GP/HBM は instance 化予定) |
+| 設計 | sum-type `ModelFit` (~2000 行、密結合) | section 並び + `Reportable` typeclass (拡張容易) |
+| 拡張 | ModelFit に variant 追加 + 各 section ハンドラ書き直し | `Reportable` instance を 1 つ書くだけ |
 | レポート構成 | 5 セクション固定 (Data / Model / Result / Interactive / Appendix) | 任意の section 順序 |
-| 対話的予測 | 内蔵 (JS で散布図上に予測点を表示) | なし (将来計画) |
-| MCMC 統合 | HBM の DAG / トレース / 自己相関を内蔵 | なし (`Viz.Report` と組合せ) |
+| 対話的予測 | 内蔵 | `secInteractiveLM` / `secInteractiveMulti` で対応 |
+| MCMC 統合 | HBM 用に内蔵 | `secMCMCDiagnostics` / `secMCMCAutocorr` / `secMCMCPair` / `secPosteriorSummary` で対応 |
+| 状態 | 削除予定 (CLI `regress --report` の互換のため当面残置) | 育成中 (LM/GLM/GLMM/GP/HBM の `Reportable` instance 化が次の課題) |
 
 **選択指針**:
-- LM / GLM / GLMM / GP / HBM の標準的な分析 → `AnalysisReport`
-- 上記以外、または独自モデル/カスタム可視化 → `ReportBuilder`
-- HBM の MCMC 診断専用 → `Viz.Report`
+- 新規実装 → 必ず `ReportBuilder`
+- LM/GLM/GLMM/GP/HBM の `regress` CLI → 当面は `AnalysisReport` (将来 ReportBuilder 移行)
+- HBM の MCMC 診断のみ単独で見たい → `Viz.Report`
 
-将来的には ReportBuilder を基盤として AnalysisReport も再構築する方向で検討。
+### 移行ロードマップ
+
+1. **Phase 1 (current)**: `Reportable` instance を LM/GLM/GLMM/GP/HBM に追加 (sum-type なしで CLI 同等のレポートを生成)
+2. **Phase 2**: CLI `regress --report` を ReportBuilder 経路に切り替え
+3. **Phase 3**: `Viz.AnalysisReport` を削除
 
 ---
 

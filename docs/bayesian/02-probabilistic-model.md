@@ -4,7 +4,7 @@
 
 > Related demos:
 > - [`hbm-example`](../demo/HBMExample.hs) — hierarchical normal model + 4-chain NUTS
-> - [`hbm-regression`](../demo/HBMRegressionDemo.hs) — Bayesian simple regression (with AnalysisReport)
+> - [`hbm-regression`](../demo/HBMRegressionDemo.hs) — Bayesian simple regression (HTML report via legacy `Viz.AnalysisReport`)
 > - [`clinical-trial`](../demo/ClinicalTrial.hs) — Beta-Binomial A/B test
 > - [`simpson-paradox`](../demo/SimpsonParadoxDemo.hs) — LM/GLMM/HBM compared on Simpson's example
 > - [`hbm-random-slope`](../demo/HBMRandomSlopeDemo.hs) — random-slope extension

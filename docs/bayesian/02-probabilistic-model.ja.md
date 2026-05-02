@@ -4,7 +4,7 @@
 
 > 関連デモ:
 > - [`hbm-example`](../demo/HBMExample.hs) — 階層正規モデル + 4 チェーン NUTS
-> - [`hbm-regression`](../demo/HBMRegressionDemo.hs) — ベイズ単回帰 (AnalysisReport 付き)
+> - [`hbm-regression`](../demo/HBMRegressionDemo.hs) — ベイズ単回帰 (HTML レポート付き; legacy `Viz.AnalysisReport` 経由)
 > - [`clinical-trial`](../demo/ClinicalTrial.hs) — Beta-Binomial A/B テスト
 > - [`simpson-paradox`](../demo/SimpsonParadoxDemo.hs) — シンプソン例で LM/GLMM/HBM 比較
 > - [`hbm-random-slope`](../demo/HBMRandomSlopeDemo.hs) — ランダム傾き拡張

@@ -116,7 +116,7 @@ cabal run hanalyze -- regress data.csv x y LM --report    # 既存の回帰 (= b
 
 | やりたいこと | 推奨アプローチ | 例 |
 |---|---|---|
-| AnalysisReport (DAG・MCMC 診断・予測曲線統合) | CLI: `--report` | LM/GLM/GLMM/GP/HBM 全対応 |
+| HTML レポート (DAG・MCMC 診断・予測曲線統合) | CLI: `--report` | LM/GLM/GLMM/GP/HBM 全対応 (legacy `Viz.AnalysisReport` 経由、後継は `Viz.ReportBuilder`) |
 | 棒グラフ・ヒストグラム単体 | デモ: `bar-demo` / CLI: `--hist COL` | PNG/SVG 出力可能 |
 | MCMC 単独レポート (KDE + トレース + DAG) | `Viz.Report.renderReport` | デモ: `hbm-example` |
 | プロットを PNG/SVG にエクスポート | CLI: `--format png` | 各 NamedPlot が個別画像化 |
@@ -245,4 +245,4 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | MCMC レポート (KDE / trace / DAG) | `Viz.Report` / `Viz.MCMC` | `renderReport`, `tracePlotHDI` |
 | Pareto front (5 種) | `Viz.Pareto` | `paretoScatter`, `parallelCoordinates` |
 | 散布 / 棒 / ヒスト | `Viz.Scatter` / `Viz.Bar` / `Viz.Histogram` | |
-| 多モデル比較レポート | `Viz.AnalysisReport` | `writeAnalysisReport` |
+| 多モデル比較レポート | `Viz.ReportBuilder` (★ 標準) / `Viz.AnalysisReport` (非推奨) | `renderReport` / `writeAnalysisReport` |

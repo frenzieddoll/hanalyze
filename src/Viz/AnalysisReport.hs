@@ -1,13 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | LM / GLM / GLMM の分析結果を1つの HTML レポートにまとめるモジュール。
+-- | __DEPRECATED__ — LM / GLM / GLMM / GP / HBM 専用の HTML レポート
+-- (sum-type 'ModelFit' ベース、~2000 行)。
 --
--- セクション構成:
+-- 後継: 'Viz.ReportBuilder' (compositional 'ReportSection' + 'Reportable' typeclass)。
+-- 新規モデル/可視化は ReportBuilder 側で実装する。本モジュールは既存 CLI
+-- (@hanalyze regress --report@) との互換のため残置しているが、将来削除予定。
+--
+-- セクション構成 (legacy):
 --   1. データの特性 (N, 列統計, ヒストグラム)
 --   2. モデル概要 (種別, 式, ファミリー/リンク)
 --   3. 回帰結果 (係数表, R², 散布図, 残差プロット)
 --   4. 対話的予測 (リアルタイム散布図 + CI/PI 表示)
 --   5. 付録 (モデルの原理説明)
-module Viz.AnalysisReport
+module Viz.AnalysisReport {-# DEPRECATED "Viz.AnalysisReport は非推奨。新規実装は Viz.ReportBuilder を使うこと。" #-}
   ( -- * 設定
     AnalysisReportConfig (..)
   , defaultAnalysisConfig

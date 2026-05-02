@@ -22,7 +22,8 @@
 -- - 'RFFRidgeFit'    (Model.RFF)         — Random Fourier Features Ridge
 -- - 'RobustGPFit'    (Model.GPRobust)    — ロバスト GP
 --
--- LM/GLM/GLMM/GP/HBM は 'Viz.AnalysisReport' に統合済 (より詳細なレポート)。
+-- LM/GLM/GLMM/GP/HBM は当面 'Viz.AnalysisReport' (非推奨) 経由。
+-- ReportBuilder 化が次の課題。
 module Viz.ReportInstances () where
 
 import Data.Text (Text)

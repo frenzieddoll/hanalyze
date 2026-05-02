@@ -9,6 +9,11 @@
 A compositional HTML-report builder. Define analyses as a list of `ReportSection`
 values; `renderReport` produces a single self-contained HTML (Vega-Lite assets
 embedded). The `Reportable` typeclass lets each fit type generate its default
-section list. Covers ridge / kernel / spline / RFF / RobustGP / quantile / gam /
-rf — complementary to the existing `Viz.AnalysisReport` (LM / GLM / GLMM / GP /
-HBM).
+section list. Currently covers ridge / kernel / spline / RFF / RobustGP / quantile / gam / rf.
+
+**Status**: `Viz.ReportBuilder` is the going-forward standard. The legacy
+`Viz.AnalysisReport` (LM / GLM / GLMM / GP / HBM, sum-type based) is **deprecated**
+(`{-# DEPRECATED #-}` pragma) and kept only for CLI `regress --report`
+compatibility. New models / visualizations must be implemented on top of
+`ReportBuilder`. `Reportable` instances for LM/GLM/GLMM/GP/HBM are the next
+milestone, after which `AnalysisReport` will be removed.

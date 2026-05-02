@@ -4,12 +4,12 @@
 
 > 関連デモ:
 > - [`hbm-example`](../demo/HBMExample.hs) — `Viz.Report` (KDE/トレース/DAG/ペア散布)
-> - [`hbm-regression`](../demo/HBMRegressionDemo.hs) — `Viz.AnalysisReport` の HBMFit (DAG + MCMC + 信用区間付き予測)
+> - [`hbm-regression`](../demo/HBMRegressionDemo.hs) — HBM 回帰の HTML レポート (DAG + MCMC + 信用区間付き予測。レポートビルダは `Viz.AnalysisReport` (非推奨) → `Viz.ReportBuilder` (標準) へ移行中)
 > - [`simpson-paradox`](../demo/SimpsonParadoxDemo.hs) — `writeComparisonReport` で複数モデル並列比較
 > - [`bar-demo`](../demo/BarDemo.hs) — `Viz.Bar` + PNG/SVG エクスポート
 > - [`gp-demo`](../demo/GPDemo.hs) — GP 専用レポート
 >
-> CLI: `--report` で AnalysisReport 生成、`--format png|svg` で個別プロットも画像化。
+> CLI: `--report` で HTML レポート生成 (`regress` は legacy `Viz.AnalysisReport`、その他は標準 `Viz.ReportBuilder`)、`--format png|svg` で個別プロットも画像化。
 
 ## 出力形式
 

@@ -4,12 +4,12 @@
 
 > Related demos:
 > - [`hbm-example`](../demo/HBMExample.hs) — `Viz.Report` (KDE / trace / DAG / pair scatter)
-> - [`hbm-regression`](../demo/HBMRegressionDemo.hs) — `Viz.AnalysisReport` HBMFit (DAG + MCMC + credible-interval predictions)
+> - [`hbm-regression`](../demo/HBMRegressionDemo.hs) — HBM regression HTML report (DAG + MCMC + credible-interval predictions; report builder is migrating from deprecated `Viz.AnalysisReport` to standard `Viz.ReportBuilder`)
 > - [`simpson-paradox`](../demo/SimpsonParadoxDemo.hs) — multi-model side-by-side via `writeComparisonReport`
 > - [`bar-demo`](../demo/BarDemo.hs) — `Viz.Bar` + PNG/SVG export
 > - [`gp-demo`](../demo/GPDemo.hs) — GP-specific report
 >
-> CLI: `--report` builds an AnalysisReport; `--format png|svg` renders individual plots as images.
+> CLI: `--report` builds an HTML report (`regress` uses legacy `Viz.AnalysisReport`; other subcommands use the standard `Viz.ReportBuilder`); `--format png|svg` renders individual plots as images.
 
 ## Output formats
 

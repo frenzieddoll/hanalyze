@@ -151,7 +151,7 @@ A free-monad DSL from which **four interpretations** (structural inspection / lo
 | Page | Contents |
 |---|---|
 | [Visualization overview](docs/visualization/01-visualization.md) | Report / Bar / Histogram / PNG/SVG output |
-| [HTML report builder](docs/visualization/02-report-builder.md) | Viz.ReportBuilder + Reportable typeclass usage (★ unified report API) |
+| [HTML report builder](docs/visualization/02-report-builder.md) | Viz.ReportBuilder + Reportable typeclass usage (★ unified report API, going-forward standard) |
 
 ---
 
@@ -190,7 +190,7 @@ Sources are organized into genre-based subdirectories under `demo/` mirroring th
 | Demo | Contents | What you learn |
 |---|---|---|
 | `hbm-example`     | Hierarchical normal model + 4-chain NUTS → `mcmc_report*.html` | How to write the HBM DSL, MCMC reports |
-| `hbm-regression`  | Bayesian simple regression + AnalysisReport (DAG / MCMC / credible intervals) | AnalysisReport integration for HBM regression |
+| `hbm-regression`  | Bayesian simple regression + ReportBuilder (DAG / MCMC / credible intervals) | Report integration for HBM regression |
 | `gp-demo`         | GP regression (RBF/Matérn/Periodic) + LML comparison | Kernel selection, how to use GPs |
 
 ### Model comparison and paradoxes
@@ -314,7 +314,7 @@ hanalyze         <file> <xcols> <ycols> [LM|GLM|NoReg|GP|HBM] [options]   # equi
 | `--format FMT` | `html` / `png` / `svg`; for `png/svg` plots inside the report are rendered as images |
 
 ```bash
-# Linear regression + confidence interval + AnalysisReport
+# Linear regression + confidence interval + HTML report
 cabal run hanalyze -- regress data.tsv x y LM --ci 0.95 --report
 
 # Poisson GLM (per-column polynomial degree) + WAIC
@@ -323,7 +323,7 @@ cabal run hanalyze -- regress data.tsv "x1 x2" y GLM -d poisson -l log --degree 
 # Mixed-effects model (LME) + WAIC
 cabal run hanalyze -- regress data.tsv x y LM --group school --waic --report
 
-# Bayesian linear regression (HBM): NUTS posteriors for α/β/σ → AnalysisReport
+# Bayesian linear regression (HBM): NUTS posteriors for α/β/σ → HTML report
 cabal run hanalyze -- regress data.csv x y HBM --report --waic
 
 # Gaussian process regression (RBF/Matérn/Periodic comparison)
@@ -516,9 +516,10 @@ Viz/
   MCMC.hs          -- diagnostic plots (KDE / trace / autocorr / pair scatter)
   Report.hs        -- integrated HTML report (multi-chain with R-hat)
   Taguchi.hs       -- Taguchi-analysis HTML report (factor-effect bar charts + optimum table)
-  ReportBuilder.hs -- compositional reports (ReportSection + Reportable typeclass,
-                                              with interactive prediction + MCMC sections)
+  ReportBuilder.hs -- ★ compositional reports (ReportSection + Reportable typeclass,
+                                                with interactive prediction + MCMC sections; going-forward standard)
   ReportInstances.hs -- Reportable RegFit/SplineFit/KernelRidgeFit/RFFRidgeFit/RobustGPFit
+  AnalysisReport.hs -- [DEPRECATED] LM/GLM/GLMM/GP/HBM-specific sum-type report (kept for CLI regress --report compatibility, scheduled for removal)
   ModelGraph.hs    -- Mermaid.js DAG
   Bar.hs           -- bar charts (vertical / horizontal / stacked / grouped)
   Histogram.hs     -- histograms (with optional theoretical-density overlay)

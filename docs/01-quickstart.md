@@ -118,7 +118,7 @@ cabal run hanalyze -- regress data.csv x y LM --report    # regression (= bare f
 
 | Goal | Recommended approach | Example |
 |---|---|---|
-| AnalysisReport (DAG / MCMC diagnostics / prediction curves) | CLI: `--report` | LM/GLM/GLMM/GP/HBM all supported |
+| HTML report (DAG / MCMC diagnostics / prediction curves) | CLI: `--report` | LM/GLM/GLMM/GP/HBM all supported (legacy `Viz.AnalysisReport`; successor is `Viz.ReportBuilder`) |
 | Bar chart / histogram alone | Demo: `bar-demo` / CLI: `--hist COL` | PNG/SVG export available |
 | MCMC-only report (KDE + trace + DAG) | `Viz.Report.renderReport` | Demo: `hbm-example` |
 | Export plots as PNG/SVG | CLI: `--format png` | Each NamedPlot becomes a separate image |
@@ -247,4 +247,4 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | MCMC report (KDE / trace / DAG) | `Viz.Report` / `Viz.MCMC` | `renderReport`, `tracePlotHDI` |
 | Pareto front (5 styles) | `Viz.Pareto` | `paretoScatter`, `parallelCoordinates` |
 | Scatter / bar / histogram | `Viz.Scatter` / `Viz.Bar` / `Viz.Histogram` | |
-| Multi-model comparison report | `Viz.AnalysisReport` | `writeAnalysisReport` |
+| Multi-model comparison report | `Viz.ReportBuilder` (★ standard) / `Viz.AnalysisReport` (deprecated) | `renderReport` / `writeAnalysisReport` |

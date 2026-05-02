@@ -57,6 +57,11 @@ module Viz.ReportBuilder
   , secMCMCAutocorr
   , secMCMCPair
   , secPosteriorSummary
+    -- * モデル比較・診断セクション (Cycle 1)
+  , secComparisonTable
+  , secForestPlot
+  , secFeatureImportance
+  , secPPC
     -- * 対話的予測 (LM/GLM 用)
   , secInteractiveLM
   , secInteractiveMulti
@@ -65,24 +70,29 @@ module Viz.ReportBuilder
   , renderReport
     -- * Reportable typeclass
   , Reportable (..)
-    -- * 専用 Vega-Lite ヘルパ (regularization path 等)
+    -- * 専用 Vega-Lite ヘルパ
   , regPathSpec
+  , forestPlotSpec
+  , ppcSpec
   ) where
 
 import Data.Aeson (encode)
 import Data.ByteString.Lazy (toStrict)
-import Data.List (sort)
+import Data.List (sort, sortBy)
+import Data.Ord (Down (..), comparing)
 import Data.Text (Text)
 import qualified Data.Text    as T
 import qualified Data.Text.IO as TIO
 import Data.Text.Encoding (decodeUtf8)
 import Graphics.Vega.VegaLite hiding (filter, name)
+import qualified Graphics.Vega.VegaLite as VL
 import Numeric (showFFloat)
 import qualified Data.Vector as V
 import Text.Printf (printf)
 
 import DataFrame.Core
 import MCMC.Core (Chain)
+import qualified Stat.MCMC as SM
 import Viz.Assets (vegaJS, vegaLiteJS, vegaEmbedJS)
 import Viz.Core (PlotConfig (..), defaultConfig)
 import qualified Viz.MCMC as VM
@@ -430,6 +440,61 @@ secPosteriorSummary title rows =
                   ]
                 | (p, m, sd, lo, hi, ess, rhat) <- rows ]
   in SecTable title headers body
+
+-- ---------------------------------------------------------------------------
+-- モデル比較・診断セクション (Cycle 1)
+-- ---------------------------------------------------------------------------
+
+-- | モデル比較テーブル。'secTable' のラッパだが、
+-- 'mBest' で 0-based 行 index を渡すと、その行をハイライト表示する。
+-- WAIC / LOO / RMSE などを横並びにし最良モデルを強調するのに使う。
+secComparisonTable
+  :: Text         -- ^ タイトル
+  -> [Text]       -- ^ ヘッダ
+  -> [[Text]]     -- ^ 行
+  -> Maybe Int    -- ^ 最良行 index (0-based、'Nothing' でハイライトなし)
+  -> ReportSection
+secComparisonTable title headers rows mBest = case mBest of
+  Nothing  -> SecTable title headers rows
+  Just idx -> SecHtml title (renderComparisonHtml headers rows idx)
+
+renderComparisonHtml :: [Text] -> [[Text]] -> Int -> Text
+renderComparisonHtml headers rows bestIdx =
+  let hdr = "<tr>" <> T.concat ["<th>" <> h <> "</th>" | h <- headers] <> "</tr>"
+      mkRow i r =
+        let style | i == bestIdx =
+                      " style=\"background:#fff7d6;font-weight:600\""
+                  | otherwise = ""
+        in "<tr" <> style <> ">"
+           <> T.concat ["<td>" <> c <> "</td>" | c <- r]
+           <> "</tr>"
+      body = T.concat (zipWith mkRow [0 :: Int ..] rows)
+      legend = "<p style=\"margin-top:6px;font-size:.85em;color:#666\">"
+            <> "★ ハイライト行 = 最良 (黄色背景)</p>"
+  in "<table class=\"datatable\">" <> hdr <> body <> "</table>" <> legend
+
+-- | Forest plot — 各パラメータの中央値 + 信用 (HDI/CI) 区間を横並び。
+-- ベイズモデルの coefficient 比較や階層モデルの BLUP 表示に使う。
+secForestPlot
+  :: Text                                          -- ^ タイトル
+  -> [(Text, Double, Double, Double)]              -- ^ (label, lower, mean, upper)
+  -> ReportSection
+secForestPlot title rows = SecVega title (forestPlotSpec rows)
+
+-- | 特徴量重要度バー — 値降順にソートして 'secBarChart' に渡す。
+-- Random Forest / GBM の feature importance 表示用。
+secFeatureImportance :: Text -> [(Text, Double)] -> ReportSection
+secFeatureImportance title items =
+  SecBarChart title (sortBy (comparing (Down . snd)) items)
+
+-- | Posterior Predictive Check — 観測データ密度 + 事後予測サンプルの密度を重ね描き。
+-- 各 replicate の KDE を薄い線で、観測の KDE を太線で描画。
+secPPC
+  :: Text         -- ^ タイトル
+  -> [Double]     -- ^ 観測値 y_obs
+  -> [[Double]]   -- ^ 事後予測サンプル (replicate ごと、各長さ ~ length y_obs)
+  -> ReportSection
+secPPC title observed reps = SecVega title (ppcSpec observed reps)
 
 -- ---------------------------------------------------------------------------
 -- 対話的予測 (LM/GLM 単変数)
@@ -1382,6 +1447,90 @@ barChartSpec _title vs =
            $ []
        , widthStep 40
        , height 220
+       ]
+
+-- | Forest plot — 各パラメータの中央値 (点) と HDI/CI (横棒)。
+forestPlotSpec :: [(Text, Double, Double, Double)] -> VegaLite
+forestPlotSpec rows =
+  let names = [n | (n, _, _, _) <- rows]
+      means = [m | (_, _, m, _) <- rows]
+      los   = [l | (_, l, _, _) <- rows]
+      his   = [h | (_, _, _, h) <- rows]
+  in toVegaLite
+       [ dataFromColumns []
+           . dataColumn "param" (Strings names)
+           . dataColumn "mean"  (Numbers means)
+           . dataColumn "lo"    (Numbers los)
+           . dataColumn "hi"    (Numbers his)
+           $ []
+       , layer
+           [ asSpec
+               [ mark Rule [MStrokeWidth 2.4, MColor "#4C72B0"]
+               , encoding
+                   . position Y  [PName "param", PmType Nominal,
+                                  PAxis [AxTitle ""]]
+                   . position X  [PName "lo", PmType Quantitative,
+                                  PAxis [AxTitle "推定値"]]
+                   . position X2 [PName "hi"]
+                   $ []
+               ]
+           , asSpec
+               [ mark Circle [MSize 110, MColor "#1e3a5c", MOpacity 0.95]
+               , encoding
+                   . position Y [PName "param", PmType Nominal]
+                   . position X [PName "mean", PmType Quantitative]
+                   $ []
+               ]
+           ]
+       , width 540
+       , heightStep 28
+       ]
+
+-- | Posterior Predictive Check — 観測 KDE + 各 replicate KDE 重ね描き。
+ppcSpec :: [Double] -> [[Double]] -> VegaLite
+ppcSpec observed reps =
+  let nGrid = 200
+      obsKde   = SM.kde nGrid observed
+      repKdes  = [ SM.kde nGrid r | r <- reps, not (null r) ]
+      obsRows  = [ (x, y, "観測 (y_obs)" :: Text, 0 :: Int) | (x, y) <- obsKde ]
+      repRows  = [ (x, y, "事後予測", j)
+                 | (j, kd) <- zip [1 :: Int ..] repKdes
+                 , (x, y)  <- kd ]
+      rows     = obsRows ++ repRows
+      xs    = [ x  | (x, _, _, _) <- rows ]
+      ys    = [ y  | (_, y, _, _) <- rows ]
+      grps  = [ g  | (_, _, g, _) <- rows ]
+      idx   = [ T.pack ("rep_" <> show k) | (_, _, _, k) <- rows ]
+  in toVegaLite
+       [ dataFromColumns []
+           . dataColumn "x"     (Numbers xs)
+           . dataColumn "y"     (Numbers ys)
+           . dataColumn "group" (Strings grps)
+           . dataColumn "rep"   (Strings idx)
+           $ []
+       , layer
+           [ asSpec
+               [ transform . VL.filter (FExpr "datum.group === '事後予測'") $ []
+               , mark Line [MStrokeWidth 0.7, MOpacity 0.25, MColor "#888"]
+               , encoding
+                   . position X [PName "x", PmType Quantitative,
+                                 PAxis [AxTitle "y"]]
+                   . position Y [PName "y", PmType Quantitative,
+                                 PAxis [AxTitle "密度"]]
+                   . detail [DName "rep", DmType Nominal]
+                   $ []
+               ]
+           , asSpec
+               [ transform . VL.filter (FExpr "datum.group === '観測 (y_obs)'") $ []
+               , mark Line [MStrokeWidth 2.4, MColor "#1e3a5c"]
+               , encoding
+                   . position X [PName "x", PmType Quantitative]
+                   . position Y [PName "y", PmType Quantitative]
+                   $ []
+               ]
+           ]
+       , width 640
+       , height 280
        ]
 
 -- ---------------------------------------------------------------------------
