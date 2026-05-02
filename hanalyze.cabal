@@ -33,6 +33,7 @@ library
     Design.Anova
     Design.Power
     Design.Quality
+    Design.RSM
     Model.HBM
     MCMC.Core
     MCMC.MH
@@ -217,6 +218,18 @@ executable newdistribs-demo
     , hanalyze
     , text       >= 1.2  && < 2.2
     , containers >= 0.6  && < 0.8
+    , mwc-random >= 0.15 && < 0.16
+
+executable rsm-demo
+  import:           warnings
+  main-is:          RSMDemo.hs
+  hs-source-dirs:   demo
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , text       >= 1.2  && < 2.2
+    , hmatrix    >= 0.20 && < 0.22
     , mwc-random >= 0.15 && < 0.16
 
 executable doe-demo
