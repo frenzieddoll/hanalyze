@@ -33,6 +33,7 @@ module Viz.ReportInstances
   , HBMLinearReport (..)
   , HBMReport (..)
   , HBMRibbon (..)
+  , RFFMVReport (..)
   ) where
 
 import Data.Text (Text)
@@ -43,7 +44,10 @@ import qualified Numeric.LinearAlgebra as LA
 import Text.Printf (printf)
 
 import qualified DataFrame.Internal.DataFrame as DXD
-import DataIO.Convert (getDoubleVec)
+import DataIO.Convert (getDoubleVec, getMaybeTextVec)
+import qualified Numeric.LinearAlgebra as LA2
+import Viz.Scatter   (scatterWithGroups)
+import Viz.Core      (defaultConfig, PlotConfig (..))
 import Model.Core      (FitResult, coeffList, fittedList, residualsV, rSquared1)
 import Model.LM        (SmoothFit (..))
 import Model.GLM       (Family (..), LinkFn (..))
@@ -51,7 +55,9 @@ import Model.Regularized (RegFit (..), Penalty (..), predictRegularized)
 import Model.Spline     (SplineFit (..), SplineKind (..), predictSpline, sfBeta)
 import Model.Kernel     (KernelRidgeFit (..), predictKernelRidge)
 import Model.RFF        (RFFRidgeFit (..), predictRFFRidge, rffrFeatures,
-                         rffSigmaF, rffLengthScale, rffOmegas)
+                         rffSigmaF, rffLengthScale, rffOmegas,
+                         RFFRidgeFitMV (..), RFFFeaturesMV (..),
+                         predictRFFRidgeMV)
 import Model.GP         (GPParams (..))
 import Model.GPRobust   (RobustGPFit (..), RobustLikelihood (..))
 import Model.Quantile   (QRFit (..))
@@ -1067,3 +1073,90 @@ instance Reportable HBMReport where
            [("サンプラー", hbmrSamplerG rep)] (hbmrGraphG rep)
        , resultSec
        ] ++ ribbonSecs
+
+-- ---------------------------------------------------------------------------
+-- RFFMVReport — 多変量 RFF Ridge (Phase B-RFF)
+-- ---------------------------------------------------------------------------
+
+-- | 多変量 RFF Ridge のレポート。`rfmvGroup` 列で色分けし、`rfmvXAxis` 列
+-- (xCols のいずれか) を横軸にして観測点 + 予測曲線を描く。
+data RFFMVReport = RFFMVReport
+  { rfmvFit   :: RFFRidgeFitMV
+  , rfmvGroup :: Text
+  , rfmvXAxis :: Text
+  } deriving (Show)
+
+instance Reportable RFFMVReport where
+  toReport _cfg df xCols yCol r =
+    case (mapM (`getDoubleVec` df) xCols, getDoubleVec yCol df,
+          getMaybeTextVec (rfmvGroup r) df) of
+      (Just xVecs, Just yVec, Just gv) ->
+        let cols   = map V.toList xVecs
+            ys     = V.toList yVec
+            groups = [ maybe "" id g | g <- V.toList gv ]
+            xMatObs = LA2.fromColumns (map LA2.fromList cols)
+            yhat    = predictRFFRidgeMV (rfmvFit r) xMatObs
+            sse     = sum (zipWith (\a b -> (a-b)*(a-b)) ys yhat)
+            sst     = let m = sum ys / fromIntegral (max 1 (length ys))
+                      in sum [(y - m)*(y - m) | y <- ys]
+            r2      = if sst < 1e-12 then 0 else 1 - sse / sst
+            n       = length ys
+            rmse    = sqrt (sse / fromIntegral (max 1 n))
+            feats   = rffrmvFeatures (rfmvFit r)
+            d       = LA2.cols (rffmvOmegas feats)
+            ellLbl  = T.pack (printf "%.4f" (rffmvLengthScale feats))
+            sfLbl   = T.pack (printf "%.4f" (rffmvSigmaF feats))
+            lamLbl  = T.pack (printf "%g"   (rffrmvLambda (rfmvFit r)))
+            xColIdx = case [ i | (i, c) <- zip [0..] xCols, c == rfmvXAxis r ] of
+                        (i:_) -> i
+                        []    -> 0
+            xValuesAll = cols !! xColIdx
+            xMin = minimum xValuesAll
+            xMax = maximum xValuesAll
+            ngrid = 100
+            xGrid = [ xMin + fromIntegral i * (xMax - xMin) / fromIntegral (ngrid - 1)
+                    | i <- [0 .. ngrid - 1] ]
+            ptData = zip3 groups xValuesAll ys
+            uniqGroups = uniq2 groups
+            rowsForGroup g = [ i | (i, gg) <- zip [0..] groups, gg == g ]
+            repValues g = [ (cols !! j) !! head (rowsForGroup g)
+                          | j <- [0 .. length xCols - 1] ]
+            mkLineData g =
+              let rep = repValues g
+                  makeRow t =
+                    [ if j == xColIdx then t else rep !! j
+                    | j <- [0 .. length xCols - 1] ]
+                  xMatGrid = LA2.fromLists [ makeRow t | t <- xGrid ]
+                  ys'  = predictRFFRidgeMV (rfmvFit r) xMatGrid
+              in [ (g, t, y') | (t, y') <- zip xGrid ys' ]
+            lnData = concatMap mkLineData uniqGroups
+            plotCfg = (defaultConfig
+                        (yCol <> " by " <> rfmvGroup r
+                          <> " — RFF Ridge (multivariate)"))
+                       { plotWidth = 720, plotHeight = 480 }
+            vega = scatterWithGroups plotCfg (rfmvXAxis r) yCol ptData lnData
+            formula = yCol <> " ~ φ(" <> T.intercalate "," xCols <> ")ᵀ w  (D="
+                       <> T.pack (show d) <> ")"
+        in [ secDataOverview df xCols yCol
+           , secModelOverview "Multivariate RFF Ridge" formula Nothing
+           , secKeyValue "Fit summary"
+               [ ("Features (D)",  T.pack (show d))
+               , ("Length scale ℓ", ellLbl)
+               , ("Signal σ_f",     sfLbl)
+               , ("Lambda",         lamLbl)
+               , ("R²",             T.pack (printf "%.4f" r2))
+               , ("RMSE",           T.pack (printf "%.4f" rmse))
+               , ("n",              T.pack (show n))
+               ]
+           , secVega ("予測曲線 + 観測点 (" <> rfmvGroup r <> " で色分け)") vega
+           , secResiduals yhat (zipWith (-) ys yhat)
+           ]
+      _ -> [ secDataOverview df xCols yCol
+           , secModelOverview "Multivariate RFF Ridge"
+               "(必要な列が取得できません: x_i, y, group の数値/Text 列を確認してください)"
+               Nothing
+           ]
+
+uniq2 :: Ord a => [a] -> [a]
+uniq2 []     = []
+uniq2 (x:xs) = x : uniq2 (filter (/= x) xs)

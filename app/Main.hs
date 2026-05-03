@@ -2391,6 +2391,16 @@ runKernelMV df xCols yCol xVecs yVec opts = do
           fmt     = koFormat opts
       writeMVPlot fmt outPath df gCol xCol xCols yCol fit cols ys
       putStrLn $ "Plot: " ++ outPath
+      -- --report 指定時は ReportBuilder で統合 HTML を出力
+      case koReport opts of
+        Just rpath -> do
+          let rep    = RI.RFFMVReport fit gCol xCol
+              cfg    = RB.defaultReportConfig
+                         (yCol <> " — Multivariate RFF Ridge")
+              secs   = RB.toReport cfg df xCols yCol rep
+          RB.renderReport rpath cfg secs
+          putStrLn $ "Report: " ++ rpath
+        Nothing -> return ()
     _ -> putStrLn
       "Plot skipped (use --group COL --xaxis COL to draw scatter+fit by group)"
 
