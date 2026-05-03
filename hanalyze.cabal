@@ -83,6 +83,7 @@ library
     Optim.CMAESFull
     Optim.SimulatedAnnealing
     Optim.ParticleSwarm
+    Optim.Constrained
     Optim.NSGA
     Optim.Pareto
     Optim.Acquisition

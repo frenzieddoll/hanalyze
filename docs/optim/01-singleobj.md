@@ -183,6 +183,28 @@ r <- PSO.runPSOWith cfg rastrigin gen
 
 Sits alongside DE / CMA-ES in the metaheuristic family. Stable on multi-modal problems.
 
+## 8. Constrained optimisation — `Optim.Constrained`
+
+Handles equality constraints `g_i(x) = 0` and inequality constraints `h_j(x) ≤ 0`:
+
+- **Augmented Lagrangian** (`runAugmentedLagrangian`): Lagrange multipliers + quadratic penalty.
+  Outer loop updates multipliers (λ, μ) and penalty ρ; inner loop solves the unconstrained
+  subproblem with L-BFGS.
+- **Penalty method** (`penaltyMethod`): omits multipliers and only grows the penalty.
+  Simple but prone to ill-conditioning.
+
+```haskell
+import qualified Optim.Constrained as Con
+
+let f xs = (head xs)^2 + (xs !! 1)^2
+    cs = Con.ConstraintSet
+           { Con.csEq   = [\xs -> head xs + xs !! 1 - 1]   -- x1+x2 = 1
+           , Con.csIneq = []                                -- no inequality
+           }
+(r, viol) <- Con.runAugmentedLagrangian Con.defaultConstrainedConfig f cs [0, 0]
+-- Expected: x1=x2=0.5, viol < 1e-3
+```
+
 ## Benchmark
 
 `cabal run single-opt-bench-demo` produces an HTML report comparing convergence histories

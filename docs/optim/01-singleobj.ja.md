@@ -180,6 +180,27 @@ r <- PSO.runPSOWith cfg rastrigin gen
 
 DE/CMA-ES と並ぶメタヒューリスティック。多峰問題で安定。
 
+## 8. 制約付き最適化 — `Optim.Constrained`
+
+等式制約 `g_i(x) = 0` と不等式制約 `h_j(x) ≤ 0` を扱う:
+
+- **Augmented Lagrangian** (`runAugmentedLagrangian`): Lagrange 乗数 + 二次罰則。
+  外側で乗数 (λ, μ) と罰則係数 ρ を更新、内側で L-BFGS で無制約問題を解く。
+- **Penalty method** (`penaltyMethod`): 乗数を省略し罰則のみ増加。シンプルだが
+  ill-conditioning に弱い。
+
+```haskell
+import qualified Optim.Constrained as Con
+
+let f xs = (head xs)^2 + (xs !! 1)^2
+    cs = Con.ConstraintSet
+           { Con.csEq   = [\xs -> head xs + xs !! 1 - 1]   -- x1+x2 = 1
+           , Con.csIneq = []                                -- 不等式なし
+           }
+(r, viol) <- Con.runAugmentedLagrangian Con.defaultConstrainedConfig f cs [0, 0]
+-- 期待: x1=x2=0.5、viol < 1e-3
+```
+
 ## ベンチマーク
 
 `cabal run single-opt-bench-demo` で 5 アルゴリズム × 3 ベンチ (Sphere / Rosenbrock / Rastrigin) の

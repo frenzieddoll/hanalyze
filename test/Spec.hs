@@ -41,6 +41,7 @@ import qualified Optim.CMAES       as CMAES
 import qualified Optim.CMAESFull   as CMAESF
 import qualified Optim.SimulatedAnnealing as SA
 import qualified Optim.ParticleSwarm as PSO
+import qualified Optim.Constrained as Con
 import qualified Optim.BayesOpt    as BO
 import qualified Optim.Common      as OC
 import qualified System.Random.MWC as MWC
@@ -1076,6 +1077,45 @@ main = hspec $ do
             sum [x*x - 10 * cos (2 * pi * x) | x <- xs]
       r <- PSO.runPSOWith cfg rastrigin gen
       OC.orValue r `shouldSatisfy` (< 5.0)   -- 大域近傍 (10 程度の局所有り)
+
+  -- ===========================================================================
+  -- 制約付き最適化 (Augmented Lagrangian)
+  -- ===========================================================================
+  describe "Optim.Constrained" $ do
+    it "Augmented Lagrangian: min x1²+x2² s.t. x1+x2=1 → (0.5, 0.5)" $ do
+      let f xs = (head xs)^(2::Int) + (xs !! 1)^(2::Int)
+          cs = Con.ConstraintSet
+                 { Con.csEq   = [\xs -> head xs + xs !! 1 - 1]
+                 , Con.csIneq = []
+                 }
+      (r, viol) <- Con.runAugmentedLagrangian
+                     Con.defaultConstrainedConfig f cs [0, 0]
+      let [x1, x2] = OC.orBest r
+      abs (x1 - 0.5) `shouldSatisfy` (< 0.05)
+      abs (x2 - 0.5) `shouldSatisfy` (< 0.05)
+      viol `shouldSatisfy` (< 1e-3)
+
+    it "Augmented Lagrangian: 不等式 x ≥ 1 (h(x)=1-x≤0) で min x²" $ do
+      let f xs  = (head xs)^(2::Int)
+          cs   = Con.ConstraintSet
+                 { Con.csEq   = []
+                 , Con.csIneq = [\xs -> 1 - head xs]    -- 1 - x ≤ 0 ⇔ x ≥ 1
+                 }
+      (r, viol) <- Con.runAugmentedLagrangian
+                     Con.defaultConstrainedConfig f cs [0]
+      let [x] = OC.orBest r
+      x `shouldSatisfy` (\v -> v >= 1 - 0.01)
+      viol `shouldSatisfy` (< 1e-3)
+
+    it "Penalty method: 等式 x1+x2=1 (簡易版)" $ do
+      let f xs = (head xs)^(2::Int) + (xs !! 1)^(2::Int)
+          cs = Con.ConstraintSet
+                 { Con.csEq   = [\xs -> head xs + xs !! 1 - 1]
+                 , Con.csIneq = []
+                 }
+      (r, _) <- Con.penaltyMethod Con.defaultConstrainedConfig f cs [0, 0]
+      let [x1, x2] = OC.orBest r
+      abs (x1 + x2 - 1) `shouldSatisfy` (< 0.05)
 
   -- ===========================================================================
   -- Bayesian Optimization 内部最適化の差し替え (Optim.BayesOpt)
