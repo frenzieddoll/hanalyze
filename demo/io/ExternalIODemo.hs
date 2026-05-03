@@ -7,7 +7,7 @@
 -- - imputeMean で欠損補完
 import qualified Data.Text as T
 
-import DataIO.External    (loadCsvX)
+import DataIO.CSV         (loadCSV)
 import DataIO.Preprocess  (countMissing, imputeMean)
 import qualified DataFrame                 as DX
 import qualified DataFrame.Internal.DataFrame as DXD
@@ -34,8 +34,8 @@ main = do
   putStrLn "=================================="
   putStrLn ""
 
-  putStrLn "--- loadCsvX (Hackage dataframe) ---"
-  Right df <- loadCsvX path
+  putStrLn "--- loadCSV (Hackage dataframe) ---"
+  Right df <- loadCSV path
   printDFTypes df
   putStrLn ""
 

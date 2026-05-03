@@ -1,4 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
+-- | CSV / TSV / SSV ローダ。Phase 2 以降は Hackage @dataframe@ の
+-- 'DataFrame.Internal.DataFrame.DataFrame' を直接返す。
+--
+-- - CSV / TSV: Hackage の 'DX.readCsv' / 'DX.readTsv' に委譲 (型推論強化、
+--   欠損ビットマップ対応)。
+-- - SSV: Hackage に専用ローダが無いため cassava で読みつつ、各列を
+--   'DX.fromList' で 'DX.Column' 化、'DX.insertColumn' で組み立てる。
 module DataIO.CSV
   ( loadCSV
   , loadTSV
@@ -7,8 +14,11 @@ module DataIO.CSV
   , ParseError
   ) where
 
-import DataFrame.Core
+import qualified DataFrame                    as DX
+import qualified DataFrame.Internal.DataFrame as DXD
 
+import Control.Exception (SomeException, try)
+import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Lazy as BL
 import Data.Char (ord)
 import Data.List (isSuffixOf)
@@ -22,47 +32,58 @@ import Text.Read (readMaybe)
 
 type ParseError = String
 
-data FileType = CSV | TSV | SSV
+-- ---------------------------------------------------------------------------
+-- CSV / TSV: Hackage に直接委譲
+-- ---------------------------------------------------------------------------
 
-decodeOpts :: FileType -> DecodeOptions
-decodeOpts fileType = defaultDecodeOptions { decDelimiter = fromIntegral (ord delim)}
-  where
-    delim = case fileType of
-      CSV -> ','
-      TSV -> '\t'
-      SSV -> ' '
+loadCSV :: FilePath -> IO (Either ParseError DXD.DataFrame)
+loadCSV = loadHackage DX.readCsv
 
-loadFileType :: FileType -> FilePath -> IO (Either ParseError DataFrame)
-loadFileType fileType path = do
+loadTSV :: FilePath -> IO (Either ParseError DXD.DataFrame)
+loadTSV = loadHackage DX.readTsv
+
+loadHackage :: (FilePath -> IO DXD.DataFrame)
+            -> FilePath -> IO (Either ParseError DXD.DataFrame)
+loadHackage reader path = do
+  r <- try (reader path) :: IO (Either SomeException DXD.DataFrame)
+  return $ case r of
+    Left  e  -> Left ("CSV/TSV loader failed: " ++ show e)
+    Right df -> Right df
+
+-- ---------------------------------------------------------------------------
+-- SSV: cassava で読み、Hackage 'DataFrame' に詰め替える
+-- ---------------------------------------------------------------------------
+
+loadSSV :: FilePath -> IO (Either ParseError DXD.DataFrame)
+loadSSV path = do
   content <- BL.readFile path
-  let opts = decodeOpts fileType
+  let opts = defaultDecodeOptions { decDelimiter = fromIntegral (ord ' ') }
   case decodeByNameWith opts content of
     Left err          -> return (Left err)
-    Right (hdr, rows) -> return (Right (toDataFrame hdr rows))
+    Right (hdr, rows) -> return (Right (toHackageDF hdr rows))
 
-loadCSV, loadTSV, loadSSV :: FilePath -> IO (Either ParseError DataFrame)
-loadCSV = loadFileType CSV
-loadTSV = loadFileType TSV
-loadSSV = loadFileType SSV
+toHackageDF :: Header -> V.Vector NamedRecord -> DXD.DataFrame
+toHackageDF hdr rows =
+  foldl insert DX.empty
+    [ (TE.decodeUtf8 key, classifyCells key rows) | key <- V.toList hdr ]
+  where
+    insert df (name, col) = DX.insertColumn name col df
 
-loadAuto :: FilePath -> IO (Either ParseError DataFrame)
+-- | 列の値を全て読み 'Double' として parse できれば数値列、そうでなければ Text 列。
+classifyCells :: BS.ByteString -> V.Vector NamedRecord -> DX.Column
+classifyCells key rows =
+  let cells = V.map (TE.decodeUtf8 . HM.lookupDefault "" key) rows
+      texts = V.toList cells
+  in case mapM (readMaybe . T.unpack) texts of
+       Just nums -> DX.fromList (nums :: [Double])
+       Nothing   -> DX.fromList (texts :: [Text])
+
+-- ---------------------------------------------------------------------------
+-- 拡張子による自動振り分け
+-- ---------------------------------------------------------------------------
+
+loadAuto :: FilePath -> IO (Either ParseError DXD.DataFrame)
 loadAuto path
   | ".tsv" `isSuffixOf` path = loadTSV path
   | ".ssv" `isSuffixOf` path = loadSSV path
-  | otherwise                 = loadCSV path
-
-toDataFrame :: Header -> V.Vector NamedRecord -> DataFrame
-toDataFrame hdr rows =
-  mkDataFrame
-    [ (colName, classifyColumn colName rows)
-    | key <- V.toList hdr
-    , let colName = TE.decodeUtf8 key
-    ]
-
-classifyColumn :: Text -> V.Vector NamedRecord -> Column
-classifyColumn col rows =
-  let bsKey = TE.encodeUtf8 col
-      vals   = V.map (TE.decodeUtf8 . HM.lookupDefault "" bsKey) rows
-  in case V.mapM (readMaybe . T.unpack) vals of
-       Just nums -> NumericCol nums
-       Nothing   -> TextCol vals
+  | otherwise                = loadCSV path

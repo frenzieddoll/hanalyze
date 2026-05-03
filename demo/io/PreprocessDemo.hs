@@ -13,7 +13,7 @@ import qualified Data.Text as T
 
 import qualified DataFrame                    as DX
 import qualified DataFrame.Internal.DataFrame as DXD
-import DataIO.External    (loadCsvX)
+import DataIO.CSV         (loadCSV)
 import DataIO.Preprocess
 
 import System.IO          (hPutStrLn, stderr)
@@ -38,7 +38,7 @@ main = do
   let path = "/tmp/preprocess_demo.csv"
   writeFile path testCSV
 
-  result <- loadCsvX path
+  result <- loadCSV path
   case result of
     Left err -> do
       hPutStrLn stderr ("Parse error: " ++ err)
