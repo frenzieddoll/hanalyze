@@ -207,8 +207,11 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | Use case | Module | Key functions |
 |---|---|---|
 | CSV / TSV / SSV (cassava) | `DataIO.CSV` | `loadAuto`, `loadCSV`, `loadTSV` (returns Hackage `DataFrame` directly) |
+| Defensive CSV loader | `DataIO.CSV` | `loadAutoSafe`, `loadAutoSafeWith`, `LoadOpts` (--no-header / --skip / --comment / --strict) |
 | Parquet / JSON | `DataIO.External` | `loadParquet`, `loadJSON` |
-| DataFrame → vector extraction | `DataIO.Convert` | `getDoubleVec`, `getTextVec` |
+| DataFrame → vector extraction | `DataIO.Convert` | `getDoubleVec`, `getTextVec`, `getMaybeTextVec` |
+| Structured log | `DataIO.Log` | `LogEntry`, `LogReport`, `printLogReport` |
+| Health checks (W001..W008) | `DataIO.Health` | `inspectDataFrame`, `inspectWithPreview` |
 | Imputation / filter / derived columns | `DataIO.Preprocess` | `imputeMean`, `imputeMedian`, `dropMissingRows`, `filterRowsByNumeric`, `deriveNumeric`, `mapNumeric` |
 | groupBy / aggregate | `DataIO.Preprocess` | `groupByMean`, `groupBySum`, `groupByMin`, `groupByMax`, `groupByMedian`, `groupByCount`, `groupByAggregate` |
 

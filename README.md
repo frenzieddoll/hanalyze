@@ -74,6 +74,28 @@ let df1          = imputeMean "score" df0          -- mean-fill missing values
     Just summary = groupByMean "category" "score" df2  -- per-group mean
 ```
 
+### Reading dirty CSV (Phase A)
+Detects messy real-world CSV problems automatically — missing headers, comment
+preambles, duplicate column names, mixed NA strings, delimiter mismatches,
+currency / unit-suffixed values, etc. — and lets you repair them with `LoadOpts`.
+```haskell
+import DataIO.CSV (loadAutoSafeWith, defaultLoadOpts, LoadOpts (..))
+import qualified DataIO.Log as Log
+
+Right (df, lg) <- loadAutoSafeWith
+                    (defaultLoadOpts { loSkip = 3, loNoHeader = True })
+                    "raw_export.csv"
+Log.printLogReport lg     -- prints W001..W008 / I010..I012 entries
+```
+Same flags are wired into every CLI subcommand:
+```
+hanalyze info     data/dirty/02_no_header.csv --no-header
+hanalyze regress  data/dirty/03_preamble.csv x y LM --skip 3
+hanalyze regress  data/raw.csv x y LM --strict   # fail when any Warn fires
+```
+19 typical fixtures live in `data/dirty/`; run `cabal run dirty-data-demo` to see
+each warning code and its repair option in one place.
+
 ### Design of Experiments
 ```haskell
 import Design.Factorial (twoLevelFactorial)
@@ -153,6 +175,12 @@ A free-monad DSL from which **four interpretations** (structural inspection / lo
 |---|---|
 | [Visualization overview](docs/visualization/01-visualization.md) | Report / Bar / Histogram / PNG/SVG output |
 | [HTML report builder](docs/visualization/02-report-builder.md) | Viz.ReportBuilder + Reportable typeclass usage (★ unified report API, going-forward standard) |
+
+### 5. Data I/O — `docs/io/`
+
+| Page | Contents |
+|---|---|
+| [Dirty data reading guide](docs/io/01-dirty-data.ja.md) | W001..W008 / LoadOpts / 19 fixtures / CLI repair examples (Phase A, ja-only for now) |
 
 ---
 
@@ -485,10 +513,14 @@ Add `hanalyze` to the `build-depends` field of `hanalyze.cabal`.
 
 ```
 DataIO/
-  CSV.hs           -- cassava-based CSV/TSV/SSV loader (loadAuto, returns Hackage DataFrame)
+  CSV.hs           -- standard + defensive loaders (loadAuto / loadAutoSafe / loadAutoSafeWith)
+                   -- LoadOpts (--no-header / --skip / --comment / --strict) supported
   External.hs      -- Parquet / JSON loaders backed by Hackage `dataframe`
   Convert.hs       -- helpers to extract V.Vector Double / Text from a DataFrame
+                   -- (deepseq-based exception capture for Hackage internals)
   Preprocess.hs    -- missing-value imputation / filter / derived columns / column selection / groupBy
+  Log.hs           -- structured log (Severity / LogEntry / LogReport / Loaded)
+  Health.hs        -- health checks (W001 missing-header ... W008 currency, 9 codes)
 
 Stat/
   Distribution.hs  -- probability distributions (Normal / Gamma / Beta / ...)
