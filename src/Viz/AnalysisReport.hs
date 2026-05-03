@@ -52,7 +52,9 @@ import Numeric (showFFloat)
 import qualified Data.Vector as V
 import qualified Numeric.LinearAlgebra as LA
 
-import DataFrame.Core
+import qualified DataFrame                    as DX
+import qualified DataFrame.Internal.DataFrame as DXD
+import DataIO.Convert (getDoubleVec, getTextVec)
 import MCMC.Core    (Chain, chainSamples, chainAccepted, chainTotal)
 import Model.Core   (FitResult (..), coeffList, fittedList,
                      residualsV, rSquared1)
@@ -222,7 +224,7 @@ data NamedPlot = NamedPlot
 writeAnalysisReport
   :: FilePath
   -> AnalysisReportConfig
-  -> DataFrame
+  -> DXD.DataFrame
   -> [Text]
   -> Text
   -> ModelFit
@@ -261,7 +263,7 @@ writeAnalysisReportPlots prefix fmt plots = do
 -- HTML builder
 -- ---------------------------------------------------------------------------
 
-buildHtml :: AnalysisReportConfig -> DataFrame -> [Text] -> Text -> ModelFit -> [NamedPlot] -> Text
+buildHtml :: AnalysisReportConfig -> DXD.DataFrame -> [Text] -> Text -> ModelFit -> [NamedPlot] -> Text
 buildHtml cfg df xCols yCol fit plots = T.unlines $
   [ "<!DOCTYPE html>"
   , "<html lang=\"ja\">"
@@ -344,12 +346,12 @@ isHBMFit _          = False
 -- Section 1: Data summary with histograms
 -- ---------------------------------------------------------------------------
 
-dataSummarySection :: DataFrame -> [Text] -> Text -> Text
+dataSummarySection :: DXD.DataFrame -> [Text] -> Text -> Text
 dataSummarySection df xCols yCol = T.unlines $
   [ "<section id=\"sec-data\">"
   , "  <h2><span class=\"sec-icon\">&#128202;</span> 1. データの特性</h2>"
   , "  <div class=\"stat-grid\" style=\"margin-bottom:20px\">"
-  , statBox "N (サンプル数)" (T.pack (show (numRows df))) False
+  , statBox "N (サンプル数)" (T.pack (show ((fst (DX.dimensions df))))) False
   , "  </div>"
   , "  <div class=\"col-cards\">"
   ] ++
@@ -359,9 +361,9 @@ dataSummarySection df xCols yCol = T.unlines $
   , "</section>"
   ]
 
-colCard :: DataFrame -> Text -> Text -> [Text]
+colCard :: DXD.DataFrame -> Text -> Text -> [Text]
 colCard df role col =
-  case getNumeric col df of
+  case getDoubleVec col df of
     Nothing -> []
     Just v  ->
       let sorted  = sort (V.toList v)
@@ -716,14 +718,14 @@ plotDiv (i, np) =
 -- Section 4: Interactive prediction
 -- ---------------------------------------------------------------------------
 
-predictionSection :: DataFrame -> [Text] -> Text -> ModelFit -> [Text]
+predictionSection :: DXD.DataFrame -> [Text] -> Text -> ModelFit -> [Text]
 predictionSection _ _ _ NoRegFit = []
 predictionSection _ _ _ (GPFit gf) = gpPredictionSection gf
 predictionSection df xCols yCol fit =
   let -- データ範囲を ±50% 拡張してスライダーに使う
       xRanges = [ (col, mn, mx, smin, smax)
                 | col <- xCols
-                , Just v <- [getNumeric col df]
+                , Just v <- [getDoubleVec col df]
                 , let mn   = V.minimum v
                 , let mx   = V.maximum v
                 , let ext  = max 1e-8 (mx - mn) * 0.5
@@ -1017,7 +1019,7 @@ embedScript plots = T.unlines
 -- JavaScript: column raw data (for histogram rendering)
 -- ---------------------------------------------------------------------------
 
-columnDataJS :: DataFrame -> [Text] -> Text -> Text
+columnDataJS :: DXD.DataFrame -> [Text] -> Text -> Text
 columnDataJS df xCols yCol = T.unlines
   [ "const columnData = {" <> entries <> "};"
   , "const xColNames  = " <> jsStrArray xCols <> ";"
@@ -1025,7 +1027,7 @@ columnDataJS df xCols yCol = T.unlines
   ]
   where
     allCols = xCols ++ [yCol]
-    entry c = case getNumeric c df of
+    entry c = case getDoubleVec c df of
       Nothing -> ""
       Just v  -> jsStr c <> ": " <> jsDoubleArray (V.toList v)
     entries = T.intercalate "," (filter (not . T.null) (map entry allCols))
@@ -1084,7 +1086,7 @@ histogramInitJS cols = T.unlines $
 -- JavaScript: interactive prediction chart spec
 -- ---------------------------------------------------------------------------
 
-predChartSpecJS :: ModelFit -> [Text] -> Text -> DataFrame -> Text
+predChartSpecJS :: ModelFit -> [Text] -> Text -> DXD.DataFrame -> Text
 predChartSpecJS (GPFit gf) _ _ _ =
   -- ベストカーネルの曲線でチャートを構築
   case gfKernelFits gf of
@@ -1113,7 +1115,7 @@ predChartSpecJS (GPFit gf) _ _ _ =
 predChartSpecJS fit xCols yCol df =
   case (smoothDataFor fit, xCols) of
     (Just (xCol, sd), [_]) ->
-      case (getNumeric xCol df, getNumeric yCol df) of
+      case (getDoubleVec xCol df, getDoubleVec yCol df) of
         (Just xVec, Just yVec) ->
           let scatterData = jsonArr
                 [ "{\"x\":" <> fmtJS x <> ",\"y\":" <> fmtJS y <> "}"
@@ -1769,7 +1771,7 @@ data CompareEntry = CompareEntry
 writeComparisonReport
   :: FilePath
   -> AnalysisReportConfig
-  -> DataFrame
+  -> DXD.DataFrame
   -> [Text]              -- ^ x 列名 (典型的には 1 つ)
   -> Text                -- ^ y 列名
   -> [CompareEntry]
@@ -1778,7 +1780,7 @@ writeComparisonReport path cfg df xCols yCol entries =
   TIO.writeFile path (buildCompareHtml cfg df xCols yCol entries)
 
 buildCompareHtml
-  :: AnalysisReportConfig -> DataFrame -> [Text] -> Text
+  :: AnalysisReportConfig -> DXD.DataFrame -> [Text] -> Text
   -> [CompareEntry] -> Text
 buildCompareHtml cfg df xCols yCol entries = T.unlines $
   [ "<!DOCTYPE html>"
@@ -1994,15 +1996,15 @@ waicLooOf (MixFit gs) = gsModelSelect gs
 waicLooOf _           = Nothing
 
 -- | オーバーレイ用の Vega-Lite spec を組み立てる JS (data URL 経由)
-compareOverlayJS :: DataFrame -> [Text] -> Text -> [CompareEntry] -> Text
+compareOverlayJS :: DXD.DataFrame -> [Text] -> Text -> [CompareEntry] -> Text
 compareOverlayJS df xCols yCol entries
   | length xCols /= 1 = ""
   | otherwise =
       let xCol = head xCols
-          (xs, ys) = case (getNumeric xCol df, getNumeric yCol df) of
+          (xs, ys) = case (getDoubleVec xCol df, getDoubleVec yCol df) of
             (Just xv, Just yv) -> (V.toList xv, V.toList yv)
             _                  -> ([], [])
-          gs = case getText "group" df of
+          gs = case getTextVec "group" df of
                  Just gv -> map Just (V.toList gv)
                  Nothing -> map (const Nothing) xs
           dataPoints = T.intercalate "," $

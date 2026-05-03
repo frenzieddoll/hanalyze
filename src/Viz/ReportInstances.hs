@@ -42,7 +42,8 @@ import qualified Data.Vector as V
 import qualified Numeric.LinearAlgebra as LA
 import Text.Printf (printf)
 
-import DataFrame.Core (DataFrame, getNumeric)
+import qualified DataFrame.Internal.DataFrame as DXD
+import DataIO.Convert (getDoubleVec)
 import Model.Core      (FitResult, coeffList, fittedList, residualsV, rSquared1)
 import Model.LM        (SmoothFit (..))
 import Model.GLM       (Family (..), LinkFn (..))
@@ -75,9 +76,9 @@ xGridFromVec v
       in [ lo + fromIntegral i * (hi - lo) / 99 | i <- [0 .. 99 :: Int] ]
 
 -- | DataFrame から x 列 (1 つ) を numeric vector で取り出す。
-firstNumericVec :: [Text] -> DataFrame -> Maybe (V.Vector Double)
+firstNumericVec :: [Text] -> DXD.DataFrame -> Maybe (V.Vector Double)
 firstNumericVec []     _  = Nothing
-firstNumericVec (c:_)  df = getNumeric c df
+firstNumericVec (c:_)  df = getDoubleVec c df
 
 penaltyName :: Penalty -> Text
 penaltyName p = case p of
@@ -120,7 +121,7 @@ instance Reportable RegFit where
 
         -- 1 変数なら scatter + fit
         scatterSec = case (xCols, firstNumericVec xCols df,
-                           getNumeric yCol df) of
+                           getDoubleVec yCol df) of
           ([xc1], Just xVec, Just yVec) ->
             let grid = xGridFromVec xVec
                 gridMat = LA.fromColumns
@@ -149,7 +150,7 @@ instance Reportable RegFit where
 
 instance Reportable SplineFit where
   toReport _cfg df xCols yCol fit =
-    case (xCols, firstNumericVec xCols df, getNumeric yCol df) of
+    case (xCols, firstNumericVec xCols df, getDoubleVec yCol df) of
       ([xc], Just xVec, Just yVec) ->
         let kindLbl = splineKindName (sfKind fit)
             grid    = xGridFromVec xVec
@@ -181,7 +182,7 @@ instance Reportable SplineFit where
 
 instance Reportable KernelRidgeFit where
   toReport _cfg df xCols yCol fit =
-    case (xCols, firstNumericVec xCols df, getNumeric yCol df) of
+    case (xCols, firstNumericVec xCols df, getDoubleVec yCol df) of
       ([xc], Just xVec, Just yVec) ->
         let grid    = xGridFromVec xVec
             gridV   = V.fromList grid
@@ -212,7 +213,7 @@ instance Reportable KernelRidgeFit where
 
 instance Reportable RFFRidgeFit where
   toReport _cfg df xCols yCol fit =
-    case (xCols, firstNumericVec xCols df, getNumeric yCol df) of
+    case (xCols, firstNumericVec xCols df, getDoubleVec yCol df) of
       ([xc], Just xVec, Just yVec) ->
         let feats   = rffrFeatures fit
             grid    = xGridFromVec xVec
@@ -360,8 +361,8 @@ instance Reportable LMReport where
         p        = length beta
         (sigmaH, rmse, maxAbs) = residStats resid p
 
-        xVecs    = [ v | c <- xCols, Just v <- [getNumeric c df] ]
-        yVecMb   = getNumeric yCol df
+        xVecs    = [ v | c <- xCols, Just v <- [getDoubleVec c df] ]
+        yVecMb   = getDoubleVec yCol df
 
         smoothC  = smoothFitToCurve mSmooth
 
@@ -420,8 +421,8 @@ instance Reportable GLMReport where
         p        = length beta
         (sigmaH, rmse, maxAbs) = residStats resid p
 
-        xVecs    = [ v | c <- xCols, Just v <- [getNumeric c df] ]
-        yVecMb   = getNumeric yCol df
+        xVecs    = [ v | c <- xCols, Just v <- [getDoubleVec c df] ]
+        yVecMb   = getDoubleVec yCol df
 
         smoothC  = smoothFitToCurve mSmooth
 
@@ -516,7 +517,7 @@ instance Reportable QRFit where
             , ("RMSE",         T.pack (printf "%.4f" rmse))
             , ("最大絶対残差", T.pack (printf "%.4f" maxAbs))
             ]
-        scatterCard = case (xCols, firstNumericVec xCols df, getNumeric yCol df) of
+        scatterCard = case (xCols, firstNumericVec xCols df, getDoubleVec yCol df) of
           ([xc], Just xv, Just yv) ->
             -- 単変数: yHat を x ソート順で線として描く
             let pairs = zip (V.toList xv) fitted
@@ -566,7 +567,7 @@ instance Reportable GAMFit where
 
         -- 各特徴の partial effect: s_j(x_j) を smooth として可視化
         partialCards =
-          [ let mxVec = getNumeric x df
+          [ let mxVec = getDoubleVec x df
             in case mxVec of
                  Just xv ->
                    let xsRaw = V.toList xv
@@ -682,8 +683,8 @@ instance Reportable GLMMReport where
         blups    = V.toList (GLMM.glmmBLUPs  gr)
         blupRows = [ [g, T.pack (printf "%+.4f" u)] | (g, u) <- zip groups blups ]
 
-        xVecs    = [ v | c <- xCols, Just v <- [getNumeric c df] ]
-        yVecMb   = getNumeric yCol df
+        xVecs    = [ v | c <- xCols, Just v <- [getDoubleVec c df] ]
+        yVecMb   = getDoubleVec yCol df
 
         modelType = case fam of
           Gaussian -> "LME (linear mixed effects)"

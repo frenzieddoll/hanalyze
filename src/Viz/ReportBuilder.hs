@@ -97,7 +97,9 @@ import Numeric (showFFloat)
 import qualified Data.Vector as V
 import Text.Printf (printf)
 
-import DataFrame.Core
+import qualified DataFrame                    as DX
+import qualified DataFrame.Internal.DataFrame as DXD
+import DataIO.Convert (getDoubleVec, getTextVec)
 import MCMC.Core (Chain)
 import qualified Stat.MCMC as SM
 import Viz.Assets (vegaJS, vegaLiteJS, vegaEmbedJS)
@@ -150,7 +152,7 @@ data InteractiveModel = InteractiveModel
 -- | レポート 1 セクション。
 data ReportSection
   = -- | データ概要: 列ごとの型/N/min/max/mean/SD + ヒストグラム
-    SecDataOverview DataFrame [Text] Text
+    SecDataOverview DXD.DataFrame [Text] Text
     -- | モデル概要: タイトル / 数式 / 任意の追加 info-box [(label,value)] / Mermaid DAG
   | SecModelOverview Text Text [(Text, Text)] (Maybe Text)
     -- | 係数表: ラベル/値 + オプションの (R² ラベル, 値)
@@ -192,7 +194,7 @@ data ReportSection
 -- ビルダ
 -- ---------------------------------------------------------------------------
 
-secDataOverview :: DataFrame -> [Text] -> Text -> ReportSection
+secDataOverview :: DXD.DataFrame -> [Text] -> Text -> ReportSection
 secDataOverview = SecDataOverview
 
 -- | モデル概要 (追加 box なし)。LM 等。
@@ -577,7 +579,7 @@ secInteractiveMulti = SecInteractiveMulti
 -- 形で簡潔に書ける。各モデル型 (RegFit / SplineFit / RobustGPFit 等) は
 -- このクラスのインスタンスで既定セクションを定義する。
 class Reportable a where
-  toReport :: ReportConfig -> DataFrame -> [Text] -> Text -> a -> [ReportSection]
+  toReport :: ReportConfig -> DXD.DataFrame -> [Text] -> Text -> a -> [ReportSection]
 
 -- ---------------------------------------------------------------------------
 -- レンダリング
@@ -723,11 +725,22 @@ collapsibleSection sid title open inner =
 
 -- データ概要 -----------------------------------------------------------------
 
-renderDataOverview :: Text -> DataFrame -> [Text] -> Text -> Text
+-- | 列ごとの簡易分類: 数値列なら @NumCol [Double]@、Text 列なら @TxtCol [Text]@、
+-- 取得不能なら 'NoCol'。ReportBuilder 内部のみで使用。
+data ColView = NumCol [Double] | TxtCol [Text] | NoCol
+
+classifyCol :: Text -> DXD.DataFrame -> ColView
+classifyCol c df = case getDoubleVec c df of
+  Just v  -> NumCol (V.toList v)
+  Nothing -> case getTextVec c df of
+    Just v  -> TxtCol (V.toList v)
+    Nothing -> NoCol
+
+renderDataOverview :: Text -> DXD.DataFrame -> [Text] -> Text -> Text
 renderDataOverview sid df xCols yCol =
   let allCols  = xCols ++ [yCol]
-      relevant = [ (i, c, getColumn c df) | (i, c) <- zip [0::Int ..] allCols ]
-      n        = numRows df
+      relevant = [ (i, c, classifyCol c df) | (i, c) <- zip [0::Int ..] allCols ]
+      (n, _)   = DX.dimensions df
       header   =
         T.concat
           [ "<tr>"
@@ -747,7 +760,7 @@ renderDataOverview sid df xCols yCol =
         [ "  <div class=\"hist-card\"><div class=\"hist-title\">" <> c
           <> "</div><div class=\"vl-wrap\"><div id=\"hist_" <> sid
           <> "_" <> T.pack (show i) <> "\"></div></div></div>"
-        | (i, c, Just (NumericCol _)) <- relevant ]
+        | (i, c, NumCol _) <- relevant ]
       title = "<span class=\"sec-icon\">&#128202;</span> データの特性"
       body  = T.unlines
         [ "<p class=\"sec-desc\">" <> summary <> "</p>"
@@ -763,12 +776,11 @@ renderDataOverview sid df xCols yCol =
         ]
   in collapsibleSection sid title True body
   where
-    renderColRow (_, c, Just (NumericCol v)) =
-      let xs = V.toList v
-          m  = V.length v
+    renderColRow (_, c, NumCol xs) =
+      let m  = length xs
           ss = sort xs
-          mn = if m == 0 then 0 else V.minimum v
-          mx = if m == 0 then 0 else V.maximum v
+          mn = if m == 0 then 0 else minimum xs
+          mx = if m == 0 then 0 else maximum xs
           mean = if m == 0 then 0 else sum xs / fromIntegral m
           q1   = if m == 0 then 0 else ss !! (m `div` 4)
           med  = if m == 0 then 0 else ss !! (m `div` 2)
@@ -790,9 +802,8 @@ renderDataOverview sid df xCols yCol =
            , td (showD4 mean), td (showD4 sdv)
            , td (showD4 skew), td (showD4 kurt)
            ] <> "</tr>"
-    renderColRow (_, c, Just (TextCol v)) =
-      let xs = V.toList v
-          m  = length xs
+    renderColRow (_, c, TxtCol xs) =
+      let m  = length xs
           uniq = length (unique xs)
       in "<tr>" <> T.intercalate ""
            [ td c, td "text", td (T.pack (show m))
@@ -801,16 +812,16 @@ renderDataOverview sid df xCols yCol =
            , td ("unique=" <> T.pack (show uniq))
            , td "—"
            ] <> "</tr>"
-    renderColRow (_, c, Nothing) =
+    renderColRow (_, c, NoCol) =
       "<tr><td>" <> c <> "</td><td colspan=12>(missing)</td></tr>"
     td x = "<td>" <> x <> "</td>"
     unique = foldr (\x acc -> if x `elem` acc then acc else x : acc) []
 
 -- | データ概要セクションのスクリプト: 各 numeric 列のヒストグラムを embed。
-dataOverviewScript :: Text -> DataFrame -> [Text] -> Text -> Text
+dataOverviewScript :: Text -> DXD.DataFrame -> [Text] -> Text -> Text
 dataOverviewScript sid df xCols yCol =
   let allCols = xCols ++ [yCol]
-      pairs = [ (i, c, getNumeric c df)
+      pairs = [ (i, c, getDoubleVec c df)
               | (i, c) <- zip [0::Int ..] allCols ]
       embed i v =
         let json = decodeUtf8 . toStrict . encode . fromVL $

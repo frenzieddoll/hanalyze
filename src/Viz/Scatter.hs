@@ -16,7 +16,8 @@ module Viz.Scatter
   , predictedVsActualFile
   ) where
 
-import DataFrame.Core
+import qualified DataFrame.Internal.DataFrame as DXD
+import DataIO.Convert (getDoubleVec)
 import Model.Core  (FitResult, fittedList)
 import Model.LM    (CIBand (..), SmoothFit (..))
 import Viz.Core    (PlotConfig (..), OutputFormat, writeSpec)
@@ -28,7 +29,7 @@ import qualified Data.Vector as V
 import Graphics.Vega.VegaLite
 
 -- | Build a Vega-Lite scatter plot spec from two numeric columns.
-scatterPlot :: PlotConfig -> DataFrame -> Text -> Text -> VegaLite
+scatterPlot :: PlotConfig -> DXD.DataFrame -> Text -> Text -> VegaLite
 scatterPlot cfg df xCol yCol =
   toVegaLite
     [ title (plotTitle cfg) []
@@ -39,8 +40,8 @@ scatterPlot cfg df xCol yCol =
     , height (plotHeight cfg)
     ]
   where
-    xVals   = maybe [] V.toList (getNumeric xCol df)
-    yVals   = maybe [] V.toList (getNumeric yCol df)
+    xVals   = maybe [] V.toList (getDoubleVec xCol df)
+    yVals   = maybe [] V.toList (getDoubleVec yCol df)
     dataSpec = dataFromColumns []
                . dataColumn xCol (Numbers xVals)
                . dataColumn yCol (Numbers yVals)
@@ -50,12 +51,12 @@ scatterPlot cfg df xCol yCol =
                . position Y [PName yCol, PmType Quantitative, PAxis [AxTitle yCol]]
                $ []
 
-scatterPlotFile :: OutputFormat -> FilePath -> PlotConfig -> DataFrame -> Text -> Text -> IO ()
+scatterPlotFile :: OutputFormat -> FilePath -> PlotConfig -> DXD.DataFrame -> Text -> Text -> IO ()
 scatterPlotFile fmt path cfg df xCol yCol =
   writeSpec fmt path (scatterPlot cfg df xCol yCol)
 
 -- | Scatter plot with a fitted regression line overlaid.
-scatterWithLM :: PlotConfig -> DataFrame -> Text -> Text -> FitResult -> VegaLite
+scatterWithLM :: PlotConfig -> DXD.DataFrame -> Text -> Text -> FitResult -> VegaLite
 scatterWithLM cfg df xCol yCol res =
   toVegaLite
     [ title (plotTitle cfg) []
@@ -64,8 +65,8 @@ scatterWithLM cfg df xCol yCol res =
     , height (plotHeight cfg)
     ]
   where
-    xVals  = maybe [] V.toList (getNumeric xCol df)
-    yVals  = maybe [] V.toList (getNumeric yCol df)
+    xVals  = maybe [] V.toList (getDoubleVec xCol df)
+    yVals  = maybe [] V.toList (getDoubleVec yCol df)
     pairs  = sortBy (comparing fst) (zip xVals (fittedList res))
     xLine  = map fst pairs
     yLine  = map snd pairs
@@ -94,12 +95,12 @@ scatterWithLM cfg df xCol yCol res =
           $ []
       ]
 
-scatterWithLMFile :: OutputFormat -> FilePath -> PlotConfig -> DataFrame -> Text -> Text -> FitResult -> IO ()
+scatterWithLMFile :: OutputFormat -> FilePath -> PlotConfig -> DXD.DataFrame -> Text -> Text -> FitResult -> IO ()
 scatterWithLMFile fmt path cfg df xCol yCol res =
   writeSpec fmt path (scatterWithLM cfg df xCol yCol res)
 
 -- | Scatter plot with regression line and confidence band (training-point CI).
-scatterWithLMCI :: PlotConfig -> DataFrame -> Text -> Text -> FitResult -> CIBand -> VegaLite
+scatterWithLMCI :: PlotConfig -> DXD.DataFrame -> Text -> Text -> FitResult -> CIBand -> VegaLite
 scatterWithLMCI cfg df xCol yCol res ci =
   toVegaLite
     [ title (plotTitle cfg) []
@@ -108,8 +109,8 @@ scatterWithLMCI cfg df xCol yCol res ci =
     , height (plotHeight cfg)
     ]
   where
-    xVals = maybe [] V.toList (getNumeric xCol df)
-    yVals = maybe [] V.toList (getNumeric yCol df)
+    xVals = maybe [] V.toList (getDoubleVec xCol df)
+    yVals = maybe [] V.toList (getDoubleVec yCol df)
 
     sorted4 = sortBy (comparing (\(x,_,_,_) -> x))
                 [ (x, f, l, u)
@@ -158,14 +159,14 @@ scatterWithLMCI cfg df xCol yCol res ci =
           $ []
       ]
 
-scatterWithLMCIFile :: OutputFormat -> FilePath -> PlotConfig -> DataFrame -> Text -> Text -> FitResult -> CIBand -> IO ()
+scatterWithLMCIFile :: OutputFormat -> FilePath -> PlotConfig -> DXD.DataFrame -> Text -> Text -> FitResult -> CIBand -> IO ()
 scatterWithLMCIFile fmt path cfg df xCol yCol res ci =
   writeSpec fmt path (scatterWithLMCI cfg df xCol yCol res ci)
 
 -- | Scatter plot with smooth fitted curve.
 -- Renders a CI/PI band when sfHasBand is True.
 -- Shows an optional equation subtitle under the chart title.
-scatterWithSmooth :: PlotConfig -> Maybe Text -> DataFrame -> Text -> Text -> SmoothFit -> VegaLite
+scatterWithSmooth :: PlotConfig -> Maybe Text -> DXD.DataFrame -> Text -> Text -> SmoothFit -> VegaLite
 scatterWithSmooth cfg mEquation df xCol yCol sf =
   toVegaLite
     [ title (plotTitle cfg) titleOpts
@@ -174,8 +175,8 @@ scatterWithSmooth cfg mEquation df xCol yCol sf =
     , height (plotHeight cfg)
     ]
   where
-    xVals = maybe [] V.toList (getNumeric xCol df)
-    yVals = maybe [] V.toList (getNumeric yCol df)
+    xVals = maybe [] V.toList (getDoubleVec xCol df)
+    yVals = maybe [] V.toList (getDoubleVec yCol df)
 
     titleOpts = case mEquation of
       Just eq -> [TSubtitle eq, TSubtitleFontSize 11, TSubtitleColor "#555"]
@@ -221,12 +222,12 @@ scatterWithSmooth cfg mEquation df xCol yCol sf =
 
     layers = (if sfHasBand sf then [ciLayer] else []) ++ [lineLayer, pointLayer]
 
-scatterWithSmoothFile :: OutputFormat -> FilePath -> PlotConfig -> Maybe Text -> DataFrame -> Text -> Text -> SmoothFit -> IO ()
+scatterWithSmoothFile :: OutputFormat -> FilePath -> PlotConfig -> Maybe Text -> DXD.DataFrame -> Text -> Text -> SmoothFit -> IO ()
 scatterWithSmoothFile fmt path cfg mEq df xCol yCol sf =
   writeSpec fmt path (scatterWithSmooth cfg mEq df xCol yCol sf)
 
 -- | Scatter plot with multiple y columns as color-coded series (no regression).
-scatterMultiY :: PlotConfig -> DataFrame -> Text -> [Text] -> VegaLite
+scatterMultiY :: PlotConfig -> DXD.DataFrame -> Text -> [Text] -> VegaLite
 scatterMultiY cfg df xCol yCols =
   toVegaLite
     [ title (plotTitle cfg) []
@@ -244,8 +245,8 @@ scatterMultiY cfg df xCol yCols =
     , height (plotHeight cfg)
     ]
   where
-    xVals = maybe [] V.toList (getNumeric xCol df)
-    yData = foldr (\col f -> dataColumn col (Numbers (maybe [] V.toList (getNumeric col df))) . f)
+    xVals = maybe [] V.toList (getDoubleVec xCol df)
+    yData = foldr (\col f -> dataColumn col (Numbers (maybe [] V.toList (getDoubleVec col df))) . f)
                   id yCols
 
     dataSpec = dataFromColumns []
@@ -253,7 +254,7 @@ scatterMultiY cfg df xCol yCols =
                . yData
                $ []
 
-scatterMultiYFile :: OutputFormat -> FilePath -> PlotConfig -> DataFrame -> Text -> [Text] -> IO ()
+scatterMultiYFile :: OutputFormat -> FilePath -> PlotConfig -> DXD.DataFrame -> Text -> [Text] -> IO ()
 scatterMultiYFile fmt path cfg df xCol yCols =
   writeSpec fmt path (scatterMultiY cfg df xCol yCols)
 
