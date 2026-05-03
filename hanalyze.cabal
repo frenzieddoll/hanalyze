@@ -19,6 +19,7 @@ library
     DataIO.Preprocess
     DataIO.External
     DataIO.Convert
+    DataIO.Log
     Viz.Core
     Viz.Scatter
     Viz.Histogram

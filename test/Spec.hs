@@ -12,6 +12,7 @@ import qualified DataFrame                    as DX
 import qualified Design.Orthogonal as OA
 import qualified Design.Taguchi as TG
 import qualified DataIO.Preprocess as Pp
+import qualified DataIO.Log        as Log
 import qualified Model.GP        as GP
 import qualified Model.GPRobust  as GPR
 import qualified Model.RFF       as RFF
@@ -386,3 +387,35 @@ main = hspec $ do
           hp = GP.GPParams 1.0 1.0 0.1 1.0
           fit = GPR.fitGPRobust GP.RBF hp (GPR.RStudentT 4 0.5) xs ys
       GPR.rgpIters fit `shouldSatisfy` (\n -> n > 0 && n <= 50)
+
+  describe "DataIO.Log" $ do
+    it "Monoid: noLog <> r == r" $ do
+      let r = Log.logReport (Log.mkWarn "W001" "msg" Nothing)
+      Log.entries (Log.noLog <> r) `shouldBe` Log.entries r
+      Log.entries (r <> Log.noLog) `shouldBe` Log.entries r
+    it "addEntry appends" $ do
+      let r0 = Log.logReport (Log.mkInfo "I001" "first" Nothing)
+          r1 = Log.addEntry (Log.mkWarn "W001" "second" (Just "ヒント")) r0
+      length (Log.entries r1) `shouldBe` 2
+      Log.lgSev  (last (Log.entries r1)) `shouldBe` Log.Warn
+      Log.lgHint (last (Log.entries r1)) `shouldBe` Just "ヒント"
+    it "hasErrors / hasWarnings detect severity" $ do
+      let rW = Log.logReport (Log.mkWarn "W"  "w"  Nothing)
+          rE = Log.logReport (Log.mkErr  "E"  "e"  Nothing)
+      Log.hasWarnings rW         `shouldBe` True
+      Log.hasErrors   rW         `shouldBe` False
+      Log.hasErrors   (rW <> rE) `shouldBe` True
+    it "severityCount counts each level" $ do
+      let r = Log.logReport (Log.mkInfo "I" "i" Nothing)
+            <> Log.logReport (Log.mkWarn "W1" "w" Nothing)
+            <> Log.logReport (Log.mkWarn "W2" "w" Nothing)
+            <> Log.logReport (Log.mkErr  "E"  "e" Nothing)
+      Log.severityCount Log.Info r `shouldBe` 1
+      Log.severityCount Log.Warn r `shouldBe` 2
+      Log.severityCount Log.Err  r `shouldBe` 1
+    it "prettyEntry: includes code, message, hint" $ do
+      let s = Log.prettyEntry (Log.mkWarn "W042" "壊れている" (Just "助言"))
+      T.isInfixOf "[WARN]" s   `shouldBe` True
+      T.isInfixOf "W042"   s   `shouldBe` True
+      T.isInfixOf "壊れている" s `shouldBe` True
+      T.isInfixOf "助言"   s   `shouldBe` True
