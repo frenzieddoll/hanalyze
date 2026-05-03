@@ -122,6 +122,20 @@ hanalyze kernel data/io/melted_sample.csv "x1 t" y --method rff \
 # → R²=1.000, interactive scatter (33 KB) + composite report (877 KB)
 ```
 
+Adding `--interactive` produces a JS-driven interactive prediction: drag the
+side-axis sliders and the curve updates in real time. Useful when you want to
+explore "how does the curve change as I tweak conditions?" — e.g. an ion
+implantation potential depth profile across energy / dose:
+```
+cabal run potential-gen
+hanalyze kernel data/io/potential_long.csv "energy dose z" y --method rff \
+    --features 400 --bandwidth 30 --lambda 0.01 \
+    --group name --xaxis z \
+    --out trash/potential_plot.html --report trash/potential_report.html \
+    --interactive
+# → 920 KB report: drag energy / dose sliders, the z-vs-y curve updates live.
+```
+
 ### Design of Experiments
 ```haskell
 import Design.Factorial (twoLevelFactorial)

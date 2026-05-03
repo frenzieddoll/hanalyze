@@ -181,7 +181,55 @@ main = do
     (RB.toReport cfg df ["x1", "t"] "y" rep)
 ```
 
-### 多変量モデル対応状況
+### インタラクティブ予測 (--interactive)
+
+`--interactive` を `--report` と一緒に渡すと、HTML 内の **副軸スライダ**
+(横軸 `--xaxis` で指定した列以外) を動かすと、ブラウザ JS 側で RFF 特徴量を
+再計算して予測曲線が即座に更新されます。RFF の重みと周波数を JSON で埋め込んで
+おき、`φ_j(x_new) = σ_f √(2/D) cos(ω_jᵀx_new + b_j)` を JavaScript で評価する
+仕組みです。
+
+例: 半導体イオン注入 (II) のポテンシャル深さ分布を、エネルギー / ドーズで
+スライドさせて曲線変化を見る。
+
+```bash
+# 6 条件のダミーデータを生成 (各条件で z グリッドが異なる、 SimRun 風)
+cabal run potential-gen   # → data/io/potential_long.csv
+
+# 横軸 z 固定、energy / dose スライダで予測曲線が動く
+hanalyze kernel data/io/potential_long.csv "energy dose z" y \
+    --method rff --features 400 --bandwidth 30 --lambda 0.01 \
+    --group name --xaxis z \
+    --out trash/potential_plot.html \
+    --report trash/potential_report.html \
+    --interactive
+```
+
+ブラウザで `potential_report.html` を開くと、**energy / dose のスライダ** が
+表示され、操作するたびに予測曲線がリアルタイムで再計算されます。観測点
+(各条件の sim 結果) は色分けで重ねて常時表示されます。
+
+> **z グリッドが条件ごとに違うデータの扱い**: `Model.RFF` の RBF カーネル
+> はもともと「z が近いと出力が近くなる」滑らかさ事前を持つので、long-form
+> にしてしまえば不揃いグリッドはそのまま受け入れられます。予測時は
+> mainAxis (z) に細かい等間隔グリッド (100 点) を使って曲線を描きます。
+
+### 「z が近いと y が近い」をより明示的にする回帰 (将来計画)
+
+現状の `rffRidgeMV` は **共通長さスケール ℓ** を使うため、scale 差の大きな
+特徴 (例: energy 50–200 keV、dose 0.5–2.0、z 0–200 nm) では、どれか 1 つの
+スケールに合わせると他がうまく学習されません。
+
+これを解決する方向性:
+
+| 案 | 概要 | 実装規模 |
+|---|---|---|
+| **A. ARD-RFF** (Automatic Relevance Determination) | ω_jk ~ N(0, 1/ℓ_k²) と次元ごと独立に長さスケールを持つ。`rffmvOmegas` を生成する際に列ごとの ℓ_k を指定 | 小 (`sampleRFFRBFMV` の引数を `[Double]` に変えるだけ) |
+| **B. 入力標準化 + 共通 ℓ** | 学習前に各列を mean-0/std-1 に正規化し、内部では共通 ℓ で学習 → 予測時に逆変換 | 中 |
+| **C. GP の多変量化** | `Model.GP` を多次元入力 (各次元独立 ℓ) に拡張。事後分散も得られる | 中〜大 |
+
+**推奨: A → B** の段階導入。A だけで多くのケースを救え、B は更に頑健。
+C は予測の不確実性が必要になったタイミングで。
 
 melt 後は通常の DataFrame なので原則どのモデルにも乗せられますが、複数
 説明変数 (例 `"x1 t"`) を CLI / Model API 両方で扱えるかは個別:

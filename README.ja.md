@@ -121,6 +121,19 @@ hanalyze kernel data/io/melted_sample.csv "x1 t" y --method rff \
 # → R²=1.000、対話散布図 33KB + 統合レポート 877KB
 ```
 
+`--interactive` を加えると、副軸スライダで予測曲線が JS によりリアルタイム
+更新される。半導体 II のポテンシャル深さ分布のように「条件を変えると曲線が
+どう変わるか」を見たい用途に向く:
+```
+cabal run potential-gen   # ダミー Sim データ生成 (data/io/potential_long.csv)
+hanalyze kernel data/io/potential_long.csv "energy dose z" y --method rff \
+    --features 400 --bandwidth 30 --lambda 0.01 \
+    --group name --xaxis z \
+    --out trash/potential_plot.html --report trash/potential_report.html \
+    --interactive
+# → energy / dose スライダで z-y 曲線が即時更新される 920KB のレポート
+```
+
 ### 実験計画法
 ```haskell
 import Design.Factorial (twoLevelFactorial)
