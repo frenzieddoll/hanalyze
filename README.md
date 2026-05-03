@@ -104,6 +104,24 @@ hanalyze clean data/dirty/16_dates_units.csv \
     --rule weight=StripUnits      # "5kg" / "5.2kg" → 5 / 5.2
 ```
 
+### Wide-form → long reshape + multivariate RFF Ridge
+For experimental data shaped "one row per condition, column names are levels,
+NA-sparse" (`data/io/wide_sample.csv`), `hanalyze melt` reshapes to long-form,
+and the column names (1..10) become a new explanatory variable t feeding into
+**multivariate RFF Ridge**. The fit captures the column-wise non-linear pattern
+in one model and produces an interactive plot (color-coded by `name`) overlaid
+with a per-group prediction curve.
+```
+hanalyze melt   data/io/wide_sample.csv --id name,x1,x2 \
+    --vars 1,2,3,4,5,6,7,8,9,10 --var t --value y \
+    --output data/io/melted_sample.csv
+hanalyze kernel data/io/melted_sample.csv "x1 t" y --method rff \
+    --features 200 --bandwidth 1.0 --lambda 0.001 \
+    --group name --xaxis t \
+    --out trash/rff_mv_plot.html --report trash/rff_mv_report.html
+# → R²=1.000, interactive scatter (33 KB) + composite report (877 KB)
+```
+
 ### Design of Experiments
 ```haskell
 import Design.Factorial (twoLevelFactorial)

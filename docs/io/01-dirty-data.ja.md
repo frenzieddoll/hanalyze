@@ -121,6 +121,83 @@ hanalyze info data/dirty/03_preamble.csv
 hanalyze info data/dirty/11_semicolon_eu.csv
 ```
 
+## Wide-form データの長尺化 (melt / pivot_longer)
+
+「1 行 1 水準・列名が水準 (時刻 / 位置 / index 等)・歯抜けセル」という形の
+CSV — 例えば `data/io/wide_sample.csv`:
+
+```
+name,x1,x2,1,2,3,4,5,6,7,8,9,10
+a,1,0,1,,3,,5,,7,,9,
+b,2,0,,4,,8,10,,14,,,20
+c,3,0,0.1,0.2,,0.4,,0.6,,0.8,,1
+d,4,0,,1,1.5,2,2.5,,,4,,5
+e,5,0,3,,9,12,,18,,,,30
+```
+
+をそのまま列ごとの y にすると「歯抜け」+ 「t 間の連続性が失われる」の二重で
+回帰に向きません。`DataIO.Preprocess.meltLonger` で long-form (tidy) に
+ほどけば、列名 (1〜10) がそのまま新しい説明変数 t になり、NA セルは
+「未観測サンプル」として自然に drop されます。
+
+### CLI 例
+
+```bash
+# wide → long
+hanalyze melt data/io/wide_sample.csv \
+    --id name,x1,x2 \
+    --vars 1,2,3,4,5,6,7,8,9,10 \
+    --var t --value y \
+    --output data/io/melted_sample.csv
+# → 27 行 × 5 列 (name, x1, x2, t, y)、NA は自動 drop
+
+# 多変量 RFF Ridge で「列に対して非線形」な関係を捉える
+hanalyze kernel data/io/melted_sample.csv "x1 t" y \
+    --method rff --features 200 --bandwidth 1.0 --lambda 0.001 \
+    --group name --xaxis t \
+    --out trash/rff_mv_plot.html \
+    --report trash/rff_mv_report.html
+# → R²=1.0000、横軸 t / 縦軸 y / 色 name の対話的散布図 + 予測曲線、
+#    + ReportBuilder 統合 HTML レポート
+```
+
+### ライブラリ例
+
+```haskell
+import qualified DataIO.Preprocess as Pp
+import qualified Model.RFF         as RFF
+import qualified Viz.ReportBuilder as RB
+import qualified Viz.ReportInstances as RI
+
+main = do
+  Right (df0, _) <- CSV.loadAutoSafe "data/io/wide_sample.csv"
+  let df = Pp.meltLonger ["name", "x1", "x2"]
+                         (map (T.pack . show) [1..10 :: Int])
+                         "t" "y" True df0
+  -- ... fit RFF ridge multivariate ...
+  let rep = RI.RFFMVReport fit "name" "t"
+      cfg = RB.defaultReportConfig "Multivariate RFF Ridge"
+  RB.renderReport "out.html" cfg
+    (RB.toReport cfg df ["x1", "t"] "y" rep)
+```
+
+### 多変量モデル対応状況
+
+melt 後は通常の DataFrame なので原則どのモデルにも乗せられますが、複数
+説明変数 (例 `"x1 t"`) を CLI / Model API 両方で扱えるかは個別:
+
+| 多変量 OK | 1 変数のみ |
+|---|---|
+| LM / GLM / GLMM | GP (`Model.GP`) |
+| Ridge / Lasso / ElasticNet | Spline (`Model.Spline`) |
+| HBM | Kernel NW / KR (`Model.Kernel` の 1D 版) |
+| GAM (各 feature を独立 spline で) | |
+| Random Forest | |
+| Quantile | |
+| **RFF (`rffRidgeMV`、`hanalyze kernel ... --method rff`)** | |
+
+GP / Spline / Kernel NW・KR の多変量化は将来の拡張候補。
+
 ## Phase C: クリーニング DSL (`DataIO.Clean`、完了)
 
 通貨記号 / 桁区切り / 単位 / decimal point 違いなど、Phase A の Health

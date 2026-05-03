@@ -105,6 +105,22 @@ hanalyze clean data/dirty/16_dates_units.csv \
     --rule weight=StripUnits      # "5kg" / "5.2kg" → 5 / 5.2
 ```
 
+### Wide-form → 長尺化 + 多変量 RFF Ridge
+「1 行 1 水準・列名が水準・歯抜け」な実験データ (`data/io/wide_sample.csv`)
+を **`hanalyze melt`** で long-form に展開し、列名 (1〜10) を新しい説明変数 t
+として **多変量 RFF Ridge** に乗せると、列に対して非線形な関係を 1 本のモデル
+で学習し、`name` で色分けした観測点 + 予測曲線を HTML レポートで出力できる。
+```
+hanalyze melt   data/io/wide_sample.csv --id name,x1,x2 \
+    --vars 1,2,3,4,5,6,7,8,9,10 --var t --value y \
+    --output data/io/melted_sample.csv
+hanalyze kernel data/io/melted_sample.csv "x1 t" y --method rff \
+    --features 200 --bandwidth 1.0 --lambda 0.001 \
+    --group name --xaxis t \
+    --out trash/rff_mv_plot.html --report trash/rff_mv_report.html
+# → R²=1.000、対話散布図 33KB + 統合レポート 877KB
+```
+
 ### 実験計画法
 ```haskell
 import Design.Factorial (twoLevelFactorial)
