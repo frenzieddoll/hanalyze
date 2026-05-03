@@ -128,6 +128,7 @@ auto-loadable via `secAppendixFromMd`.
 |---|---|
 | `secInteractiveLM title xc yc xs ys smooth (xMin, xMax)` | Single-variate. Sliding x re-renders predicted point with the supplied `SmoothCurve` (and band). Works for GP / HBM ribbon-style forecasts too. |
 | `secInteractiveMulti title im` | Multi-variate. `InteractiveModel` (intercept / β vector / link) → JS-evaluated `β₀ + Σ β_j x_j → invLink(.)` with sliders for each x_j and a primary-axis dropdown. CI band from σ_hat. |
+| `secInteractiveMultiOut title imo` | **True multi-output (1 input → q output curves)** (Phase M1-M8). One input slider recomputes all q predictions live in the browser and renders them as a curve via Vega-Lite. `InteractivePredictor = PredLinearMO \| PredKernelRBF1` switches between linear and RBF kernel-ridge predictors. Built with `mkInteractiveMOLinear` / `mkInteractiveMOKernelRBF`. See [io/02-multireg.md](../io/02-multireg.md). |
 
 ---
 

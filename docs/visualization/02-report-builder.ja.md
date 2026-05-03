@@ -255,6 +255,7 @@ main = do
 |---|---|
 | `secInteractiveLM title xc yc xs ys smooth (xMin, xMax)` | **単変数** 用。スライダーで x を変えるとグリッド線形補間で予測値 + 信頼帯を表示。GP/HBM のような非線形・MCMC 経由の予測曲線でも使える。 |
 | `secInteractiveMulti title im` | **多変量** 用。`InteractiveModel` (係数+リンク関数) を渡すと、左側に各 x_j の slider + 主軸 dropdown、右側に scatter + 予測曲線。slider 変化のたび JS で β₀ + Σβ_j x_j → invLink で y_hat 再計算 + scatter 再描画。CI は σ_hat ± 1.96 で帯描画。 |
+| `secInteractiveMultiOut title imo` | **真の多出力 (1 入力 → q 出力カーブ)** 用 (Phase M1-M8)。入力スライダ 1 本で全 q 個の予測値を JS が即時再計算 → Vega-Lite で予測曲線として描画。`InteractivePredictor = PredLinearMO | PredKernelRBF1` で線形 / RBF カーネルリッジを切替。構築は `mkInteractiveMOLinear` / `mkInteractiveMOKernelRBF`。詳細: [io/02-multireg.ja.md](../io/02-multireg.ja.md) |
 
 `InteractiveModel`:
 ```haskell
