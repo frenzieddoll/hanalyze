@@ -4,8 +4,10 @@ module Main where
 
 import DataIO.CSV        (loadAuto)
 import qualified DataIO.Preprocess as Pp
-import DataFrame.Core    (DataFrame, Column (..), columnNames, numRows,
-                          getColumn, getNumeric, getText)
+import qualified DataFrame                    as DX
+import qualified DataFrame.Internal.Column    as DXC
+import qualified DataFrame.Internal.DataFrame as DXD
+import DataIO.Convert     (getDoubleVec, getTextVec)
 import Model.Core        (Band (..), FitResult, rSquared1, coeffList, fittedList, residualsV)
 import Model.GLM         (Family (..), parseFamily, LinkFn (..), parseLink, canonicalLink,
                           fitGLMWithSmooth, fitGLMFull)
@@ -325,7 +327,7 @@ cliResidStats resid p =
 
 -- | LM / GLM 用 CLI レポートセクション群。多項式次数と WAIC/LOO に対応。
 cliRegressSections
-  :: Config -> DataFrame -> Family -> LinkFn
+  :: Config -> DXD.DataFrame -> Family -> LinkFn
   -> [(T.Text, Int)] -> FitResult -> Maybe SmoothFit
   -> Maybe (WAICResult, LOOResult)
   -> [NamedPlot]
@@ -370,7 +372,7 @@ cliRegressSections cfg df dist lnk colDegs res mSmooth mModelSel pvsaPlots =
         Nothing -> RB.SmoothCurve [] [] [] []
 
       scatterCard = case (xCols, mSmooth) of
-        ([xc], Just _) -> case (getNumeric xc df, getNumeric yCol df) of
+        ([xc], Just _) -> case (getDoubleVec xc df, getDoubleVec yCol df) of
           (Just xv, Just yv) ->
             [ RB.secCard "散布図 + 回帰線"
                 [ RB.secFitScatter xc yCol (V.toList xv) (V.toList yv)
@@ -379,7 +381,7 @@ cliRegressSections cfg df dist lnk colDegs res mSmooth mModelSel pvsaPlots =
         _ -> []
 
       -- 対話的予測: 多項式拡張の場合は係数数と x 列数が合わないので省略。
-      interactiveSecs = case (isPoly, traverse (`getNumeric` df) xCols, getNumeric yCol df) of
+      interactiveSecs = case (isPoly, traverse (`getDoubleVec` df) xCols, getDoubleVec yCol df) of
         (False, Just xVs, Just yV) | not (null xVs) ->
           let xRows = [ [ xv V.! i | xv <- xVs ]
                       | i <- [0 .. V.length yV - 1] ]
@@ -446,7 +448,7 @@ linkLabelLower Sqrt     = "sqrt"
 
 -- | GLMM (LME) 用 CLI レポートセクション群。
 cliMixedSections
-  :: Config -> DataFrame -> Family -> LinkFn
+  :: Config -> DXD.DataFrame -> Family -> LinkFn
   -> [(T.Text, Int)] -> T.Text -> GLMMResult -> Maybe (WAICResult, LOOResult)
   -> [NamedPlot]
   -> [RB.ReportSection]
@@ -465,7 +467,7 @@ cliMixedSections cfg df dist lnk colDegs grpCol gr mModelSel extraPlots =
 -- | GP 用 CLI レポートセクション群。マルチカーネル比較対応。
 -- 呼び出し側で予測グリッド X (`gridX`) を渡す。
 cliGPSections
-  :: T.Text -> T.Text -> DataFrame -> [Double] -> [Double]
+  :: T.Text -> T.Text -> DXD.DataFrame -> [Double] -> [Double]
   -> [Double]              -- ^ 予測グリッド X
   -> [GPKernelFit]
   -> [RB.ReportSection]
@@ -490,7 +492,7 @@ cliGPSections xCol yCol df xs ys gridX kfits =
 
 -- | HBM 用 CLI レポートセクション群。
 cliHBMSections
-  :: T.Text -> T.Text -> DataFrame -> [Double] -> [Double]
+  :: T.Text -> T.Text -> DXD.DataFrame -> [Double] -> [Double]
   -> MCMCcore.Chain -> Maybe T.Text -> Maybe (WAICResult, LOOResult)
   -> [NamedPlot]
   -> [RB.ReportSection]
@@ -604,10 +606,10 @@ runInfoCmd (file:_)  = do
     Left err -> hPutStrLn stderr ("Parse error: " ++ err)
     Right df -> printDataFrameInfo file df
 
-printDataFrameInfo :: FilePath -> DataFrame -> IO ()
+printDataFrameInfo :: FilePath -> DXD.DataFrame -> IO ()
 printDataFrameInfo file df = do
-  let n    = numRows df
-      cols = columnNames df
+  let n    = (fst (DX.dimensions df))
+      cols = DX.columnNames df
   putStrLn $ "File:    " ++ file
   putStrLn $ "Rows:    " ++ show n
   putStrLn $ "Columns: " ++ show (length cols)
@@ -619,14 +621,14 @@ printDataFrameInfo file df = do
   putStrLn (replicate 92 '-')
   mapM_ (printColInfo df) cols
 
-printColInfo :: DataFrame -> T.Text -> IO ()
-printColInfo df name = case getColumn name df of
-  Just (NumericCol v) -> do
+printColInfo :: DXD.DataFrame -> T.Text -> IO ()
+printColInfo df name = case getDoubleVec name df of
+  Just v -> do
     let xs   = V.toList v
         m    = length xs
-        mn   = minimum xs
-        mx   = maximum xs
-        mean = sum xs / fromIntegral m
+        mn   = if null xs then 0 else minimum xs
+        mx   = if null xs then 0 else maximum xs
+        mean = if null xs then 0 else sum xs / fromIntegral m
         ss   = sort xs
         med  = if m == 0 then 0 else ss !! (m `div` 2)
         var  = if m <= 1 then 0
@@ -635,20 +637,25 @@ printColInfo df name = case getColumn name df of
         sd_  = sqrt var
     printf "  %-20s %-7s %5d %10.4f %10.4f %10.4f %10.4f %10.4f\n"
            (T.unpack name) ("numeric" :: String) m mn mx mean med sd_
-  Just (TextCol v) -> do
-    let xs   = V.toList v
-        m    = length xs
-        nMiss = V.length (V.filter Pp.isNAString v)
-        uniq = Set.size (Set.fromList xs)
-        topN = take 3 (countTop xs)
-        topStr = intercalate ", "
-                   [ T.unpack k ++ "(" ++ show c ++ ")" | (k, c) <- topN ]
-        missStr = if nMiss > 0
-                    then "  NA=" ++ show nMiss
-                    else ""
-    printf "  %-20s %-7s %5d  unique=%-3d top: %s%s\n"
-           (T.unpack name) ("text" :: String) m uniq topStr missStr
-  Nothing -> return ()
+  Nothing -> case getTextVec name df of
+    Just v -> do
+      let xs   = V.toList v
+          m    = length xs
+          nMiss = case DXD.getColumn name df of
+                    Just c  -> length [ i | i <- [0 .. DXC.columnLength c - 1]
+                                          , DXC.columnElemIsNull c i ]
+                              + V.length (V.filter Pp.isNAString v)
+                    Nothing -> V.length (V.filter Pp.isNAString v)
+          uniq = Set.size (Set.fromList xs)
+          topN = take 3 (countTop xs)
+          topStr = intercalate ", "
+                     [ T.unpack k ++ "(" ++ show c ++ ")" | (k, c) <- topN ]
+          missStr = if nMiss > 0
+                      then "  NA=" ++ show nMiss
+                      else ""
+      printf "  %-20s %-7s %5d  unique=%-3d top: %s%s\n"
+             (T.unpack name) ("text" :: String) m uniq topStr missStr
+    Nothing -> return ()
 
 -- | Count occurrences and return descending list.
 countTop :: Ord a => [a] -> [(a, Int)]
@@ -721,7 +728,7 @@ runHistOpts ho = do
   result <- loadAuto (hoFile ho)
   case result of
     Left err -> hPutStrLn stderr ("Parse error: " ++ err)
-    Right df -> case getNumeric (hoCol ho) df of
+    Right df -> case getDoubleVec (hoCol ho) df of
       Nothing -> hPutStrLn stderr $
         "Error: column '" ++ T.unpack (hoCol ho) ++ "' not found or not numeric"
       Just xVec -> do
@@ -755,9 +762,9 @@ runConfig cfg = do
   case result of
     Left err -> putStrLn ("Parse error: " ++ err)
     Right df -> do
-      putStrLn $ "Loaded " ++ show (numRows df) ++ " rows from " ++ cfgFile cfg
+      putStrLn $ "Loaded " ++ show ((fst (DX.dimensions df))) ++ " rows from " ++ cfgFile cfg
       putStrLn "Columns:"
-      mapM_ (TIO.putStrLn . ("  - " <>)) (columnNames df)
+      mapM_ (TIO.putStrLn . ("  - " <>)) (DX.columnNames df)
 
       let fmt   = cfgFormat cfg
           xCol1 = head (cfgXCols cfg)
@@ -774,7 +781,7 @@ runConfig cfg = do
 -- Mixed model (LME / GLMM)
 -- ---------------------------------------------------------------------------
 
-runMixedModel :: Config -> DataFrame -> OutputFormat -> T.Text -> T.Text -> T.Text -> IO ()
+runMixedModel :: Config -> DXD.DataFrame -> OutputFormat -> T.Text -> T.Text -> T.Text -> IO ()
 runMixedModel cfg df fmt xCol1 yCol grpCol = do
   let colDegs = applyDegreeSpec (cfgDegree cfg) (cfgXCols cfg)
       (dist, lnk) = case cfgModel cfg of
@@ -820,7 +827,7 @@ runMixedModel cfg df fmt xCol1 yCol grpCol = do
       let suffix = "  [" <> T.pack modelKind <> " | group: " <> grpCol <> "]"
 
       -- Scatter with group-level fitted lines (single x only)
-      case (length (cfgXCols cfg), getNumeric xCol1 df, getNumeric yCol df, getText grpCol df) of
+      case (length (cfgXCols cfg), getDoubleVec xCol1 df, getDoubleVec yCol df, getTextVec grpCol df) of
         (1, Just xVec, Just yVec, Just gVec) -> do
           let ptData = zip3 (V.toList gVec) (V.toList xVec) (V.toList yVec)
               lnData = computeGroupLines lnk cs colDegs
@@ -834,7 +841,7 @@ runMixedModel cfg df fmt xCol1 yCol grpCol = do
           putStrLn "\n(Scatter plot skipped for multiple x columns)"
 
       -- Predicted vs Actual
-      case getNumeric yCol df of
+      case getDoubleVec yCol df of
         Nothing   -> return ()
         Just yVec -> do
           let pvsaPath = "pvsa.html"
@@ -850,10 +857,10 @@ runMixedModel cfg df fmt xCol1 yCol grpCol = do
           -- WAIC/LOO 計算 (--waic 指定時、Gaussian/Identity の LME のみ)
           mModelSel <-
             if cfgWAIC cfg && dist == Gaussian && lnk == Identity
-            then case (getNumeric yCol df, getText grpCol df) of
+            then case (getDoubleVec yCol df, getTextVec grpCol df) of
                    (Just yVec, Just gVec) -> do
                      let xVecPairs = [ (xv, deg) | (xc, deg) <- colDegs
-                                     , Just xv <- [getNumeric xc df] ]
+                                     , Just xv <- [getDoubleVec xc df] ]
                      case xVecPairs of
                        [] -> return Nothing
                        _  -> do
@@ -879,7 +886,7 @@ runMixedModel cfg df fmt xCol1 yCol grpCol = do
           let rbCfg = RB.defaultReportConfig
                         (T.pack modelKind <> ": " <> yCol <> " | " <> grpCol)
               scatterPlots =
-                case (length (cfgXCols cfg), getNumeric xCol1 df, getNumeric yCol df, getText grpCol df) of
+                case (length (cfgXCols cfg), getDoubleVec xCol1 df, getDoubleVec yCol df, getTextVec grpCol df) of
                   (1, Just xVec, Just yVec, Just gVec) ->
                     let ptData  = zip3 (V.toList gVec) (V.toList xVec) (V.toList yVec)
                         lnData  = computeGroupLines lnk cs colDegs (glmmGroups gr) (glmmBLUPs gr) xVec
@@ -888,7 +895,7 @@ runMixedModel cfg df fmt xCol1 yCol grpCol = do
                          (scatterWithGroups scCfg xCol1 yCol ptData lnData)]
                   _ -> []
               pvsaPlots =
-                case getNumeric yCol df of
+                case getDoubleVec yCol df of
                   Just yVec ->
                     let pvCfg = defaultConfig ("Predicted vs Actual" <> suffix)
                     in [NamedPlot "vl-pvsa" "Predicted vs Actual"
@@ -905,7 +912,7 @@ runMixedModel cfg df fmt xCol1 yCol grpCol = do
 -- GLM regression (no random effects)
 -- ---------------------------------------------------------------------------
 
-runRegression :: Config -> DataFrame -> OutputFormat -> T.Text -> T.Text -> IO ()
+runRegression :: Config -> DXD.DataFrame -> OutputFormat -> T.Text -> T.Text -> IO ()
 runRegression cfg df fmt xCol1 yCol = do
   let colDegs = applyDegreeSpec (cfgDegree cfg) (cfgXCols cfg)
       (dist, lnk) = case cfgModel cfg of
@@ -942,7 +949,7 @@ runRegression cfg df fmt xCol1 yCol = do
         Nothing ->
           putStrLn "\n(Scatter plot skipped for multiple x columns)"
 
-      case getNumeric yCol df of
+      case getDoubleVec yCol df of
         Nothing   -> return ()
         Just yVec -> do
           let pvsaPath = "pvsa.html"
@@ -959,7 +966,7 @@ runRegression cfg df fmt xCol1 yCol = do
                         (T.pack (modelLabel dist lnk)
                           <> ": " <> yCol <> " ~ "
                           <> T.pack (modelFormula colDegs))
-              pvsaPlots = case getNumeric yCol df of
+              pvsaPlots = case getDoubleVec yCol df of
                 Just yVec ->
                   let pvCfg = defaultConfig ("Predicted vs Actual" <> titleSuffix)
                   in [NamedPlot "vl-pvsa" "Predicted vs Actual"
@@ -970,12 +977,12 @@ runRegression cfg df fmt xCol1 yCol = do
           mModelSelect <-
             if not (cfgWAIC cfg)
             then return Nothing
-            else case getNumeric yCol df of
+            else case getDoubleVec yCol df of
               Nothing   -> return Nothing
               Just yVec -> do
                 let xVecPairs = [ (xv, deg)
                                 | (xc, deg) <- colDegs
-                                , Just xv   <- [getNumeric xc df] ]
+                                , Just xv   <- [getDoubleVec xc df] ]
                 case xVecPairs of
                   [] -> return Nothing
                   _  -> do
@@ -1005,7 +1012,7 @@ runRegression cfg df fmt xCol1 yCol = do
 -- Regression / scatter dispatch (non-histogram path)
 -- ---------------------------------------------------------------------------
 
-runAnalysis :: Config -> DataFrame -> OutputFormat -> T.Text -> IO ()
+runAnalysis :: Config -> DXD.DataFrame -> OutputFormat -> T.Text -> IO ()
 runAnalysis cfg df fmt xCol1 = do
   let yCols    = cfgYCols cfg
       effModel = if length yCols > 1 then NoReg
@@ -1048,10 +1055,10 @@ runAnalysis cfg df fmt xCol1 = do
 -- GP regression
 -- ---------------------------------------------------------------------------
 
-runGP :: Config -> DataFrame -> T.Text -> IO ()
+runGP :: Config -> DXD.DataFrame -> T.Text -> IO ()
 runGP cfg df xCol1 = do
   let yCol = head (cfgYCols cfg)
-  case (getNumeric xCol1 df, getNumeric yCol df) of
+  case (getDoubleVec xCol1 df, getDoubleVec yCol df) of
     (Just xVec, Just yVec) -> do
       let xs = V.toList xVec
           ys = V.toList yVec
@@ -1103,13 +1110,13 @@ runGP cfg df xCol1 = do
 -- HBM (Bayesian linear regression via NUTS)
 -- ---------------------------------------------------------------------------
 
-runHBM :: Config -> DataFrame -> T.Text -> IO ()
+runHBM :: Config -> DXD.DataFrame -> T.Text -> IO ()
 runHBM cfg df xCol = do
   let yCols = cfgYCols cfg
       xCols = cfgXCols cfg
-  case (yCols, xCols, getNumeric xCol df) of
+  case (yCols, xCols, getDoubleVec xCol df) of
     ([yCol], [_], Just xVec) ->
-      case getNumeric yCol df of
+      case getDoubleVec yCol df of
         Nothing -> putStrLn $ "Error: y column '" ++ T.unpack yCol ++ "' not numeric"
         Just yVec -> do
           let xs = V.toList xVec
@@ -1125,7 +1132,7 @@ runHBM cfg df xCol = do
       putStrLn "Error: HBM requires exactly one x and one y column (numeric)"
 
 runHBMRegression
-  :: [Double] -> [Double] -> T.Text -> T.Text -> DataFrame -> Config -> IO ()
+  :: [Double] -> [Double] -> T.Text -> T.Text -> DXD.DataFrame -> Config -> IO ()
 runHBMRegression xs ys xCol yCol df cfg = do
   let nutsCfg = HBMnuts.defaultNUTSConfig
                   { HBMnuts.nutsIterations = 1500
@@ -1221,9 +1228,9 @@ runHBMRegression xs ys xCol yCol df cfg = do
 -- Histogram mode
 -- ---------------------------------------------------------------------------
 
-runHistogram :: Config -> DataFrame -> OutputFormat -> T.Text -> IO ()
+runHistogram :: Config -> DXD.DataFrame -> OutputFormat -> T.Text -> IO ()
 runHistogram cfg df fmt xCol =
-  case getNumeric xCol df of
+  case getDoubleVec xCol df of
     Nothing ->
       putStrLn $ "Error: column '" ++ T.unpack xCol ++ "' not found or not numeric"
     Just xVec -> do
@@ -1598,15 +1605,15 @@ doTaguchiAnalyze oa opts path = do
         Left err -> hPutStrLn stderr (T.unpack err)
         Right ad -> runAnalyzeWith ad opts df
 
-runAnalyzeWith :: OA.AssignedDesign -> TgAnalyzeOpts -> DataFrame -> IO ()
+runAnalyzeWith :: OA.AssignedDesign -> TgAnalyzeOpts -> DXD.DataFrame -> IO ()
 runAnalyzeWith ad opts df = do
   let factorNames = map OA.fsName (OA.adFactors ad)
       yCols = filter (\c -> not (c `elem` factorNames) && c /= "Run")
-                     (columnNames df)
+                     (DX.columnNames df)
       n = length (OA.adRows ad)
-  when (numRows df /= n) $
+  when ((fst (DX.dimensions df)) /= n) $
     hPutStrLn stderr $
-      "Warning: CSV has " ++ show (numRows df)
+      "Warning: CSV has " ++ show ((fst (DX.dimensions df)))
       ++ " rows, expected " ++ show n
   if null yCols
     then hPutStrLn stderr
@@ -1614,11 +1621,11 @@ runAnalyzeWith ad opts df = do
     else do
       -- Per-inner-run observations (skip non-numeric rows)
       let yMatrix =
-            [ [ case getNumeric c df of
+            [ [ case getDoubleVec c df of
                   Just v | i < V.length v -> v V.! i
                   _ -> 0
               | c <- yCols ]
-            | i <- [0 .. min (numRows df) n - 1] ]
+            | i <- [0 .. min ((fst (DX.dimensions df))) n - 1] ]
           sns  = TG.snRatioRows (toSN opts) yMatrix
           fes  = TG.analyzeSN ad sns
           opts' = TG.optimalLevels fes
@@ -1749,12 +1756,12 @@ doTaguchiCross innerOA outerOA opts = do
 
 -- | CSV を読み、x 列(複数可) と y 列(1) を numeric vector で取り出す。
 loadXY :: FilePath -> [T.Text] -> T.Text
-       -> IO (Either String (DataFrame, [V.Vector Double], V.Vector Double))
+       -> IO (Either String (DXD.DataFrame, [V.Vector Double], V.Vector Double))
 loadXY path xCols yCol = do
   result <- loadAuto path
   case result of
     Left err -> return (Left err)
-    Right df -> case (mapM (\c -> getNumeric c df) xCols, getNumeric yCol df) of
+    Right df -> case (mapM (\c -> getDoubleVec c df) xCols, getDoubleVec yCol df) of
       (Just xs, Just y) -> return (Right (df, xs, y))
       _ -> return (Left $ "Numeric column(s) not found: x="
                     ++ T.unpack (T.intercalate "," xCols)
@@ -1769,7 +1776,7 @@ rmseV ys yhat =
 
 -- | 散布図 + 滑らか曲線 を出力。
 writeSmoothPlot :: OutputFormat -> FilePath -> T.Text
-                -> DataFrame -> T.Text -> T.Text -> SmoothFit -> IO ()
+                -> DXD.DataFrame -> T.Text -> T.Text -> SmoothFit -> IO ()
 writeSmoothPlot fmt path titleSuffix df xc yc sf =
   scatterWithSmoothFile fmt path
     (defaultConfig (xc <> " vs " <> yc <> "  [" <> titleSuffix <> "]"))
@@ -2089,7 +2096,7 @@ doKernel file xColStr yColStr opts = do
       runKernelOn df xCol yCol xVec yVec opts
     Right _ -> hPutStrLn stderr "kernel: expected single x column"
 
-runKernelOn :: DataFrame -> T.Text -> T.Text -> V.Vector Double -> V.Vector Double
+runKernelOn :: DXD.DataFrame -> T.Text -> T.Text -> V.Vector Double -> V.Vector Double
             -> KernelOpts -> IO ()
 runKernelOn df xCol yCol xVec yVec opts = do
   let n = V.length xVec
