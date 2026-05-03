@@ -40,7 +40,9 @@ Each optimiser provides roughly `runX :: XConfig -> ([Double] -> Double) -> [Dou
 | Smooth + gradient (or numeric grad OK) | **L-BFGS** (`Optim.LBFGS`) |
 | Non-differentiable, low-dim (≤ 20) | **Nelder-Mead** (`Optim.NelderMead`) |
 | Non-convex, global, gradient-free (≤ 30 dim) | **Differential Evolution** (`Optim.DifferentialEvolution`) |
-| Non-convex, continuous, auto-tuning (10–100 dim) | **CMA-ES** (`Optim.CMAES`) |
+| Non-convex, continuous, auto-tuning (10–100 dim) | **CMA-ES** (`Optim.CMAES` / `Optim.CMAESFull`) |
+| Classic metaheuristic | **Simulated Annealing** (`Optim.SimulatedAnnealing`) |
+| Swarm intelligence | **Particle Swarm** (`Optim.ParticleSwarm`) |
 
 ---
 
@@ -144,6 +146,42 @@ r <- CMAES.runCMAESWith cfg sphere [3, -2, 1, 0.5, -1.5] gen
 ```
 
 ---
+
+## 6. Simulated Annealing — `Optim.SimulatedAnnealing`
+
+Kirkpatrick et al. 1983. Physical analogy (cooling solids): random walk + Metropolis acceptance.
+Temperature `T_k = T_0 · α^k`; worse moves accepted with probability `exp(-Δf/T)`,
+escaping local minima.
+
+```haskell
+import qualified Optim.SimulatedAnnealing as SA
+
+gen <- MWC.createSystemRandom
+let bs = replicate 5 (-3, 3)
+    cfg = (SA.defaultSAConfig bs)
+            { SA.saInitTemp = 2.0, SA.saAlpha = 0.997 }
+r <- SA.runSAWith cfg sphere [2, -1.5, 1, 0.5, -0.7] gen
+```
+
+Larger α (closer to 0.99) cools more slowly, yielding stronger local-escape ability.
+
+## 7. Particle Swarm Optimization — `Optim.ParticleSwarm`
+
+Kennedy & Eberhart 1995. A particle swarm pulled by personal best (pbest) and global best
+(gbest), updating velocities:
+
+  v_{t+1} = w · v_t + c_1 r_1 · (pbest - x) + c_2 r_2 · (gbest - x)
+
+```haskell
+import qualified Optim.ParticleSwarm as PSO
+
+gen <- MWC.createSystemRandom
+let bs = replicate 3 (-5.12, 5.12)
+    cfg = (PSO.defaultPSOConfig bs) { PSO.psoNum = 40 }
+r <- PSO.runPSOWith cfg rastrigin gen
+```
+
+Sits alongside DE / CMA-ES in the metaheuristic family. Stable on multi-modal problems.
 
 ## Benchmark
 

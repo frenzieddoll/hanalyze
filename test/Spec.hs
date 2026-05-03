@@ -39,6 +39,8 @@ import qualified Optim.LineSearch  as LS
 import qualified Optim.DifferentialEvolution as DE
 import qualified Optim.CMAES       as CMAES
 import qualified Optim.CMAESFull   as CMAESF
+import qualified Optim.SimulatedAnnealing as SA
+import qualified Optim.ParticleSwarm as PSO
 import qualified Optim.BayesOpt    as BO
 import qualified Optim.Common      as OC
 import qualified System.Random.MWC as MWC
@@ -1036,6 +1038,44 @@ main = hspec $ do
           rosen _      = error "2D"
       r <- CMAESF.runCMAESFullWith cfg rosen [-1.2, 1.0] gen
       l2 (OC.orBest r) [1, 1] `shouldSatisfy` (< 0.1)
+
+  -- ===========================================================================
+  -- メタヒューリスティック (Tier 2: Simulated Annealing, PSO)
+  -- ===========================================================================
+  describe "Optim.SimulatedAnnealing" $ do
+    it "SA: sphere 5D で sufficient annealing" $ do
+      gen <- MWC.create
+      let bs = replicate 5 (-3, 3)
+          cfg = (SA.defaultSAConfig bs)
+                  { SA.saStop = OC.defaultStopCriteria { OC.stMaxIter = 5000 }
+                  , SA.saInitTemp = 2.0
+                  , SA.saAlpha = 0.997 }
+          sphere xs = sum [x*x | x <- xs]
+      r <- SA.runSAWith cfg sphere [2, -1.5, 1, 0.5, -0.7] gen
+      OC.orValue r `shouldSatisfy` (< 0.5)
+
+  describe "Optim.ParticleSwarm" $ do
+    it "PSO: sphere 5D で原点近傍 (0.5 以内)" $ do
+      gen <- MWC.create
+      let bs = replicate 5 (-5, 5)
+          cfg = (PSO.defaultPSOConfig bs)
+                  { PSO.psoStop = OC.defaultStopCriteria { OC.stMaxIter = 200 }
+                  , PSO.psoNum  = 30 }
+          sphere xs = sum [x*x | x <- xs]
+      r <- PSO.runPSOWith cfg sphere gen
+      OC.orValue r `shouldSatisfy` (< 0.5)
+
+    it "PSO: Rastrigin 3D の大域最小に近い" $ do
+      gen <- MWC.create
+      let bs = replicate 3 (-5.12, 5.12)
+          cfg = (PSO.defaultPSOConfig bs)
+                  { PSO.psoStop = OC.defaultStopCriteria { OC.stMaxIter = 300 }
+                  , PSO.psoNum  = 40 }
+          rastrigin xs =
+            10 * fromIntegral (length xs) +
+            sum [x*x - 10 * cos (2 * pi * x) | x <- xs]
+      r <- PSO.runPSOWith cfg rastrigin gen
+      OC.orValue r `shouldSatisfy` (< 5.0)   -- 大域近傍 (10 程度の局所有り)
 
   -- ===========================================================================
   -- Bayesian Optimization 内部最適化の差し替え (Optim.BayesOpt)

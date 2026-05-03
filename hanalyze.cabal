@@ -81,6 +81,8 @@ library
     Optim.DifferentialEvolution
     Optim.CMAES
     Optim.CMAESFull
+    Optim.SimulatedAnnealing
+    Optim.ParticleSwarm
     Optim.NSGA
     Optim.Pareto
     Optim.Acquisition

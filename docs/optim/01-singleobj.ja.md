@@ -40,7 +40,9 @@ data Direction = Minimize | Maximize
 | 滑らか・勾配あり (or 数値勾配 OK) | **L-BFGS** (`Optim.LBFGS`) |
 | 微分不能・低次元 (≤ 20) | **Nelder-Mead** (`Optim.NelderMead`) |
 | 非凸・大域・微分不要 (≤ 30 次元) | **Differential Evolution** (`Optim.DifferentialEvolution`) |
-| 非凸・連続・自動チューニング (10〜100 次元) | **CMA-ES** (`Optim.CMAES`) |
+| 非凸・連続・自動チューニング (10〜100 次元) | **CMA-ES** (`Optim.CMAES` / `Optim.CMAESFull`) |
+| 古典的メタヒューリスティック | **Simulated Annealing** (`Optim.SimulatedAnnealing`) |
+| 群知能ベース | **Particle Swarm** (`Optim.ParticleSwarm`) |
 
 ---
 
@@ -142,6 +144,41 @@ r <- CMAES.runCMAESWith cfg sphere [3, -2, 1, 0.5, -1.5] gen
 ```
 
 ---
+
+## 6. Simulated Annealing — `Optim.SimulatedAnnealing`
+
+Kirkpatrick et al. 1983。物理アナロジー (固体冷却) によるランダムウォーク + Metropolis 受容。
+温度 `T_k = T_0 · α^k` で確率 `exp(-Δf/T)` で悪化を受容、全体最適に向かう。
+
+```haskell
+import qualified Optim.SimulatedAnnealing as SA
+
+gen <- MWC.createSystemRandom
+let bs = replicate 5 (-3, 3)
+    cfg = (SA.defaultSAConfig bs)
+            { SA.saInitTemp = 2.0, SA.saAlpha = 0.997 }
+r <- SA.runSAWith cfg sphere [2, -1.5, 1, 0.5, -0.7] gen
+```
+
+α が大きいほど (0.99 寄り) 緩やかに冷却し局所脱出能力が高い。
+
+## 7. Particle Swarm Optimization — `Optim.ParticleSwarm`
+
+Kennedy & Eberhart 1995。粒子群が個人最良 (pbest) と全体最良 (gbest) に
+引き寄せられて速度を更新:
+
+  v_{t+1} = w · v_t + c_1 r_1 · (pbest - x) + c_2 r_2 · (gbest - x)
+
+```haskell
+import qualified Optim.ParticleSwarm as PSO
+
+gen <- MWC.createSystemRandom
+let bs = replicate 3 (-5.12, 5.12)
+    cfg = (PSO.defaultPSOConfig bs) { PSO.psoNum = 40 }
+r <- PSO.runPSOWith cfg rastrigin gen
+```
+
+DE/CMA-ES と並ぶメタヒューリスティック。多峰問題で安定。
 
 ## ベンチマーク
 
