@@ -63,6 +63,7 @@ library
     MCMC.Slice
     Stat.Distribution
     Stat.Standardize
+    Stat.NumberFormat
     Stat.MCMC
     Stat.ModelSelect
     Stat.AD

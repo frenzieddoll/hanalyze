@@ -47,6 +47,7 @@ import qualified DataFrame.Internal.DataFrame as DXD
 import DataIO.Convert (getDoubleVec, getMaybeTextVec)
 import qualified Numeric.LinearAlgebra as LA2
 import qualified Stat.Standardize as Std
+import qualified Stat.NumberFormat as NF
 import Viz.Scatter   (scatterWithGroups)
 import Viz.Core      (defaultConfig, PlotConfig (..))
 import Model.Core      (FitResult, coeffList, fittedList, residualsV, rSquared1)
@@ -1115,9 +1116,9 @@ instance Reportable RFFMVReport where
             rmse    = sqrt (sse / fromIntegral (max 1 n))
             feats   = rffrmvFeatures (rfmvFit r)
             d       = LA2.cols (rffmvOmegas feats)
-            ellLbl  = T.pack (printf "%.4f" (rffmvLengthScale feats))
-            sfLbl   = T.pack (printf "%.4f" (rffmvSigmaF feats))
-            lamLbl  = T.pack (printf "%g"   (rffrmvLambda (rfmvFit r)))
+            ellLbl  = NF.fmtNumT (rffmvLengthScale feats)
+            sfLbl   = NF.fmtNumT (rffmvSigmaF feats)
+            lamLbl  = NF.fmtNumT (rffrmvLambda (rfmvFit r))
             xColIdx = case [ i | (i, c) <- zip [0..] xCols, c == rfmvXAxis r ] of
                         (i:_) -> i
                         []    -> 0
@@ -1212,8 +1213,8 @@ instance Reportable RFFMVReport where
                , ("Ridge λ (=σ_n²)",    lamLbl)
                , ("Standardize",
                    maybe "OFF" (const "ON") (rfmvStandardizer r))
-               , ("R²",                 T.pack (printf "%.4f" r2))
-               , ("RMSE",               T.pack (printf "%.4f" rmse))
+               , ("R²",                 NF.fmtNumT r2)
+               , ("RMSE",               NF.fmtNumT rmse)
                , ("n",                  T.pack (show n))
                ]
            , secVega ("予測曲線 + 観測点 (" <> rfmvGroup r <> " で色分け)") vega

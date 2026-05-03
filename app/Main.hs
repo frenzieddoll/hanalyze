@@ -6,6 +6,7 @@ import DataIO.CSV        (loadAutoSafeWith, LoadOpts (..), defaultLoadOpts)
 import qualified DataIO.Log     as Log
 import qualified DataIO.Clean   as Clean
 import qualified Stat.Standardize as Std
+import qualified Stat.NumberFormat as NF
 import qualified DataIO.Preprocess as Pp
 import qualified DataFrame                    as DX
 import qualified DataFrame.Internal.Column    as DXC
@@ -2396,8 +2397,8 @@ runKernelMV df xCols yCol xVecs yVec opts = do
   if koStandardize opts
     then do
       putStrLn "  Standardize: ON"
-      printf "    μ = [%s]\n" (T.unpack (T.intercalate "," (map (T.pack . printf "%.4g") (Std.stMu stdr))))
-      printf "    σ = [%s]\n" (T.unpack (T.intercalate "," (map (T.pack . printf "%.4g") (Std.stSd stdr))))
+      printf "    μ = [%s]\n" (T.unpack (T.intercalate ", " (map NF.fmtNumT (Std.stMu stdr))))
+      printf "    σ = [%s]\n" (T.unpack (T.intercalate ", " (map NF.fmtNumT (Std.stSd stdr))))
     else putStrLn "  Standardize: OFF"
 
   -- ステップ 2: HP の決定
@@ -2411,17 +2412,19 @@ runKernelMV df xCols yCol xVecs yVec opts = do
             snOpt  = RFF.mlSigmaN res
             -- σ_n² = λ (Ridge と GP のノイズ等価関係)
             lamOpt = snOpt * snOpt
-        printf "    ℓ      = %.4g\n" ellOpt
-        printf "    σ_f    = %.4g\n" sfOpt
-        printf "    σ_n    = %.4g  (λ = σ_n² = %.4g)\n" snOpt lamOpt
-        printf "    log_mlik = %.4f  (グリッド %d 点評価)\n"
-               (RFF.mlLogMlik res) (RFF.mlGridPts res)
+        printf "    ℓ      = %s\n" (NF.fmtNum ellOpt)
+        printf "    σ_f    = %s\n" (NF.fmtNum sfOpt)
+        printf "    σ_n    = %s  (λ = σ_n² = %s)\n"
+               (NF.fmtNum snOpt) (NF.fmtNum lamOpt)
+        printf "    log_mlik = %s  (グリッド %d 点評価)\n"
+               (NF.fmtNum (RFF.mlLogMlik res)) (RFF.mlGridPts res)
         return (ellOpt, lamOpt, sfOpt)
       else do
         let ell0 = case koBandwidth opts of
               Just h  -> h
               Nothing -> defaultLengthScale (map LA.toList (LA.toColumns xMat))
-        printf "  ell=%.4f  lambda=%.4f\n" ell0 (koLambda opts)
+        printf "  ell=%s  lambda=%s\n"
+               (NF.fmtNum ell0) (NF.fmtNum (koLambda opts))
         return (ell0, koLambda opts, 1.0)
 
   let d = koFeatures opts
@@ -2436,8 +2439,8 @@ runKernelMV df xCols yCol xVecs yVec opts = do
              in sum [(y - m)^(2::Int) | y <- ys]
       r2   = if sst < 1e-12 then 0 else 1 - sse / sst
   printf "RFF (multivariate) Ridge fit:\n"
-  printf "  R^2 = %.4f\n" r2
-  printf "  RMSE = %.4g\n" (sqrt (sse / fromIntegral n))
+  printf "  R^2 = %s\n" (NF.fmtNum r2)
+  printf "  RMSE = %s\n" (NF.fmtNum (sqrt (sse / fromIntegral n)))
 
   -- --group + --xaxis が両方指定されていればプロット
   case (koGroup opts, koXAxis opts) of
