@@ -411,6 +411,25 @@ main = hspec $ do
           mliks = [ RFF.logMarginalLikRBFMV xMat yV ell 1.0 0.05 | ell <- ells ]
           best  = snd (maximum (zip mliks ells))
       best `shouldSatisfy` (\b -> b >= 0.2 && b <= 2.0)
+    it "loocvRFFRidgeMV: λ → ∞ で残差ベース LOOCV が増える、適度な λ で最小" $ do
+      let xs = [0.0, 0.3 .. 6.0]
+          ys = map sin xs
+          xMat = LA.fromLists [[x] | x <- xs]
+          yV   = LA.fromList ys
+      gen   <- MWC.createSystemRandom
+      feats <- RFF.sampleRFFRBFMV 1 64 0.5 1.0 gen
+      let lamSmall = RFF.loocvRFFRidgeMV feats xMat yV 1e-2
+          lamHuge  = RFF.loocvRFFRidgeMV feats xMat yV 1e6
+      lamSmall `shouldSatisfy` (< lamHuge)
+    it "gridSearchLOOCVRBFMV: ℓ/λ を自動探索して LOOCV が小さくなる" $ do
+      let xs = [0.0, 0.5 .. 10.0]
+          ys = [ sin (x/2) | x <- xs ]
+          xMat = LA.fromLists [[x] | x <- xs]
+          yV   = LA.fromList ys
+      gen <- MWC.createSystemRandom
+      res <- RFF.gridSearchLOOCVRBFMV 1 100 xMat yV (Just (4, 8)) gen
+      RFF.lcLOOCV res `shouldSatisfy` (< 1.0)
+      RFF.lcEll res   `shouldSatisfy` (> 0)
     it "maximizeMarginalLikRBFMV: 雑音ありデータで mlik が改善する" $ do
       let xs = [0.0, 0.5 .. 10.0]
           ys = [ sin (x/2) + 0.05 * (fromIntegral i / 21) - 0.025

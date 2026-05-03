@@ -2249,7 +2249,8 @@ kernelUsage = unlines
   , "  --interactive     スライダで副軸を変えると JS が予測曲線を再計算"
   , "                    (--report と併用、--xaxis の列以外がスライダになる)"
   , "  --standardize     入力 X を z-score 化してから fit (スケール差対策)"
-  , "  --auto-hp         周辺尤度最大化で (ℓ, σ_n) を自動決定"
+  , "  --auto-hp         HP 自動決定 (default method=loocv)"
+  , "  --auto-hp-method M  loocv (Ridge LOOCV 解析解、推奨) | mlik (周辺尤度最大化)"
   , "                    (--bandwidth / --lambda は無視される)"
   , ""
   , "Examples:"
@@ -2275,7 +2276,8 @@ data KernelOpts = KernelOpts
   , koXAxis     :: Maybe T.Text  -- 多変量 RFF プロット用 横軸列名
   , koInteractive :: Bool        -- インタラクティブ予測 (--report と併用)
   , koStandardize :: Bool        -- 入力標準化 (Phase 4)
-  , koAutoHP      :: Bool        -- 周辺尤度最大化で (ℓ, σ_n) 自動決定 (Phase 4)
+  , koAutoHP      :: Bool        -- HP 自動決定
+  , koAutoHPMethod :: T.Text     -- "loocv" / "mlik" (default loocv = 速い)
   }
 
 defaultKernelOpts :: KernelOpts
@@ -2293,6 +2295,7 @@ defaultKernelOpts = KernelOpts
   , koInteractive = False
   , koStandardize = False
   , koAutoHP      = False
+  , koAutoHPMethod = "loocv"
   }
 
 parseKernelKind :: String -> Either String Kern.Kernel
@@ -2366,6 +2369,12 @@ parseKernelOpts (flag : rest) acc
       parseKernelOpts rest (acc { koStandardize = True })
   | flag == "--auto-hp" =
       parseKernelOpts rest (acc { koAutoHP = True })
+  | flag == "--auto-hp-method" = case rest of
+      (v:rs) | v `elem` ["loocv", "mlik"] ->
+        parseKernelOpts rs (acc { koAutoHP = True
+                                , koAutoHPMethod = T.pack v })
+      (v:_) -> Left ("unknown --auto-hp-method '" ++ v ++ "' (choose loocv|mlik)")
+      []    -> Left "--auto-hp-method requires loocv|mlik"
   | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
 
 doKernel :: FilePath -> String -> String -> KernelOpts -> LoadOpts -> IO ()
@@ -2427,24 +2436,38 @@ runKernelMV df xCols yCol xVecs yVec opts = do
     else putStrLn "  Standardize: OFF"
 
   -- ステップ 2: HP の決定 (タイマー付き)
+  hpGen <- createSystemRandom
   (tHP, (ell, lam, sigF)) <- timed $
     if koAutoHP opts
-      then do
-        putStrLn "  Auto-HP: 周辺尤度最大化を実行中..."
-        let res = RFF.maximizeMarginalLikRBFMV xMat yV Nothing
-            ellOpt = RFF.mlEll res
-            sfOpt  = RFF.mlSigmaF res
-            snOpt  = RFF.mlSigmaN res
-            lamOpt = snOpt * snOpt
-        -- 計算を強制 (timed の中で重い処理が走るように)
-        ellOpt `seq` sfOpt `seq` snOpt `seq` return ()
-        printf "    ℓ      = %s\n" (NF.fmtNum ellOpt)
-        printf "    σ_f    = %s\n" (NF.fmtNum sfOpt)
-        printf "    σ_n    = %s  (λ = σ_n² = %s)\n"
-               (NF.fmtNum snOpt) (NF.fmtNum lamOpt)
-        printf "    log_mlik = %s  (グリッド %d 点評価)\n"
-               (NF.fmtNum (RFF.mlLogMlik res)) (RFF.mlGridPts res)
-        return (ellOpt, lamOpt, sfOpt)
+      then case koAutoHPMethod opts of
+        "loocv" -> do
+          putStrLn "  Auto-HP (LOOCV): RFF Ridge の解析的 LOO を最小化中..."
+          res <- RFF.gridSearchLOOCVRBFMV p (koFeatures opts) xMat yV Nothing hpGen
+          let ellOpt = RFF.lcEll res
+              sfOpt  = RFF.lcSigmaF res
+              lamOpt = RFF.lcLambda res
+          ellOpt `seq` sfOpt `seq` lamOpt `seq` return ()
+          printf "    ℓ      = %s\n" (NF.fmtNum ellOpt)
+          printf "    σ_f    = %s\n" (NF.fmtNum sfOpt)
+          printf "    λ      = %s\n" (NF.fmtNum lamOpt)
+          printf "    LOOCV  = %s  (グリッド %d 点評価)\n"
+                 (NF.fmtNum (RFF.lcLOOCV res)) (RFF.lcGridPts res)
+          return (ellOpt, lamOpt, sfOpt)
+        _ -> do  -- "mlik"
+          putStrLn "  Auto-HP (周辺尤度): Cholesky で marg-lik を最大化中..."
+          let res = RFF.maximizeMarginalLikRBFMV xMat yV Nothing
+              ellOpt = RFF.mlEll res
+              sfOpt  = RFF.mlSigmaF res
+              snOpt  = RFF.mlSigmaN res
+              lamOpt = snOpt * snOpt
+          ellOpt `seq` sfOpt `seq` snOpt `seq` return ()
+          printf "    ℓ      = %s\n" (NF.fmtNum ellOpt)
+          printf "    σ_f    = %s\n" (NF.fmtNum sfOpt)
+          printf "    σ_n    = %s  (λ = σ_n² = %s)\n"
+                 (NF.fmtNum snOpt) (NF.fmtNum lamOpt)
+          printf "    log_mlik = %s  (グリッド %d 点評価)\n"
+                 (NF.fmtNum (RFF.mlLogMlik res)) (RFF.mlGridPts res)
+          return (ellOpt, lamOpt, sfOpt)
       else do
         let ell0 = case koBandwidth opts of
               Just h  -> h

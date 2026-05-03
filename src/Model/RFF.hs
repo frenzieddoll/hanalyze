@@ -47,6 +47,10 @@ module Model.RFF
   , logMarginalLikRBFMV
   , maximizeMarginalLikRBFMV
   , MLikResult (..)
+    -- * LOOCV 解析解 (Phase 3: HP 自動チューニング高速版)
+  , loocvRFFRidgeMV
+  , gridSearchLOOCVRBFMV
+  , LOOCVResult (..)
   ) where
 
 import Control.Exception (SomeException, try, evaluate)
@@ -459,3 +463,107 @@ sampleStd xs
           v = sum [ (x - m) * (x - m) | x <- xs ] / (n - 1)
       in if v <= 0 then 1.0 else sqrt v
 
+
+-- ---------------------------------------------------------------------------
+-- LOOCV 解析解 (Phase 3 — Ridge の closed-form leave-one-out cross-validation)
+-- ---------------------------------------------------------------------------
+
+-- | LOOCV 探索結果。
+data LOOCVResult = LOOCVResult
+  { lcEll      :: !Double
+  , lcSigmaF   :: !Double   -- ^ 信号 sd (= std(y) を使う簡易版)
+  , lcLambda   :: !Double   -- ^ Ridge 正則化
+  , lcLOOCV    :: !Double   -- ^ LOOCV(λ) = mean square LOO residual
+  , lcGridPts  :: !Int
+  } deriving (Show)
+
+-- | RFF Ridge の LOOCV を Cholesky と「ハット行列の対角」を使って解析的に計算する。
+--
+--   H = Φ (ΦᵀΦ + λI)⁻¹ Φᵀ
+--   ŷ = H y
+--   LOOCV(λ) = (1/n) Σᵢ ((y_i - ŷ_i) / (1 - H_ii))²
+--
+-- 本関数は与えられた特徴行列 'feats' (= 既に ω/b/σ_f が決まったもの) と
+-- Ridge λ に対して LOOCV を返す。グリッドサーチ側ではこれを多数の λ で
+-- 呼び出すが、Φ は 1 度だけ計算すれば良いので外側でキャッシュする。
+loocvRFFRidgeMV
+  :: RFFFeaturesMV
+  -> LA.Matrix Double           -- ^ X (n × p)
+  -> LA.Vector Double           -- ^ y (n)
+  -> Double                     -- ^ λ
+  -> Double
+loocvRFFRidgeMV feats x y lam =
+  let phi = rffFeaturesMV feats x      -- n × D
+  in loocvFromPhi phi y lam
+
+-- | Φ から LOOCV を計算する内部実装 (グリッドサーチでキャッシュ用)。
+-- Cholesky ベース (Φ_ridge = Φᵀ Φ + λI、A = chol(Φ_ridge))。
+--   H = Φ Φ_ridge⁻¹ Φᵀ
+--   T = Φ Φ_ridge⁻¹  → diag(H) = row-sum(T ⊙ Φ)
+loocvFromPhi :: LA.Matrix Double -> LA.Vector Double -> Double -> Double
+loocvFromPhi phi y lam =
+  let n     = LA.rows phi
+      d     = LA.cols phi
+      gram  = LA.tr phi LA.<> phi             -- D × D
+      regK  = gram + LA.scale lam (LA.ident d)
+      -- 解析解: w = regK⁻¹ Φᵀ y
+      w     = regK LA.<\> (LA.tr phi LA.#> y)
+      yhat  = phi LA.#> w
+      -- diag(H) = diag(Φ M Φᵀ) where M = regK⁻¹
+      -- T = Φ M  (n × D)。Φ M Φᵀ の対角 = row(T) · row(Φ)
+      tMat  = LA.tr (regK LA.<\> LA.tr phi)   -- T = Φ M、n × D
+      hDiag = LA.fromList
+                [ LA.dot (LA.flatten (tMat LA.? [i]))
+                         (LA.flatten (phi  LA.? [i]))
+                | i <- [0 .. n - 1] ]
+      -- 1 - H_ii の極小ガード
+      oneMinusH = LA.cmap (\h -> max 1e-12 (1 - h)) hDiag
+      resid     = y - yhat
+      ratios    = LA.toList resid `divList` LA.toList oneMinusH
+      sse       = sum [ r * r | r <- ratios ]
+  in sse / fromIntegral (max 1 n)
+  where
+    divList xs ys = zipWith (/) xs ys
+
+-- | (ℓ, λ) を log-spaced グリッドで探索し、LOOCV 最小を見つける。
+--
+-- ℓ ごとに ω を新規サンプリングするため IO。グリッドサイズ default (8, 20):
+-- ℓ 8 点 × λ 20 点 = 160 fit。各 fit O(n D + D³) で n=545, D=200 程度なら
+-- 全体で数秒程度。
+--
+-- σ_f は std(y) 固定 (Ridge ↔ GP 等価では σ_f は ω 分散と一緒に動くべきだが、
+-- λ で吸収できるので簡易化)。
+gridSearchLOOCVRBFMV
+  :: Int                               -- ^ p (入力次元)
+  -> Int                               -- ^ D (特徴次元)
+  -> LA.Matrix Double                  -- ^ X
+  -> LA.Vector Double                  -- ^ y
+  -> Maybe (Int, Int)                  -- ^ (n_ℓ, n_λ) default (8, 20)
+  -> GenIO
+  -> IO LOOCVResult
+gridSearchLOOCVRBFMV p d x y mGrid gen = do
+  let (nL, nLam) = case mGrid of { Just g -> g; Nothing -> (8, 20) }
+      yStd  = sampleStd (LA.toList y)
+      sf    = max 1e-9 yStd
+      ellM  = max 1e-3 (medianPairwiseDist x)
+      ellGrid = logSpace (ellM * 0.05) (ellM * 20)  nL
+      lamGrid = logSpace (yStd * 1e-6) (yStd * 10)  nLam
+  -- 各 ℓ について 1 度サンプリングしてから λ ループ
+  evals <- mapM (\ell -> do
+                   feats <- sampleRFFRBFMV p d ell sf gen
+                   let phi = rffFeaturesMV feats x
+                   let scoresAtLam = [ (ell, sf, lam, loocvFromPhi phi y lam)
+                                     | lam <- lamGrid ]
+                   return scoresAtLam)
+                ellGrid
+  let evaluations = concat evals
+      best = foldr1 (\a@(_,_,_,la) b@(_,_,_,lb) ->
+                       if la <= lb then a else b) evaluations
+      (bEll, bSf, bLam, bL) = best
+  return LOOCVResult
+    { lcEll = bEll
+    , lcSigmaF = bSf
+    , lcLambda = bLam
+    , lcLOOCV  = bL
+    , lcGridPts = nL * nLam
+    }
