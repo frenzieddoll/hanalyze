@@ -127,6 +127,7 @@ executable hanalyze
     , filepath   >= 1.4  && < 1.6
     , hvega      >= 0.12 && < 0.13
     , dataframe
+    , time       >= 1.11 && < 1.13
 
 executable glmm-demo
   import:           warnings

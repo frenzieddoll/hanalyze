@@ -7,6 +7,7 @@ import qualified DataIO.Log     as Log
 import qualified DataIO.Clean   as Clean
 import qualified Stat.Standardize as Std
 import qualified Stat.NumberFormat as NF
+import Data.Time.Clock (getCurrentTime, diffUTCTime, UTCTime)
 import qualified DataIO.Preprocess as Pp
 import qualified DataFrame                    as DX
 import qualified DataFrame.Internal.Column    as DXC
@@ -642,6 +643,28 @@ readMaybeInt :: String -> Maybe Int
 readMaybeInt s = case reads s of
   [(n, "")] -> Just n
   _         -> Nothing
+
+-- ---------------------------------------------------------------------------
+-- 簡易プロファイリング (Phase 2)
+-- ---------------------------------------------------------------------------
+
+-- | アクションの実行時間を計測し、結果と合わせて (経過秒, 結果) を返す。
+timed :: IO a -> IO (Double, a)
+timed act = do
+  t0 <- getCurrentTime
+  r  <- act
+  t1 <- getCurrentTime
+  return (realToFrac (diffUTCTime t1 t0), r)
+
+-- | 1 段階のタイマー出力。"  [Standardize]  12.3 ms" / "  [Auto-HP]  58.21 s" 形式。
+printPhase :: String -> Double -> IO ()
+printPhase label sec
+  | sec >= 1.0 = printf "  [%-15s] %7.2f s\n" label sec
+  | otherwise  = printf "  [%-15s] %7.0f ms\n" label (sec * 1000)
+
+-- 未使用警告抑止
+_dummyTime :: UTCTime -> UTCTime
+_dummyTime = id
 
 -- ---------------------------------------------------------------------------
 -- clean subcommand (Phase C)
@@ -2387,13 +2410,15 @@ runKernelMV df xCols yCol xVecs yVec opts = do
   printf "Loaded %d rows × %d features (%s); method=rff (multivariate)\n"
          n p (T.unpack (T.intercalate "," xCols))
 
-  -- ステップ 1: 標準化 (任意)
-  let stdr = if koStandardize opts
-               then Std.fitStandardizer xMatRaw
-               else Std.identityStandardizer p
-      xMat = if koStandardize opts
-               then Std.applyStandardizer stdr xMatRaw
+  -- ステップ 1: 標準化 (タイマー付き)
+  (tStd, (stdr, xMat)) <- timed $ do
+    let s = if koStandardize opts
+              then Std.fitStandardizer xMatRaw
+              else Std.identityStandardizer p
+        xm = if koStandardize opts
+               then Std.applyStandardizer s xMatRaw
                else xMatRaw
+    return (s, xm)
   if koStandardize opts
     then do
       putStrLn "  Standardize: ON"
@@ -2401,8 +2426,8 @@ runKernelMV df xCols yCol xVecs yVec opts = do
       printf "    σ = [%s]\n" (T.unpack (T.intercalate ", " (map NF.fmtNumT (Std.stSd stdr))))
     else putStrLn "  Standardize: OFF"
 
-  -- ステップ 2: HP の決定
-  (ell, lam, sigF) <-
+  -- ステップ 2: HP の決定 (タイマー付き)
+  (tHP, (ell, lam, sigF)) <- timed $
     if koAutoHP opts
       then do
         putStrLn "  Auto-HP: 周辺尤度最大化を実行中..."
@@ -2410,8 +2435,9 @@ runKernelMV df xCols yCol xVecs yVec opts = do
             ellOpt = RFF.mlEll res
             sfOpt  = RFF.mlSigmaF res
             snOpt  = RFF.mlSigmaN res
-            -- σ_n² = λ (Ridge と GP のノイズ等価関係)
             lamOpt = snOpt * snOpt
+        -- 計算を強制 (timed の中で重い処理が走るように)
+        ellOpt `seq` sfOpt `seq` snOpt `seq` return ()
         printf "    ℓ      = %s\n" (NF.fmtNum ellOpt)
         printf "    σ_f    = %s\n" (NF.fmtNum sfOpt)
         printf "    σ_n    = %s  (λ = σ_n² = %s)\n"
@@ -2430,10 +2456,13 @@ runKernelMV df xCols yCol xVecs yVec opts = do
   let d = koFeatures opts
   printf "  D=%d\n" d
 
+  -- ステップ 3: RFF サンプリング + Ridge fit + 評価 (各タイマー付き)
   gen   <- createSystemRandom
-  feats <- RFF.sampleRFFRBFMV p d ell sigF gen
-  let fit  = RFF.rffRidgeMV feats xMat ys lam
-      yhat = RFF.predictRFFRidgeMV fit xMat
+  (tSample, feats) <- timed (RFF.sampleRFFRBFMV p d ell sigF gen)
+  (tFit, fit) <- timed $ do
+    let f = RFF.rffRidgeMV feats xMat ys lam
+    LA.size (RFF.rffrmvWeights f) `seq` return f
+  let yhat = RFF.predictRFFRidgeMV fit xMat
       sse  = sum (zipWith (\a b -> (a - b)^(2::Int)) ys yhat)
       sst  = let m = sum ys / fromIntegral (max 1 (length ys))
              in sum [(y - m)^(2::Int) | y <- ys]
@@ -2442,30 +2471,40 @@ runKernelMV df xCols yCol xVecs yVec opts = do
   printf "  R^2 = %s\n" (NF.fmtNum r2)
   printf "  RMSE = %s\n" (NF.fmtNum (sqrt (sse / fromIntegral n)))
 
+  putStrLn ""
+  putStrLn "Profiling (cumulative wall time):"
+  printPhase "Standardize" tStd
+  printPhase "Auto-HP" tHP
+  printPhase "Sample RFF" tSample
+  printPhase "Fit Ridge" tFit
+
   -- --group + --xaxis が両方指定されていればプロット
   case (koGroup opts, koXAxis opts) of
     (Just gCol, Just xCol) -> do
       let outPath = koOut opts
           fmt     = koFormat opts
-      writeMVPlot fmt outPath df gCol xCol xCols yCol fit stdr cols ys
+      (tPlot, _) <- timed (writeMVPlot fmt outPath df gCol xCol xCols yCol fit stdr cols ys)
       putStrLn $ "Plot: " ++ outPath
+      printPhase "Plot" tPlot
       -- --report 指定時は ReportBuilder で統合 HTML を出力
       case koReport opts of
         Just rpath -> do
-          let rep    = RI.RFFMVReport
-                         { RI.rfmvFit         = fit
-                         , RI.rfmvGroup       = gCol
-                         , RI.rfmvXAxis       = xCol
-                         , RI.rfmvInteractive = koInteractive opts
-                         , RI.rfmvStandardizer =
-                             if koStandardize opts then Just stdr else Nothing
-                         }
-              cfg    = RB.defaultReportConfig
-                         (yCol <> " — Multivariate RFF Ridge"
-                            <> if koInteractive opts then " (interactive)" else "")
-              secs   = RB.toReport cfg df xCols yCol rep
-          RB.renderReport rpath cfg secs
+          (tRep, _) <- timed $ do
+            let rep    = RI.RFFMVReport
+                          { RI.rfmvFit         = fit
+                          , RI.rfmvGroup       = gCol
+                          , RI.rfmvXAxis       = xCol
+                          , RI.rfmvInteractive = koInteractive opts
+                          , RI.rfmvStandardizer =
+                              if koStandardize opts then Just stdr else Nothing
+                          }
+                cfg    = RB.defaultReportConfig
+                          (yCol <> " — Multivariate RFF Ridge"
+                              <> if koInteractive opts then " (interactive)" else "")
+                secs   = RB.toReport cfg df xCols yCol rep
+            RB.renderReport rpath cfg secs
           putStrLn $ "Report: " ++ rpath
+          printPhase "Render report" tRep
         Nothing -> return ()
     _ -> putStrLn
       "Plot skipped (use --group COL --xaxis COL to draw scatter+fit by group)"
