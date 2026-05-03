@@ -1,0 +1,70 @@
+-- | 多出力回帰の共通基盤。
+--
+-- 設計方針:
+--
+-- - 各モデルの **主 API** は応答 Y を @LA.Matrix Double@ (n × q) で受け取り、
+--   結果も Matrix で返す (q=1 を特殊化)。
+-- - 単出力 API (@V.Vector Double@) は @asMultiY@/@fromMultiY@ で
+--   1 列 Matrix に昇格させ、Multi 版を再利用する薄いラッパ。
+-- - q ごとの評価指標 (R² etc.) もここに集約。
+module Model.MultiOutput
+  ( -- * 単出力 ↔ 多出力 変換
+    asMultiY
+  , fromMultiY
+  , asMultiYV
+    -- * 多出力評価指標
+  , rmseMulti
+  , r2Multi
+  , mseMulti
+  ) where
+
+import qualified Data.Vector as V
+import qualified Numeric.LinearAlgebra as LA
+
+-- ---------------------------------------------------------------------------
+-- 変換
+-- ---------------------------------------------------------------------------
+
+-- | 1D ベクトルを n×1 行列に昇格。
+asMultiY :: V.Vector Double -> LA.Matrix Double
+asMultiY = LA.asColumn . LA.fromList . V.toList
+
+-- | hmatrix 'LA.Vector' を n×1 行列に。
+asMultiYV :: LA.Vector Double -> LA.Matrix Double
+asMultiYV = LA.asColumn
+
+-- | n×1 行列から 1D ベクトルへ。q ≠ 1 のときは最初の列を返す。
+fromMultiY :: LA.Matrix Double -> V.Vector Double
+fromMultiY m
+  | LA.cols m == 0 = V.empty
+  | otherwise      = V.fromList (LA.toList (LA.flatten (m LA.¿ [0])))
+
+-- ---------------------------------------------------------------------------
+-- 評価指標
+-- ---------------------------------------------------------------------------
+
+-- | 全要素 MSE (sum-of-squares / n / q)。
+mseMulti :: LA.Matrix Double -> LA.Matrix Double -> Double
+mseMulti ys yhat =
+  let n = LA.rows ys
+      q = LA.cols ys
+      r = ys - yhat
+  in LA.sumElements (r * r) / fromIntegral (n * q)
+
+-- | 全要素 RMSE。
+rmseMulti :: LA.Matrix Double -> LA.Matrix Double -> Double
+rmseMulti ys yhat = sqrt (mseMulti ys yhat)
+
+-- | 列ごと R² (長さ q ベクトル)。
+r2Multi :: LA.Matrix Double -> LA.Matrix Double -> V.Vector Double
+r2Multi ys yhat =
+  let n  = LA.rows ys
+      q  = LA.cols ys
+      colR2 j =
+        let yc  = LA.toList (LA.flatten (ys   LA.¿ [j]))
+            yhc = LA.toList (LA.flatten (yhat LA.¿ [j]))
+            mu  = sum yc / fromIntegral n
+            sst = sum [(y - mu)^(2::Int) | y <- yc]
+            sse = sum [(y - p)^(2::Int) | (y, p) <- zip yc yhc]
+        in if sst == 0 then 0 else 1 - sse / sst
+  in V.fromList [ colR2 j | j <- [0 .. q - 1] ]
