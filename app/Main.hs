@@ -2,7 +2,8 @@
 {-# LANGUAGE RankNTypes #-}
 module Main where
 
-import DataIO.CSV        (loadAuto, loadAutoSafe)
+import DataIO.CSV        (loadAuto, loadAutoSafe, loadAutoSafeWith,
+                          LoadOpts (..), defaultLoadOpts)
 import qualified DataIO.Log as Log
 import qualified DataIO.Preprocess as Pp
 import qualified DataFrame                    as DX
@@ -600,14 +601,37 @@ runRegressCmd args = case parseArgs args of
 -- ---------------------------------------------------------------------------
 
 runInfoCmd :: [String] -> IO ()
-runInfoCmd []        = hPutStrLn stderr "Usage: hanalyze info <file>"
-runInfoCmd (file:_)  = do
-  result <- loadAutoSafe file
-  case result of
-    Left err          -> hPutStrLn stderr ("Parse error: " ++ err)
-    Right (df, lg)    -> do
-      Log.printLogReport lg
-      printDataFrameInfo file df
+runInfoCmd args = do
+  let (lopts, rest) = parseLoadOpts args
+  case rest of
+    []        -> hPutStrLn stderr
+                   "Usage: hanalyze info <file> [--no-header] [--skip N] [--comment CH] [--strict]"
+    (file:_)  -> do
+      result <- loadAutoSafeWith lopts file
+      case result of
+        Left err          -> hPutStrLn stderr ("Parse error: " ++ err)
+        Right (df, lg)    -> do
+          Log.printLogReport lg
+          printDataFrameInfo file df
+
+-- | 共通フラグを切り出す: '--no-header' / '--skip N' / '--comment CH' /
+-- '--strict' を 'LoadOpts' に集約し、残った位置引数を返す。
+parseLoadOpts :: [String] -> (LoadOpts, [String])
+parseLoadOpts = go defaultLoadOpts []
+  where
+    go acc rs []                              = (acc, reverse rs)
+    go acc rs ("--no-header":xs)              = go acc { loNoHeader = True } rs xs
+    go acc rs ("--strict":xs)                 = go acc { loStrict   = True } rs xs
+    go acc rs ("--skip":n:xs)
+      | Just k <- readMaybeInt n              = go acc { loSkip = k } rs xs
+    go acc rs ("--comment":cs:xs)
+      | (c:_) <- cs                           = go acc { loComment = Just c } rs xs
+    go acc rs (x:xs)                          = go acc (x:rs) xs
+
+readMaybeInt :: String -> Maybe Int
+readMaybeInt s = case reads s of
+  [(n, "")] -> Just n
+  _         -> Nothing
 
 printDataFrameInfo :: FilePath -> DXD.DataFrame -> IO ()
 printDataFrameInfo file df = do

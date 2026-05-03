@@ -505,3 +505,35 @@ main = hspec $ do
     -- BS インポートを使う何かのスモーク (未使用 warning 防止)
     it "preview is non-empty for typical use" $
       BS.length "x,y\n1,2" `shouldSatisfy` (> 0)
+
+  describe "DataIO.CSV.loadAutoSafeWith" $ do
+    it "--no-header: 先頭行をデータ行として扱い col0... を生成" $
+      withSystemTempFile "ha-noh.csv" $ \fp h -> do
+        hPutStr h "1,2\n3,4\n5,6\n"
+        hClose h
+        r <- CSV.loadAutoSafeWith
+               (CSV.defaultLoadOpts { CSV.loNoHeader = True }) fp
+        case r of
+          Left e -> expectationFailure ("unexpected Left: " ++ e)
+          Right (df, lg) -> do
+            let cols = DX.columnNames df
+            cols `shouldBe` ["col0", "col1"]
+            map Log.lgCode (Log.entries lg) `shouldContain` ["I012"]
+    it "--skip 2: 先頭 2 行を skip" $
+      withSystemTempFile "ha-skip.csv" $ \fp h -> do
+        hPutStr h "# c1\n# c2\nx,y\n1,2\n3,4\n"
+        hClose h
+        r <- CSV.loadAutoSafeWith
+               (CSV.defaultLoadOpts { CSV.loSkip = 2 }) fp
+        case r of
+          Left e -> expectationFailure ("unexpected Left: " ++ e)
+          Right (df, _) -> DX.columnNames df `shouldBe` ["x", "y"]
+    it "--strict + 警告ありデータ → Left" $
+      withSystemTempFile "ha-strict.csv" $ \fp h -> do
+        hPutStr h "1.0,2.0\n3.0,4.0\n"  -- ヘッダ無し疑い W001
+        hClose h
+        r <- CSV.loadAutoSafeWith
+               (CSV.defaultLoadOpts { CSV.loStrict = True }) fp
+        case r of
+          Left _   -> return ()
+          Right _  -> expectationFailure "expected Left under --strict"

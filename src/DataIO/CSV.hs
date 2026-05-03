@@ -16,6 +16,10 @@ module DataIO.CSV
   , loadTsvSafe
   , loadSsvSafe
   , loadAutoSafe
+    -- * Loader options (Phase A4)
+  , LoadOpts (..)
+  , defaultLoadOpts
+  , loadAutoSafeWith
   , ParseError
   ) where
 
@@ -36,8 +40,10 @@ import qualified Data.Vector as V
 import System.IO.Error (tryIOError)
 import Text.Read (readMaybe)
 
-import DataIO.Log (Loaded)
+import DataIO.Log (Loaded, LogReport, mkInfo, hasWarnings, logReport, entries)
 import DataIO.Health (inspectWithPreview)
+import qualified System.IO.Temp as Tmp
+import System.IO (hClose)
 
 type ParseError = String
 
@@ -195,3 +201,118 @@ loadAutoSafe path
   | ".tsv" `isSuffixOf` path = loadTsvSafe path
   | ".ssv" `isSuffixOf` path = loadSsvSafe path
   | otherwise                = loadCsvSafe path
+
+-- ---------------------------------------------------------------------------
+-- Phase A4: ロードオプション
+-- ---------------------------------------------------------------------------
+
+-- | CLI から渡せる読込オプション。
+--
+-- * 'loSkip'      — 先頭 N 行を読み飛ばす
+-- * 'loComment'   — 指定文字で始まる行を読み飛ばす (例: @\'#\'@)
+-- * 'loNoHeader'  — ヘッダ無しと見なし、@col0, col1, ...@ を生成
+-- * 'loStrict'    — 'LogReport' に Warn が含まれていたら 'Left' で短絡する
+data LoadOpts = LoadOpts
+  { loSkip     :: !Int
+  , loComment  :: !(Maybe Char)
+  , loNoHeader :: !Bool
+  , loStrict   :: !Bool
+  } deriving (Eq, Show)
+
+defaultLoadOpts :: LoadOpts
+defaultLoadOpts = LoadOpts 0 Nothing False False
+
+-- | 'LoadOpts' を反映して 'loadAutoSafe' を呼ぶ。skip/comment/noHeader が
+-- いずれも無指定のときは元ファイルを直接読む。指定があれば一時ファイルに
+-- 前処理結果を書き出してから読む。
+loadAutoSafeWith
+  :: LoadOpts -> FilePath
+  -> IO (Either ParseError (Loaded DXD.DataFrame))
+loadAutoSafeWith opts path
+  | needRewrite opts = withRewritten opts path go
+  | otherwise        = go path mempty
+  where
+    go p extraLog = do
+      r <- loadAutoSafe p
+      case r of
+        Left  e        -> return (Left e)
+        Right (df, lg) ->
+          let lg' = extraLog <> lg
+          in if loStrict opts && hasWarnings lg'
+               then return $ Left
+                      ("strict: 警告が発生しました ("
+                         <> show (length (entries lg'))
+                         <> " 件)。--strict を外すか、--skip / --comment / --no-header で対処してください。")
+               else return (Right (df, lg'))
+
+needRewrite :: LoadOpts -> Bool
+needRewrite o = loSkip o > 0
+             || loComment o /= Nothing
+             || loNoHeader o
+
+-- | 前処理 (skip / comment / no-header) を施した一時ファイルを作って
+-- アクションに渡す。withSystemTempFile で自動クリーンアップ。
+withRewritten
+  :: LoadOpts -> FilePath
+  -> (FilePath -> LogReport -> IO (Either ParseError (Loaded DXD.DataFrame)))
+  -> IO (Either ParseError (Loaded DXD.DataFrame))
+withRewritten opts path act = do
+  raw <- BS.readFile path
+  let (rewritten, plog) = rewriteContent opts raw
+  Tmp.withSystemTempFile "ha-rewrite-.csv" $ \tmp h -> do
+    BS.hPut h rewritten
+    hClose h
+    act tmp plog
+
+-- | LoadOpts に従ってバイト列を変換し、変換ログを返す。
+rewriteContent :: LoadOpts -> BS.ByteString -> (BS.ByteString, LogReport)
+rewriteContent opts bs0 =
+  let nl       = fromIntegral (ord '\n')
+      bs       = stripBOM bs0
+      rawLines = BS.split nl bs
+      lines0   = map stripCR rawLines
+      (afterSkip, skippedNote) =
+        if loSkip opts > 0
+          then ( drop (loSkip opts) lines0
+               , logReport (mkInfo "I010"
+                   ("先頭 " <> tShow (loSkip opts) <> " 行を skip しました。")
+                   Nothing))
+          else (lines0, mempty)
+      (afterComment, commentNote) = case loComment opts of
+        Just ch ->
+          let chBy = fromIntegral (ord ch)
+              isC l = case BS.uncons (BS.dropWhile (== fromIntegral (ord ' ')) l) of
+                        Just (c, _) -> c == chBy
+                        Nothing     -> False
+              kept   = filter (not . isC) afterSkip
+              dropped = length afterSkip - length kept
+          in if dropped > 0
+               then ( kept
+                    , logReport (mkInfo "I011"
+                        ("コメント文字 '" <> T.singleton ch
+                            <> "' で始まる行を " <> tShow dropped <> " 件 skip しました。")
+                        Nothing))
+               else (kept, mempty)
+        Nothing -> (afterSkip, mempty)
+      (afterHeader, headerNote) =
+        if loNoHeader opts
+          then case dropWhile BS.null afterComment of
+                 [] -> (afterComment, mempty)
+                 (firstRow:_) ->
+                   let nCols = length (BS.split (fromIntegral (ord ',')) firstRow)
+                       hdr   = BS.intercalate ","
+                                 [ TE.encodeUtf8 (T.pack ("col" ++ show i))
+                                 | i <- [0 .. nCols - 1] ]
+                       lg = logReport (mkInfo "I012"
+                              ("--no-header: ヘッダ "
+                                 <> tShow nCols
+                                 <> " 列 (col0...) を生成しました。")
+                              Nothing)
+                   in (hdr : afterComment, lg)
+          else (afterComment, mempty)
+      out      = BS.intercalate (BS.singleton nl) afterHeader
+      logTotal = skippedNote <> commentNote <> headerNote
+  in (out, logTotal)
+
+tShow :: Show a => a -> Text
+tShow = T.pack . show
