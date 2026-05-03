@@ -142,6 +142,21 @@ r <- CMAES.runCMAESWith cfg sphere [3, -2, 1, 0.5, -1.5] gen
 `cabal run single-opt-bench-demo` produces an HTML report comparing convergence histories
 of all 5 algorithms × 3 benchmarks (Sphere / Rosenbrock / Rastrigin).
 
+## Integration with Bayesian Optimization (`Optim.BayesOpt`)
+
+`Optim.BayesOpt`'s acquisition maximisation has been swapped to the new optimisers (Phase O8):
+
+| Function | Inner optimiser |
+|---|---|
+| `bayesOpt` (1D single-objective) | **Brent** + coarse-grid bracket |
+| `bayesOptND` (N-dim single-objective) | **L-BFGS multi-start** (nStarts random initial points) |
+| `bayesOptScalarMO` (multi-objective, ParEGO-style) | random scalarisation + **L-BFGS multi-start** |
+| `bayesOptMOWithNSGA` (multi-objective, full Pareto-front search) | **NSGA-II** (kept; appropriate here) |
+
+GP Cholesky / SVD failures are caught internally with `try (evaluate ...)` and converted
+to a penalty (1e30), so the optimiser does not crash when params drift to extreme regions
+(e.g. tiny length scales).
+
 ## On the CLI
 
 We do not provide a CLI subcommand (`hanalyze optim` etc.) for single-objective

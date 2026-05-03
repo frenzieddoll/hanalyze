@@ -38,6 +38,7 @@ import qualified Optim.LBFGS       as LBFGS
 import qualified Optim.LineSearch  as LS
 import qualified Optim.DifferentialEvolution as DE
 import qualified Optim.CMAES       as CMAES
+import qualified Optim.BayesOpt    as BO
 import qualified Optim.Common      as OC
 import qualified System.Random.MWC as MWC
 
@@ -1015,3 +1016,19 @@ main = hspec $ do
                   , CMAES.cmSigma0 = 1.0 }
       r <- CMAES.runCMAESWith cfg sphere [3, -2, 1, 0.5, -1.5] gen
       l2 (OC.orBest r) [0,0,0,0,0] `shouldSatisfy` (< 0.5)
+
+  -- ===========================================================================
+  -- Bayesian Optimization 内部最適化の差し替え (Optim.BayesOpt)
+  -- ===========================================================================
+  describe "Optim.BayesOpt (acquisition optimizer swap)" $ do
+    it "bayesOpt 1D: Brent 内側で簡単な凸関数 (x-1.5)^2 を見つける" $ do
+      gen <- MWC.create
+      let cfg = BO.defaultBayesOptConfig
+                  { BO.boIterations = 8
+                  , BO.boInitPoints = 4
+                  , BO.boGridSize   = 32
+                  }
+          target x = pure ((x - 1.5)^(2::Int) :: Double)
+      (_, (xb, _)) <- BO.bayesOpt cfg target (0, 3) gen
+      -- 8 反復では精度は緩めに。3.0 範囲のうち 0.5 以内に収束を期待
+      abs (xb - 1.5) `shouldSatisfy` (< 0.5)

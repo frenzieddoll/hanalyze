@@ -48,6 +48,7 @@ import qualified Optim.GradAscent
 import qualified Optim.Numeric
 import qualified Optim.LBFGS as LBFGS
 import qualified Optim.Common as OC
+import Control.Exception (SomeException, try, evaluate)
 import System.IO.Unsafe (unsafePerformIO)
 
 -- ---------------------------------------------------------------------------
@@ -164,17 +165,32 @@ noiseKernel ker p xs =
 -- ハイパーパラメータ最適化の目的関数として使用する。
 --
 -- log p = −½ yᵀ Ky⁻¹ y − ½ log|Ky| − n/2 log(2π)
+--
+-- params が病的 (極小 length scale 等) で Cholesky が失敗した場合は
+-- ペナルティ -1e30 を返し、optimizer が当該領域を避けるよう誘導する。
 logMarginalLikelihood :: [Double] -> [Double] -> Kernel -> GPParams -> Double
 logMarginalLikelihood trainX trainY ker params =
-  let n    = length trainX
-      ky   = noiseKernel ker params trainX
-      y    = LA.fromList trainY
-      -- Cholesky 分解: ky = Rᵀ R  (R は上三角)
-      r    = LA.chol (LA.sym ky)
-      logDet  = 2 * sum (map log (LA.toList (LA.takeDiag r)))
-      alpha   = ky LA.<\> y
-      dataFit = LA.dot y alpha
-  in -0.5 * dataFit - 0.5 * logDet - fromIntegral n / 2 * log (2 * pi)
+  let n      = length trainX
+      ky     = noiseKernel ker params trainX
+      y      = LA.fromList trainY
+      tryChol c =
+        let result = unsafePerformIO $
+                       try (evaluate (LA.chol (LA.sym c)))
+                       :: Either SomeException (LA.Matrix Double)
+        in case result of
+             Right r -> Just r
+             Left _  -> Nothing
+      mR = case tryChol ky of
+             Just r  -> Just r
+             -- jitter を追加して再試行
+             Nothing -> tryChol (ky `LA.add` LA.scale 1e-4 (LA.ident n))
+  in case mR of
+       Nothing -> -1e30
+       Just r  ->
+         let logDet  = 2 * sum (map log (LA.toList (LA.takeDiag r)))
+             alpha   = ky LA.<\> y
+             dataFit = LA.dot y alpha
+         in -0.5 * dataFit - 0.5 * logDet - fromIntegral n / 2 * log (2 * pi)
 
 -- | テスト点 testX での GP 事後予測 (単出力)。
 -- 多出力 'fitGPMulti' に y を 1 列行列化して委譲、列 0 を取り出す。

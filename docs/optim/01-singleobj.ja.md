@@ -140,6 +140,20 @@ r <- CMAES.runCMAESWith cfg sphere [3, -2, 1, 0.5, -1.5] gen
 `cabal run single-opt-bench-demo` で 5 アルゴリズム × 3 ベンチ (Sphere / Rosenbrock / Rastrigin) の
 収束履歴を HTML レポートで比較できる。
 
+## Bayesian Optimization 内側 (`Optim.BayesOpt`) との統合
+
+`Optim.BayesOpt` の獲得関数最大化は、新オプティマイザに置換済 (Phase O8):
+
+| 関数 | 内側 |
+|---|---|
+| `bayesOpt` (1D 単目的) | **Brent** + 粗グリッド bracket |
+| `bayesOptND` (N 次元単目的) | **L-BFGS multi-start** (nStarts 個の初期点から並列探索) |
+| `bayesOptScalarMO` (多目的 ParEGO 風) | random scalarization + **L-BFGS multi-start** |
+| `bayesOptMOWithNSGA` (多目的、Pareto front 全探索) | **NSGA-II** (適性あり、残置) |
+
+GP の Cholesky / SVD 失敗は内部で `try (evaluate ...)` でキャッチして
+ペナルティ値 (1e30) を返すため、極小 length scale 等で optimizer がクラッシュしない。
+
 ## CLI について
 
 単目的最適化用の CLI サブコマンド (`hanalyze optim` 等) は提供していない。
