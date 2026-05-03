@@ -163,6 +163,9 @@ data InteractiveRFFMV = InteractiveRFFMV
   , irfDim         :: Int                 -- ^ D
   , irfP           :: Int                 -- ^ p
   , irfWeights     :: [Double]            -- ^ D
+  , irfStdMu       :: Maybe [Double]      -- ^ 標準化 ON 時の μ (length p)。
+                                          --   JS 側で raw → 標準化変換に使用
+  , irfStdSd       :: Maybe [Double]      -- ^ 同 σ
   } deriving (Show)
 
 data InteractiveModel = InteractiveModel
@@ -1948,6 +1951,8 @@ interactiveRFFMVScript sid r =
       omegasArr = arrD (irfOmegasRowMaj r)
       bsArr     = arrD (irfBs r)
       wArr      = arrD (irfWeights r)
+      muArr  = case irfStdMu r of { Just xs -> arrD xs; Nothing -> "null" }
+      sdArr  = case irfStdSd r of { Just xs -> arrD xs; Nothing -> "null" }
       xObsJson  =
         "[" <> T.intercalate ","
                   [ arrD col | col <- irfXObs r ] <> "]"
@@ -1976,7 +1981,14 @@ interactiveRFFMVScript sid r =
        , "  const groups   = " <> groupsJson <> ";"
        , "  const mainGrid = " <> mainGridJson <> ";"
        , "  const coef     = sigmaF * Math.sqrt(2 / Ddim);"
-       , "  function predictY(xVec) {"
+       , "  const stdMu    = " <> muArr <> ";"
+       , "  const stdSd    = " <> sdArr <> ";"
+       , "  function standardize(xVec) {"
+       , "    if (stdMu === null) return xVec;"
+       , "    return xVec.map((v, k) => (v - stdMu[k]) / stdSd[k]);"
+       , "  }"
+       , "  function predictY(xVecRaw) {"
+       , "    const xVec = standardize(xVecRaw);"
        , "    let y = 0;"
        , "    for (let j = 0; j < Ddim; j++) {"
        , "      let arg = bs[j];"

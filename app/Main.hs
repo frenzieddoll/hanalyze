@@ -3,8 +3,9 @@
 module Main where
 
 import DataIO.CSV        (loadAutoSafeWith, LoadOpts (..), defaultLoadOpts)
-import qualified DataIO.Log   as Log
-import qualified DataIO.Clean as Clean
+import qualified DataIO.Log     as Log
+import qualified DataIO.Clean   as Clean
+import qualified Stat.Standardize as Std
 import qualified DataIO.Preprocess as Pp
 import qualified DataFrame                    as DX
 import qualified DataFrame.Internal.Column    as DXC
@@ -2223,6 +2224,9 @@ kernelUsage = unlines
   , "  --xaxis COL       column to use as horizontal axis in the plot (e.g. t)"
   , "  --interactive     スライダで副軸を変えると JS が予測曲線を再計算"
   , "                    (--report と併用、--xaxis の列以外がスライダになる)"
+  , "  --standardize     入力 X を z-score 化してから fit (スケール差対策)"
+  , "  --auto-hp         周辺尤度最大化で (ℓ, σ_n) を自動決定"
+  , "                    (--bandwidth / --lambda は無視される)"
   , ""
   , "Examples:"
   , "  hanalyze kernel data.csv x y --method kr --bandwidth 0.5"
@@ -2246,6 +2250,8 @@ data KernelOpts = KernelOpts
   , koGroup     :: Maybe T.Text  -- 多変量 RFF プロット用 group 列
   , koXAxis     :: Maybe T.Text  -- 多変量 RFF プロット用 横軸列名
   , koInteractive :: Bool        -- インタラクティブ予測 (--report と併用)
+  , koStandardize :: Bool        -- 入力標準化 (Phase 4)
+  , koAutoHP      :: Bool        -- 周辺尤度最大化で (ℓ, σ_n) 自動決定 (Phase 4)
   }
 
 defaultKernelOpts :: KernelOpts
@@ -2261,6 +2267,8 @@ defaultKernelOpts = KernelOpts
   , koGroup     = Nothing
   , koXAxis     = Nothing
   , koInteractive = False
+  , koStandardize = False
+  , koAutoHP      = False
   }
 
 parseKernelKind :: String -> Either String Kern.Kernel
@@ -2330,6 +2338,10 @@ parseKernelOpts (flag : rest) acc
       []     -> Left "--xaxis requires a column name"
   | flag == "--interactive" =
       parseKernelOpts rest (acc { koInteractive = True })
+  | flag == "--standardize" =
+      parseKernelOpts rest (acc { koStandardize = True })
+  | flag == "--auto-hp" =
+      parseKernelOpts rest (acc { koAutoHP = True })
   | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
 
 doKernel :: FilePath -> String -> String -> KernelOpts -> LoadOpts -> IO ()
@@ -2359,6 +2371,7 @@ doKernel file xColStr yColStr opts lopts = do
 -- | 多変量 RFF Ridge を走らせる (Phase B-RFF)。
 -- '--group' / '--xaxis' が指定されていれば、グループ別観測点 + 予測曲線の
 -- 散布図を出力する。
+-- '--standardize' / '--auto-hp' で前処理 / HP 自動決定。
 runKernelMV
   :: DXD.DataFrame -> [T.Text] -> T.Text
   -> [V.Vector Double] -> V.Vector Double
@@ -2366,20 +2379,56 @@ runKernelMV
 runKernelMV df xCols yCol xVecs yVec opts = do
   let n = V.length yVec
       p = length xCols
-      -- n × p 行列に組む
       cols   = map V.toList xVecs
-      xMat   = LA.fromColumns (map LA.fromList cols)
+      xMatRaw = LA.fromColumns (map LA.fromList cols)
       ys     = V.toList yVec
-      ell0   = case koBandwidth opts of
-                 Just h  -> h
-                 Nothing -> defaultLengthScale cols
-      lam    = koLambda opts
-      d      = koFeatures opts
+      yV     = LA.fromList ys
   printf "Loaded %d rows × %d features (%s); method=rff (multivariate)\n"
          n p (T.unpack (T.intercalate "," xCols))
-  printf "  ell=%.4f  lambda=%.4f  D=%d\n" ell0 lam d
+
+  -- ステップ 1: 標準化 (任意)
+  let stdr = if koStandardize opts
+               then Std.fitStandardizer xMatRaw
+               else Std.identityStandardizer p
+      xMat = if koStandardize opts
+               then Std.applyStandardizer stdr xMatRaw
+               else xMatRaw
+  if koStandardize opts
+    then do
+      putStrLn "  Standardize: ON"
+      printf "    μ = [%s]\n" (T.unpack (T.intercalate "," (map (T.pack . printf "%.4g") (Std.stMu stdr))))
+      printf "    σ = [%s]\n" (T.unpack (T.intercalate "," (map (T.pack . printf "%.4g") (Std.stSd stdr))))
+    else putStrLn "  Standardize: OFF"
+
+  -- ステップ 2: HP の決定
+  (ell, lam, sigF) <-
+    if koAutoHP opts
+      then do
+        putStrLn "  Auto-HP: 周辺尤度最大化を実行中..."
+        let res = RFF.maximizeMarginalLikRBFMV xMat yV Nothing
+            ellOpt = RFF.mlEll res
+            sfOpt  = RFF.mlSigmaF res
+            snOpt  = RFF.mlSigmaN res
+            -- σ_n² = λ (Ridge と GP のノイズ等価関係)
+            lamOpt = snOpt * snOpt
+        printf "    ℓ      = %.4g\n" ellOpt
+        printf "    σ_f    = %.4g\n" sfOpt
+        printf "    σ_n    = %.4g  (λ = σ_n² = %.4g)\n" snOpt lamOpt
+        printf "    log_mlik = %.4f  (グリッド %d 点評価)\n"
+               (RFF.mlLogMlik res) (RFF.mlGridPts res)
+        return (ellOpt, lamOpt, sfOpt)
+      else do
+        let ell0 = case koBandwidth opts of
+              Just h  -> h
+              Nothing -> defaultLengthScale (map LA.toList (LA.toColumns xMat))
+        printf "  ell=%.4f  lambda=%.4f\n" ell0 (koLambda opts)
+        return (ell0, koLambda opts, 1.0)
+
+  let d = koFeatures opts
+  printf "  D=%d\n" d
+
   gen   <- createSystemRandom
-  feats <- RFF.sampleRFFRBFMV p d ell0 1.0 gen
+  feats <- RFF.sampleRFFRBFMV p d ell sigF gen
   let fit  = RFF.rffRidgeMV feats xMat ys lam
       yhat = RFF.predictRFFRidgeMV fit xMat
       sse  = sum (zipWith (\a b -> (a - b)^(2::Int)) ys yhat)
@@ -2388,19 +2437,26 @@ runKernelMV df xCols yCol xVecs yVec opts = do
       r2   = if sst < 1e-12 then 0 else 1 - sse / sst
   printf "RFF (multivariate) Ridge fit:\n"
   printf "  R^2 = %.4f\n" r2
-  printf "  RMSE = %.4f\n" (sqrt (sse / fromIntegral n))
+  printf "  RMSE = %.4g\n" (sqrt (sse / fromIntegral n))
 
   -- --group + --xaxis が両方指定されていればプロット
   case (koGroup opts, koXAxis opts) of
     (Just gCol, Just xCol) -> do
       let outPath = koOut opts
           fmt     = koFormat opts
-      writeMVPlot fmt outPath df gCol xCol xCols yCol fit cols ys
+      writeMVPlot fmt outPath df gCol xCol xCols yCol fit stdr cols ys
       putStrLn $ "Plot: " ++ outPath
       -- --report 指定時は ReportBuilder で統合 HTML を出力
       case koReport opts of
         Just rpath -> do
-          let rep    = RI.RFFMVReport fit gCol xCol (koInteractive opts)
+          let rep    = RI.RFFMVReport
+                         { RI.rfmvFit         = fit
+                         , RI.rfmvGroup       = gCol
+                         , RI.rfmvXAxis       = xCol
+                         , RI.rfmvInteractive = koInteractive opts
+                         , RI.rfmvStandardizer =
+                             if koStandardize opts then Just stdr else Nothing
+                         }
               cfg    = RB.defaultReportConfig
                          (yCol <> " — Multivariate RFF Ridge"
                             <> if koInteractive opts then " (interactive)" else "")
@@ -2412,19 +2468,18 @@ runKernelMV df xCols yCol xVecs yVec opts = do
       "Plot skipped (use --group COL --xaxis COL to draw scatter+fit by group)"
 
 -- | name (group) ごとに観測点と予測曲線をプロット。
+-- 標準化 ON のときは予測グリッドを raw → 標準化空間に変換してから predict。
+-- 横軸 / 観測点は raw 単位で表示する。
 writeMVPlot
   :: OutputFormat -> FilePath
   -> DXD.DataFrame
-  -> T.Text                 -- ^ group 列名
-  -> T.Text                 -- ^ 横軸列名 (xCols のいずれか)
-  -> [T.Text]               -- ^ 全 x 列名 (xMat の列順)
-  -> T.Text                 -- ^ y 列名 (タイトル用)
+  -> T.Text -> T.Text -> [T.Text] -> T.Text
   -> RFF.RFFRidgeFitMV
-  -> [[Double]]             -- ^ 各 x 列の生データ (列順)
-  -> [Double]               -- ^ y 観測値
+  -> Std.Standardizer
+  -> [[Double]]             -- ^ raw cols
+  -> [Double]
   -> IO ()
-writeMVPlot fmt path df gCol xCol xCols yCol fit cols ys = do
-  -- group 列を取り出す
+writeMVPlot fmt path df gCol xCol xCols yCol fit stdr cols ys = do
   case getMaybeTextVec gCol df of
     Nothing -> hPutStrLn stderr $
       "plot: group column '" ++ T.unpack gCol ++ "' not found"
@@ -2432,28 +2487,28 @@ writeMVPlot fmt path df gCol xCol xCols yCol fit cols ys = do
       let groups = [ maybe "" id g | g <- V.toList gv ]
           xColIdx = case [ i | (i, c) <- zip [0..] xCols, c == xCol ] of
                       (i:_) -> i
-                      []    -> 0  -- フォールバック
+                      []    -> 0
           xValuesAll = cols !! xColIdx
           xMin = minimum xValuesAll
           xMax = maximum xValuesAll
           ngrid = 100
           xGrid = [ xMin + fromIntegral i * (xMax - xMin) / fromIntegral (ngrid - 1)
                   | i <- [0 .. ngrid - 1] ]
-          -- 観測点: (group, x, y)
           ptData = zip3 groups xValuesAll ys
-          -- 予測曲線: 各 unique group について (x_other_cols をその group の代表値で固定 + xGrid)
           uniqGroups = uniq groups
           rowsForGroup g = [ i | (i, gg) <- zip [0..] groups, gg == g ]
           repValues g = [ (cols !! j) !! head (rowsForGroup g)
                         | j <- [0 .. length xCols - 1] ]
-          -- 各 group / xGrid 点に対して予測
           mkLineData g =
             let rep = repValues g
-                makeRow t =
+                -- raw 値で row を組む
+                makeRowRaw t =
                   [ if j == xColIdx then t else rep !! j
                   | j <- [0 .. length xCols - 1] ]
-                xMat = LA.fromLists [ makeRow t | t <- xGrid ]
-                ys'  = RFF.predictRFFRidgeMV fit xMat
+                xMatRaw = LA.fromLists [ makeRowRaw t | t <- xGrid ]
+                -- 標準化空間に変換してから predict
+                xMatStd = Std.applyStandardizer stdr xMatRaw
+                ys'     = RFF.predictRFFRidgeMV fit xMatStd
             in [ (g, t, y') | (t, y') <- zip xGrid ys' ]
           lnData = concatMap mkLineData uniqGroups
           plotCfg = (defaultConfig (yCol <> " by " <> gCol))

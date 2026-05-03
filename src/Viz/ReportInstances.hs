@@ -46,6 +46,7 @@ import Text.Printf (printf)
 import qualified DataFrame.Internal.DataFrame as DXD
 import DataIO.Convert (getDoubleVec, getMaybeTextVec)
 import qualified Numeric.LinearAlgebra as LA2
+import qualified Stat.Standardize as Std
 import Viz.Scatter   (scatterWithGroups)
 import Viz.Core      (defaultConfig, PlotConfig (..))
 import Model.Core      (FitResult, coeffList, fittedList, residualsV, rSquared1)
@@ -1081,11 +1082,14 @@ instance Reportable HBMReport where
 -- | 多変量 RFF Ridge のレポート。`rfmvGroup` 列で色分けし、`rfmvXAxis` 列
 -- (xCols のいずれか) を横軸にして観測点 + 予測曲線を描く。
 data RFFMVReport = RFFMVReport
-  { rfmvFit         :: RFFRidgeFitMV
-  , rfmvGroup       :: Text
-  , rfmvXAxis       :: Text
-  , rfmvInteractive :: Bool
+  { rfmvFit          :: RFFRidgeFitMV
+  , rfmvGroup        :: Text
+  , rfmvXAxis        :: Text
+  , rfmvInteractive  :: Bool
     -- ^ True なら 'secInteractiveRFFMV' (スライダ + リアルタイム JS 予測) を含める
+  , rfmvStandardizer :: Maybe Std.Standardizer
+    -- ^ fit 時に X を標準化したときの μ/σ。Nothing なら未標準化。
+    --   plot や JS 予測時はこれで raw → 標準化変換を行う。
   } deriving (Show)
 
 instance Reportable RFFMVReport where
@@ -1093,10 +1097,15 @@ instance Reportable RFFMVReport where
     case (mapM (`getDoubleVec` df) xCols, getDoubleVec yCol df,
           getMaybeTextVec (rfmvGroup r) df) of
       (Just xVecs, Just yVec, Just gv) ->
-        let cols   = map V.toList xVecs
-            ys     = V.toList yVec
-            groups = [ maybe "" id g | g <- V.toList gv ]
-            xMatObs = LA2.fromColumns (map LA2.fromList cols)
+        let cols    = map V.toList xVecs
+            ys      = V.toList yVec
+            groups  = [ maybe "" id g | g <- V.toList gv ]
+            xMatRaw = LA2.fromColumns (map LA2.fromList cols)
+            -- fit は標準化空間で行われたので、観測点も標準化空間に投げる
+            stdr    = case rfmvStandardizer r of
+                        Just s  -> s
+                        Nothing -> Std.identityStandardizer (length xCols)
+            xMatObs = Std.applyStandardizer stdr xMatRaw
             yhat    = predictRFFRidgeMV (rfmvFit r) xMatObs
             sse     = sum (zipWith (\a b -> (a-b)*(a-b)) ys yhat)
             sst     = let m = sum ys / fromIntegral (max 1 (length ys))
@@ -1128,8 +1137,9 @@ instance Reportable RFFMVReport where
                   makeRow t =
                     [ if j == xColIdx then t else rep !! j
                     | j <- [0 .. length xCols - 1] ]
-                  xMatGrid = LA2.fromLists [ makeRow t | t <- xGrid ]
-                  ys'  = predictRFFRidgeMV (rfmvFit r) xMatGrid
+                  xMatRawGrid = LA2.fromLists [ makeRow t | t <- xGrid ]
+                  xMatStdGrid = Std.applyStandardizer stdr xMatRawGrid
+                  ys'  = predictRFFRidgeMV (rfmvFit r) xMatStdGrid
               in [ (g, t, y') | (t, y') <- zip xGrid ys' ]
             lnData = concatMap mkLineData uniqGroups
             plotCfg = (defaultConfig
@@ -1162,6 +1172,8 @@ instance Reportable RFFMVReport where
                         , irfDim         = d
                         , irfP           = length xCols
                         , irfWeights     = LA2.toList (rffrmvWeights (rfmvFit r))
+                        , irfStdMu       = fmap Std.stMu (rfmvStandardizer r)
+                        , irfStdSd       = fmap Std.stSd (rfmvStandardizer r)
                         }
                   ]
               | otherwise = []
