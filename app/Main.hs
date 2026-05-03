@@ -14,6 +14,7 @@ import qualified DataFrame.Internal.Column    as DXC
 import qualified DataFrame.Internal.DataFrame as DXD
 import DataIO.Convert     (getDoubleVec, getTextVec, getMaybeTextVec)
 import Model.Core        (Band (..), FitResult, rSquared1, coeffList, fittedList, residualsV)
+import qualified Model.Core as Core
 import Model.GLM         (Family (..), parseFamily, LinkFn (..), parseLink, canonicalLink,
                           fitGLMWithSmooth, fitGLMFull)
 import Model.GLMM        (GLMMResult (..), fitLMEDataFrame, fitGLMMDataFrame)
@@ -38,6 +39,7 @@ import qualified Viz.ModelGraph
 import qualified Graphics.Vega.VegaLite as VL
 import Graphics.Vega.VegaLite (VegaLite, VLProperty, VLSpec)
 import qualified Model.Kernel as Kern
+import qualified Model.MultiLM as MLM
 import qualified Model.Regularized as Reg
 import qualified Model.GAM as GAM
 import qualified Model.Quantile as QR
@@ -553,6 +555,7 @@ helpMsg = unlines
   , "  quantile  Quantile regression (τ-quantile, MM-IRLS)                  [implemented]"
   , "  gam       Generalized Additive Model (additive B-splines + Ridge)   [implemented]"
   , "  rf        Random Forest regression (CART + bagging + feature subset) [implemented]"
+  , "  multireg  Multi-output regression (wide CSV; linear/kernel-rbf)      [implemented]"
   , "  doe       Orthogonal arrays (L_n) for experimental designs           [implemented]"
   , "  taguchi   Taguchi method (SN ratio + factor effects + inner/outer)   [implemented]"
   , ""
@@ -596,6 +599,7 @@ dispatch ("gam":rest)                 = runGAMCmd rest
 dispatch ("rf":rest)                  = runRFCmd rest
 dispatch ("clean":rest)               = runCleanCmd rest
 dispatch ("melt":rest)                = runMeltCmd rest
+dispatch ("multireg":rest)            = runMultiRegCmd rest
 dispatch (cmd:_) | isFutureSubcommand cmd = do
   hPutStrLn stderr $ "hanalyze: " ++ stubMessage cmd
   hPutStrLn stderr "  Run 'hanalyze help' to see implemented subcommands."
@@ -3420,3 +3424,212 @@ gamPartialSpec col xVec fit j =
        , VL.width 500
        , VL.height 240
        ]
+
+-- ---------------------------------------------------------------------------
+-- multireg subcommand (多出力回帰: wide CSV → 対話的予測曲線)
+-- ---------------------------------------------------------------------------
+
+multiRegUsage :: String
+multiRegUsage = unlines
+  [ "Usage: hanalyze multireg <file> <xcol> <yspec> [options]"
+  , ""
+  , "wide-form CSV (1 行 = 入力 1 値、複数列 = q 個の出力) を読み込み、"
+  , "1 入力 → q 出力の多出力回帰を実行。dose スライダで対話的に予測曲線を更新。"
+  , ""
+  , "<yspec>: カンマ区切り列名 (例 'y_z001,y_z002,...') または prefix*"
+  , "         (例 'y_z*' で y_z で始まる全列)"
+  , ""
+  , "Options:"
+  , "  --method M       linear | kernel-rbf  (default: linear)"
+  , "  --bandwidth H    kernel-rbf の bandwidth (default: auto via LOOCV)"
+  , "  --lambda L       kernel-rbf の Ridge λ  (default: auto via LOOCV)"
+  , "  --auto-hp        kernel-rbf で h, λ を LOOCV 解析解で自動決定 (default: ON)"
+  , "  --report FILE    対話的 HTML レポート出力先 (default: multireg.html)"
+  , "  --xaxis LABEL    出力グリッドの x 軸ラベル (default: 'index')"
+  , ""
+  , "前提: y 列が共通の z grid を表す場合、列名末尾の数値で z 座標を内挿。"
+  , "      例: y_z001..y_z100 のとき z = 0..99 を等間隔展開 (--xaxis-min/max で上書き)."
+  , ""
+  , "Options (出力 grid):"
+  , "  --xaxis-min V    出力 grid の最小値 (default: 1)"
+  , "  --xaxis-max V    出力 grid の最大値 (default: q)"
+  , ""
+  , "Examples:"
+  , "  hanalyze multireg data/io/potential_wide.csv dose 'y_z*' \\"
+  , "      --method kernel-rbf --report trash/pot.html \\"
+  , "      --xaxis 'z [nm]' --xaxis-min 0 --xaxis-max 200"
+  ]
+
+data MROpts = MROpts
+  { mroMethod   :: String         -- "linear" | "kernel-rbf"
+  , mroH        :: Maybe Double
+  , mroLambda   :: Maybe Double
+  , mroAutoHP   :: Bool
+  , mroReport   :: FilePath
+  , mroXAxis    :: String
+  , mroXAxisMin :: Maybe Double
+  , mroXAxisMax :: Maybe Double
+  } deriving Show
+
+defaultMROpts :: MROpts
+defaultMROpts = MROpts "linear" Nothing Nothing True "multireg.html" "index" Nothing Nothing
+
+parseMROpts :: [String] -> (MROpts, [String])
+parseMROpts = go defaultMROpts []
+  where
+    go o acc [] = (o, reverse acc)
+    go o acc ("--method":m:rest)     = go o { mroMethod = m } acc rest
+    go o acc ("--bandwidth":v:rest)  = go o { mroH      = Just (read v) } acc rest
+    go o acc ("--lambda":v:rest)     = go o { mroLambda = Just (read v) } acc rest
+    go o acc ("--auto-hp":rest)      = go o { mroAutoHP = True } acc rest
+    go o acc ("--no-auto-hp":rest)   = go o { mroAutoHP = False } acc rest
+    go o acc ("--report":p:rest)     = go o { mroReport = p } acc rest
+    go o acc ("--xaxis":s:rest)      = go o { mroXAxis = s } acc rest
+    go o acc ("--xaxis-min":v:rest)  = go o { mroXAxisMin = Just (read v) } acc rest
+    go o acc ("--xaxis-max":v:rest)  = go o { mroXAxisMax = Just (read v) } acc rest
+    go o acc (x:rest)                = go o (x:acc) rest
+
+runMultiRegCmd :: [String] -> IO ()
+runMultiRegCmd args0 = do
+  let (lopts, args1) = parseLoadOpts args0
+      (opts,  args2) = parseMROpts args1
+  case args2 of
+    (file:xCol:ySpec:_) -> do
+      result <- loadAutoSafeWith lopts file
+      case result of
+        Left err          -> hPutStrLn stderr ("Parse error: " ++ err)
+        Right (df, lg)    -> do
+          Log.printLogReport lg
+          let allCols = map T.unpack (DX.columnNames df)
+              yCols   = resolveYSpec ySpec allCols
+              xColT   = T.pack xCol
+              yColTs  = map T.pack yCols
+          if null yCols
+            then hPutStrLn stderr ("multireg: yspec '" ++ ySpec
+                                    ++ "' に該当する列がありません")
+            else case getDoubleVec xColT df of
+              Nothing -> hPutStrLn stderr ("multireg: 入力列 '" ++ xCol
+                                            ++ "' が見つかりません")
+              Just xV -> do
+                let n   = V.length xV
+                    yMs = [ getDoubleVec c df | c <- yColTs ]
+                if any null (map mtoMaybe yMs)
+                  then hPutStrLn stderr "multireg: y 列の取得失敗"
+                  else do
+                    let yVecs   = [v | Just v <- yMs]
+                        q       = length yVecs
+                        xMat1   = LA.fromLists [[1.0, xV V.! i]
+                                               | i <- [0 .. n - 1]]
+                        ys      = LA.fromLists
+                                    [ [ (yVecs !! j) V.! i
+                                      | j <- [0 .. q - 1] ]
+                                    | i <- [0 .. n - 1] ]
+                        xObsL   = V.toList xV
+                        yObsL   = [ [ (yVecs !! j) V.! i
+                                    | j <- [0 .. q - 1] ]
+                                  | i <- [0 .. n - 1] ]
+                        outGrid =
+                          let lo = maybe 1.0 id (mroXAxisMin opts)
+                              hi = maybe (fromIntegral q) id (mroXAxisMax opts)
+                              step = if q < 2 then 0 else (hi - lo) / fromIntegral (q - 1)
+                          in [ lo + step * fromIntegral i | i <- [0 .. q - 1] ]
+                        xMin    = minimum xObsL - (maximum xObsL - minimum xObsL) * 0.2
+                        xMax    = maximum xObsL + (maximum xObsL - minimum xObsL) * 0.2
+                        xMid    = 0.5 * (xMin + xMax)
+                    putStrLn $ "Loaded " ++ show n ++ " rows × " ++ show q
+                                ++ " outputs; method=" ++ mroMethod opts
+                    sections <- case mroMethod opts of
+                      "linear" -> do
+                        let mf       = MLM.fitMultiLM xMat1 ys
+                            betaB    = Core.coefficients (MLM.mfFit mf)
+                            ints     = LA.toList (betaB LA.! 0)
+                            slps     = LA.toList (betaB LA.! 1)
+                            res      = Core.residuals (MLM.mfFit mf)
+                            rmse     = sqrt (LA.sumElements (res*res)
+                                              / fromIntegral (n * q))
+                            r2v      = Core.rSquared (MLM.mfFit mf)
+                            r2mean   = LA.sumElements r2v / fromIntegral q
+                            imo      = RB.mkInteractiveMOLinear
+                                         (T.pack xCol)
+                                         "y" (T.pack (mroXAxis opts))
+                                         outGrid xObsL yObsL
+                                         ints slps (xMin, xMid, xMax)
+                        printf "  RMSE = %.4f, R^2 mean = %.4f\n" rmse r2mean
+                        return
+                          [ RB.secModelOverview "Multi-output Linear (B = (X'X)^-1 X'Y)"
+                              "$\\hat{Y} = X B$" Nothing
+                          , RB.secStatRow
+                              [ ("N", T.pack (show n))
+                              , ("q", T.pack (show q))
+                              , ("RMSE", T.pack (printf "%.4f" rmse))
+                              , ("R^2 mean", T.pack (printf "%.4f" r2mean))
+                              ]
+                          , RB.secInteractiveMultiOut "予測曲線 (スライダ)" imo
+                          ]
+                      "kernel-rbf" -> do
+                        let hs   = case mroH opts of
+                                     Just h | not (mroAutoHP opts) -> [h]
+                                     _ -> Kern.defaultHGrid xV
+                            lams = case mroLambda opts of
+                                     Just l | not (mroAutoHP opts) -> [l]
+                                     _ -> Kern.defaultLamGrid
+                            (fit, bestH, bestL, looMSE) =
+                              Kern.autoTuneKernelRidgeMulti
+                                Kern.Gaussian xV ys hs lams
+                            yhat = Kern.fittedKernelRidgeMulti fit
+                            r2v  = Kern.r2Multi ys yhat
+                            res  = ys - yhat
+                            rmse = sqrt (LA.sumElements (res*res)
+                                          / fromIntegral (n * q))
+                            r2mean = V.sum r2v / fromIntegral q
+                            alpha2 = [ LA.toList (LA.flatten (Kern.krmAlpha fit LA.? [i]))
+                                     | i <- [0 .. n - 1] ]
+                            imo    = RB.mkInteractiveMOKernelRBF
+                                       (T.pack xCol) "y"
+                                       (T.pack (mroXAxis opts))
+                                       outGrid xObsL yObsL
+                                       xObsL alpha2 bestH
+                                       (xMin, xMid, xMax)
+                        printf "  best h=%.3g  λ=%.3g  LOO MSE=%.3g  RMSE=%.4f  R^2 mean=%.4f\n"
+                          bestH bestL looMSE rmse r2mean
+                        return
+                          [ RB.secModelOverview "Multi-output Kernel Ridge (RBF)"
+                              "$\\hat{y}_j(x)=\\sum_i K_h(x,x_i)\\,\\alpha_{ij}$" Nothing
+                          , RB.secStatRow
+                              [ ("N", T.pack (show n))
+                              , ("q", T.pack (show q))
+                              , ("h",      T.pack (printf "%.3g" bestH))
+                              , ("λ",      T.pack (printf "%.3g" bestL))
+                              , ("LOO MSE", T.pack (printf "%.3g" looMSE))
+                              , ("RMSE",   T.pack (printf "%.4f" rmse))
+                              , ("R^2 mean", T.pack (printf "%.4f" r2mean))
+                              ]
+                          , RB.secInteractiveMultiOut "予測曲線 (スライダ)" imo
+                          ]
+                      m -> do
+                        hPutStrLn stderr ("multireg: unknown method '" ++ m
+                                            ++ "' (use linear|kernel-rbf)")
+                        return []
+                    if null sections
+                      then return ()
+                      else do
+                        let cfg = RB.defaultReportConfig
+                                    (T.pack ("multireg: " ++ file))
+                        RB.renderReport (mroReport opts) cfg sections
+                        putStrLn ("Wrote " ++ mroReport opts)
+    _ -> hPutStrLn stderr multiRegUsage
+  where
+    mtoMaybe Nothing  = []
+    mtoMaybe (Just _) = ["x"]
+    -- "y_z*" → all columns starting with "y_z"
+    -- "a,b,c" → ["a","b","c"]
+    resolveYSpec spec allCols
+      | last' spec == Just '*' =
+          let pre = init spec
+          in [ c | c <- allCols, take (length pre) c == pre, c /= xCol0 spec ]
+      | otherwise = wordsBy (== ',') spec
+    last' []     = Nothing
+    last' s      = Just (last s)
+    -- xCol0 is irrelevant for filtering but ensure no accidental match
+    xCol0 _      = ""
+
