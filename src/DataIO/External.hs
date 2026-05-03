@@ -19,7 +19,13 @@
 -- let df1 = imputeMean \"score\" =<< df0    -- score 列を平均で補完
 -- @
 module DataIO.External
-  ( loadCSVExt
+  ( -- * Hackage 'dataframe' を直接返すローダ (Phase 0+ 推奨経路)
+    loadCsvX
+  , loadTsvX
+  , loadParquetX
+  , loadJsonX
+    -- * 旧ラッパー API (Phase 7 で削除予定)
+  , loadCSVExt
   , loadTSVExt
   , loadParquet
   , loadJSON
@@ -40,7 +46,35 @@ import qualified Data.Text as T
 import qualified Data.Vector as V
 
 -- ---------------------------------------------------------------------------
--- 公開ローダ
+-- Hackage 'DataFrame' を直接返すローダ (新規・推奨経路)
+-- ---------------------------------------------------------------------------
+
+-- | CSV を読み込み Hackage 'DXD.DataFrame' をそのまま返す。
+loadCsvX :: FilePath -> IO (Either String DXD.DataFrame)
+loadCsvX = loadRaw DX.readCsv
+
+-- | TSV を読み込み Hackage 'DXD.DataFrame' をそのまま返す。
+loadTsvX :: FilePath -> IO (Either String DXD.DataFrame)
+loadTsvX = loadRaw DX.readTsv
+
+-- | Parquet を読み込み Hackage 'DXD.DataFrame' をそのまま返す。
+loadParquetX :: FilePath -> IO (Either String DXD.DataFrame)
+loadParquetX = loadRaw DX.readParquet
+
+-- | JSON (records-of-objects) を読み込み Hackage 'DXD.DataFrame' をそのまま返す。
+loadJsonX :: FilePath -> IO (Either String DXD.DataFrame)
+loadJsonX = loadRaw DXJ.readJSON
+
+loadRaw :: (FilePath -> IO DXD.DataFrame)
+        -> FilePath -> IO (Either String DXD.DataFrame)
+loadRaw reader path = do
+  result <- try (reader path) :: IO (Either SomeException DXD.DataFrame)
+  return $ case result of
+    Left  e  -> Left ("External loader failed: " ++ show e)
+    Right df -> Right df
+
+-- ---------------------------------------------------------------------------
+-- 旧ラッパー: 内部 'DataFrame.Core.DataFrame' を返す (Phase 7 で削除)
 -- ---------------------------------------------------------------------------
 
 -- | Hackage 'dataframe' で CSV を読み込み、内部 'DataFrame' に変換する。
