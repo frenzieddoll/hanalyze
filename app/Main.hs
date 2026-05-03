@@ -2218,10 +2218,18 @@ kernelUsage = unlines
   , "  --out FILE        scatter+fit output path (default: kernel.html)"
   , "  --report [FILE]   build composite HTML report (default: kernel.html)"
   , ""
+  , "Multivariate RFF (--method rff with multiple x columns):"
+  , "  --group COL       group column for color-coded scatter+fit (e.g. name)"
+  , "  --xaxis COL       column to use as horizontal axis in the plot (e.g. t)"
+  , ""
   , "Examples:"
   , "  hanalyze kernel data.csv x y --method kr --bandwidth 0.5"
   , "  hanalyze kernel data.csv x y --method nw   # auto-bandwidth via LOO-CV"
   , "  hanalyze kernel data.csv x y --method rff --features 200"
+  , "  # 多変量 RFF (melted データに対して):"
+  , "  hanalyze kernel data/io/melted_sample.csv \"x1 t\" y --method rff \\"
+  , "      --features 200 --bandwidth 1.0 --lambda 0.001 \\"
+  , "      --group name --xaxis t --out plot.html"
   ]
 
 data KernelOpts = KernelOpts
@@ -2233,6 +2241,8 @@ data KernelOpts = KernelOpts
   , koFormat    :: OutputFormat
   , koOut       :: FilePath
   , koReport    :: Maybe FilePath
+  , koGroup     :: Maybe T.Text  -- 多変量 RFF プロット用 group 列
+  , koXAxis     :: Maybe T.Text  -- 多変量 RFF プロット用 横軸列名
   }
 
 defaultKernelOpts :: KernelOpts
@@ -2245,6 +2255,8 @@ defaultKernelOpts = KernelOpts
   , koFormat    = HTML
   , koOut       = "kernel.html"
   , koReport    = Nothing
+  , koGroup     = Nothing
+  , koXAxis     = Nothing
   }
 
 parseKernelKind :: String -> Either String Kern.Kernel
@@ -2306,6 +2318,12 @@ parseKernelOpts (flag : rest) acc
       (v:rs) | not (null v) && head v /= '-' ->
         parseKernelOpts rs (acc { koReport = Just v })
       _ -> parseKernelOpts rest (acc { koReport = Just "kernel.html" })
+  | flag == "--group" = case rest of
+      (v:rs) -> parseKernelOpts rs (acc { koGroup = Just (T.pack v) })
+      []     -> Left "--group requires a column name"
+  | flag == "--xaxis" = case rest of
+      (v:rs) -> parseKernelOpts rs (acc { koXAxis = Just (T.pack v) })
+      []     -> Left "--xaxis requires a column name"
   | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
 
 doKernel :: FilePath -> String -> String -> KernelOpts -> LoadOpts -> IO ()
@@ -2326,17 +2344,20 @@ doKernel file xColStr yColStr opts lopts = do
         result <- loadXY lopts file xCols yCol
         case result of
           Left err -> hPutStrLn stderr err
-          Right (_df, xVecs, yVec) ->
-            runKernelMV xCols yCol xVecs yVec opts
+          Right (df, xVecs, yVec) ->
+            runKernelMV df xCols yCol xVecs yVec opts
       m -> hPutStrLn stderr $
         "kernel --method " ++ T.unpack m
           ++ " は単一 x 列のみ。多変量入力は --method rff を使ってください。"
 
 -- | 多変量 RFF Ridge を走らせる (Phase B-RFF)。
+-- '--group' / '--xaxis' が指定されていれば、グループ別観測点 + 予測曲線の
+-- 散布図を出力する。
 runKernelMV
-  :: [T.Text] -> T.Text -> [V.Vector Double] -> V.Vector Double
+  :: DXD.DataFrame -> [T.Text] -> T.Text
+  -> [V.Vector Double] -> V.Vector Double
   -> KernelOpts -> IO ()
-runKernelMV xCols yCol xVecs yVec opts = do
+runKernelMV df xCols yCol xVecs yVec opts = do
   let n = V.length yVec
       p = length xCols
       -- n × p 行列に組む
@@ -2362,13 +2383,69 @@ runKernelMV xCols yCol xVecs yVec opts = do
   printf "RFF (multivariate) Ridge fit:\n"
   printf "  R^2 = %.4f\n" r2
   printf "  RMSE = %.4f\n" (sqrt (sse / fromIntegral n))
-  putStrLn "Note: 多変量 RFF はライブラリ API で予測 / プロットが可能です:"
-  putStrLn "      Model.RFF.rffRidgeMV / predictRFFRidgeMV"
-  putStrLn "      対話的可視化は Phase B-RFF レポート対応で追加予定。"
-  -- 未使用シンボルへのダミー参照 (yCol / fit)
-  _ <- return yCol
-  _ <- return fit
-  return ()
+
+  -- --group + --xaxis が両方指定されていればプロット
+  case (koGroup opts, koXAxis opts) of
+    (Just gCol, Just xCol) -> do
+      let outPath = koOut opts
+          fmt     = koFormat opts
+      writeMVPlot fmt outPath df gCol xCol xCols yCol fit cols ys
+      putStrLn $ "Plot: " ++ outPath
+    _ -> putStrLn
+      "Plot skipped (use --group COL --xaxis COL to draw scatter+fit by group)"
+
+-- | name (group) ごとに観測点と予測曲線をプロット。
+writeMVPlot
+  :: OutputFormat -> FilePath
+  -> DXD.DataFrame
+  -> T.Text                 -- ^ group 列名
+  -> T.Text                 -- ^ 横軸列名 (xCols のいずれか)
+  -> [T.Text]               -- ^ 全 x 列名 (xMat の列順)
+  -> T.Text                 -- ^ y 列名 (タイトル用)
+  -> RFF.RFFRidgeFitMV
+  -> [[Double]]             -- ^ 各 x 列の生データ (列順)
+  -> [Double]               -- ^ y 観測値
+  -> IO ()
+writeMVPlot fmt path df gCol xCol xCols yCol fit cols ys = do
+  -- group 列を取り出す
+  case getMaybeTextVec gCol df of
+    Nothing -> hPutStrLn stderr $
+      "plot: group column '" ++ T.unpack gCol ++ "' not found"
+    Just gv ->
+      let groups = [ maybe "" id g | g <- V.toList gv ]
+          xColIdx = case [ i | (i, c) <- zip [0..] xCols, c == xCol ] of
+                      (i:_) -> i
+                      []    -> 0  -- フォールバック
+          xValuesAll = cols !! xColIdx
+          xMin = minimum xValuesAll
+          xMax = maximum xValuesAll
+          ngrid = 100
+          xGrid = [ xMin + fromIntegral i * (xMax - xMin) / fromIntegral (ngrid - 1)
+                  | i <- [0 .. ngrid - 1] ]
+          -- 観測点: (group, x, y)
+          ptData = zip3 groups xValuesAll ys
+          -- 予測曲線: 各 unique group について (x_other_cols をその group の代表値で固定 + xGrid)
+          uniqGroups = uniq groups
+          rowsForGroup g = [ i | (i, gg) <- zip [0..] groups, gg == g ]
+          repValues g = [ (cols !! j) !! head (rowsForGroup g)
+                        | j <- [0 .. length xCols - 1] ]
+          -- 各 group / xGrid 点に対して予測
+          mkLineData g =
+            let rep = repValues g
+                makeRow t =
+                  [ if j == xColIdx then t else rep !! j
+                  | j <- [0 .. length xCols - 1] ]
+                xMat = LA.fromLists [ makeRow t | t <- xGrid ]
+                ys'  = RFF.predictRFFRidgeMV fit xMat
+            in [ (g, t, y') | (t, y') <- zip xGrid ys' ]
+          lnData = concatMap mkLineData uniqGroups
+          plotCfg = (defaultConfig (yCol <> " by " <> gCol))
+                      { plotWidth = 720, plotHeight = 480 }
+      in scatterWithGroupsFile fmt path plotCfg xCol yCol ptData lnData
+
+uniq :: Ord a => [a] -> [a]
+uniq []     = []
+uniq (x:xs) = x : uniq (filter (/= x) xs)
 
 -- | 各列の標準偏差の幾何平均で長さスケールを推定 (median heuristic 簡易版)。
 defaultLengthScale :: [[Double]] -> Double
