@@ -52,6 +52,8 @@ module DataIO.Preprocess
   , groupByMax
   , groupByMedian
   , groupByCount
+    -- * Wide ↔ Long 変形 (Phase B/C — melt)
+  , meltLonger
   ) where
 
 import qualified DataFrame                    as DX
@@ -407,3 +409,118 @@ meanD xs = sum xs / fromIntegral (length xs)
 medianD :: [Double] -> Double
 medianD [] = 0
 medianD xs = let s = sort xs in s !! (length s `div` 2)
+
+-- ---------------------------------------------------------------------------
+-- Wide → Long 変形 (melt / pivot_longer)
+-- ---------------------------------------------------------------------------
+
+-- | Wide-form の DataFrame を long-form に展開する (R/pandas の pivot_longer
+-- / melt 相当)。
+--
+-- @meltLonger idCols valueCols varName valueName parseVarAsDouble df@:
+--
+-- * @idCols@         そのまま残す (繰返しコピー) 列。
+-- * @valueCols@      縦方向に展開する列。これらの列名が新しい @varName@ 列の値になる。
+-- * @varName@        新しい variable 列の名前 (例: \"t\")。
+-- * @valueName@      新しい value 列の名前 (例: \"y\")。
+-- * @parseVarAsDouble@
+--                    True なら variable 列の中身 (= 元 wide 列名) を Double として
+--                    parse して数値列に。Parse 失敗時は Text 列のまま。
+--
+-- 元セルが NA (null bitmap or NA 文字列) の行は出力から除外される。
+--
+-- 例:
+--
+-- @
+-- name x1 1   2   3       --      name x1 t y
+-- a    1  10  20  -    →          a    1  1 10
+-- b    2  -   30  60              a    1  2 20
+--                                 b    2  2 30
+--                                 b    2  3 60
+-- @
+meltLonger
+  :: [Text]      -- ^ id 列 (そのまま残す)
+  -> [Text]      -- ^ wide 列 (縦展開する)
+  -> Text        -- ^ 新しい variable 列名
+  -> Text        -- ^ 新しい value 列名
+  -> Bool        -- ^ True: variable 列を Double に parse
+  -> DXD.DataFrame
+  -> DXD.DataFrame
+meltLonger idCols valueCols varName valueName parseVar df =
+  let nrows = fst (DX.dimensions df)
+      -- 各 id 列を [Maybe Text] / [Maybe Double] として取り出す
+      idTexts =
+        [ (n, idColAsText n) | n <- idCols ]
+      -- id 列を [Text] として取り出す: Maybe Text → Text → Maybe Double → Double → Maybe Int → Int の順に試行
+      idColAsText n =
+        case tryColumnAsList @(Maybe Text) n df of
+          Just xs -> Just (map (maybe "" id) xs)
+          Nothing -> case tryColumnAsList @Text n df of
+            Just xs -> Just xs
+            Nothing -> case tryColumnAsList @(Maybe Double) n df of
+              Just xs -> Just (map showMaybeD xs)
+              Nothing -> case tryColumnAsList @Double n df of
+                Just xs -> Just (map showD xs)
+                Nothing -> case tryColumnAsList @(Maybe Int) n df of
+                  Just xs -> Just (map showMaybeI xs)
+                  Nothing -> case tryColumnAsList @Int n df of
+                    Just xs -> Just (map (T.pack . show) xs)
+                    Nothing -> Nothing
+      showMaybeD Nothing  = ""
+      showMaybeD (Just d) = showD d
+      showD d
+        | d == fromInteger (round d) = T.pack (show (round d :: Integer))
+        | otherwise                   = T.pack (show d)
+      showMaybeI Nothing  = ""
+      showMaybeI (Just i) = T.pack (show i)
+      -- valueCols のセル値を [Maybe Double] で取り出す
+      valData =
+        [ (n, valueAsMaybeDouble n df, varValue n)
+        | n <- valueCols ]
+      varValue n
+        | parseVar  = case readMaybe (T.unpack n) :: Maybe Double of
+                        Just d  -> Right d
+                        Nothing -> Left n
+        | otherwise = Left n
+      -- 全 (id行 × value列) ペアから NA でない物だけ残す
+      indices = [(i, j) | i <- [0 .. nrows - 1], j <- [0 .. length valueCols - 1]]
+      keep = [ (i, j, v)
+             | (i, j) <- indices
+             , let (_, vs, _) = valData !! j
+             , Just v <- [vs !! i]
+             ]
+      -- id 列を keep 行数ぶん展開
+      mkIdCol (n, mxs) =
+        let xs = case mxs of
+                   Just xs0 -> xs0
+                   Nothing  -> replicate nrows ""
+            ys = [ xs !! i | (i, _, _) <- keep ]
+        in (n, ys)
+      -- variable 列
+      varValues = [ thd ((valData !! j)) | (_, j, _) <- keep ]
+        where thd (_,_,c) = c
+      -- value 列 (Double)
+      valValues = [ v | (_, _, v) <- keep ]
+      idColsOut = map mkIdCol idTexts
+      df0       = foldl insertText DX.empty idColsOut
+      df1       = case (parseVar, sequence (map varEither varValues)) of
+                    (True, Just ds) ->
+                      DX.insertColumn varName (DX.fromList (ds :: [Double])) df0
+                    _               ->
+                      let texts = map (either id (T.pack . show)) varValues
+                      in DX.insertColumn varName (DX.fromList texts) df0
+      df2       = DX.insertColumn valueName (DX.fromList (valValues :: [Double])) df1
+  in df2
+  where
+    insertText d (n, xs) = DX.insertColumn n (DX.fromList (xs :: [Text])) d
+    varEither (Right d) = Just d
+    varEither (Left  _) = Nothing
+    showCell Nothing  = ""
+    showCell (Just t) = t
+
+-- | 列を 'Maybe Double' のリストとして取り出すヘルパ (内部用)。
+-- 数値 / Maybe Double / Int / Maybe Int / Text 列のいずれでも対応。
+valueAsMaybeDouble :: Text -> DXD.DataFrame -> [Maybe Double]
+valueAsMaybeDouble name df = case readMaybeDoubleColumn name df of
+  Just xs -> xs
+  Nothing -> replicate (fst (DX.dimensions df)) Nothing

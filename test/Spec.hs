@@ -7,6 +7,7 @@ import Model.GLMM
 import Model.GLM (Family (..), LinkFn (..))
 import qualified Data.Vector as V
 import qualified Data.Text   as T
+import Data.List (sort)
 
 import qualified DataFrame                    as DX
 import qualified Design.Orthogonal as OA
@@ -595,6 +596,24 @@ main = hspec $ do
       case Conv2.getDoubleVec "x" df1 of
         Just v  -> V.toList v `shouldBe` [12.3, 12.3, 1000.0]
         Nothing -> expectationFailure "expected all-success column"
+    it "Preprocess.meltLonger: wide → long、NA セルは除外、列名を Double に parse" $ do
+      let df0 = DX.insertColumn "id" (DX.fromList (["a", "b"] :: [T.Text]))
+              $ DX.insertColumn "1"  (DX.fromList ([Just 10.0, Nothing] :: [Maybe Double]))
+              $ DX.insertColumn "2"  (DX.fromList ([Just 20.0, Just 30.0] :: [Maybe Double]))
+              $ DX.insertColumn "3"  (DX.fromList ([Nothing,   Just 60.0] :: [Maybe Double]))
+              $ DX.empty
+          df1 = Pp.meltLonger ["id"] ["1", "2", "3"] "t" "y" True df0
+          (nrows, ncols) = DX.dimensions df1
+      nrows `shouldBe` 4    -- a,1=10; a,2=20; b,2=30; b,3=60
+      ncols `shouldBe` 3    -- id, t, y
+      DX.columnNames df1 `shouldMatchList` ["id", "t", "y"]
+      case Conv2.getDoubleVec "y" df1 of
+        Just v  -> sort (V.toList v) `shouldBe` [10, 20, 30, 60]
+        Nothing -> expectationFailure "expected y as numeric"
+      case Conv2.getDoubleVec "t" df1 of
+        Just v  -> sort (V.toList v) `shouldBe` [1, 2, 2, 3]
+        Nothing -> expectationFailure "expected t parsed as numeric"
+
     it "Clean.cleanPipeline: 複数列を一括変換" $ do
       let df0 = DX.insertColumn "p"
                    (DX.fromList (["$10", "$20"] :: [T.Text]))

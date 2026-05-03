@@ -592,6 +592,7 @@ dispatch ("quantile":rest)            = runQuantileCmd rest
 dispatch ("gam":rest)                 = runGAMCmd rest
 dispatch ("rf":rest)                  = runRFCmd rest
 dispatch ("clean":rest)               = runCleanCmd rest
+dispatch ("melt":rest)                = runMeltCmd rest
 dispatch (cmd:_) | isFutureSubcommand cmd = do
   hPutStrLn stderr $ "hanalyze: " ++ stubMessage cmd
   hPutStrLn stderr "  Run 'hanalyze help' to see implemented subcommands."
@@ -704,6 +705,97 @@ parseCleanFlags = go [] Nothing []
     go rs _   kept ("--output":p:xs)    = go rs (Just p) kept xs
     go rs _   kept ("-o":p:xs)          = go rs (Just p) kept xs
     go rs out kept (x:xs)               = go rs out (x:kept) xs
+
+-- ---------------------------------------------------------------------------
+-- melt subcommand (Phase B/C — wide → long)
+-- ---------------------------------------------------------------------------
+
+runMeltCmd :: [String] -> IO ()
+runMeltCmd args0 = do
+  let (lopts, args1)    = parseLoadOpts args0
+      (mopts, args2)    = parseMeltFlags args1
+  case args2 of
+    []       -> hPutStrLn stderr meltUsage
+    (file:_) -> case (moIds mopts, moVars mopts) of
+      ([], _) -> hPutStrLn stderr "melt: --id COL1,COL2,... 必須"
+      (_, []) -> hPutStrLn stderr "melt: --vars COL1,COL2,... 必須"
+      (ids, vars) -> do
+        result <- loadAutoSafeWith lopts file
+        case result of
+          Left err          -> hPutStrLn stderr ("Parse error: " ++ err)
+          Right (df0, lg)   -> do
+            Log.printLogReport lg
+            let df1 = Pp.meltLonger ids vars
+                                    (moVarName mopts) (moValueName mopts)
+                                    (moParseVar mopts) df0
+                (nrows, ncols) = DX.dimensions df1
+            putStrLn "Long-form DataFrame:"
+            putStrLn $ "  Rows / Cols: " ++ show nrows ++ " × " ++ show ncols
+            putStrLn "  Columns:"
+            mapM_ (TIO.putStrLn . ("    - " <>)) (DX.columnNames df1)
+            case moOut mopts of
+              Just path -> do
+                writeMeltedCsv path df1
+                putStrLn $ "Wrote " ++ path
+              Nothing -> return ()
+
+-- | melt 結果を簡易 CSV (Hackage の writeCsv 経由) で書き出す。
+writeMeltedCsv :: FilePath -> DXD.DataFrame -> IO ()
+writeMeltedCsv path df = DX.writeCsv path df
+
+data MeltOpts = MeltOpts
+  { moIds       :: [T.Text]
+  , moVars      :: [T.Text]
+  , moVarName   :: T.Text
+  , moValueName :: T.Text
+  , moParseVar  :: Bool
+  , moOut       :: Maybe FilePath
+  } deriving (Show)
+
+defaultMeltOpts :: MeltOpts
+defaultMeltOpts = MeltOpts [] [] "variable" "value" True Nothing
+
+parseMeltFlags :: [String] -> (MeltOpts, [String])
+parseMeltFlags = go defaultMeltOpts []
+  where
+    splitCSV = map T.pack . filter (not . null) . wordsBy (== ',')
+    go acc kept []                    = (acc, reverse kept)
+    go acc kept ("--id":v:xs)         = go acc { moIds = splitCSV v } kept xs
+    go acc kept ("--vars":v:xs)       = go acc { moVars = splitCSV v } kept xs
+    go acc kept ("--var":v:xs)        = go acc { moVarName = T.pack v } kept xs
+    go acc kept ("--value":v:xs)      = go acc { moValueName = T.pack v } kept xs
+    go acc kept ("--no-parse-var":xs) = go acc { moParseVar = False } kept xs
+    go acc kept ("--output":p:xs)     = go acc { moOut = Just p } kept xs
+    go acc kept ("-o":p:xs)           = go acc { moOut = Just p } kept xs
+    go acc kept (x:xs)                = go acc (x:kept) xs
+
+wordsBy :: (Char -> Bool) -> String -> [String]
+wordsBy p s = case dropWhile p s of
+  "" -> []
+  s' -> let (w, rest) = break p s' in w : wordsBy p rest
+
+meltUsage :: String
+meltUsage = unlines
+  [ "Usage: hanalyze melt <file> --id COL1,COL2,... --vars COL1,COL2,..."
+  , "                     [--var NAME] [--value NAME]"
+  , "                     [--no-parse-var] [--output FILE] [load opts]"
+  , ""
+  , "wide-form CSV を long-form (tidy) に展開する。"
+  , ""
+  , "  --id    そのまま残す列 (例: name,x1,x2)"
+  , "  --vars  縦方向に展開する wide 列 (例: 1,2,3,4,5,6,7,8,9,10)"
+  , "  --var   新しい variable 列名 (default: 'variable'; 例: --var t)"
+  , "  --value 新しい value 列名    (default: 'value';    例: --value y)"
+  , "  --no-parse-var  variable 列を Double に parse せず Text のまま残す"
+  , "  --output FILE   結果を CSV として書き出す"
+  , ""
+  , "例:"
+  , "  hanalyze melt data/io/wide_sample.csv \\"
+  , "      --id name,x1,x2 \\"
+  , "      --vars 1,2,3,4,5,6,7,8,9,10 \\"
+  , "      --var t --value y \\"
+  , "      --output data/io/melted_sample.csv"
+  ]
 
 parseRuleSpec :: String -> Maybe (T.Text, Clean.ColumnRule)
 parseRuleSpec s = case break (== '=') s of
