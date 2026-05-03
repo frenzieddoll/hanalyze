@@ -1,14 +1,19 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | データ前処理ヘルパ。
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+-- | Hackage @dataframe@ ベースのデータ前処理ヘルパ。
 --
--- 'DataIO.CSV' でロードした 'DataFrame' に対して:
+-- Phase 1 で独自 'DataFrame.Core' から Hackage 'DataFrame.DataFrame'
+-- (本モジュールでは @DXD.DataFrame@) に全面切替された。
+--
 -- - 欠損値の検出 / 除去 / 補完 (mean / median / 定数)
 -- - 列の選択 / 削除 / リネーム
 -- - 行のフィルタリング
 -- - 派生列の計算 (mapNumeric / deriveNumeric / deriveText)
--- - TextCol を数値化 (NA 除去 + parse)
+-- - Text 列を数値化 (NA 除去 + parse)
 --
--- すべて純粋に新しい 'DataFrame' を返す (元は不変)。
+-- すべて純粋に新しい 'DXD.DataFrame' を返す。
 module DataIO.Preprocess
   ( -- * 値・行の表現
     Value (..)
@@ -21,7 +26,7 @@ module DataIO.Preprocess
   , selectColumns
   , dropColumns
   , renameColumn
-    -- * 欠損値の処理 (テキスト列の NA 文字列対応)
+    -- * 欠損値の処理
   , countMissing
   , dropMissingRows
   , imputeConstant
@@ -36,6 +41,8 @@ module DataIO.Preprocess
   , mapNumeric
   , deriveNumeric
   , deriveText
+  , replaceColumn
+  , addColumn
     -- * groupBy / aggregate
   , groupByAggregate
   , groupByMean
@@ -46,20 +53,23 @@ module DataIO.Preprocess
   , groupByCount
   ) where
 
-import DataFrame.Core
+import qualified DataFrame                    as DX
+import qualified DataFrame.Internal.Column    as DXC
+import qualified DataFrame.Internal.DataFrame as DXD
+import qualified DataFrame.Internal.Types     as DXT
 
+import Control.Exception (SomeException, try, evaluate)
 import Data.List (sort)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Vector as V
+import System.IO.Unsafe (unsafePerformIO)
 import Text.Read (readMaybe)
 
 -- ---------------------------------------------------------------------------
--- 値 / 行の表現
+-- 値 / 行の表現 (deriveNumeric/deriveText 用の述語インタフェース)
 -- ---------------------------------------------------------------------------
 
--- | 1 セルの値 (数値 / テキスト / 欠損)。
 data Value = VNum Double | VText Text | VMissing
   deriving (Show, Eq)
 
@@ -70,14 +80,12 @@ isVMissing _        = False
 type DataRow = Map.Map Text Value
 
 -- ---------------------------------------------------------------------------
--- NA 検出
+-- NA 検出 (Text レベル)
 -- ---------------------------------------------------------------------------
 
--- | 標準的に「欠損」と見なす文字列。
 defaultNAStrings :: [Text]
 defaultNAStrings = ["", "NA", "N/A", "n/a", "null", "NULL", "NaN", "nan", "?"]
 
--- | 'defaultNAStrings' のいずれかにマッチするか。
 isNAString :: Text -> Bool
 isNAString t = T.strip t `elem` defaultNAStrings
 
@@ -85,287 +93,308 @@ isNAString t = T.strip t `elem` defaultNAStrings
 -- 列の選択 / 削除 / リネーム
 -- ---------------------------------------------------------------------------
 
--- | 指定した列だけを残す (順序を保つ)。存在しない列は無視。
-selectColumns :: [Text] -> DataFrame -> DataFrame
+selectColumns :: [Text] -> DXD.DataFrame -> DXD.DataFrame
 selectColumns names df =
-  mkDataFrame [ (n, c) | n <- names, Just c <- [getColumn n df] ]
+  let present = filter (`elem` DX.columnNames df) names
+  in DX.select present df
 
--- | 指定した列を削除する。
-dropColumns :: [Text] -> DataFrame -> DataFrame
+dropColumns :: [Text] -> DXD.DataFrame -> DXD.DataFrame
 dropColumns names df =
-  let keep = filter (`notElem` names) (columnNames df)
-  in mkDataFrame [ (n, c) | n <- keep, Just c <- [getColumn n df] ]
+  let present = filter (`elem` DX.columnNames df) names
+  in DX.exclude present df
 
--- | 列名を変更する。元の名前が無ければ無変更。
-renameColumn :: Text -> Text -> DataFrame -> DataFrame
-renameColumn old new df = case getColumn old df of
-  Nothing -> df
-  Just c  ->
-    mkDataFrame
-      [ (if n == old then new else n, c')
-      | n <- columnNames df
-      , Just c' <- [getColumn n df]
-      , (n /= new) || (n == old) ]
-    `mergeCol` (new, c)
-  where
-    -- 名前衝突時は new を上書き
-    mergeCol :: DataFrame -> (Text, Column) -> DataFrame
-    mergeCol _ (k, v) =
-      mkDataFrame $
-        [ (n, c) | n <- columnNames df, n /= old, n /= new
-                 , Just c <- [getColumn n df] ]
-        ++ [(k, v)]
+renameColumn :: Text -> Text -> DXD.DataFrame -> DXD.DataFrame
+renameColumn old new df
+  | old `elem` DX.columnNames df = DX.rename old new df
+  | otherwise                    = df
+
+-- ---------------------------------------------------------------------------
+-- 内部: 列値の安全な取得 (型不一致時 Nothing)
+-- ---------------------------------------------------------------------------
+
+-- | 列の長さ (列が無ければ 0)。
+colLength :: Text -> DXD.DataFrame -> Int
+colLength name df = case DXD.getColumn name df of
+  Just c  -> DXC.columnLength c
+  Nothing -> 0
+
+-- | 「i 番目の要素が null か」。列が無ければ True。
+isNullAt :: Text -> Int -> DXD.DataFrame -> Bool
+isNullAt name i df = case DXD.getColumn name df of
+  Just c  -> DXC.columnElemIsNull c i
+  Nothing -> True
+
+-- | 列を @[a]@ として安全に取り出す。型不一致や例外時は Nothing。
+tryColumnAsList
+  :: forall a. DXC.Columnable a
+  => Text -> DXD.DataFrame -> Maybe [a]
+tryColumnAsList name df = unsafePerformIO $ do
+  r <- try (evaluate (DX.columnAsList (DX.col @a name) df))
+         :: IO (Either SomeException [a])
+  return $ case r of
+    Right xs -> Just xs
+    Left _   -> Nothing
 
 -- ---------------------------------------------------------------------------
 -- 欠損値処理
 -- ---------------------------------------------------------------------------
 
--- | 列ごとの欠損値 (NA 文字列) の数。
--- 'NumericCol' の列は欠損 0 と扱う (我々の型は欠損を表現しないため)。
-countMissing :: DataFrame -> [(Text, Int)]
+-- | 列ごとの欠損数。null bitmap が無い列は 0、ある列は null 数を数える。
+-- 加えて Text 列に含まれる NA 文字列も欠損として数える (CSV 由来互換)。
+countMissing :: DXD.DataFrame -> [(Text, Int)]
 countMissing df =
-  [ (n, missing c)
-  | n <- columnNames df
-  , Just c <- [getColumn n df] ]
+  [ (n, countOne n) | n <- DX.columnNames df ]
   where
-    missing (NumericCol _) = 0
-    missing (TextCol v)    = V.length (V.filter isNAString v)
+    countOne n =
+      let len    = colLength n df
+          nulls  = length [ () | i <- [0 .. len - 1], isNullAt n i df ]
+          texts  = case tryColumnAsList @Text n df of
+                     Just xs -> length (filter isNAString xs)
+                     Nothing -> 0
+      in nulls + texts
 
--- | 指定した列のいずれかに NA 文字列がある行を削除。
--- 'NumericCol' の列は欠損なしとみなす。
-dropMissingRows :: [Text] -> DataFrame -> DataFrame
+-- | 指定した列のいずれかが null である行を削除。
+-- Text 列の NA 文字列もまとめて欠損として扱う。
+dropMissingRows :: [Text] -> DXD.DataFrame -> DXD.DataFrame
 dropMissingRows targets df =
-  let n = numRows df
-      keepIxs = [ i | i <- [0 .. n - 1]
-                    , not (any (rowMissing i) targets) ]
-      sliceCol (NumericCol v) = NumericCol (V.fromList [ v V.! i | i <- keepIxs ])
-      sliceCol (TextCol v)    = TextCol    (V.fromList [ v V.! i | i <- keepIxs ])
-  in mkDataFrame
-       [ (name, sliceCol c)
-       | name <- columnNames df
-       , Just c <- [getColumn name df] ]
-  where
-    rowMissing i name = case getColumn name df of
-      Just (TextCol v) -> i < V.length v && isNAString (v V.! i)
-      _                -> False
+  let n = if null cols then 0 else maximum (map (`colLength` df) cols)
+      cols = targets
+      rowMissing i =
+        any (\c -> isNullAt c i df || isTextNA c i) cols
+      isTextNA c i = case tryColumnAsList @Text c df of
+        Just xs -> i < length xs && isNAString (xs !! i)
+        Nothing -> False
+      keep = [ i | i <- [0 .. n - 1], not (rowMissing i) ]
+  in selectRows keep df
 
--- | 指定列を「定数で欠損補完して NumericCol 化」する。
--- 既に 'NumericCol' なら無変更。'TextCol' は parse して非 NA を採用、
--- NA は constant で埋める。すべて parse 不能なテキストの列は失敗。
-imputeConstant :: Text -> Double -> DataFrame -> Maybe DataFrame
-imputeConstant name fill df = case getColumn name df of
-  Just (NumericCol _) -> Just df
-  Just (TextCol v)    ->
-    let parsed = V.map (parseCell fill) v
-    in Just (replaceColumn name (NumericCol parsed) df)
+-- | インデックス集合で全列を縦スライス。
+selectRows :: [Int] -> DXD.DataFrame -> DXD.DataFrame
+selectRows idxs df = foldr ins DX.empty (DX.columnNames df)
+  where
+    ins name acc =
+      case sliceColumn name df idxs of
+        Just c  -> DX.insertColumn name c acc
+        Nothing -> acc
+
+-- | 列を indices で取り出して新しい Column を作る。
+-- BoxedColumn / UnboxedColumn のどちらでも columnAsList 経由で安全に処理する。
+sliceColumn :: Text -> DXD.DataFrame -> [Int] -> Maybe DX.Column
+sliceColumn name df idxs = case DXD.getColumn name df of
   Nothing -> Nothing
+  Just _  ->
+    -- 型を順に試す。Maybe Double → Double → Maybe Int → Int → Text の順。
+    tryAs @(Maybe Double)
+      (tryAs @Double
+        (tryAs @(Maybe Int)
+          (tryAs @Int
+            (tryAs @Text Nothing))))
   where
-    parseCell c t
-      | isNAString t = c
-      | otherwise    = maybe c id (readMaybe (T.unpack t))
+    tryAs
+      :: forall a. (DXC.Columnable a,
+                    DXC.ColumnifyRep (DXT.KindOf a) a)
+      => Maybe DX.Column -> Maybe DX.Column
+    tryAs fallback = case tryColumnAsList @a name df of
+      Just xs -> Just (DX.fromList [ xs !! i | i <- idxs, i < length xs ])
+      Nothing -> fallback
 
--- | 平均値で補完。
-imputeMean :: Text -> DataFrame -> Maybe DataFrame
-imputeMean name df = case getColumn name df of
-  Just (NumericCol _) -> Just df
-  Just (TextCol v)    ->
-    let nums = [ x | t <- V.toList v, not (isNAString t)
-                   , Just x <- [readMaybe (T.unpack t) :: Maybe Double] ]
+-- | 定数で欠損補完して Double 列に統一する。
+imputeConstant :: Text -> Double -> DXD.DataFrame -> Maybe DXD.DataFrame
+imputeConstant name fill df = case readMaybeDoubleColumn name df of
+  Nothing -> Nothing
+  Just xs ->
+    let filled = map (maybe fill id) xs
+    in Just (DX.insertColumn name (DX.fromList filled) df)
+
+-- | 平均値で補完。非欠損が 0 件なら Nothing。
+imputeMean :: Text -> DXD.DataFrame -> Maybe DXD.DataFrame
+imputeMean name df = case readMaybeDoubleColumn name df of
+  Nothing -> Nothing
+  Just xs ->
+    let nums = [ x | Just x <- xs ]
     in if null nums
          then Nothing
          else
            let m = sum nums / fromIntegral (length nums)
            in imputeConstant name m df
-  Nothing -> Nothing
 
--- | 中央値で補完。
-imputeMedian :: Text -> DataFrame -> Maybe DataFrame
-imputeMedian name df = case getColumn name df of
-  Just (NumericCol _) -> Just df
-  Just (TextCol v)    ->
-    let nums = sort
-                 [ x | t <- V.toList v, not (isNAString t)
-                     , Just x <- [readMaybe (T.unpack t) :: Maybe Double] ]
-    in if null nums
+-- | 中央値で補完。非欠損が 0 件なら Nothing。
+imputeMedian :: Text -> DXD.DataFrame -> Maybe DXD.DataFrame
+imputeMedian name df = case readMaybeDoubleColumn name df of
+  Nothing -> Nothing
+  Just xs ->
+    let s = sort [ x | Just x <- xs ]
+    in if null s
          then Nothing
-         else
-           let m = nums !! (length nums `div` 2)
-           in imputeConstant name m df
-  Nothing -> Nothing
+         else imputeConstant name (s !! (length s `div` 2)) df
 
--- | TextCol を NumericCol に変換 (NA 行は事前に dropMissingRows で除去済の前提)。
--- parse 不能セルがあれば 'Nothing'。
-parseNumericColumn :: Text -> DataFrame -> Maybe DataFrame
-parseNumericColumn name df = case getColumn name df of
-  Just (NumericCol _) -> Just df
-  Just (TextCol v)    -> do
-    parsed <- V.mapM (readMaybe . T.unpack) v
-    return (replaceColumn name (NumericCol parsed) df)
-  Nothing -> Nothing
+-- | Text/Double/Maybe Double/Int/Maybe Int いずれの列でも @[Maybe Double]@
+-- に正規化して取り出す。Text 列の NA 文字列・parse 失敗は Nothing として扱う。
+--
+-- 注意: Hackage 'DX.columnAsList' は @Maybe a@ 列に対して @col @a@ を要求しても
+-- 例外を投げず、null セルを 0 などのデフォルト値で埋めて返す。そのため null は
+-- 必ず 'isNullAt' (= columnElemIsNull) で別途マスクする。
+readMaybeDoubleColumn :: Text -> DXD.DataFrame -> Maybe [Maybe Double]
+readMaybeDoubleColumn name df = fmap (maskNulls . zip [0..]) raw
+  where
+    maskNulls = map (\(i, x) -> if isNullAt name i df then Nothing else x)
+    raw =
+      case tryColumnAsList @(Maybe Double) name df of
+        Just xs -> Just xs
+        Nothing -> case tryColumnAsList @(Maybe Int) name df of
+          Just xs -> Just (map (fmap fromIntegral) xs)
+          Nothing -> case tryColumnAsList @Double name df of
+            Just xs -> Just (map Just xs)
+            Nothing -> case tryColumnAsList @Int name df of
+              Just xs -> Just (map (Just . fromIntegral) xs)
+              Nothing -> case tryColumnAsList @Text name df of
+                Just xs -> Just
+                  [ if isNAString t
+                      then Nothing
+                      else readMaybe (T.unpack t)
+                  | t <- xs ]
+                Nothing -> Nothing
+
+-- | Text 列を Double 列に変換。NA / parse 不能セルがあれば Nothing。
+parseNumericColumn :: Text -> DXD.DataFrame -> Maybe DXD.DataFrame
+parseNumericColumn name df =
+  case tryColumnAsList @Double name df of
+    Just _  -> Just df
+    Nothing -> case tryColumnAsList @Text name df of
+      Nothing -> Nothing
+      Just xs -> do
+        ds <- mapM (readMaybe . T.unpack) xs
+        return (DX.insertColumn name (DX.fromList (ds :: [Double])) df)
 
 -- ---------------------------------------------------------------------------
--- 行フィルタ
+-- 行フィルタ (DataRow ベース、レガシー API)
 -- ---------------------------------------------------------------------------
 
--- | 全行を 'DataRow' のリストに展開。
-rowsOf :: DataFrame -> [DataRow]
+-- | 行を 'DataRow' のリストに展開する。NA 文字列は VMissing。
+rowsOf :: DXD.DataFrame -> [DataRow]
 rowsOf df =
-  let cols = columnNames df
-      n    = numRows df
+  let cols = DX.columnNames df
+      n    = if null cols then 0 else maximum (map (`colLength` df) cols)
   in [ Map.fromList [ (c, cellAt c i) | c <- cols ] | i <- [0 .. n - 1] ]
   where
-    cellAt c i = case getColumn c df of
-      Just (NumericCol v)
-        | i < V.length v -> VNum (v V.! i)
-        | otherwise      -> VMissing
-      Just (TextCol v)
-        | i < V.length v ->
-            let t = v V.! i
-            in if isNAString t then VMissing else VText t
-        | otherwise -> VMissing
-      Nothing -> VMissing
+    cellAt c i
+      | isNullAt c i df = VMissing
+      | otherwise = case readMaybeDoubleColumn c df of
+          Just xs | i < length xs ->
+            case xs !! i of
+              Just d  -> VNum d
+              Nothing ->
+                case tryColumnAsList @Text c df of
+                  Just ts | i < length ts ->
+                    let t = ts !! i
+                    in if isNAString t then VMissing else VText t
+                  _ -> VMissing
+          _ -> case tryColumnAsList @Text c df of
+                 Just ts | i < length ts ->
+                   let t = ts !! i
+                   in if isNAString t then VMissing else VText t
+                 _ -> VMissing
 
--- | 述語に一致する行だけを残す。
-filterRows :: (DataRow -> Bool) -> DataFrame -> DataFrame
+filterRows :: (DataRow -> Bool) -> DXD.DataFrame -> DXD.DataFrame
 filterRows p df =
-  let keepIxs = [ i | (i, r) <- zip [0..] (rowsOf df), p r ]
-      sliceCol (NumericCol v) = NumericCol (V.fromList [ v V.! i | i <- keepIxs, i < V.length v ])
-      sliceCol (TextCol v)    = TextCol    (V.fromList [ v V.! i | i <- keepIxs, i < V.length v ])
-  in mkDataFrame
-       [ (name, sliceCol c)
-       | name <- columnNames df
-       , Just c <- [getColumn name df] ]
+  let keep = [ i | (i, r) <- zip [0..] (rowsOf df), p r ]
+  in selectRows keep df
 
--- | 数値列に対する単純な比較フィルタ。
-filterRowsByNumeric :: Text -> (Double -> Bool) -> DataFrame -> DataFrame
-filterRowsByNumeric name p = filterRows $ \row ->
-  case Map.lookup name row of
-    Just (VNum x) -> p x
-    _             -> False
+filterRowsByNumeric :: Text -> (Double -> Bool) -> DXD.DataFrame -> DXD.DataFrame
+filterRowsByNumeric name p df =
+  case readMaybeDoubleColumn name df of
+    Nothing -> df
+    Just xs ->
+      let keep = [ i | (i, Just x) <- zip [0..] xs, p x ]
+      in selectRows keep df
 
 -- ---------------------------------------------------------------------------
 -- 派生列
 -- ---------------------------------------------------------------------------
 
--- | 単一の数値列に関数を適用する (in-place ではなく新しい DataFrame)。
-mapNumeric :: Text -> (Double -> Double) -> DataFrame -> DataFrame
-mapNumeric name f df = case getColumn name df of
-  Just (NumericCol v) ->
-    replaceColumn name (NumericCol (V.map f v)) df
-  _ -> df
+mapNumeric :: Text -> (Double -> Double) -> DXD.DataFrame -> DXD.DataFrame
+mapNumeric name f df = case tryColumnAsList @Double name df of
+  Just xs -> DX.insertColumn name (DX.fromList (map f xs)) df
+  Nothing -> df
 
--- | 行から数値列を取り出して新しい数値列を作る。
--- 入力列のいずれかが欠損 (VMissing) または非数値の行は失敗 → 'Nothing'。
-deriveNumeric
-  :: Text                         -- ^ 新しい列名
-  -> (DataRow -> Double)
-  -> DataFrame -> DataFrame
+deriveNumeric :: Text -> (DataRow -> Double) -> DXD.DataFrame -> DXD.DataFrame
 deriveNumeric newName f df =
-  let vals = V.fromList [ f r | r <- rowsOf df ]
-  in addColumn newName (NumericCol vals) df
+  let vals = map f (rowsOf df)
+  in DX.insertColumn newName (DX.fromList (vals :: [Double])) df
 
--- | 行から文字列列を作る。
-deriveText
-  :: Text
-  -> (DataRow -> Text)
-  -> DataFrame -> DataFrame
+deriveText :: Text -> (DataRow -> Text) -> DXD.DataFrame -> DXD.DataFrame
 deriveText newName f df =
-  let vals = V.fromList [ f r | r <- rowsOf df ]
-  in addColumn newName (TextCol vals) df
+  let vals = map f (rowsOf df)
+  in DX.insertColumn newName (DX.fromList (vals :: [Text])) df
 
--- ---------------------------------------------------------------------------
--- 内部ユーティリティ
--- ---------------------------------------------------------------------------
+-- | 列の上書き / 追加 (Hackage 'DX.insertColumn' は既存列を置換する)。
+replaceColumn :: Text -> DX.Column -> DXD.DataFrame -> DXD.DataFrame
+replaceColumn = DX.insertColumn
 
--- | 列を上書き (なければ追加)。
-replaceColumn :: Text -> Column -> DataFrame -> DataFrame
-replaceColumn name col df =
-  mkDataFrame
-    [ (n, if n == name then col else c)
-    | n <- if name `elem` columnNames df
-              then columnNames df
-              else columnNames df ++ [name]
-    , Just c <- [Map.lookup n m]
-    ]
-  where
-    m = Map.fromList
-          $ ((name, col) :)
-          $ [ (n, c) | n <- columnNames df, Just c <- [getColumn n df] ]
-
--- | 列を末尾に追加 (重複時は上書き)。
-addColumn :: Text -> Column -> DataFrame -> DataFrame
-addColumn = replaceColumn
+addColumn :: Text -> DX.Column -> DXD.DataFrame -> DXD.DataFrame
+addColumn = DX.insertColumn
 
 -- ---------------------------------------------------------------------------
 -- groupBy / aggregate
 -- ---------------------------------------------------------------------------
 
--- | 行を group 列でグループ化し、numeric 列に集約関数を適用する。
--- 戻り値は 2 列 (group, aggregated) の新しい DataFrame。
--- group 列は TextCol、numeric 列は NumericCol である必要がある。
---
--- 利用例:
---
--- @
--- groupByAggregate "group" "score" mean df
--- -- → "group", "score" の 2 列 DataFrame (group ごとの score 平均)
--- @
+-- | グループ列 (Text) ごとに数値列に集約関数を適用する。
+-- カスタム集約 (任意の @[Double] -> Double@) を扱うため、Hackage の
+-- @groupBy + aggregate@ ではなく独自バケット実装。決まった集約は
+-- 'groupByMean' 等を経由した方が高速。
 groupByAggregate
-  :: Text                          -- ^ グループ列 (TextCol)
-  -> Text                          -- ^ 集約対象列 (NumericCol)
+  :: Text                          -- ^ グループ列
+  -> Text                          -- ^ 集約対象列
   -> ([Double] -> Double)          -- ^ 集約関数
-  -> DataFrame
-  -> Maybe DataFrame
+  -> DXD.DataFrame
+  -> Maybe DXD.DataFrame
 groupByAggregate gCol nCol agg df =
-  case (getText gCol df, getNumeric nCol df) of
-    (Just gVec, Just nVec) ->
-      let pairs = V.toList (V.zip gVec nVec)
-          -- 順序保持 group ごとに値を蓄積
-          buckets = foldr step [] pairs
-          step (g, v) acc = case lookup g acc of
-            Just _  -> [ if k == g then (k, v : vs) else (k, vs)
-                       | (k, vs) <- acc ]
-            Nothing -> acc ++ [(g, [v])]
+  case (tryColumnAsList @Text gCol df, readMaybeDoubleColumn nCol df) of
+    (Just gs, Just nsM) ->
+      let pairs = [ (g, x) | (g, Just x) <- zip gs nsM ]
+          buckets = collectInOrder pairs
           groups   = map fst buckets
           aggVals  = map (agg . snd) buckets
-      in Just $ mkDataFrame
-           [ (gCol, TextCol (V.fromList groups))
-           , (nCol, NumericCol (V.fromList aggVals))
-           ]
+      in Just $
+           DX.insertColumn nCol (DX.fromList (aggVals :: [Double])) $
+           DX.insertColumn gCol (DX.fromList (groups  :: [Text]))
+             DX.empty
     _ -> Nothing
 
-groupByMean   :: Text -> Text -> DataFrame -> Maybe DataFrame
+-- | 順序保持の group→[value] 蓄積。
+collectInOrder :: Eq k => [(k, v)] -> [(k, [v])]
+collectInOrder = foldl step []
+  where
+    step acc (k, v) = case lookup k acc of
+      Just _  -> [ if k' == k then (k', vs ++ [v]) else (k', vs) | (k', vs) <- acc ]
+      Nothing -> acc ++ [(k, [v])]
+
+groupByMean   :: Text -> Text -> DXD.DataFrame -> Maybe DXD.DataFrame
 groupByMean g n = groupByAggregate g n meanD
 
-groupBySum    :: Text -> Text -> DataFrame -> Maybe DataFrame
+groupBySum    :: Text -> Text -> DXD.DataFrame -> Maybe DXD.DataFrame
 groupBySum g n = groupByAggregate g n sum
 
-groupByMin    :: Text -> Text -> DataFrame -> Maybe DataFrame
+groupByMin    :: Text -> Text -> DXD.DataFrame -> Maybe DXD.DataFrame
 groupByMin g n = groupByAggregate g n minimum
 
-groupByMax    :: Text -> Text -> DataFrame -> Maybe DataFrame
+groupByMax    :: Text -> Text -> DXD.DataFrame -> Maybe DXD.DataFrame
 groupByMax g n = groupByAggregate g n maximum
 
-groupByMedian :: Text -> Text -> DataFrame -> Maybe DataFrame
+groupByMedian :: Text -> Text -> DXD.DataFrame -> Maybe DXD.DataFrame
 groupByMedian g n = groupByAggregate g n medianD
 
--- | グループごとの行数を返す ('count' 集約)。
--- 戻り値は (group, count) の 2 列 DataFrame。count 列名は "count" 固定。
-groupByCount :: Text -> DataFrame -> Maybe DataFrame
-groupByCount gCol df = case getText gCol df of
-  Just gVec ->
-    let groups = V.toList gVec
-        buckets = foldr step [] groups
-        step g acc = case lookup g acc of
-          Just c  -> [ if k == g then (k, c + 1) else (k, c) | (k, c) <- acc ]
-          Nothing -> acc ++ [(g, 1 :: Int)]
-        keys    = map fst buckets
-        counts  = map (fromIntegral . snd) buckets
-    in Just $ mkDataFrame
-         [ (gCol,    TextCol (V.fromList keys))
-         , ("count", NumericCol (V.fromList counts))
-         ]
+-- | グループごとの行数。count 列名は @"count"@ 固定。
+groupByCount :: Text -> DXD.DataFrame -> Maybe DXD.DataFrame
+groupByCount gCol df = case tryColumnAsList @Text gCol df of
   Nothing -> Nothing
+  Just gs ->
+    let buckets = collectInOrder [ (g, ()) | g <- gs ]
+        keys    = map fst buckets
+        counts  = map (fromIntegral . length . snd) buckets
+    in Just $
+         DX.insertColumn "count" (DX.fromList (counts :: [Double])) $
+         DX.insertColumn gCol    (DX.fromList (keys   :: [Text]))
+           DX.empty
 
 meanD :: [Double] -> Double
 meanD [] = 0
@@ -373,6 +402,4 @@ meanD xs = sum xs / fromIntegral (length xs)
 
 medianD :: [Double] -> Double
 medianD [] = 0
-medianD xs = let s = sort xs
-                 n = length s
-             in s !! (n `div` 2)
+medianD xs = let s = sort xs in s !! (length s `div` 2)

@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 module Main where
 
 import Test.Hspec
@@ -6,7 +7,9 @@ import DataFrame.Core
 import Model.GLMM
 import Model.GLM (Family (..), LinkFn (..))
 import qualified Data.Vector as V
+import qualified Data.Text   as T
 
+import qualified DataFrame                    as DX
 import qualified Design.Orthogonal as OA
 import qualified Design.Taguchi as TG
 import qualified DataIO.Preprocess as Pp
@@ -244,10 +247,10 @@ main = hspec $ do
 
   -- ─────────────────────────────────────────────────────────────────────
   describe "DataIO.Preprocess" $ do
-    let dfNA = mkDataFrame
-                 [ ("group", TextCol (V.fromList ["A","B","A","B","C"]))
-                 , ("x",     TextCol (V.fromList ["1","NA","3","","5"]))
-                 , ("y",     NumericCol (V.fromList [10, 20, 30, 40, 50]))
+    let dfNA = DX.fromNamedColumns
+                 [ ("group", DX.fromList (["A","B","A","B","C"] :: [T.Text]))
+                 , ("x",     DX.fromList (["1","NA","3","","5"]   :: [T.Text]))
+                 , ("y",     DX.fromList ([10, 20, 30, 40, 50]    :: [Double]))
                  ]
 
     it "isNAString detects standard NA strings" $ do
@@ -258,7 +261,7 @@ main = hspec $ do
       Pp.isNAString "  "    `shouldBe` True
       Pp.isNAString "valid" `shouldBe` False
 
-    it "countMissing counts NAs in TextCol; ignores NumericCol" $ do
+    it "countMissing counts NAs in Text columns; numeric is 0" $ do
       let counts = Pp.countMissing dfNA
       lookup "x"     counts `shouldBe` Just 2
       lookup "y"     counts `shouldBe` Just 0
@@ -266,102 +269,91 @@ main = hspec $ do
 
     it "dropMissingRows removes rows with NA in target columns" $ do
       let df' = Pp.dropMissingRows ["x"] dfNA
-      numRows df' `shouldBe` 3   -- only rows 1, 3, 5 remain (x = "1","3","5")
+          (n, _) = DX.dimensions df'
+      n `shouldBe` 3   -- only rows with x ∈ {"1","3","5"} remain
 
-    it "imputeMean converts TextCol to NumericCol with mean fill" $ do
+    it "imputeMean converts Text/NA column to Double with mean fill" $ do
       case Pp.imputeMean "x" dfNA of
         Just df' -> do
-          case getNumeric "x" df' of
-            Just v  -> do
-              V.length v `shouldBe` 5
-              -- mean of [1, 3, 5] = 3
-              v V.! 1 `shouldBe` 3.0   -- was "NA"
-              v V.! 3 `shouldBe` 3.0   -- was ""
-            Nothing -> expectationFailure "x should be numeric after imputeMean"
+          let xs = DX.columnAsList (DX.col @Double "x") df'
+          length xs `shouldBe` 5
+          -- mean of [1, 3, 5] = 3
+          (xs !! 1) `shouldBe` 3.0   -- was "NA"
+          (xs !! 3) `shouldBe` 3.0   -- was ""
         Nothing -> expectationFailure "imputeMean failed"
 
     it "selectColumns retains only listed columns" $ do
       let df' = Pp.selectColumns ["y", "group"] dfNA
-      columnNames df' `shouldMatchList` ["y", "group"]
+      DX.columnNames df' `shouldMatchList` ["y", "group"]
 
     it "filterRowsByNumeric filters numeric column" $ do
       let df' = Pp.filterRowsByNumeric "y" (>= 30) dfNA
-      numRows df' `shouldBe` 3
+          (n, _) = DX.dimensions df'
+      n `shouldBe` 3
 
     it "mapNumeric applies a unary function" $ do
       let df' = Pp.mapNumeric "y" (* 2) dfNA
-      case getNumeric "y" df' of
-        Just v  -> V.toList v `shouldBe` [20, 40, 60, 80, 100]
-        Nothing -> expectationFailure "y should be numeric"
+          xs = DX.columnAsList (DX.col @Double "y") df'
+      xs `shouldBe` [20, 40, 60, 80, 100]
 
   -- ─────────────────────────────────────────────────────────────────────
   describe "DataIO.Preprocess (groupBy)" $ do
-    let dfGrp = mkDataFrame
-                  [ ("group", TextCol (V.fromList ["A","B","A","B","A","C"]))
-                  , ("y",     NumericCol (V.fromList [1, 4, 3, 6, 5, 10]))
+    let dfGrp = DX.fromNamedColumns
+                  [ ("group", DX.fromList (["A","B","A","B","A","C"] :: [T.Text]))
+                  , ("y",     DX.fromList ([1, 4, 3, 6, 5, 10]       :: [Double]))
                   ]
 
     it "groupByMean computes per-group mean" $ do
       case Pp.groupByMean "group" "y" dfGrp of
         Just df' -> do
-          numRows df' `shouldBe` 3
-          case (getText "group" df', getNumeric "y" df') of
-            (Just gs, Just vs) -> do
-              let pairs = zip (V.toList gs) (V.toList vs)
-              lookup "A" pairs `shouldBe` Just 3.0       -- (1+3+5)/3
-              lookup "B" pairs `shouldBe` Just 5.0       -- (4+6)/2
-              lookup "C" pairs `shouldBe` Just 10.0
-            _ -> expectationFailure "expected text + numeric columns"
+          let (n, _) = DX.dimensions df'
+          n `shouldBe` 3
+          let gs = DX.columnAsList (DX.col @T.Text "group") df'
+              vs = DX.columnAsList (DX.col @Double "y")    df'
+              pairs = zip gs vs
+          lookup "A" pairs `shouldBe` Just 3.0       -- (1+3+5)/3
+          lookup "B" pairs `shouldBe` Just 5.0       -- (4+6)/2
+          lookup "C" pairs `shouldBe` Just 10.0
         Nothing -> expectationFailure "groupByMean failed"
 
     it "groupBySum computes per-group sum" $ do
       case Pp.groupBySum "group" "y" dfGrp of
         Just df' -> do
-          case (getText "group" df', getNumeric "y" df') of
-            (Just gs, Just vs) -> do
-              let pairs = zip (V.toList gs) (V.toList vs)
-              lookup "A" pairs `shouldBe` Just 9.0
-              lookup "B" pairs `shouldBe` Just 10.0
-            _ -> expectationFailure "expected columns"
+          let gs = DX.columnAsList (DX.col @T.Text "group") df'
+              vs = DX.columnAsList (DX.col @Double "y")    df'
+              pairs = zip gs vs
+          lookup "A" pairs `shouldBe` Just 9.0
+          lookup "B" pairs `shouldBe` Just 10.0
         Nothing -> expectationFailure "groupBySum failed"
 
     it "groupByCount counts rows per group" $ do
       case Pp.groupByCount "group" dfGrp of
         Just df' -> do
-          case (getText "group" df', getNumeric "count" df') of
-            (Just gs, Just vs) -> do
-              let pairs = zip (V.toList gs) (V.toList vs)
-              lookup "A" pairs `shouldBe` Just 3.0
-              lookup "B" pairs `shouldBe` Just 2.0
-              lookup "C" pairs `shouldBe` Just 1.0
-            _ -> expectationFailure "expected columns"
+          let gs = DX.columnAsList (DX.col @T.Text "group") df'
+              vs = DX.columnAsList (DX.col @Double "count") df'
+              pairs = zip gs vs
+          lookup "A" pairs `shouldBe` Just 3.0
+          lookup "B" pairs `shouldBe` Just 2.0
+          lookup "C" pairs `shouldBe` Just 1.0
         Nothing -> expectationFailure "groupByCount failed"
 
     it "groupByMin/Max return correct extremes" $ do
       case Pp.groupByMin "group" "y" dfGrp of
-        Just dfMin ->
-          case getNumeric "y" dfMin of
-            Just vs ->
-              case getText "group" dfMin of
-                Just gs -> do
-                  let pairs = zip (V.toList gs) (V.toList vs)
-                  lookup "A" pairs `shouldBe` Just 1.0
-                  lookup "B" pairs `shouldBe` Just 4.0
-                Nothing -> expectationFailure "no group"
-            Nothing -> expectationFailure "no y"
+        Just dfMin -> do
+          let gs = DX.columnAsList (DX.col @T.Text "group") dfMin
+              vs = DX.columnAsList (DX.col @Double "y")    dfMin
+              pairs = zip gs vs
+          lookup "A" pairs `shouldBe` Just 1.0
+          lookup "B" pairs `shouldBe` Just 4.0
         Nothing -> expectationFailure "groupByMin failed"
 
       case Pp.groupByMax "group" "y" dfGrp of
-        Just dfMax ->
-          case getNumeric "y" dfMax of
-            Just vs ->
-              case getText "group" dfMax of
-                Just gs -> do
-                  let pairs = zip (V.toList gs) (V.toList vs)
-                  lookup "A" pairs `shouldBe` Just 5.0
-                  lookup "B" pairs `shouldBe` Just 6.0
-                Nothing -> expectationFailure "no group"
-            Nothing -> expectationFailure "no y"
+        Just dfMax -> do
+          let gs = DX.columnAsList (DX.col @T.Text "group") dfMax
+              vs = DX.columnAsList (DX.col @Double "y")    dfMax
+              pairs = zip gs vs
+          lookup "A" pairs `shouldBe` Just 5.0
+          lookup "B" pairs `shouldBe` Just 6.0
         Nothing -> expectationFailure "groupByMax failed"
 
   -- ─────────────────────────────────────────────────────────────────────

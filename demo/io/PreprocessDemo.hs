@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 -- | DataIO.Preprocess の総合デモ。
 --
--- - NA 文字列を含む CSV をロード
+-- - NA 文字列を含む CSV をロード (Hackage dataframe 経由)
 -- - countMissing で欠損列を確認
 -- - dropMissingRows / imputeMean / imputeMedian / imputeConstant の比較
 -- - filterRowsByNumeric / mapNumeric / deriveNumeric の使用例
@@ -9,12 +10,10 @@ module Main where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
-import qualified Data.Text.IO as TIO
-import qualified Data.Vector as V
 
-import DataIO.CSV          (loadAuto)
-import DataFrame.Core      (DataFrame, Column (..), columnNames, getColumn,
-                            getNumeric, numRows)
+import qualified DataFrame                    as DX
+import qualified DataFrame.Internal.DataFrame as DXD
+import DataIO.External    (loadCsvX)
 import DataIO.Preprocess
 
 import System.IO          (hPutStrLn, stderr)
@@ -36,28 +35,27 @@ testCSV = unlines
 
 main :: IO ()
 main = do
-  -- write a test CSV in /tmp
   let path = "/tmp/preprocess_demo.csv"
   writeFile path testCSV
 
-  result <- loadAuto path
+  result <- loadCsvX path
   case result of
     Left err -> do
       hPutStrLn stderr ("Parse error: " ++ err)
       exitFailure
     Right df -> runDemo df
 
-runDemo :: DataFrame -> IO ()
+runDemo :: DXD.DataFrame -> IO ()
 runDemo df = do
   putStrLn "=================================="
   putStrLn " DataIO.Preprocess Demo"
   putStrLn "=================================="
   putStrLn ""
+  let (nrows, _) = DX.dimensions df
   printf "Loaded %d rows, columns: %s\n"
-         (numRows df) (T.unpack (T.intercalate ", " (columnNames df)))
+         nrows (T.unpack (T.intercalate ", " (DX.columnNames df)))
   putStrLn ""
 
-  -- 1. 欠損カウント
   putStrLn "--- countMissing ---"
   mapM_ (\(c, m) ->
     if m > 0 then printf "  %s: %d missing\n" (T.unpack c) m
@@ -65,52 +63,51 @@ runDemo df = do
     (countMissing df)
   putStrLn ""
 
-  -- 2. dropMissingRows
   putStrLn "--- dropMissingRows [\"age\", \"income\"] ---"
   let df1 = dropMissingRows ["age", "income"] df
-  printf "  After: %d rows (was %d)\n" (numRows df1) (numRows df)
+      (nrows1, _) = DX.dimensions df1
+  printf "  After: %d rows (was %d)\n" nrows1 nrows
   putStrLn ""
 
-  -- 3. parseNumericColumn (after dropping NA)
-  putStrLn "--- parseNumericColumn (TextCol → NumericCol) ---"
+  putStrLn "--- parseNumericColumn ---"
   case parseNumericColumn "age" df1 >>= parseNumericColumn "income" of
-    Nothing -> putStrLn "  failed (still has unparseable cells)"
+    Nothing -> putStrLn "  (already numeric or parse failed; OK if Hackage parsed it)"
     Just df2 -> do
       printf "  Both age/income are now numeric\n"
       showNumericStats df2 "age"
       showNumericStats df2 "income"
   putStrLn ""
 
-  -- 4. imputeMean / imputeMedian on raw df (before drop)
   putStrLn "--- imputeMean / imputeMedian on age ---"
   case imputeMean "age" df of
     Just df3 -> do
-      printf "  imputeMean produces %d numeric rows\n" (numRows df3)
+      let (n3, _) = DX.dimensions df3
+      printf "  imputeMean produces %d numeric rows\n" n3
       showNumericStats df3 "age"
     Nothing -> putStrLn "  imputeMean failed"
   case imputeMedian "income" df of
     Just df4 -> do
-      printf "  imputeMedian produces %d numeric rows\n" (numRows df4)
+      let (n4, _) = DX.dimensions df4
+      printf "  imputeMedian produces %d numeric rows\n" n4
       showNumericStats df4 "income"
     Nothing -> putStrLn "  imputeMedian failed"
   putStrLn ""
 
-  -- 5. filterRowsByNumeric
   putStrLn "--- filterRowsByNumeric (age >= 30) ---"
   let dfNum = case imputeMean "age" df >>= imputeMean "income" of
-                Just d -> d
+                Just d  -> d
                 Nothing -> df
       dfFilt = filterRowsByNumeric "age" (>= 30) dfNum
-  printf "  After: %d rows (was %d)\n" (numRows dfFilt) (numRows dfNum)
+      (nNum, _)  = DX.dimensions dfNum
+      (nFilt, _) = DX.dimensions dfFilt
+  printf "  After: %d rows (was %d)\n" nFilt nNum
   putStrLn ""
 
-  -- 6. mapNumeric
   putStrLn "--- mapNumeric \"income\" (/1000) ---"
   let dfMap = mapNumeric "income" (/ 1000) dfNum
   showNumericStats dfMap "income"
   putStrLn ""
 
-  -- 7. deriveNumeric (income / age = income-per-year)
   putStrLn "--- deriveNumeric \"ratio\" = income / age ---"
   let dfDeriv = deriveNumeric "ratio"
                   (\row -> case (Map.lookup "income" row, Map.lookup "age" row) of
@@ -120,22 +117,40 @@ runDemo df = do
   showNumericStats dfDeriv "ratio"
   putStrLn ""
 
-  -- 8. selectColumns
   putStrLn "--- selectColumns [\"group\", \"age\"] ---"
   let dfSel = selectColumns ["group", "age"] dfNum
-  printf "  columns: %s\n" (T.unpack (T.intercalate ", " (columnNames dfSel)))
+  printf "  columns: %s\n" (T.unpack (T.intercalate ", " (DX.columnNames dfSel)))
   putStrLn ""
 
   putStrLn "Done."
 
-showNumericStats :: DataFrame -> T.Text -> IO ()
-showNumericStats df name = case getNumeric name df of
-  Nothing -> printf "  %s: not numeric\n" (T.unpack name)
-  Just v  -> do
-    let xs = V.toList v
-        m  = length xs
-        mean = sum xs / fromIntegral m
-        mn = minimum xs
-        mx = maximum xs
-    printf "  %-10s n=%d  min=%.2f  max=%.2f  mean=%.2f\n"
-           (T.unpack name) m mn mx mean
+showNumericStats :: DXD.DataFrame -> T.Text -> IO ()
+showNumericStats df name =
+  case readNum name df of
+    Nothing -> printf "  %s: not numeric\n" (T.unpack name)
+    Just xs -> do
+      let m  = length xs
+          mean = sum xs / fromIntegral m
+          mn = minimum xs
+          mx = maximum xs
+      printf "  %-10s n=%d  min=%.2f  max=%.2f  mean=%.2f\n"
+             (T.unpack name) m mn mx mean
+
+readNum :: T.Text -> DXD.DataFrame -> Maybe [Double]
+readNum name df =
+  case DXD.getColumn name df of
+    Nothing -> Nothing
+    Just _  ->
+      case tryReadDouble name df of
+        Just xs -> Just xs
+        Nothing -> tryReadIntAsDouble name df
+
+tryReadDouble :: T.Text -> DXD.DataFrame -> Maybe [Double]
+tryReadDouble name df = either (const Nothing) Just $
+  fmap (map (id :: Double -> Double)) $
+    Right (DX.columnAsList (DX.col @Double name) df)
+
+tryReadIntAsDouble :: T.Text -> DXD.DataFrame -> Maybe [Double]
+tryReadIntAsDouble name df = either (const Nothing) Just $
+  fmap (map (fromIntegral :: Int -> Double)) $
+    Right (DX.columnAsList (DX.col @Int name) df)

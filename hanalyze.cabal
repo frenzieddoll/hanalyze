@@ -236,6 +236,7 @@ executable preprocess-demo
     , text       >= 1.2  && < 2.2
     , containers >= 0.6  && < 0.8
     , vector     >= 0.12 && < 0.14
+    , dataframe  >= 0.3  && < 2
 
 executable external-io-demo
   import:           warnings
@@ -247,6 +248,7 @@ executable external-io-demo
     , hanalyze
     , text       >= 1.2  && < 2.2
     , vector     >= 0.12 && < 0.14
+    , dataframe  >= 0.3  && < 2
 
 executable analysis-compare-demo
   import:           warnings
@@ -820,3 +822,5 @@ test-suite hanalyze-test
     , hspec      >= 2.10 && < 2.12
     , vector     >= 0.12 && < 0.14
     , mwc-random >= 0.15 && < 0.16
+    , text       >= 1.2  && < 2.2
+    , dataframe  >= 0.3  && < 2

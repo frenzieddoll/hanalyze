@@ -2,17 +2,16 @@
 -- | DataIO.External のデモ。
 --
 -- Hackage 'dataframe' ライブラリ経由で CSV を読み込み:
--- - 既存 'DataIO.CSV.loadAuto' との比較 (型推論精度)
--- - 欠損値が "NA" 文字列として保持されることを確認
--- - imputeMean で欠損補完して NumericCol 化
+-- - 列ごとの自動型推論結果
+-- - 欠損値の検出
+-- - imputeMean で欠損補完
 import qualified Data.Text as T
-import qualified Data.Vector as V
 
-import DataIO.CSV         (loadAuto)
-import DataIO.External    (loadCSVExt)
+import DataIO.External    (loadCsvX)
 import DataIO.Preprocess  (countMissing, imputeMean)
-import DataFrame.Core     (DataFrame, Column (..), columnNames, getColumn,
-                           numRows)
+import qualified DataFrame                 as DX
+import qualified DataFrame.Internal.DataFrame as DXD
+import qualified DataFrame.Internal.Column as DXC
 import Text.Printf        (printf)
 
 testCSV :: String
@@ -35,29 +34,20 @@ main = do
   putStrLn "=================================="
   putStrLn ""
 
-  -- 1. 既存 loadAuto (cassava ベース)
-  putStrLn "--- 既存 loadAuto (DataIO.CSV) ---"
-  Right df1 <- loadAuto path
-  printDFTypes df1
+  putStrLn "--- loadCsvX (Hackage dataframe) ---"
+  Right df <- loadCsvX path
+  printDFTypes df
   putStrLn ""
 
-  -- 2. loadCSVExt (Hackage dataframe ベース)
-  putStrLn "--- 新規 loadCSVExt (DataIO.External) ---"
-  Right df2 <- loadCSVExt path
-  printDFTypes df2
-  putStrLn ""
-
-  -- 3. countMissing で欠損を確認 (External 経由は欠損が NA として残る)
-  putStrLn "--- countMissing on External-loaded df ---"
+  putStrLn "--- countMissing ---"
   mapM_ (\(c, m) ->
     if m > 0 then printf "  %s: %d missing\n" (T.unpack c) m
              else printf "  %s: complete\n"   (T.unpack c))
-    (countMissing df2)
+    (countMissing df)
   putStrLn ""
 
-  -- 4. imputeMean で score 列を補完 (TextCol → NumericCol)
-  putStrLn "--- imputeMean \"score\" on External-loaded df ---"
-  case imputeMean "score" df2 of
+  putStrLn "--- imputeMean \"score\" ---"
+  case imputeMean "score" df of
     Just df3 -> do
       printDFTypes df3
       printf "  → score is now numeric (mean-imputed for NA rows)\n"
@@ -66,15 +56,14 @@ main = do
 
   putStrLn "Done."
 
-printDFTypes :: DataFrame -> IO ()
+printDFTypes :: DXD.DataFrame -> IO ()
 printDFTypes df = do
-  printf "  Rows: %d, Columns: %d\n" (numRows df) (length (columnNames df))
-  mapM_ (\n -> case getColumn n df of
-           Just (NumericCol v) ->
-             printf "    %-10s : NumericCol (n=%d)\n" (T.unpack n) (V.length v)
-           Just (TextCol v)    ->
-             printf "    %-10s : TextCol    (n=%d) values=%s\n"
-               (T.unpack n) (V.length v)
-               (show (V.toList v))
+  let (rows, ncols) = DX.dimensions df
+  printf "  Rows: %d, Columns: %d\n" rows ncols
+  mapM_ (\n -> case DXD.getColumn n df of
+           Just c  -> printf "    %-10s : %s (len=%d)\n"
+                        (T.unpack n)
+                        (DXC.columnTypeString c)
+                        (DXC.columnLength c)
            Nothing -> printf "    %-10s : <missing>\n" (T.unpack n))
-        (columnNames df)
+        (DX.columnNames df)
