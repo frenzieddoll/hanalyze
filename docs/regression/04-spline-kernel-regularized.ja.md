@@ -1,7 +1,10 @@
 # 回帰拡張 (Spline / Kernel / Regularized) の使い方
 
+> 🌐 [English](04-spline-kernel-regularized.md) | **日本語**
+
 > LM/GLM の上に重ねる **非線形** ・ **非パラメトリック** ・ **正則化** モデル群。
 > 理論は [docs/regression/theory-regression-extensions.ja.md](theory-regression-extensions.ja.md) を参照。
+> **多出力対応** (Phase M1-M8) は [05-multivariate.ja.md](05-multivariate.ja.md) を参照。
 
 ## モジュール早見表
 
