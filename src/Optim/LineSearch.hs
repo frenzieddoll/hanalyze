@@ -1,0 +1,186 @@
+-- | 1D 最適化: Brent 法 + 黄金分割探索 (Golden Section)。
+--
+-- 目的: 単峰区間 [a, b] 内の局所最小を高精度に求める。
+--
+-- - 'goldenSection': シンプル・確実 (関数が単峰なら線形収束)。
+-- - 'brent': Brent 1973。放物線補間 + 黄金分割の hybrid。超線形収束、
+--   外れ値に頑健。`scipy.optimize.brent` / `R::optimize` の標準。
+--
+-- いずれも勾配不要。両端から狭めるので bracket (a < x < b で f(x) < f(a), f(b))
+-- を最初に与える必要あり (`bracketMinimum` で自動探索可)。
+module Optim.LineSearch
+  ( BrentConfig (..)
+  , defaultBrentConfig
+  , brent
+  , goldenSection
+  , bracketMinimum
+  ) where
+
+import Optim.Common
+
+-- | 黄金比 φ。
+phi :: Double
+phi = (1 + sqrt 5) / 2
+
+-- | 1 - 1/φ ≈ 0.382 (黄金分割の縮小比)。
+gold :: Double
+gold = (3 - sqrt 5) / 2
+
+-- | Brent 設定。
+data BrentConfig = BrentConfig
+  { bcMaxIter :: !Int
+  , bcTol     :: !Double      -- ^ 相対許容、最終区間幅の目安
+  , bcDir     :: !Direction
+  } deriving (Show, Eq)
+
+defaultBrentConfig :: BrentConfig
+defaultBrentConfig = BrentConfig
+  { bcMaxIter = 200
+  , bcTol     = 1e-8
+  , bcDir     = Minimize
+  }
+
+-- | 黄金分割探索。
+--
+-- 仕様: 区間 [a, b] が単峰 (内部に唯一の最小) と仮定。
+-- 4 点 a < c < d < b を維持し、c = a + gold*(b-a), d = b - gold*(b-a)
+-- (gold = 1 - 1/φ ≈ 0.382)。各反復で区間を 1/φ ≈ 0.618 倍に縮小、
+-- 1 反復あたり関数評価 1 回。
+goldenSection :: Direction
+              -> ([Double] -> Double)   -- ^ 1D だが [Double] で受ける (1 要素)
+              -> Double                  -- ^ a
+              -> Double                  -- ^ b
+              -> Double                  -- ^ tol
+              -> Int                     -- ^ maxIter
+              -> OptimResult
+goldenSection dir fUser a0 b0 tol maxIter =
+  let f x = flipFor dir fUser [x]
+      -- a < c < d < b を維持 (gold ≈ 0.382)
+      go iter a b c d fc fd hist
+        | iter >= maxIter || abs (b - a) < tol =
+            let xm = if fc < fd then c else d
+                fm = min fc fd
+            in (xm, fm, fm : hist, iter, abs (b - a) < tol)
+        | fc < fd =
+            -- 最小は [a, d] にある: 区間を [a, d] に縮め、old c が new d になる
+            let bN  = d
+                dN  = c
+                fdN = fc
+                cN  = a + gold * (bN - a)
+                fcN = f cN
+            in go (iter + 1) a bN cN dN fcN fdN (min fcN fdN : hist)
+        | otherwise =
+            -- 最小は [c, b] にある: 区間を [c, b] に縮め、old d が new c になる
+            let aN  = c
+                cN  = d
+                fcN = fd
+                dN  = b - gold * (b - aN)
+                fdN = f dN
+            in go (iter + 1) aN b cN dN fcN fdN (min fcN fdN : hist)
+      a = min a0 b0
+      b = max a0 b0
+      c = a + gold * (b - a)         -- 左の内点 (約 0.382 of (b-a) from a)
+      d = b - gold * (b - a)         -- 右の内点 (約 0.618 of (b-a) from a)
+      fc = f c
+      fd = f d
+      (xb, vb, hist, iters, conv) = go 0 a b c d fc fd [min fc fd]
+      vUser = case dir of { Minimize -> vb; Maximize -> negate vb }
+      histU = case dir of { Minimize -> reverse hist; Maximize -> map negate (reverse hist) }
+  in OptimResult [xb] vUser histU iters conv
+
+-- | Brent's method (放物線補間 + 黄金分割の hybrid)。
+--
+-- Numerical Recipes / scipy.optimize.brent 互換のシンプル実装。
+brent :: BrentConfig
+      -> ([Double] -> Double)
+      -> Double                 -- ^ a
+      -> Double                 -- ^ b
+      -> OptimResult
+brent cfg fUser ax bx =
+  let f x = flipFor (bcDir cfg) fUser [x]
+      a0 = min ax bx
+      b0 = max ax bx
+      x0 = a0 + gold * (b0 - a0)
+      fx0 = f x0
+      (xBest, vBest, hist, iters, conv) =
+        loopBrent cfg f a0 b0 x0 x0 x0 fx0 fx0 fx0 0 0 [fx0]
+      vUser = case bcDir cfg of { Minimize -> vBest; Maximize -> negate vBest }
+      histU = case bcDir cfg of { Minimize -> reverse hist; Maximize -> map negate (reverse hist) }
+  in OptimResult [xBest] vUser histU iters conv
+
+-- | Brent 反復。Numerical Recipes "brent" の素直な移植 (簡略版)。
+-- 状態: a, b (区間), x (現在最良), w (2 番目), v (3 番目), 対応する f 値。
+-- e: 一つ前の `d` (放物線補間ステップの記憶)、d: 現ステップ幅。
+loopBrent :: BrentConfig
+          -> (Double -> Double)
+          -> Double -> Double                 -- a, b
+          -> Double -> Double -> Double       -- x, w, v
+          -> Double -> Double -> Double       -- fx, fw, fv
+          -> Int -> Double                    -- iter, e
+          -> [Double]                         -- hist
+          -> (Double, Double, [Double], Int, Bool)
+loopBrent cfg f a b x w v fx fw fv iter e hist
+  | iter >= bcMaxIter cfg = (x, fx, hist, iter, False)
+  | abs (x - xm) <= tol2 - 0.5 * (b - a) = (x, fx, hist, iter, True)
+  | otherwise =
+      let -- 放物線補間を試み、失敗時は黄金分割
+          (d, eN) = parabolicOrGolden
+          u  = if abs d >= tol1 then x + d else x + signum d * tol1
+          fu = f u
+      in if fu <= fx
+           then
+             let (aN, bN) = if u >= x then (x, b) else (a, x)
+                 (xN, wN, vN, fxN, fwN, fvN) = (u, x, w, fu, fx, fw)
+             in loopBrent cfg f aN bN xN wN vN fxN fwN fvN (iter + 1) eN (fxN : hist)
+           else
+             let (aN, bN) = if u < x then (u, b) else (a, u)
+                 (xN, wN, vN, fxN, fwN, fvN) =
+                   if fu <= fw || w == x
+                     then (x, u, w, fx, fu, fw)
+                     else if fu <= fv || v == x || v == w
+                            then (x, w, u, fx, fw, fu)
+                            else (x, w, v, fx, fw, fv)
+             in loopBrent cfg f aN bN xN wN vN fxN fwN fvN (iter + 1) eN (fxN : hist)
+  where
+    xm   = 0.5 * (a + b)
+    tol1 = bcTol cfg * abs x + 1e-10
+    tol2 = 2 * tol1
+    parabolicOrGolden =
+      if abs e > tol1
+        then
+          let r0 = (x - w) * (fx - fv)
+              q0 = (x - v) * (fx - fw)
+              p0 = (x - v) * q0 - (x - w) * r0
+              q1 = 2 * (q0 - r0)
+              p  = if q1 > 0 then -p0 else p0
+              q  = abs q1
+              eOld = e
+              dCand = p / q
+              ok = abs p < abs (0.5 * q * eOld)
+                   && p > q * (a - x) && p < q * (b - x)
+          in if ok then (dCand, dCand) else goldenStep
+        else goldenStep
+    goldenStep =
+      let eG = if x >= xm then a - x else b - x
+          dG = gold * eG
+      in (dG, eG)
+
+-- | 入口探索: f(c) < f(a), f(c) < f(b) を満たす (a, c, b) を見つける。
+-- 単純な拡張アルゴリズム (Numerical Recipes mnbrak 簡易版)。
+--
+-- 戻り値: (a, b) — c は内部で発見し、bracket が成立する区間幅を返す。
+-- bracket できなければ Nothing。
+bracketMinimum :: ([Double] -> Double)
+               -> Double               -- ^ 初期 a
+               -> Double               -- ^ 初期 b
+               -> Maybe (Double, Double, Double)  -- (a, c, b) with f(c) < f(a),f(b)
+bracketMinimum fUser a0 b0 =
+  let f x = fUser [x]
+      step = (b0 - a0) * 0.5
+      go a b k
+        | k > 100   = Nothing
+        | f c < f a && f c < f b = Just (a, c, b)
+        | otherwise = go (a - step) (b + step) (k + 1)
+        where
+          c = 0.5 * (a + b)
+  in go a0 b0 0

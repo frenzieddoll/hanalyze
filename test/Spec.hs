@@ -35,6 +35,7 @@ import qualified Model.Core        as Core
 import qualified Model.GLM         as GLM
 import qualified Optim.NelderMead  as NM
 import qualified Optim.LBFGS       as LBFGS
+import qualified Optim.LineSearch  as LS
 import qualified Optim.Common      as OC
 import qualified System.Random.MWC as MWC
 
@@ -941,3 +942,33 @@ main = hspec $ do
       let x0 = take 30 (cycle [1.5, -2.0, 0.5])
       r <- LBFGS.runLBFGSNumeric LBFGS.defaultLBFGSConfig sphere x0
       OC.orValue r `shouldSatisfy` (< 1e-4)
+
+  -- ===========================================================================
+  -- 1D オプティマイザ (Optim.LineSearch)
+  -- ===========================================================================
+  describe "Optim.LineSearch" $ do
+    let parabola [x] = (x - 2.5)^(2::Int) + 1.0
+        parabola _   = error "1D"
+        cosBowl [x] = cos x + 0.1 * x * x   -- 単峰、最小 ≈ 1.428 付近
+        cosBowl _   = error "1D"
+
+    it "Brent: parabola minimum at x = 2.5" $ do
+      let r = LS.brent LS.defaultBrentConfig parabola 0 5
+      abs (head (OC.orBest r) - 2.5) `shouldSatisfy` (< 1e-5)
+      OC.orValue r `shouldSatisfy` (\v -> abs (v - 1) < 1e-8)
+
+    it "Brent: cos x + 0.1 x² minimum (verified by GS)" $ do
+      let rB = LS.brent LS.defaultBrentConfig cosBowl 0 4
+          rG = LS.goldenSection OC.Minimize cosBowl 0 4 1e-8 200
+      abs (head (OC.orBest rB) - head (OC.orBest rG)) `shouldSatisfy` (< 1e-3)
+
+    it "GoldenSection: parabola minimum at x = 2.5" $ do
+      let r = LS.goldenSection OC.Minimize parabola 0 5 1e-7 200
+      abs (head (OC.orBest r) - 2.5) `shouldSatisfy` (< 1e-3)
+
+    it "Kernel.autoBandwidthBrent: 同じ最適 h を grid 法とほぼ一致" $ do
+      let xs = V.fromList [0.0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+          ys = V.map (\x -> sin x + 0.1 * x) xs
+          (hG, _) = K.gridSearchBandwidth K.Gaussian xs ys [0.5, 0.8, 1.0, 1.5, 2.0, 3.0]
+          (hB, _) = K.autoBandwidthBrent K.Gaussian xs ys 0.3 4.0
+      abs (hB - hG) `shouldSatisfy` (< 1.0)   -- グリッドと近い領域

@@ -16,6 +16,7 @@ module Model.Kernel
   , kernelRidge
   , predictKernelRidge
   , gridSearchBandwidth
+  , autoBandwidthBrent
     -- * 多出力 (主 API)
   , KernelRidgeFitMulti (..)
   , kernelRidgeMulti
@@ -29,6 +30,8 @@ module Model.Kernel
 
 import qualified Data.Vector as V
 import qualified Numeric.LinearAlgebra as LA
+import qualified Optim.LineSearch as LS
+import qualified Optim.Common     as OC
 
 -- ---------------------------------------------------------------------------
 -- カーネル関数
@@ -159,22 +162,42 @@ gridSearchBandwidth
   -> [Double]             -- 候補 h リスト
   -> (Double, Double)     -- (best h, best LOO RMSE)
 gridSearchBandwidth kern xs ys hs =
-  let n      = V.length xs
-      looErr h =
-        let yPred = V.imap
-              (\i _ ->
-                let xs'  = V.ifilter (\j _ -> j /= i) xs
-                    ys'  = V.ifilter (\j _ -> j /= i) ys
-                    xi   = xs V.! i
-                    pred = nwRegression kern h xs' ys' (V.singleton xi)
-                in V.head pred)
-              xs
-            err  = V.zipWith (\y yh -> (y - yh)^(2::Int)) ys yPred
-        in sqrt (V.sum err / fromIntegral n)
-      results = [(h, looErr h) | h <- hs]
+  let results = [(h, looErrNW kern xs ys h) | h <- hs]
       best = head [ pair | pair <- results
                          , snd pair == minimum (map snd results) ]
   in best
+
+-- | NW + LOO-CV の loss (1D 連続)。`autoBandwidthBrent` と内部共有。
+looErrNW :: Kernel -> V.Vector Double -> V.Vector Double -> Double -> Double
+looErrNW kern xs ys h =
+  let n = V.length xs
+      yPred = V.imap
+        (\i _ ->
+          let xs'  = V.ifilter (\j _ -> j /= i) xs
+              ys'  = V.ifilter (\j _ -> j /= i) ys
+              xi   = xs V.! i
+              pred = nwRegression kern h xs' ys' (V.singleton xi)
+          in V.head pred)
+        xs
+      err = V.zipWith (\y yh -> (y - yh)^(2::Int)) ys yPred
+  in sqrt (V.sum err / fromIntegral n)
+
+-- | bandwidth h を **Brent 法** で連続的に最適化 (LOO-CV を最小化)。
+-- 区間 [h_lo, h_hi] が単峰前提。`gridSearchBandwidth` の候補列挙不要版。
+--
+-- 戻り値: (best h, best LOO RMSE)。
+autoBandwidthBrent
+  :: Kernel
+  -> V.Vector Double
+  -> V.Vector Double
+  -> Double             -- ^ h_lo
+  -> Double             -- ^ h_hi
+  -> (Double, Double)
+autoBandwidthBrent kern xs ys hLo hHi =
+  let cfg = LS.defaultBrentConfig { LS.bcMaxIter = 80, LS.bcTol = 1e-6 }
+      result = LS.brent cfg (\[h] -> looErrNW kern xs ys h) hLo hHi
+      hStar  = head (OC.orBest result)
+  in (hStar, OC.orValue result)
 
 -- ---------------------------------------------------------------------------
 -- 多出力 Kernel Ridge (Phase T2)
