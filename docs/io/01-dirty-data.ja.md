@@ -102,10 +102,27 @@ main = do
   ...
 ```
 
-## Phase B 以降の予告
+## Phase B: 自動推論 (`DataIO.Sniff`、完了)
 
-- **Phase B**: 冒頭 8 KB の sniff で delimiter / skip / NA 候補を **自動推論**。
-  W005 (#11/#13/#14) や W001 を引数なしで救済。
-- **Phase C**: `DataIO.Clean` で `stripUnits` / `parseCurrency` / `parseDate` /
-  `coerceNumeric` などの列変換を提供し、W007 (#16) / W008 (#08) を CLI から
-  ワンコマンドで救済。
+冒頭 8 KB を読んで、ユーザが明示指定しなかった項目を自動補完する。
+- delimiter (`,;\t|` から variance 昇順 + median 降順で選定)
+- コメント文字 (`#` / `!` 始まりの先頭連続行)
+- ヘッダ有無 (1 行目が全て numeric token なら無し判定)
+
+`LoadOpts.loSniff` のデフォルトは `True`。`--no-sniff` で切れる。
+sniff の結果は `I013` Info コードとしてログに残るので、何が自動修復されたか
+常に追跡できる。これにより `data/dirty/{02,03,11,13,14}` は引数無しで
+そのまま読めるようになった (5/19 → 14/19 がデフォルトで正常読込)。
+
+```bash
+# どれも引数無しで読める (sniff 自動推論)
+hanalyze info data/dirty/02_no_header.csv
+hanalyze info data/dirty/03_preamble.csv
+hanalyze info data/dirty/11_semicolon_eu.csv
+```
+
+## Phase C 予告
+
+`DataIO.Clean` で `stripUnits` / `parseCurrency` / `parseDate` /
+`coerceNumeric` などの列変換を提供し、W007 (#16) / W008 (#08) を CLI から
+ワンコマンドで救済する予定。

@@ -205,11 +205,12 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | 用途 | モジュール | 主要関数 |
 |---|---|---|
 | CSV / TSV / SSV (cassava) | `DataIO.CSV` | `loadAuto`, `loadCSV`, `loadTSV` (Hackage `DataFrame` を直接返す) |
-| 防衛的 CSV ローダ | `DataIO.CSV` | `loadAutoSafe`, `loadAutoSafeWith`, `LoadOpts` (--no-header / --skip / --comment / --strict) |
+| 防衛的 CSV ローダ | `DataIO.CSV` | `loadAutoSafe`, `loadAutoSafeWith`, `LoadOpts` (--no-header / --skip / --comment / --delim / --strict / --no-sniff) |
 | Parquet / JSON | `DataIO.External` | `loadParquet`, `loadJSON` |
 | DataFrame → ベクタ抽出 | `DataIO.Convert` | `getDoubleVec`, `getTextVec`, `getMaybeTextVec` |
 | 構造化ログ | `DataIO.Log` | `LogEntry`, `LogReport`, `printLogReport` |
 | 健全性検査 (W001..W008) | `DataIO.Health` | `inspectDataFrame`, `inspectWithPreview` |
+| 自動推論 (delimiter / 有ヘッダ / skip) | `DataIO.Sniff` | `sniffBytes`, `sniffFile` (Phase B) |
 | 欠損補完 / フィルタ / 派生列 | `DataIO.Preprocess` | `imputeMean`, `imputeMedian`, `dropMissingRows`, `filterRowsByNumeric`, `deriveNumeric`, `mapNumeric` |
 | groupBy / aggregate | `DataIO.Preprocess` | `groupByMean`, `groupBySum`, `groupByMin`, `groupByMax`, `groupByMedian`, `groupByCount`, `groupByAggregate` |
 
