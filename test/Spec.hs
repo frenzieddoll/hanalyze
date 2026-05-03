@@ -7,6 +7,7 @@ import Model.GLMM
 import Model.GLM (Family (..), LinkFn (..))
 import qualified Data.Vector as V
 import qualified Data.Text   as T
+import qualified Numeric.LinearAlgebra as LA
 import Data.List (sort)
 
 import qualified DataFrame                    as DX
@@ -343,6 +344,20 @@ main = hspec $ do
         Nothing -> expectationFailure "groupByMax failed"
 
   -- ─────────────────────────────────────────────────────────────────────
+  describe "Model.RFF (multivariate, Phase B-RFF)" $ do
+    it "rffRidgeMV: y = x1 * t を完全にフィット" $ do
+      let xs = [(x1, t) | x1 <- [1, 2, 3, 5, 7], t <- [1..10]]
+          xss = [[x1, t] | (x1, t) <- xs]
+          ys  = [x1 * t | (x1, t) <- xs]
+          xMat = LA.fromLists xss
+      gen   <- MWC.createSystemRandom
+      feats <- RFF.sampleRFFRBFMV 2 256 1.0 1.0 gen
+      let fit  = RFF.rffRidgeMV feats xMat ys 0.001
+          yhat = RFF.predictRFFRidgeMV fit xMat
+          rmse = sqrt (sum (zipWith (\a b -> (a-b)*(a-b)) ys yhat)
+                       / fromIntegral (length ys))
+      rmse `shouldSatisfy` (< 1.0)
+
   describe "Model.RFF" $ do
     it "feature matrix has correct shape" $ do
       gen   <- MWC.createSystemRandom

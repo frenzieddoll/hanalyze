@@ -35,6 +35,14 @@ module Model.RFF
   , RFFGPFit (..)
   , rffGP
   , predictRFFGP
+    -- * 多変量入力 (p 次元) 対応 (Phase B-RFF)
+  , RFFFeaturesMV (..)
+  , sampleRFFRBFMV
+  , sampleRFFMatern52MV
+  , rffFeaturesMV
+  , RFFRidgeFitMV (..)
+  , rffRidgeMV
+  , predictRFFRidgeMV
   ) where
 
 import qualified Data.Vector as V
@@ -200,3 +208,94 @@ predictRFFGP fit xNew =
       vars  = [ max 0 (LA.dot phi_i (sigma LA.#> phi_i))
               | phi_i <- LA.toRows phi ]
   in zip means vars
+
+-- ---------------------------------------------------------------------------
+-- 多変量入力 (p 次元) 対応 (Phase B-RFF)
+-- ---------------------------------------------------------------------------
+
+-- | 多変量 RFF の特徴生成情報。'rffmvOmegas' は p×D 行列で、各列が
+-- 1 個の周波数ベクトル ω_j ∈ ℝ^p を表す。
+data RFFFeaturesMV = RFFFeaturesMV
+  { rffmvKernel      :: RFFKernel
+  , rffmvDim         :: Int                   -- ^ 入力次元 p
+  , rffmvOmegas      :: LA.Matrix Double      -- ^ p × D
+  , rffmvBs          :: V.Vector Double       -- ^ D
+  , rffmvSigmaF      :: Double
+  , rffmvLengthScale :: Double                -- ^ 共通 ℓ (ARD 未対応)
+  } deriving (Show)
+
+-- | RBF カーネル用 RFF (多変量)。各 ω_j[k] ~ N(0, 1/ℓ²) 独立。
+sampleRFFRBFMV
+  :: Int -> Int -> Double -> Double -> GenIO -> IO RFFFeaturesMV
+sampleRFFRBFMV p d ell sf gen = do
+  let total = p * d
+  ws <- V.replicateM total (MWCD.normal 0 (1/ell) gen)
+  bs <- V.replicateM d (uniformR (0, 2*pi) gen)
+  let omegaMat = LA.reshape d (LA.fromList (V.toList ws))
+  return RFFFeaturesMV
+    { rffmvKernel      = RFFRBF
+    , rffmvDim         = p
+    , rffmvOmegas      = omegaMat
+    , rffmvBs          = bs
+    , rffmvSigmaF      = sf
+    , rffmvLengthScale = ell
+    }
+
+-- | Matérn 5/2 用 RFF (多変量)。
+sampleRFFMatern52MV
+  :: Int -> Int -> Double -> Double -> GenIO -> IO RFFFeaturesMV
+sampleRFFMatern52MV p d ell sf gen = do
+  let nu = 2.5 :: Double
+  ws <- V.replicateM (p * d) $ do
+    z <- MWCD.normal 0 (1/ell) gen
+    u <- MWCD.gamma nu (1/nu) gen
+    return (z / sqrt u)
+  bs <- V.replicateM d (uniformR (0, 2*pi) gen)
+  return RFFFeaturesMV
+    { rffmvKernel      = RFFMatern52
+    , rffmvDim         = p
+    , rffmvOmegas      = LA.reshape d (LA.fromList (V.toList ws))
+    , rffmvBs          = bs
+    , rffmvSigmaF      = sf
+    , rffmvLengthScale = ell
+    }
+
+-- | 入力 X (n×p) → Φ (n×D)。
+-- φ_j(x) = σ_f √(2/D) cos(ω_j^T x + b_j)
+rffFeaturesMV :: RFFFeaturesMV -> LA.Matrix Double -> LA.Matrix Double
+rffFeaturesMV rff x =
+  let d   = LA.cols (rffmvOmegas rff)
+      sf  = rffmvSigmaF rff
+      coef = sf * sqrt (2 / fromIntegral d)
+      -- X @ Ω → n × D
+      xo  = x LA.<> rffmvOmegas rff
+      bs  = LA.fromList (V.toList (rffmvBs rff))
+      -- broadcast b を各行に加える: 各行に同じ vector を加える
+      rows = LA.toRows xo
+      withB = LA.fromRows [ r + bs | r <- rows ]
+  in LA.scale coef (LA.cmap cos withB)
+
+-- | 多変量 RFF Ridge fit。
+data RFFRidgeFitMV = RFFRidgeFitMV
+  { rffrmvFeatures :: RFFFeaturesMV
+  , rffrmvWeights  :: LA.Vector Double   -- ^ D
+  , rffrmvLambda   :: Double
+  } deriving (Show)
+
+-- | 多変量 RFF Ridge: w = (ΦᵀΦ + λI)⁻¹ Φᵀ y。X は n×p。
+rffRidgeMV :: RFFFeaturesMV -> LA.Matrix Double -> [Double] -> Double
+           -> RFFRidgeFitMV
+rffRidgeMV rff x ys lam =
+  let phi  = rffFeaturesMV rff x         -- n × D
+      d    = LA.cols (rffmvOmegas rff)
+      yV   = LA.fromList ys
+      gram = LA.tr phi LA.<> phi
+      regK = gram + LA.scale lam (LA.ident d)
+      rhs  = LA.tr phi LA.#> yV
+      w    = regK LA.<\> rhs
+  in RFFRidgeFitMV rff w lam
+
+predictRFFRidgeMV :: RFFRidgeFitMV -> LA.Matrix Double -> [Double]
+predictRFFRidgeMV fit xNew =
+  let phi = rffFeaturesMV (rffrmvFeatures fit) xNew
+  in LA.toList (phi LA.#> rffrmvWeights fit)

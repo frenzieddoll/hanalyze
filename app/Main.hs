@@ -2310,14 +2310,76 @@ parseKernelOpts (flag : rest) acc
 
 doKernel :: FilePath -> String -> String -> KernelOpts -> LoadOpts -> IO ()
 doKernel file xColStr yColStr opts lopts = do
-  let xCol = T.pack xColStr
-      yCol = T.pack yColStr
-  result <- loadXY lopts file [xCol] yCol
-  case result of
-    Left err -> hPutStrLn stderr err
-    Right (df, [xVec], yVec) ->
-      runKernelOn df xCol yCol xVec yVec opts
-    Right _ -> hPutStrLn stderr "kernel: expected single x column"
+  let xCols = map T.pack (words xColStr)
+      yCol  = T.pack yColStr
+  case xCols of
+    []       -> hPutStrLn stderr "kernel: x 列が指定されていません"
+    [xCol]   -> do
+      result <- loadXY lopts file [xCol] yCol
+      case result of
+        Left err -> hPutStrLn stderr err
+        Right (df, [xVec], yVec) ->
+          runKernelOn df xCol yCol xVec yVec opts
+        Right _ -> hPutStrLn stderr "kernel: expected single x column"
+    _multiple -> case koMethod opts of
+      "rff" -> do
+        result <- loadXY lopts file xCols yCol
+        case result of
+          Left err -> hPutStrLn stderr err
+          Right (_df, xVecs, yVec) ->
+            runKernelMV xCols yCol xVecs yVec opts
+      m -> hPutStrLn stderr $
+        "kernel --method " ++ T.unpack m
+          ++ " は単一 x 列のみ。多変量入力は --method rff を使ってください。"
+
+-- | 多変量 RFF Ridge を走らせる (Phase B-RFF)。
+runKernelMV
+  :: [T.Text] -> T.Text -> [V.Vector Double] -> V.Vector Double
+  -> KernelOpts -> IO ()
+runKernelMV xCols yCol xVecs yVec opts = do
+  let n = V.length yVec
+      p = length xCols
+      -- n × p 行列に組む
+      cols   = map V.toList xVecs
+      xMat   = LA.fromColumns (map LA.fromList cols)
+      ys     = V.toList yVec
+      ell0   = case koBandwidth opts of
+                 Just h  -> h
+                 Nothing -> defaultLengthScale cols
+      lam    = koLambda opts
+      d      = koFeatures opts
+  printf "Loaded %d rows × %d features (%s); method=rff (multivariate)\n"
+         n p (T.unpack (T.intercalate "," xCols))
+  printf "  ell=%.4f  lambda=%.4f  D=%d\n" ell0 lam d
+  gen   <- createSystemRandom
+  feats <- RFF.sampleRFFRBFMV p d ell0 1.0 gen
+  let fit  = RFF.rffRidgeMV feats xMat ys lam
+      yhat = RFF.predictRFFRidgeMV fit xMat
+      sse  = sum (zipWith (\a b -> (a - b)^(2::Int)) ys yhat)
+      sst  = let m = sum ys / fromIntegral (max 1 (length ys))
+             in sum [(y - m)^(2::Int) | y <- ys]
+      r2   = if sst < 1e-12 then 0 else 1 - sse / sst
+  printf "RFF (multivariate) Ridge fit:\n"
+  printf "  R^2 = %.4f\n" r2
+  printf "  RMSE = %.4f\n" (sqrt (sse / fromIntegral n))
+  putStrLn "Note: 多変量 RFF はライブラリ API で予測 / プロットが可能です:"
+  putStrLn "      Model.RFF.rffRidgeMV / predictRFFRidgeMV"
+  putStrLn "      対話的可視化は Phase B-RFF レポート対応で追加予定。"
+  -- 未使用シンボルへのダミー参照 (yCol / fit)
+  _ <- return yCol
+  _ <- return fit
+  return ()
+
+-- | 各列の標準偏差の幾何平均で長さスケールを推定 (median heuristic 簡易版)。
+defaultLengthScale :: [[Double]] -> Double
+defaultLengthScale cols =
+  let stds = [ std c | c <- cols, length c > 1 ]
+      std xs = let n  = fromIntegral (length xs)
+                   m  = sum xs / n
+                   v  = sum [ (x - m)^(2::Int) | x <- xs ] / max 1 (n - 1)
+               in sqrt v
+      g  = product stds ** (1.0 / fromIntegral (max 1 (length stds)))
+  in if g <= 0 then 1.0 else g
 
 runKernelOn :: DXD.DataFrame -> T.Text -> T.Text -> V.Vector Double -> V.Vector Double
             -> KernelOpts -> IO ()
