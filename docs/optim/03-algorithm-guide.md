@@ -15,36 +15,24 @@ into one reference.
 
 ## 1. Algorithm selection flowchart
 
-```
-Can you supply an analytic gradient ∇f?
-  │
-  ├─ Yes ──► Smooth/convex problem? Local optimum OK?
-  │            ├─ Yes ──► L-BFGS               (Optim.LBFGS, runLBFGS)
-  │            └─ No  ──► L-BFGS multi-start  (parallel from random restarts)
-  │
-  └─ No  (numeric grad / non-differentiable / discrete-ish)
-       │
-       ├─ 1D unimodal?           ──► Brent              (Optim.LineSearch)
-       │
-       ├─ Smooth, low-dim (≤30)?
-       │     ├─ Local only       ──► Nelder-Mead       (Optim.NelderMead)
-       │     └─ Global           ──► DE / CMA-ES (below)
-       │
-       ├─ Non-convex global, 5–30 dim
-       │                          ──► Differential Evolution
-       │                              (Optim.DifferentialEvolution)
-       │
-       ├─ Non-convex continuous, 10–100 dim
-       │     ├─ Lightweight       ──► CMA-ES simplified (Optim.CMAES)
-       │     └─ Standard / robust ──► CMA-ES Full      (Optim.CMAESFull)
-       │
-       ├─ Metaheuristic
-       │     ├─ Classic           ──► Simulated Annealing (Optim.SimulatedAnnealing)
-       │     └─ Swarm             ──► Particle Swarm     (Optim.ParticleSwarm)
-       │
-       └─ Each evaluation is very expensive (≫ 1 sec)
-                                   ──► Bayesian Optimization
-                                        (Optim.BayesOpt)
+```mermaid
+flowchart TD
+    Start[Objective f] --> Grad{Analytic gradient<br/>∇f available?}
+    Grad -->|Yes| Smooth{Smooth/convex /<br/>local optimum OK?}
+    Smooth -->|Yes| LBFGS[L-BFGS<br/>Optim.LBFGS]
+    Smooth -->|No| LBFGSMS[L-BFGS multi-start<br/>parallel from restarts]
+
+    Grad -->|No| Cheap{Each evaluation<br/>≫ 1 sec?}
+    Cheap -->|Yes| BO[Bayesian Optimization<br/>Optim.BayesOpt]
+    Cheap -->|No| Dim{Dim / character}
+
+    Dim -->|1D unimodal| Brent[Brent<br/>Optim.LineSearch]
+    Dim -->|Smooth low-dim ≤ 30 / local| NM[Nelder-Mead<br/>Optim.NelderMead]
+    Dim -->|Non-convex global 5–30 dim| DE[Differential Evolution<br/>Optim.DifferentialEvolution]
+    Dim -->|Non-convex continuous 10–100 dim / lightweight| CMA[CMA-ES simplified<br/>Optim.CMAES]
+    Dim -->|Non-convex continuous 10–100 dim / standard| CMAF[CMA-ES Full<br/>Optim.CMAESFull]
+    Dim -->|Classic metaheuristic| SA[Simulated Annealing<br/>Optim.SimulatedAnnealing]
+    Dim -->|Swarm intelligence| PSO[Particle Swarm<br/>Optim.ParticleSwarm]
 ```
 
 ### Summary table

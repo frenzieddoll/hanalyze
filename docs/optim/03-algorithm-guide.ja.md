@@ -15,35 +15,24 @@
 
 ## 1. アルゴリズム選択フローチャート
 
-```
-目的関数 f に勾配 ∇f を解析的に与えられるか?
-  │
-  ├─ Yes ──► 滑らか・凸 / 局所最適でよい?
-  │            ├─ Yes ──► L-BFGS               (Optim.LBFGS, runLBFGS)
-  │            └─ No  ──► L-BFGS multi-start  (複数の初期点で並列実行)
-  │
-  └─ No (勾配は数値・微分不能・離散風 etc.)
-       │
-       ├─ 1D 単峰?              ──► Brent              (Optim.LineSearch)
-       │
-       ├─ 滑らか・低次元 (≤30)?
-       │     ├─ 局所だけ        ──► Nelder-Mead       (Optim.NelderMead)
-       │     └─ 大域            ──► DE / CMA-ES (下記)
-       │
-       ├─ 非凸・大域・5–30 次元 ──► Differential Evolution
-       │                            (Optim.DifferentialEvolution)
-       │
-       ├─ 非凸・連続・10–100 次元
-       │     ├─ 軽量             ──► CMA-ES 簡易版    (Optim.CMAES)
-       │     └─ 標準・堅牢       ──► CMA-ES Full     (Optim.CMAESFull)
-       │
-       ├─ メタヒューリスティック
-       │     ├─ 古典的           ──► Simulated Annealing (Optim.SimulatedAnnealing)
-       │     └─ 群知能           ──► Particle Swarm    (Optim.ParticleSwarm)
-       │
-       └─ 評価コスト極大 (1 評価 ≫ 1 sec)
-                                  ──► Bayesian Optimization
-                                       (Optim.BayesOpt)
+```mermaid
+flowchart TD
+    Start[目的関数 f] --> Grad{勾配 ∇f を<br/>解析的に渡せる?}
+    Grad -->|Yes| Smooth{滑らか・凸 /<br/>局所最適でよい?}
+    Smooth -->|Yes| LBFGS[L-BFGS<br/>Optim.LBFGS]
+    Smooth -->|No| LBFGSMS[L-BFGS multi-start<br/>複数初期点から並列]
+
+    Grad -->|No| Cheap{1 評価が<br/>≫ 1 秒?}
+    Cheap -->|Yes| BO[Bayesian Optimization<br/>Optim.BayesOpt]
+    Cheap -->|No| Dim{次元 / 性質}
+
+    Dim -->|1D 単峰| Brent[Brent<br/>Optim.LineSearch]
+    Dim -->|滑らか・低次元 ≤ 30 / 局所| NM[Nelder-Mead<br/>Optim.NelderMead]
+    Dim -->|非凸・大域・5–30 次元| DE[Differential Evolution<br/>Optim.DifferentialEvolution]
+    Dim -->|非凸・連続・10–100 次元 / 軽量| CMA[CMA-ES 簡易版<br/>Optim.CMAES]
+    Dim -->|非凸・連続・10–100 次元 / 標準| CMAF[CMA-ES Full<br/>Optim.CMAESFull]
+    Dim -->|古典メタヒューリスティック| SA[Simulated Annealing<br/>Optim.SimulatedAnnealing]
+    Dim -->|群知能| PSO[Particle Swarm<br/>Optim.ParticleSwarm]
 ```
 
 ### 一覧表 (再掲)
