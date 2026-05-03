@@ -13,6 +13,10 @@ import qualified Design.Orthogonal as OA
 import qualified Design.Taguchi as TG
 import qualified DataIO.Preprocess as Pp
 import qualified DataIO.Log        as Log
+import qualified DataIO.CSV        as CSV
+import qualified DataIO.Convert    as Conv
+import System.IO.Temp (withSystemTempFile)
+import System.IO     (hPutStr, hClose)
 import qualified Model.GP        as GP
 import qualified Model.GPRobust  as GPR
 import qualified Model.RFF       as RFF
@@ -419,3 +423,51 @@ main = hspec $ do
       T.isInfixOf "W042"   s   `shouldBe` True
       T.isInfixOf "壊れている" s `shouldBe` True
       T.isInfixOf "助言"   s   `shouldBe` True
+
+  describe "DataIO.CSV.loadAutoSafe" $ do
+    it "Empty file → Left, no exception" $
+      withSystemTempFile "ha-empty.csv" $ \fp h -> do
+        hPutStr h ""
+        hClose h
+        r <- CSV.loadAutoSafe fp
+        case r of
+          Left msg -> T.isInfixOf "Empty" (T.pack msg) `shouldBe` True
+          Right _  -> expectationFailure "expected Left for empty file"
+    it "Header-only file → Left" $
+      withSystemTempFile "ha-hdr.csv" $ \fp h -> do
+        hPutStr h "x,y,z\n"
+        hClose h
+        r <- CSV.loadAutoSafe fp
+        case r of
+          Left msg -> T.isInfixOf "header" (T.pack msg) `shouldBe` True
+          Right _  -> expectationFailure "expected Left for header-only file"
+    it "Valid CSV → Right with empty log by default" $
+      withSystemTempFile "ha-ok.csv" $ \fp h -> do
+        hPutStr h "x,y\n1,2\n3,4\n"
+        hClose h
+        r <- CSV.loadAutoSafe fp
+        case r of
+          Left  msg      -> expectationFailure ("unexpected Left: " ++ msg)
+          Right (_, lg)  -> Log.entries lg `shouldBe` []
+
+  describe "DataIO.Convert deep-eval" $ do
+    it "getMaybeTextVec on text column with mixed NA strings returns Just" $
+      withSystemTempFile "ha-na.csv" $ \fp h -> do
+        -- 複数 NA 表現を混ぜると Hackage は Maybe Text 列として保持する。
+        -- ヘッダ判定で n/a / null は欠損扱い → null bitmap が立つ。
+        hPutStr h "id,score\n1,A\n2,n/a\n3,null\n4,B\n5,-\n"
+        hClose h
+        r <- CSV.loadAutoSafe fp
+        case r of
+          Right (df, _) -> case Conv.getMaybeTextVec "score" df of
+            Just v  -> length (V.toList v) `shouldBe` 5
+            Nothing -> expectationFailure "getMaybeTextVec returned Nothing"
+          Left msg -> expectationFailure ("load failed: " ++ msg)
+    it "getDoubleVec returns Nothing without crashing on NA-mixed numeric column" $
+      withSystemTempFile "ha-na2.csv" $ \fp h -> do
+        hPutStr h "id,score\n1,85\n2,NA\n3,92\n"
+        hClose h
+        r <- CSV.loadAutoSafe fp
+        case r of
+          Right (df, _) -> Conv.getDoubleVec "score" df `shouldBe` Nothing
+          Left msg      -> expectationFailure ("load failed: " ++ msg)

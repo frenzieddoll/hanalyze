@@ -2,12 +2,13 @@
 {-# LANGUAGE RankNTypes #-}
 module Main where
 
-import DataIO.CSV        (loadAuto)
+import DataIO.CSV        (loadAuto, loadAutoSafe)
+import qualified DataIO.Log as Log
 import qualified DataIO.Preprocess as Pp
 import qualified DataFrame                    as DX
 import qualified DataFrame.Internal.Column    as DXC
 import qualified DataFrame.Internal.DataFrame as DXD
-import DataIO.Convert     (getDoubleVec, getTextVec)
+import DataIO.Convert     (getDoubleVec, getTextVec, getMaybeTextVec)
 import Model.Core        (Band (..), FitResult, rSquared1, coeffList, fittedList, residualsV)
 import Model.GLM         (Family (..), parseFamily, LinkFn (..), parseLink, canonicalLink,
                           fitGLMWithSmooth, fitGLMFull)
@@ -601,10 +602,12 @@ runRegressCmd args = case parseArgs args of
 runInfoCmd :: [String] -> IO ()
 runInfoCmd []        = hPutStrLn stderr "Usage: hanalyze info <file>"
 runInfoCmd (file:_)  = do
-  result <- loadAuto file
+  result <- loadAutoSafe file
   case result of
-    Left err -> hPutStrLn stderr ("Parse error: " ++ err)
-    Right df -> printDataFrameInfo file df
+    Left err          -> hPutStrLn stderr ("Parse error: " ++ err)
+    Right (df, lg)    -> do
+      Log.printLogReport lg
+      printDataFrameInfo file df
 
 printDataFrameInfo :: FilePath -> DXD.DataFrame -> IO ()
 printDataFrameInfo file df = do
@@ -637,25 +640,25 @@ printColInfo df name = case getDoubleVec name df of
         sd_  = sqrt var
     printf "  %-20s %-7s %5d %10.4f %10.4f %10.4f %10.4f %10.4f\n"
            (T.unpack name) ("numeric" :: String) m mn mx mean med sd_
-  Nothing -> case getTextVec name df of
+  Nothing -> case getMaybeTextVec name df of
     Just v -> do
-      let xs   = V.toList v
-          m    = length xs
-          nMiss = case DXD.getColumn name df of
-                    Just c  -> length [ i | i <- [0 .. DXC.columnLength c - 1]
-                                          , DXC.columnElemIsNull c i ]
-                              + V.length (V.filter Pp.isNAString v)
-                    Nothing -> V.length (V.filter Pp.isNAString v)
-          uniq = Set.size (Set.fromList xs)
-          topN = take 3 (countTop xs)
-          topStr = intercalate ", "
-                     [ T.unpack k ++ "(" ++ show c ++ ")" | (k, c) <- topN ]
+      let raw    = V.toList v
+          m      = length raw
+          xsOnly = [ x | Just x <- raw ]
+          nMissNull = length [ () | Nothing <- raw ]
+          nMissNA   = length (filter Pp.isNAString xsOnly)
+          nMiss     = nMissNull + nMissNA
+          uniq      = Set.size (Set.fromList xsOnly)
+          topN      = take 3 (countTop xsOnly)
+          topStr    = intercalate ", "
+                        [ T.unpack k ++ "(" ++ show c ++ ")" | (k, c) <- topN ]
           missStr = if nMiss > 0
                       then "  NA=" ++ show nMiss
                       else ""
       printf "  %-20s %-7s %5d  unique=%-3d top: %s%s\n"
              (T.unpack name) ("text" :: String) m uniq topStr missStr
-    Nothing -> return ()
+    Nothing -> printf "  %-20s %-7s     ?  (列の取り出しに失敗)\n"
+                      (T.unpack name) ("?" :: String)
 
 -- | Count occurrences and return descending list.
 countTop :: Ord a => [a] -> [(a, Int)]

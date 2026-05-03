@@ -59,6 +59,7 @@ import qualified DataFrame.Internal.Column    as DXC
 import qualified DataFrame.Internal.DataFrame as DXD
 import qualified DataFrame.Internal.Types     as DXT
 
+import Control.DeepSeq (NFData, force)
 import Control.Exception (SomeException, try, evaluate)
 import Data.List (sort)
 import qualified Data.Map.Strict as Map
@@ -125,12 +126,14 @@ isNullAt name i df = case DXD.getColumn name df of
   Just c  -> DXC.columnElemIsNull c i
   Nothing -> True
 
--- | 列を @[a]@ として安全に取り出す。型不一致や例外時は Nothing。
+-- | 列を @[a]@ として安全に取り出す。型不一致や例外 (Hackage が
+-- @error "fromMaybeVec: Nothing slot"@ 等を投げるケース) も 'Nothing' で吸収。
+-- 'force' でリスト要素まで NF にしてから捕捉する。
 tryColumnAsList
-  :: forall a. DXC.Columnable a
+  :: forall a. (DXC.Columnable a, NFData a)
   => Text -> DXD.DataFrame -> Maybe [a]
 tryColumnAsList name df = unsafePerformIO $ do
-  r <- try (evaluate (DX.columnAsList (DX.col @a name) df))
+  r <- try (evaluate (force (DX.columnAsList (DX.col @a name) df)))
          :: IO (Either SomeException [a])
   return $ case r of
     Right xs -> Just xs
@@ -191,7 +194,7 @@ sliceColumn name df idxs = case DXD.getColumn name df of
             (tryAs @Text Nothing))))
   where
     tryAs
-      :: forall a. (DXC.Columnable a,
+      :: forall a. (DXC.Columnable a, NFData a,
                     DXC.ColumnifyRep (DXT.KindOf a) a)
       => Maybe DX.Column -> Maybe DX.Column
     tryAs fallback = case tryColumnAsList @a name df of
