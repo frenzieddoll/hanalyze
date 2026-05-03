@@ -80,6 +80,7 @@ library
     Optim.LineSearch
     Optim.DifferentialEvolution
     Optim.CMAES
+    Optim.CMAESFull
     Optim.NSGA
     Optim.Pareto
     Optim.Acquisition

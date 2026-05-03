@@ -38,6 +38,7 @@ import qualified Optim.LBFGS       as LBFGS
 import qualified Optim.LineSearch  as LS
 import qualified Optim.DifferentialEvolution as DE
 import qualified Optim.CMAES       as CMAES
+import qualified Optim.CMAESFull   as CMAESF
 import qualified Optim.BayesOpt    as BO
 import qualified Optim.Common      as OC
 import qualified System.Random.MWC as MWC
@@ -1016,6 +1017,25 @@ main = hspec $ do
                   , CMAES.cmSigma0 = 1.0 }
       r <- CMAES.runCMAESWith cfg sphere [3, -2, 1, 0.5, -1.5] gen
       l2 (OC.orBest r) [0,0,0,0,0] `shouldSatisfy` (< 0.5)
+
+    it "CMA-ES Full: sphere 5D で 1e-3 以内に到達" $ do
+      gen <- MWC.create
+      let cfg = CMAESF.defaultCMAESFConfig
+                  { CMAESF.cmfStop = OC.defaultStopCriteria { OC.stMaxIter = 300 }
+                  , CMAESF.cmfSigma0 = 1.0 }
+      r <- CMAESF.runCMAESFullWith cfg sphere [3, -2, 1, 0.5, -1.5] gen
+      OC.orValue r `shouldSatisfy` (< 1e-3)
+
+    it "CMA-ES Full: Rosenbrock 2D で (1,1) に 0.1 以内" $ do
+      gen <- MWC.create
+      let cfg = CMAESF.defaultCMAESFConfig
+                  { CMAESF.cmfStop   = OC.defaultStopCriteria { OC.stMaxIter = 500 }
+                  , CMAESF.cmfSigma0 = 0.5
+                  , CMAESF.cmfLambda = Just 20 }
+          rosen [x, y] = (1-x)^(2::Int) + 100 * (y - x*x)^(2::Int)
+          rosen _      = error "2D"
+      r <- CMAESF.runCMAESFullWith cfg rosen [-1.2, 1.0] gen
+      l2 (OC.orBest r) [1, 1] `shouldSatisfy` (< 0.1)
 
   -- ===========================================================================
   -- Bayesian Optimization 内部最適化の差し替え (Optim.BayesOpt)

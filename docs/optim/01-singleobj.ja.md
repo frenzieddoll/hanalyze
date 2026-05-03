@@ -119,11 +119,19 @@ let cfg = (DE.defaultDEConfig bounds)
 r <- DE.runDEWith cfg rastrigin gen
 ```
 
-## 5. CMA-ES — `Optim.CMAES`
+## 5. CMA-ES — `Optim.CMAES` / `Optim.CMAESFull`
 
-Covariance Matrix Adaptation Evolution Strategy (Hansen 2001) の **簡易対角版**。
-非凸連続最適化の事実上のベスト。フルランク C 更新は省略しているが、
-Rastrigin / Ackley の中規模ベンチで十分機能する。
+Covariance Matrix Adaptation Evolution Strategy (Hansen 2001/2016)。
+
+| モジュール | 内容 | 用途 |
+|---|---|---|
+| `Optim.CMAES`     | **簡易対角版** (rank-μ のみ、σ も 1/5 ルール風) | 軽量、低 ~ 中次元 |
+| `Optim.CMAESFull` | **フルランク版** (rank-1 + rank-μ + path cumulation + CSA + h_σ) | 標準 (Hansen 2016) |
+
+フルランク版は固有分解で B, D を取得し、共分散行列を完全に更新するため、
+不変性 (rotation/scale invariance) が真に成立し、非凸問題でより堅牢。
+Rosenbrock 2D は 500 反復で (1,1) に 0.1 以内、sphere 5D は 300 反復で
+1e-3 以内に到達。
 
 ```haskell
 import qualified Optim.CMAES as CMAES

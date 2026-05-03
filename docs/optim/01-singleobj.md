@@ -121,11 +121,19 @@ let cfg = (DE.defaultDEConfig bounds)
 r <- DE.runDEWith cfg rastrigin gen
 ```
 
-## 5. CMA-ES — `Optim.CMAES`
+## 5. CMA-ES — `Optim.CMAES` / `Optim.CMAESFull`
 
-Covariance Matrix Adaptation Evolution Strategy (Hansen 2001), **simplified diagonal version**.
-The de-facto best for non-convex continuous problems. The full-rank C update is omitted but
-the diagonal version handles mid-scale Rastrigin / Ackley benchmarks adequately.
+Covariance Matrix Adaptation Evolution Strategy (Hansen 2001/2016).
+
+| Module | Variant | Use |
+|---|---|---|
+| `Optim.CMAES`     | **simplified diagonal** (rank-μ only, σ uses a 1/5-rule-like multiplier) | lightweight, low–mid dim |
+| `Optim.CMAESFull` | **full-rank** (rank-1 + rank-μ + path cumulation + CSA + h_σ) | standard (Hansen 2016) |
+
+The full-rank version performs eigendecomposition to recover B, D and updates the entire
+covariance matrix, so rotation/scale invariance truly holds and non-convex problems are
+handled more robustly. Reaches (1,1) within 0.1 on Rosenbrock 2D in 500 iterations;
+sphere 5D within 1e-3 in 300 iterations.
 
 ```haskell
 import qualified Optim.CMAES as CMAES
