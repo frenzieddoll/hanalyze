@@ -62,6 +62,7 @@ library
     MCMC.Gibbs
     MCMC.Slice
     Stat.Distribution
+    Stat.Standardize
     Stat.MCMC
     Stat.ModelSelect
     Stat.AD

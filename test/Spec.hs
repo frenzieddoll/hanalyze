@@ -20,6 +20,7 @@ import qualified DataIO.Convert    as Conv
 import qualified DataIO.Health     as Health
 import qualified DataIO.Clean      as Clean
 import qualified DataIO.Convert    as Conv2
+import qualified Stat.Standardize  as Std
 import qualified Data.ByteString   as BS
 import System.IO.Temp (withSystemTempFile)
 import System.IO     (hPutStr, hClose)
@@ -344,6 +345,39 @@ main = hspec $ do
         Nothing -> expectationFailure "groupByMax failed"
 
   -- ─────────────────────────────────────────────────────────────────────
+  describe "Stat.Standardize" $ do
+    let xMat = LA.fromLists [[1, 100], [2, 200], [3, 300], [4, 400], [5, 500]] :: LA.Matrix Double
+        s    = Std.fitStandardizer xMat
+    it "fit: 各列の μ が一致" $
+      Std.stMu s `shouldSatisfy`
+        (\ms -> length ms == 2
+              && abs (ms !! 0 - 3) < 1e-9
+              && abs (ms !! 1 - 300) < 1e-9)
+    it "fit: 各列の σ が不偏分散の平方根 (n-1 正規化)" $
+      Std.stSd s `shouldSatisfy`
+        (\ss -> length ss == 2
+              && abs (ss !! 0 - sqrt 2.5) < 1e-9
+              && abs (ss !! 1 - sqrt 25000) < 1e-9)
+    it "apply 後は各列 mean≈0, std≈1" $ do
+      let x' = Std.applyStandardizer s xMat
+          c0 = LA.toColumns x' !! 0
+          c1 = LA.toColumns x' !! 1
+          mn v = LA.sumElements v / fromIntegral (LA.size v)
+      abs (mn c0) `shouldSatisfy` (< 1e-9)
+      abs (mn c1) `shouldSatisfy` (< 1e-9)
+    it "unapply で元の値に戻る" $ do
+      let x'  = Std.applyStandardizer s xMat
+          x'' = Std.unapplyStandardizer s x'
+          d   = LA.norm_2 (xMat - x'') :: Double
+      d `shouldSatisfy` (< 1e-9)
+    it "定数列 (std=0) は std=1 にフォールバック (中央化のみ)" $ do
+      let constMat = LA.fromLists [[7, 1], [7, 2], [7, 3]] :: LA.Matrix Double
+          s2      = Std.fitStandardizer constMat
+      abs (Std.stSd s2 !! 0 - 1.0) `shouldSatisfy` (< 1e-12)
+      let x' = Std.applyStandardizer s2 constMat
+          c0 = LA.toColumns x' !! 0
+      abs (LA.sumElements c0) `shouldSatisfy` (< 1e-9)
+
   describe "Model.RFF (multivariate, Phase B-RFF)" $ do
     it "rffRidgeMV: y = x1 * t を完全にフィット" $ do
       let xs = [(x1, t) | x1 <- [1, 2, 3, 5, 7], t <- [1..10]]
