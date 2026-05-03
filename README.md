@@ -138,6 +138,24 @@ hanalyze kernel data/io/potential_long.csv "energy dose z" y \
 # R²=0.9947; drag energy/dose sliders, the z-vs-y curve updates live.
 ```
 
+### True multi-output regression (`hanalyze multireg`)
+For "1 input → q outputs" structures (e.g. one scalar input mapped to 100 z-grid
+values), `hanalyze multireg` reads a wide CSV (1 row = one input value, columns =
+output tasks) and produces an interactive HTML where one slider on the input
+recomputes all q predictions in real time.
+```
+hanalyze multireg data/io/potential_wide.csv dose 'y_z*' \
+    --method kernel-rbf --auto-hp \
+    --xaxis 'z [nm]' --xaxis-min 0 --xaxis-max 200 \
+    --report trash/multireg_kr.html
+# best h=8.000, λ=2.15e-3, LOO MSE=1.16e-2, RMSE=0.091
+# Drag the dose slider — all 100 z predictions update live via JS.
+```
+Models: `--method linear` (closed-form OLS, all q in one solve) or
+`--method kernel-rbf` (LOOCV-analytic auto-tuning of h, λ).
+Powered by `Model.MultiOutput` + `Model.Kernel.kernelRidgeMulti` +
+`Viz.ReportBuilder.SecInteractiveMultiOut`.
+
 ### Design of Experiments
 ```haskell
 import Design.Factorial (twoLevelFactorial)

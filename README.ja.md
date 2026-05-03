@@ -136,6 +136,21 @@ hanalyze kernel data/io/potential_long.csv "energy dose z" y \
 # R²=0.9947、energy/dose スライダで曲線変化が JS により即時更新される
 ```
 
+### 真の多出力回帰 (`hanalyze multireg`)
+1 入力 → 100 出力 (z grid 上の関数値) のような **真の多出力モデル** を、
+wide CSV (1 行 = 入力 1 値、列 = 出力タスク) からワンライナーで学習。
+入力スライダで 100 個の予測値をリアルタイム再計算する対話的 HTML を生成。
+```
+hanalyze multireg data/io/potential_wide.csv dose 'y_z*' \
+    --method kernel-rbf --auto-hp \
+    --xaxis 'z [nm]' --xaxis-min 0 --xaxis-max 200 \
+    --report trash/multireg_kr.html
+# best h=8.000, λ=2.15e-3, LOO MSE=1.16e-2, RMSE=0.091
+# dose スライダ操作で全 100 z 点での予測曲線が JS により即時更新
+```
+モデル選択: `--method linear` (閉形式 OLS、全 q を 1 回求解) / `--method kernel-rbf` (LOOCV 解析解で h, λ 自動)。
+内部実装は `Model.MultiOutput` + `Model.Kernel.kernelRidgeMulti` + `Viz.ReportBuilder.SecInteractiveMultiOut`。
+
 ### 実験計画法
 ```haskell
 import Design.Factorial (twoLevelFactorial)

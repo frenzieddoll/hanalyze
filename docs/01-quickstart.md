@@ -73,6 +73,7 @@ cabal run hanalyze -- regress data.csv x y LM --report    # regression (= bare f
 | Kernel regression (Nadaraya-Watson / Kernel Ridge) | Demo: `kernel-demo` | Bandwidth via LOO-CV |
 | Ridge / Lasso / Elastic Net | Demo: `regularized-demo` | Variable selection + sparse models |
 | Multi-output (MultiLM / RRR / PLS / CCA) | Demo: `multilm-demo` / `multivariate-demo` | Extract shared low-dimensional structure |
+| **True multi-output regression (1 input → q outputs)** | CLI: `multireg` | `hanalyze multireg wide.csv x 'y_*' --method kernel-rbf --auto-hp --report out.html` (one input slider recomputes all q outputs live) |
 
 ### 3. Design of Experiments and multi-objective optimization
 

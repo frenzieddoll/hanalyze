@@ -71,6 +71,7 @@ cabal run hanalyze -- regress data.csv x y LM --report    # 既存の回帰 (= b
 | カーネル回帰 (Nadaraya-Watson / Kernel Ridge) | デモ: `kernel-demo` | LOO-CV で bandwidth 選定 |
 | Ridge / Lasso / Elastic Net | デモ: `regularized-demo` | 変数選択 + sparse モデル |
 | 多次元出力 (MultiLM / RRR / PLS / CCA) | デモ: `multilm-demo` / `multivariate-demo` | 共通の低次元構造を抽出 |
+| **真の多出力回帰 (1 入力 → q 出力カーブ)** | CLI: `multireg` | `hanalyze multireg wide.csv x 'y_*' --method kernel-rbf --auto-hp --report out.html` (dose スライダで全 q 予測値を JS が即時再計算) |
 
 ### 3. 実験計画と多目的最適化
 
