@@ -1,8 +1,11 @@
 # GLMM (混合効果モデル) — 混合分布と計算手法
 
+> 🌐 [English](03-glmm.md) | **日本語**
+
 > 階層構造 (グループ・繰返し測定) を扱う **混合効果モデル**。
 > 本 doc では **混合分布の理論** (= 負の二項分布が Gamma-Poisson 混合から
 > 出てくる導出) と **GLMM の計算手法 (EM, Laplace 近似, MCMC)** を詳しく解説。
+> **多出力対応** (Phase M1-M8): `fitLMEMulti` / `fitGLMMMulti` (列ごと EM/Laplace、グループ化情報共有) — [05-multivariate.ja.md](05-multivariate.ja.md) を参照。
 
 ## 目次
 
