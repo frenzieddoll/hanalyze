@@ -74,6 +74,8 @@ library
     Optim.Adam
     Optim.GradAscent
     Optim.Numeric
+    Optim.Common
+    Optim.NelderMead
     Optim.NSGA
     Optim.Pareto
     Optim.Acquisition
