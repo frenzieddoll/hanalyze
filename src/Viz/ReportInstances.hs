@@ -1147,8 +1147,34 @@ instance Reportable RFFMVReport where
                           <> " — RFF Ridge (multivariate)"))
                        { plotWidth = 720, plotHeight = 480 }
             vega = scatterWithGroups plotCfg (rfmvXAxis r) yCol ptData lnData
-            formula = yCol <> " ~ φ(" <> T.intercalate "," xCols <> ")ᵀ w  (D="
-                       <> T.pack (show d) <> ")"
+            xJoined = T.intercalate ", " xCols
+            -- 完全な数式 (MathJax)。φ の中身、Ridge 形、ω/b の事前を明示。
+            formula = T.unlines
+              [ "$$"
+              , "\\hat{y}(x) = \\sum_{j=1}^{D} w_j\\, \\varphi_j(x), \\qquad"
+              , "\\varphi_j(x) = \\sigma_f \\sqrt{\\tfrac{2}{D}}"
+              , "\\, \\cos\\!\\bigl(\\boldsymbol{\\omega}_j^{\\top} x + b_j\\bigr)"
+              , "$$"
+              , "$$"
+              , "x = (\\mathrm{" <> T.replace ", " "},\\,\\mathrm{" xJoined
+                <> "})^{\\top} \\in \\mathbb{R}^{p}, \\quad p="
+                <> T.pack (show (length xCols))
+                <> ", \\quad D=" <> T.pack (show d) <> "."
+              , "$$"
+              , "$$"
+              , "\\boldsymbol{\\omega}_j \\sim \\mathcal{N}\\!\\left(\\mathbf{0},\\, \\ell^{-2} I_p\\right),"
+              , "\\quad b_j \\sim \\mathrm{Uniform}(0, 2\\pi),"
+              , "\\quad \\ell = " <> ellLbl
+                <> ",\\ \\sigma_f = " <> sfLbl <> "."
+              , "$$"
+              , "$$"
+              , "\\boldsymbol{w} = \\arg\\min_{w}\\,\\bigl\\| y - \\Phi w \\bigr\\|^2 + \\lambda\\,\\|w\\|^2"
+              , " \\;=\\; (\\Phi^{\\top}\\Phi + \\lambda I_D)^{-1} \\Phi^{\\top} y,"
+              , "\\quad \\lambda = " <> lamLbl <> " \\;(=\\sigma_n^2)."
+              , "$$"
+              , "ここで $\\Phi \\in \\mathbb{R}^{n \\times D}$ は $i$ 行目が $\\varphi(x_i)^{\\top}$。"
+              , "標準化 ON のときは $x$ を $(x-\\mu)/\\sigma$ してから $\\varphi$ に投入する。"
+              ]
             -- インタラクティブセクション (スライダで副軸を変えると JS が予測を再計算)
             sliderRows = mkSliders xCols xColIdx cols
             omegasRowMaj =
@@ -1180,13 +1206,15 @@ instance Reportable RFFMVReport where
         in [ secDataOverview df xCols yCol
            , secModelOverview "Multivariate RFF Ridge" formula Nothing
            , secKeyValue "Fit summary"
-               [ ("Features (D)",  T.pack (show d))
-               , ("Length scale ℓ", ellLbl)
-               , ("Signal σ_f",     sfLbl)
-               , ("Lambda",         lamLbl)
-               , ("R²",             T.pack (printf "%.4f" r2))
-               , ("RMSE",           T.pack (printf "%.4f" rmse))
-               , ("n",              T.pack (show n))
+               [ ("Features (D)",       T.pack (show d))
+               , ("Length scale ℓ",     ellLbl)
+               , ("Signal σ_f",         sfLbl)
+               , ("Ridge λ (=σ_n²)",    lamLbl)
+               , ("Standardize",
+                   maybe "OFF" (const "ON") (rfmvStandardizer r))
+               , ("R²",                 T.pack (printf "%.4f" r2))
+               , ("RMSE",               T.pack (printf "%.4f" rmse))
+               , ("n",                  T.pack (show n))
                ]
            , secVega ("予測曲線 + 観測点 (" <> rfmvGroup r <> " で色分け)") vega
            ] ++ iSection ++
