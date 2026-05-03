@@ -33,6 +33,7 @@ module DataIO.Preprocess
   , imputeMean
   , imputeMedian
   , parseNumericColumn
+  , readMaybeDoubleColumn
     -- * 行フィルタ
   , rowsOf
   , filterRows

@@ -20,7 +20,8 @@ module Model.LM
   , fitPolyWithSmooth
   ) where
 
-import DataFrame.Core
+import qualified DataFrame.Internal.DataFrame as DXD
+import DataIO.Convert (getDoubleVec)
 import Model.Core (FitResult (..), Model (..), Band (..),
                    coefficientsV, residualsV, fittedList)
 
@@ -67,10 +68,10 @@ designMatrix xs = LA.fromColumns
   where n = V.length xs
 
 -- | Convenience: fit a simple LM directly from a DataFrame.
-fitDataFrameLM :: DataFrame -> Text -> Text -> Maybe FitResult
+fitDataFrameLM :: DXD.DataFrame -> Text -> Text -> Maybe FitResult
 fitDataFrameLM df xCol yCol = do
-  xVec <- getNumeric xCol df
-  yVec <- getNumeric yCol df
+  xVec <- getDoubleVec xCol df
+  yVec <- getDoubleVec yCol df
   let dm = designMatrix xVec
       y  = LA.fromList (V.toList yVec)
   return (fitLMVec dm y)
@@ -98,10 +99,10 @@ confidenceBand x res level =
   in CIBand los his level
 
 -- | Fit LM and compute confidence band in one step.
-fitWithCI :: Double -> DataFrame -> Text -> Text -> Maybe (FitResult, CIBand)
+fitWithCI :: Double -> DXD.DataFrame -> Text -> Text -> Maybe (FitResult, CIBand)
 fitWithCI level df xCol yCol = do
-  xVec <- getNumeric xCol df
-  yVec <- getNumeric yCol df
+  xVec <- getDoubleVec xCol df
+  yVec <- getDoubleVec yCol df
   let dm  = designMatrix xVec
       y   = LA.fromList (V.toList yVec)
       res = fitLMVec dm y
@@ -147,13 +148,13 @@ data SmoothFit = SmoothFit
 fitPolyWithSmooth
   :: Band
   -> Int
-  -> DataFrame
+  -> DXD.DataFrame
   -> Text
   -> Text
   -> Maybe (FitResult, SmoothFit)
 fitPolyWithSmooth band nGrid df xCol yCol = do
-  xVec <- getNumeric xCol df
-  yVec <- getNumeric yCol df
+  xVec <- getDoubleVec xCol df
+  yVec <- getDoubleVec yCol df
   let degree = 1
       dm     = polyDesignMatrix degree xVec
       y      = LA.fromList (V.toList yVec)
