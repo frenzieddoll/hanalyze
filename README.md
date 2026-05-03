@@ -75,71 +75,14 @@ let df1          = imputeMean "score" df0          -- mean-fill missing values
 ```
 
 ### Reading dirty CSV
-Detects messy real-world CSV problems automatically — missing headers, comment
-preambles, duplicate column names, mixed NA strings, delimiter mismatches,
-currency / unit-suffixed values — via **warning codes (W001–W008)**, and
-auto-infers delimiter / comment / header presence from the leading bytes.
-Remaining scale conversions are normalised per column with a **cleaning DSL**:
+Auto-detects missing headers / comment lines / mixed NAs / units / currencies as
+**warning codes (W001–W008)**; delimiter / comment / header presence are inferred
+from the leading bytes. Remaining numeric conversions are applied per-column via
+the **cleaning DSL**:
 ```
 hanalyze clean data.csv --rule price=ParseCurrency   # $1,234.56 → 1234.56
 hanalyze clean data.csv --rule weight=StripUnits     # "5.2kg" → 5.2
-hanalyze clean data.csv --rule price=CoerceNumeric   # catch-all (tries the rules in order)
 ```
-Common flags work across every CLI subcommand: `--strict` (stop on warnings,
-useful in CI), `--skip N`, `--comment CH`, `--no-header`, etc. Details:
-[docs/io/01-dirty-data.md](docs/io/01-dirty-data.md).
-
-### Wide-form → long reshape + multivariate RFF Ridge
-For experimental data shaped "one row per condition, column names are levels,
-NA-sparse" (`data/io/wide_sample.csv`), `hanalyze melt` reshapes to long-form,
-and the column names (1..10) become a new explanatory variable t feeding into
-**multivariate RFF Ridge**. The fit captures the column-wise non-linear pattern
-in one model and produces an interactive plot (color-coded by `name`) overlaid
-with a per-group prediction curve.
-```
-hanalyze melt   data/io/wide_sample.csv --id name,x1,x2 \
-    --vars 1,2,3,4,5,6,7,8,9,10 --var t --value y \
-    --output data/io/melted_sample.csv
-hanalyze kernel data/io/melted_sample.csv "x1 t" y --method rff \
-    --features 200 --bandwidth 1.0 --lambda 0.001 \
-    --group name --xaxis t \
-    --out trash/rff_mv_plot.html --report trash/rff_mv_report.html
-# → R²=1.000, interactive scatter (33 KB) + composite report (877 KB)
-```
-
-Adding `--interactive` produces a JS-driven interactive prediction: drag the
-side-axis sliders and the curve updates in real time. `--standardize` z-scores
-the inputs, and `--auto-hp` runs marginal-likelihood maximization to choose
-(ℓ, σ_f, σ_n) automatically. For an ion-implantation dopant concentration
-profile (8 conditions × 30 z points = 240 rows):
-```
-hanalyze kernel data/io/potential_long.csv "energy dose z" y \
-    --method rff --features 400 \
-    --standardize --auto-hp \
-    --group name --xaxis z \
-    --out trash/potential_plot.html --report trash/potential_report.html \
-    --interactive
-# Auto-HP: ℓ=0.41, σ_f=1.0e13, σ_n=6.1e11, log_mlik=-7085
-# R²=0.9947; drag energy/dose sliders, the z-vs-y curve updates live.
-```
-
-### True multi-output regression (`hanalyze multireg`)
-For "1 input → q outputs" structures (e.g. one scalar input mapped to 100 z-grid
-values), `hanalyze multireg` reads a wide CSV (1 row = one input value, columns =
-output tasks) and produces an interactive HTML where one slider on the input
-recomputes all q predictions in real time.
-```
-hanalyze multireg data/io/potential_wide.csv dose 'y_z*' \
-    --method kernel-rbf --auto-hp \
-    --xaxis 'z [nm]' --xaxis-min 0 --xaxis-max 200 \
-    --report trash/multireg_kr.html
-# best h=8.000, λ=2.15e-3, LOO MSE=1.16e-2, RMSE=0.091
-# Drag the dose slider — all 100 z predictions update live via JS.
-```
-Models: `--method linear` (closed-form OLS, all q in one solve) or
-`--method kernel-rbf` (LOOCV-analytic auto-tuning of h, λ).
-Powered by `Model.MultiOutput` + `Model.Kernel.kernelRidgeMulti` +
-`Viz.ReportBuilder.SecInteractiveMultiOut`.
 
 ### Design of Experiments
 ```haskell
