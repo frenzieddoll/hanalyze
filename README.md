@@ -74,35 +74,20 @@ let df1          = imputeMean "score" df0          -- mean-fill missing values
     Just summary = groupByMean "category" "score" df2  -- per-group mean
 ```
 
-### Reading dirty CSV (Phase A)
+### Reading dirty CSV
 Detects messy real-world CSV problems automatically — missing headers, comment
 preambles, duplicate column names, mixed NA strings, delimiter mismatches,
-currency / unit-suffixed values, etc. — and lets you repair them with `LoadOpts`.
-```haskell
-import DataIO.CSV (loadAutoSafeWith, defaultLoadOpts, LoadOpts (..))
-import qualified DataIO.Log as Log
-
-Right (df, lg) <- loadAutoSafeWith
-                    (defaultLoadOpts { loSkip = 3, loNoHeader = True })
-                    "raw_export.csv"
-Log.printLogReport lg     -- prints W001..W008 / I010..I012 entries
+currency / unit-suffixed values — via **warning codes (W001–W008)**, and
+auto-infers delimiter / comment / header presence from the leading bytes.
+Remaining scale conversions are normalised per column with a **cleaning DSL**:
 ```
-Same flags are wired into every CLI subcommand:
+hanalyze clean data.csv --rule price=ParseCurrency   # $1,234.56 → 1234.56
+hanalyze clean data.csv --rule weight=StripUnits     # "5.2kg" → 5.2
+hanalyze clean data.csv --rule price=CoerceNumeric   # catch-all (tries the rules in order)
 ```
-hanalyze info     data/dirty/02_no_header.csv --no-header
-hanalyze regress  data/dirty/03_preamble.csv x y LM --skip 3
-hanalyze regress  data/raw.csv x y LM --strict   # fail when any Warn fires
-```
-19 typical fixtures live in `data/dirty/`; run `cabal run dirty-data-demo` to see
-each warning code and its repair option in one place.
-
-A `clean` subcommand applies per-column rewrite rules:
-```
-hanalyze clean data/dirty/08_thousands_currency.csv \
-    --rule price=CoerceNumeric    # parses $1,234.56 / 4 567.8 etc. as Double
-hanalyze clean data/dirty/16_dates_units.csv \
-    --rule weight=StripUnits      # "5kg" / "5.2kg" → 5 / 5.2
-```
+Common flags work across every CLI subcommand: `--strict` (stop on warnings,
+useful in CI), `--skip N`, `--comment CH`, `--no-header`, etc. Details:
+[docs/io/01-dirty-data.md](docs/io/01-dirty-data.md).
 
 ### Wide-form → long reshape + multivariate RFF Ridge
 For experimental data shaped "one row per condition, column names are levels,
@@ -240,7 +225,7 @@ A free-monad DSL from which **four interpretations** (structural inspection / lo
 
 | Page | Contents |
 |---|---|
-| [Dirty data reading guide](docs/io/01-dirty-data.ja.md) | W001..W008 / LoadOpts / 19 fixtures / CLI repair examples (Phase A, ja-only for now) |
+| [Dirty data reading guide](docs/io/01-dirty-data.md) | W001..W008 / LoadOpts / 19 fixtures / sniff / clean DSL / CLI repair examples |
 
 ---
 

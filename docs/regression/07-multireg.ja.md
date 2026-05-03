@@ -1,6 +1,6 @@
 # 真の多出力回帰 (`hanalyze multireg`)
 
-> 🌐 [English](02-multireg.md) | **日本語**
+> 🌐 [English](07-multireg.md) | **日本語**
 
 「1 つのスカラ入力 → q 個の出力カーブ」という構造のデータ — たとえば
 **1 dose に対して 100 個の z 位置で観測される電位プロファイル** — を、

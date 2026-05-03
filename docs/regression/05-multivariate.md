@@ -167,7 +167,7 @@ hanalyze multireg data.csv x 'y_*' \
 ```
 
 Produces an interactive HTML where one input slider recomputes all q
-predictions live in the browser. Details: [io/02-multireg.md](../io/02-multireg.md).
+predictions live in the browser. Details: [07-multireg.md](07-multireg.md).
 
 ---
 

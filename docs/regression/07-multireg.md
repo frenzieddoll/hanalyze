@@ -1,6 +1,6 @@
 # True multi-output regression (`hanalyze multireg`)
 
-> 🌐 **English** | [日本語](02-multireg.ja.md)
+> 🌐 **English** | [日本語](07-multireg.ja.md)
 
 For data with the structure "one scalar input → q output curves" — for example, a
 **potential profile observed at 100 z positions for one dose** — `hanalyze multireg`

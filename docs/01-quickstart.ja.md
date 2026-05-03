@@ -263,4 +263,4 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | 多モデル比較レポート | `Viz.ReportBuilder` (★ 標準) / `Viz.AnalysisReport` (非推奨) | `renderReport` / `writeAnalysisReport` |
 | 対話的予測 (1 入力 → q 出力) | `Viz.ReportBuilder` | `secInteractiveMultiOut`, `mkInteractiveMOLinear`, `mkInteractiveMOKernelRBF` |
 
-> **Phase M1-M8 (多出力統一)**: 全主要モデル (Regularized / Spline / Kernel / RFF / GP / GPRobust / GLM / GLMM / HBM) で **多出力 (Y :: Matrix n×q) を主 API、1 出力は 1 列行列化して委譲する薄いラッパ** という統一ポリシ。各モジュールに `fitXMulti` / `XFitMulti` 系列があり、Reportable / CLI 両方から利用可能。詳細は [io/02-multireg.ja.md](io/02-multireg.ja.md)。
+> **Phase M1-M8 (多出力統一)**: 全主要モデル (Regularized / Spline / Kernel / RFF / GP / GPRobust / GLM / GLMM / HBM) で **多出力 (Y :: Matrix n×q) を主 API、1 出力は 1 列行列化して委譲する薄いラッパ** という統一ポリシ。各モジュールに `fitXMulti` / `XFitMulti` 系列があり、Reportable / CLI 両方から利用可能。詳細は [regression/07-multireg.ja.md](regression/07-multireg.ja.md)。

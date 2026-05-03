@@ -165,7 +165,7 @@ hanalyze multireg data.csv x 'y_*' \
 ```
 
 入力スライダで全 q 予測値を JS が即時再計算する対話的 HTML を生成。
-詳細は [io/02-multireg.ja.md](../io/02-multireg.ja.md)。
+詳細は [07-multireg.ja.md](07-multireg.ja.md)。
 
 ---
 
