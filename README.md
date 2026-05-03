@@ -217,6 +217,7 @@ Sources are organized into genre-based subdirectories under `demo/` mirroring th
 |---|---|---|
 | `glmm-demo`     | LME / GLMM (random intercept) | Mixed-effects models |
 | `bar-demo`      | Viz.Bar (bar / stacked) + PNG/SVG export | Visualization, image export |
+| `new-sections-demo` | RB's 4 new sections (`secComparisonTable` / `secForestPlot` / `secFeatureImportance` / `secPPC`) showcased in one report | Report builder extensions, model comparison + forest plot + feature importance + PPC |
 
 ### PyMC parity additions (this branch)
 

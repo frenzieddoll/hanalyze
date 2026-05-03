@@ -216,6 +216,7 @@ cabal test               # テスト
 |---|---|---|
 | `glmm-demo`     | LME / GLMM (ランダム切片) | 混合効果モデル |
 | `bar-demo`      | Viz.Bar (棒グラフ・積み上げ) + PNG/SVG 出力 | 可視化、画像エクスポート |
+| `new-sections-demo` | RB の 4 新セクション (`secComparisonTable` / `secForestPlot` / `secFeatureImportance` / `secPPC`) を 1 レポートで使用 | レポートビルダ拡張、モデル比較 + Forest plot + 特徴量重要度 + PPC |
 
 ### PyMC 互換機能の追加 (このブランチ)
 

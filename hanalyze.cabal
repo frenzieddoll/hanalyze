@@ -262,6 +262,19 @@ executable analysis-compare-demo
     , mwc-random >= 0.15 && < 0.16
     , containers >= 0.6  && < 0.8
 
+executable new-sections-demo
+  import:           warnings
+  main-is:          NewSectionsDemo.hs
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , text       >= 1.2  && < 2.2
+    , vector     >= 0.12 && < 0.14
+    , hmatrix    >= 0.20 && < 0.22
+    , mwc-random >= 0.15 && < 0.16
+
 executable robust-gp-demo
   import:           warnings
   main-is:          RobustGPDemo.hs
