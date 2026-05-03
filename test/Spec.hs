@@ -16,6 +16,8 @@ import qualified DataIO.Log        as Log
 import qualified DataIO.CSV        as CSV
 import qualified DataIO.Convert    as Conv
 import qualified DataIO.Health     as Health
+import qualified DataIO.Clean      as Clean
+import qualified DataIO.Convert    as Conv2
 import qualified Data.ByteString   as BS
 import System.IO.Temp (withSystemTempFile)
 import System.IO     (hPutStr, hClose)
@@ -567,6 +569,45 @@ main = hspec $ do
             DX.columnNames df `shouldBe` ["1.0", "2.0"]
             -- 代わりに W001 が出る
             map Log.lgCode (Log.entries lg) `shouldContain` ["W001"]
+
+    it "Clean.stripUnitsCol: 12.3kg → 12.3" $ do
+      let df0 = DX.insertColumn "w"
+                   (DX.fromList (["12.3kg", "11.5cm", "10kg"] :: [T.Text]))
+              $ DX.empty
+          (df1, lg) = Clean.applyRule Clean.StripUnits "w" df0
+      map Log.lgCode (Log.entries lg) `shouldContain` ["I100"]
+      case Conv2.getDoubleVec "w" df1 of
+        Just v  -> V.toList v `shouldBe` [12.3, 11.5, 10.0]
+        Nothing -> expectationFailure "expected numeric column"
+    it "Clean.parseCurrencyCol: $1,234.56 → 1234.56" $ do
+      let df0 = DX.insertColumn "p"
+                   (DX.fromList (["$1,234.56", "$2,500.00"] :: [T.Text]))
+              $ DX.empty
+          (df1, _) = Clean.applyRule Clean.ParseCurrency "p" df0
+      case Conv2.getDoubleVec "p" df1 of
+        Just v  -> V.toList v `shouldBe` [1234.56, 2500.0]
+        Nothing -> expectationFailure "expected numeric column"
+    it "Clean.coerceNumericCol: 混在パターンを最大限拾う" $ do
+      let df0 = DX.insertColumn "x"
+                   (DX.fromList (["12.3", "12.3kg", "$1,000"] :: [T.Text]))
+              $ DX.empty
+          (df1, _) = Clean.applyRule Clean.CoerceNumeric "x" df0
+      case Conv2.getDoubleVec "x" df1 of
+        Just v  -> V.toList v `shouldBe` [12.3, 12.3, 1000.0]
+        Nothing -> expectationFailure "expected all-success column"
+    it "Clean.cleanPipeline: 複数列を一括変換" $ do
+      let df0 = DX.insertColumn "p"
+                   (DX.fromList (["$10", "$20"] :: [T.Text]))
+              $ DX.insertColumn "w"
+                   (DX.fromList (["1kg", "2kg"]   :: [T.Text]))
+              $ DX.empty
+          rules = [("p", Clean.ParseCurrency), ("w", Clean.StripUnits)]
+          (df1, lg) = Clean.cleanPipeline rules df0
+          codes = map Log.lgCode (Log.entries lg)
+      codes `shouldContain` ["I101"]
+      codes `shouldContain` ["I100"]
+      Conv2.getDoubleVec "p" df1 `shouldSatisfy` \mv ->
+        case mv of { Just v -> V.toList v == [10, 20]; Nothing -> False }
 
     it "--strict + 警告ありデータ (sniff off) → Left" $
       withSystemTempFile "ha-strict.csv" $ \fp h -> do

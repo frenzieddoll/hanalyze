@@ -3,7 +3,8 @@
 module Main where
 
 import DataIO.CSV        (loadAutoSafeWith, LoadOpts (..), defaultLoadOpts)
-import qualified DataIO.Log as Log
+import qualified DataIO.Log   as Log
+import qualified DataIO.Clean as Clean
 import qualified DataIO.Preprocess as Pp
 import qualified DataFrame                    as DX
 import qualified DataFrame.Internal.Column    as DXC
@@ -590,6 +591,7 @@ dispatch ("spline":rest)              = runSplineCmd rest
 dispatch ("quantile":rest)            = runQuantileCmd rest
 dispatch ("gam":rest)                 = runGAMCmd rest
 dispatch ("rf":rest)                  = runRFCmd rest
+dispatch ("clean":rest)               = runCleanCmd rest
 dispatch (cmd:_) | isFutureSubcommand cmd = do
   hPutStrLn stderr $ "hanalyze: " ++ stubMessage cmd
   hPutStrLn stderr "  Run 'hanalyze help' to see implemented subcommands."
@@ -637,6 +639,83 @@ readMaybeInt :: String -> Maybe Int
 readMaybeInt s = case reads s of
   [(n, "")] -> Just n
   _         -> Nothing
+
+-- ---------------------------------------------------------------------------
+-- clean subcommand (Phase C)
+-- ---------------------------------------------------------------------------
+
+runCleanCmd :: [String] -> IO ()
+runCleanCmd args0 = do
+  let (lopts, args1) = parseLoadOpts args0
+      (rules, out, args2) = parseCleanFlags args1
+  case args2 of
+    [] -> hPutStrLn stderr cleanUsage
+    (file:_) -> do
+      result <- loadAutoSafeWith lopts file
+      case result of
+        Left err          -> hPutStrLn stderr ("Parse error: " ++ err)
+        Right (df0, lg0)  -> do
+          Log.printLogReport lg0
+          let (df1, lg1) = Clean.cleanPipeline rules df0
+          Log.printLogReport lg1
+          case out of
+            Nothing -> do
+              -- 出力ファイル指定なし: info を出して終わり
+              putStrLn "Cleaned DataFrame:"
+              putStrLn $ "  Rows / Cols: "
+                          ++ show (fst (DX.dimensions df1)) ++ " × "
+                          ++ show (length (DX.columnNames df1))
+              putStrLn "  Columns:"
+              mapM_ (TIO.putStrLn . ("    - " <>)) (DX.columnNames df1)
+            Just path -> do
+              -- TODO: 簡易 CSV 書出し。今は警告だけ出す。
+              hPutStrLn stderr
+                ("(--output " ++ path ++ " は未実装。ライブラリ API "
+                 ++ "Clean.cleanPipeline + Hackage writeCsv を直接お使いください)")
+
+cleanUsage :: String
+cleanUsage = unlines
+  [ "Usage: hanalyze clean <file> [--rule COL=RULE]... [--output FILE] [load opts]"
+  , ""
+  , "Rules (各列に適用):"
+  , "  StripUnits        \"12.3kg\" → 12.3"
+  , "  ParseCurrency     \"$1,234.56\" → 1234.56"
+  , "  ParseDecimalEU    \"3,14\" → 3.14 (decimal point が ,)"
+  , "  TrimText          前後空白を除去"
+  , "  CoerceNumeric     上記 3 種を順に試す万能変換"
+  , ""
+  , "例:"
+  , "  hanalyze clean data/raw.csv \\"
+  , "      --rule price=ParseCurrency \\"
+  , "      --rule weight=StripUnits \\"
+  , "      --rule note=TrimText"
+  , ""
+  , "Load opts: --no-header / --skip N / --comment CH / --delim CH / --strict / --no-sniff"
+  ]
+
+parseCleanFlags
+  :: [String] -> ([(T.Text, Clean.ColumnRule)], Maybe FilePath, [String])
+parseCleanFlags = go [] Nothing []
+  where
+    go rs out kept []                   = (reverse rs, out, reverse kept)
+    go rs out kept ("--rule":spec:xs)   = case parseRuleSpec spec of
+      Just r  -> go (r:rs) out kept xs
+      Nothing -> go rs out kept xs
+    go rs _   kept ("--output":p:xs)    = go rs (Just p) kept xs
+    go rs _   kept ("-o":p:xs)          = go rs (Just p) kept xs
+    go rs out kept (x:xs)               = go rs out (x:kept) xs
+
+parseRuleSpec :: String -> Maybe (T.Text, Clean.ColumnRule)
+parseRuleSpec s = case break (== '=') s of
+  (col, '=':rule) | not (null col), not (null rule) ->
+    case rule of
+      "StripUnits"     -> Just (T.pack col, Clean.StripUnits)
+      "ParseCurrency"  -> Just (T.pack col, Clean.ParseCurrency)
+      "ParseDecimalEU" -> Just (T.pack col, Clean.ParseDecimalEU)
+      "TrimText"       -> Just (T.pack col, Clean.TrimText)
+      "CoerceNumeric"  -> Just (T.pack col, Clean.CoerceNumeric)
+      _                -> Nothing
+  _ -> Nothing
 
 printDataFrameInfo :: FilePath -> DXD.DataFrame -> IO ()
 printDataFrameInfo file df = do
