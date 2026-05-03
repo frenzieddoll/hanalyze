@@ -128,20 +128,26 @@ myModel = do
 | [理論 — 回帰拡張](docs/regression/theory-regression-extensions.ja.md) | スプライン基底、カーネルメソッド、L1/L2 正則化、bias-variance |
 | [理論 — 多変量回帰](docs/regression/theory-multivariate.ja.md) | OLS / RRR / PLS / CCA / Multi-GP の数学的背景 |
 
-### 2. 実験計画 — `docs/doe/` / 最適化 — `docs/optim/`
+### 2. 実験計画 — `docs/doe/`
 
 | ページ | 内容 |
 |---|---|
 | [実験計画法 (DOE)](docs/doe/01-doe.ja.md) | 完全/部分要因 / ラテン方格 / 乱塊 / RSM / D-optimal / ANOVA / Power 解析 |
 | [直交表とタグチメソッド](docs/doe/02-orthogonal-taguchi.ja.md) | Lₙ 表、SN 比 4 種、内/外配置、ロバスト設計 (★ 統合ガイド) |
 | [理論 — 実験計画法](docs/doe/theory-doe.ja.md) | 直交性、効率指標、RSM、検出力、サンプルサイズ |
+
+### 3. 最適化 — `docs/optim/`
+
+| ページ | 内容 |
+|---|---|
 | [単目的最適化](docs/optim/01-singleobj.ja.md) | Nelder-Mead / L-BFGS / Brent / DE / CMA-ES (Optim.* 統一インターフェース) |
 | [多目的最適化](docs/optim/02-multi-objective.ja.md) | NSGA-II / Pareto / Bayesian MOO |
+| [アルゴリズム選択 + 制約指定ガイド](docs/optim/03-algorithm-guide.ja.md) | フローチャート + box/等式/不等式制約の 5 段階 API |
 | [理論 — 単目的最適化](docs/optim/theory-singleobj.ja.md) | 各アルゴリズムの数学的背景と選択指針 |
 | [理論 — Pareto 効率と MOO](docs/optim/theory-pareto-moo.ja.md) | NSGA-II アルゴリズム、HV/IGD、scalarization、ZDT |
 | [理論 — Bayesian Optimization](docs/optim/theory-bayesopt.ja.md) | EI / UCB / PI / EHVI / ParEGO / q-EHVI |
 
-### 3. ベイズ統計と確率モデリング — `docs/bayesian/`
+### 4. ベイズ統計と確率モデリング — `docs/bayesian/`
 
 | ページ | 内容 |
 |---|---|
@@ -157,14 +163,14 @@ myModel = do
 | [理論 — HMC / NUTS](docs/bayesian/theory-hmc-nuts.ja.md) | Hamiltonian、leapfrog、制約変換、NUTS、dual averaging、BFMI |
 | [理論 — VI / モデル選択 / 高度トピック](docs/bayesian/theory-advanced.ja.md) | ELBO、ADVI、WAIC、PSIS-LOO、Mixture、LKJ、AR、**Truncated/Censored 詳細** |
 
-### 4. 可視化 — `docs/visualization/`
+### 5. 可視化 — `docs/visualization/`
 
 | ページ | 内容 |
 |---|---|
 | [可視化全般](docs/visualization/01-visualization.ja.md) | Report / Bar / Histogram / PNG/SVG 出力 |
 | [HTML レポートビルダ](docs/visualization/02-report-builder.ja.md) | Viz.ReportBuilder + Reportable typeclass の使い方 (★ 共通レポート API、今後の標準) |
 
-### 5. データ I/O — `docs/io/`
+### 6. データ I/O — `docs/io/`
 
 | ページ | 内容 |
 |---|---|

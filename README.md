@@ -130,20 +130,26 @@ A free-monad DSL from which **four interpretations** (structural inspection / lo
 | [Theory — regression extensions](docs/regression/theory-regression-extensions.md) | Spline bases, kernel methods, L1/L2 regularization, bias-variance |
 | [Theory — multivariate regression](docs/regression/theory-multivariate.md) | Mathematical background of OLS / RRR / PLS / CCA / Multi-GP |
 
-### 2. Design of Experiments — `docs/doe/` / Optimization — `docs/optim/`
+### 2. Design of Experiments — `docs/doe/`
 
 | Page | Contents |
 |---|---|
 | [Design of Experiments (DOE)](docs/doe/01-doe.md) | Full/fractional factorial / Latin square / RCBD / RSM / D-optimal / ANOVA / power analysis |
 | [Orthogonal arrays and Taguchi method](docs/doe/02-orthogonal-taguchi.md) | Lₙ tables, four SN ratios, inner/outer arrays, robust design (★ unified guide) |
 | [Theory — Design of Experiments](docs/doe/theory-doe.md) | Orthogonality, efficiency criteria, RSM, power, sample size |
+
+### 3. Optimization — `docs/optim/`
+
+| Page | Contents |
+|---|---|
 | [Single-objective optimization](docs/optim/01-singleobj.md) | Nelder-Mead / L-BFGS / Brent / DE / CMA-ES (unified Optim.* interface) |
 | [Multi-objective optimization](docs/optim/02-multi-objective.md) | NSGA-II / Pareto / Bayesian MOO |
+| [Algorithm selection + constraints guide](docs/optim/03-algorithm-guide.md) | Flowchart + 5-tier API for box / equality / inequality constraints |
 | [Theory — Single-objective optimization](docs/optim/theory-singleobj.md) | Mathematical background and selection guide for each algorithm |
 | [Theory — Pareto efficiency and MOO](docs/optim/theory-pareto-moo.md) | NSGA-II algorithm, HV/IGD, scalarization, ZDT |
 | [Theory — Bayesian Optimization](docs/optim/theory-bayesopt.md) | EI / UCB / PI / EHVI / ParEGO / q-EHVI |
 
-### 3. Bayesian statistics and probabilistic modeling — `docs/bayesian/`
+### 4. Bayesian statistics and probabilistic modeling — `docs/bayesian/`
 
 | Page | Contents |
 |---|---|
@@ -159,14 +165,14 @@ A free-monad DSL from which **four interpretations** (structural inspection / lo
 | [Theory — HMC / NUTS](docs/bayesian/theory-hmc-nuts.md) | Hamiltonians, leapfrog, constraint transforms, NUTS, dual averaging, BFMI |
 | [Theory — VI / model selection / advanced topics](docs/bayesian/theory-advanced.md) | ELBO, ADVI, WAIC, PSIS-LOO, Mixture, LKJ, AR, **Truncated/Censored in detail** |
 
-### 4. Visualization — `docs/visualization/`
+### 5. Visualization — `docs/visualization/`
 
 | Page | Contents |
 |---|---|
 | [Visualization overview](docs/visualization/01-visualization.md) | Report / Bar / Histogram / PNG/SVG output |
 | [HTML report builder](docs/visualization/02-report-builder.md) | Viz.ReportBuilder + Reportable typeclass usage (★ unified report API, going-forward standard) |
 
-### 5. Data I/O — `docs/io/`
+### 6. Data I/O — `docs/io/`
 
 | Page | Contents |
 |---|---|
