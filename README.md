@@ -96,6 +96,14 @@ hanalyze regress  data/raw.csv x y LM --strict   # fail when any Warn fires
 19 typical fixtures live in `data/dirty/`; run `cabal run dirty-data-demo` to see
 each warning code and its repair option in one place.
 
+A `clean` subcommand applies per-column rewrite rules:
+```
+hanalyze clean data/dirty/08_thousands_currency.csv \
+    --rule price=CoerceNumeric    # parses $1,234.56 / 4 567.8 etc. as Double
+hanalyze clean data/dirty/16_dates_units.csv \
+    --rule weight=StripUnits      # "5kg" / "5.2kg" → 5 / 5.2
+```
+
 ### Design of Experiments
 ```haskell
 import Design.Factorial (twoLevelFactorial)

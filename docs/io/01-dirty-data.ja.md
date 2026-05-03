@@ -121,8 +121,54 @@ hanalyze info data/dirty/03_preamble.csv
 hanalyze info data/dirty/11_semicolon_eu.csv
 ```
 
-## Phase C 予告
+## Phase C: クリーニング DSL (`DataIO.Clean`、完了)
 
-`DataIO.Clean` で `stripUnits` / `parseCurrency` / `parseDate` /
-`coerceNumeric` などの列変換を提供し、W007 (#16) / W008 (#08) を CLI から
-ワンコマンドで救済する予定。
+通貨記号 / 桁区切り / 単位 / decimal point 違いなど、Phase A の Health
+検査では警告止まりだった列を、明示的なルール適用で数値化できる。
+
+### `ColumnRule`
+
+| ルール | 例 | 結果 |
+|---|---|---|
+| `StripUnits`     | `"12.3kg"`    | `12.3`     |
+| `ParseCurrency`  | `"$1,234.56"` | `1234.56`  |
+| `ParseDecimalEU` | `"3,14"`      | `3.14`     |
+| `TrimText`       | `"  abc  "`   | `"abc"`    |
+| `CoerceNumeric`  | 上記いずれか  | 最初に成功した変換を採用 |
+
+各ルールは I100〜I104 の Info コードを出し、成功率が 50% 未満なら追加で
+`I*L` 警告を発して別ルールへの示唆を出します。
+
+### ライブラリ利用
+
+```haskell
+import qualified DataIO.Clean as Clean
+import           DataIO.Clean (ColumnRule (..), cleanPipeline)
+
+(df', lg) = cleanPipeline
+  [ ("price",  ParseCurrency)
+  , ("weight", StripUnits)
+  , ("price2", CoerceNumeric)  -- 万能変換
+  ] df
+Log.printLogReport lg
+```
+
+### CLI 利用 (`hanalyze clean`)
+
+```bash
+# 単位剥がし
+hanalyze clean data/dirty/16_dates_units.csv \
+    --rule weight=StripUnits \
+    --rule length_cm=StripUnits
+
+# 通貨記号 + 桁区切り
+hanalyze clean data/dirty/08_thousands_currency.csv \
+    --rule price=ParseCurrency
+
+# 万能変換 (最初に成功したルールを採用)
+hanalyze clean data/dirty/08_thousands_currency.csv \
+    --rule price=CoerceNumeric
+```
+
+`hanalyze clean` も他の CLI と同じく `--no-header` / `--skip N` /
+`--comment CH` / `--delim CH` / `--strict` / `--no-sniff` を併用できます。

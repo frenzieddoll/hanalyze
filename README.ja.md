@@ -97,6 +97,14 @@ hanalyze regress  data/raw.csv x y LM --strict   # Warn が出れば止める
 19 種の典型 fixture が `data/dirty/` に揃っており、
 `cabal run dirty-data-demo` で各 W コードと修復例を一覧表示できる。
 
+CLI に `clean` サブコマンドもあり、列ごとに変換ルールを適用できる:
+```
+hanalyze clean data/dirty/08_thousands_currency.csv \
+    --rule price=CoerceNumeric    # $1,234.56 / 4 567.8 等を全部 Double 化
+hanalyze clean data/dirty/16_dates_units.csv \
+    --rule weight=StripUnits      # "5kg" / "5.2kg" → 5 / 5.2
+```
+
 ### 実験計画法
 ```haskell
 import Design.Factorial (twoLevelFactorial)

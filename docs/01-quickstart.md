@@ -213,6 +213,7 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | Structured log | `DataIO.Log` | `LogEntry`, `LogReport`, `printLogReport` |
 | Health checks (W001..W008) | `DataIO.Health` | `inspectDataFrame`, `inspectWithPreview` |
 | Auto-sniff (delim / header / skip) | `DataIO.Sniff` | `sniffBytes`, `sniffFile` (Phase B) |
+| Column cleaning DSL | `DataIO.Clean` | `ColumnRule`, `applyRule`, `cleanPipeline`, `dedupeColumns`, `fillBlankNames` (Phase C) |
 | Imputation / filter / derived columns | `DataIO.Preprocess` | `imputeMean`, `imputeMedian`, `dropMissingRows`, `filterRowsByNumeric`, `deriveNumeric`, `mapNumeric` |
 | groupBy / aggregate | `DataIO.Preprocess` | `groupByMean`, `groupBySum`, `groupByMin`, `groupByMax`, `groupByMedian`, `groupByCount`, `groupByAggregate` |
 

@@ -211,6 +211,7 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | 構造化ログ | `DataIO.Log` | `LogEntry`, `LogReport`, `printLogReport` |
 | 健全性検査 (W001..W008) | `DataIO.Health` | `inspectDataFrame`, `inspectWithPreview` |
 | 自動推論 (delimiter / 有ヘッダ / skip) | `DataIO.Sniff` | `sniffBytes`, `sniffFile` (Phase B) |
+| 列クリーニング DSL | `DataIO.Clean` | `ColumnRule`, `applyRule`, `cleanPipeline`, `dedupeColumns`, `fillBlankNames` (Phase C) |
 | 欠損補完 / フィルタ / 派生列 | `DataIO.Preprocess` | `imputeMean`, `imputeMedian`, `dropMissingRows`, `filterRowsByNumeric`, `deriveNumeric`, `mapNumeric` |
 | groupBy / aggregate | `DataIO.Preprocess` | `groupByMean`, `groupBySum`, `groupByMin`, `groupByMax`, `groupByMedian`, `groupByCount`, `groupByAggregate` |
 
