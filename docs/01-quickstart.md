@@ -50,6 +50,9 @@ cabal run hanalyze -- regress data.csv x y LM --report    # regression (= bare f
 | `quantile` | ✅ | Quantile regression (τ-quantile, MM-IRLS) |
 | `gam` | ✅ | Generalized Additive Model |
 | `rf` | ✅ | Random Forest regression |
+| `clean` | ✅ | Column-cleaning DSL (StripUnits / ParseCurrency / ParseDecimalEU / TrimText / CoerceNumeric) |
+| `melt` | ✅ | wide → long reshape (`--id`/`--vars`/`--var`/`--value`) |
+| `multireg` | ✅ | True multi-output regression (1 input → q output curves; linear / kernel-rbf + interactive HTML) |
 
 ---
 
@@ -198,7 +201,8 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | Ridge / Lasso / Elastic Net | `Model.Regularized` | `fitRegularized` (sum-type penalty) |
 | **RFF (Random Fourier Features)** | `Model.RFF` | `sampleRFFRBF`, `rffRidge`, `rffGP` |
 | Multivariate LR / RRR / PLS / CCA | `Model.MultiLM` / `Model.Multivariate` | |
-| Gaussian process / Multi-output GP | `Model.GP` / `Model.MultiGP` | `optimizeGP`, `fitGP` |
+| **Multi-output common base (Phase M1-M8)** | `Model.MultiOutput` | `asMultiY`, `fromMultiY`, `r2Multi`, `rmseMulti` |
+| Gaussian process / Multi-output GP | `Model.GP` / `Model.MultiGP` | `optimizeGP`, `fitGP`, `fitGPMulti` |
 | **Robust GP** (StudentT/Cauchy) | `Model.GPRobust` | `fitGPRobust`, `predictGPRobust` |
 | **Quantile regression** (τ-quantile) | `Model.Quantile` | `fitQuantile`, `predictQuantile` |
 | **GAM** (additive B-spline) | `Model.GAM` | `fitGAM`, `predictGAM`, `predictGAMComponent` |
@@ -259,3 +263,6 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | Pareto front (5 styles) | `Viz.Pareto` | `paretoScatter`, `parallelCoordinates` |
 | Scatter / bar / histogram | `Viz.Scatter` / `Viz.Bar` / `Viz.Histogram` | |
 | Multi-model comparison report | `Viz.ReportBuilder` (★ standard) / `Viz.AnalysisReport` (deprecated) | `renderReport` / `writeAnalysisReport` |
+| Interactive prediction (1 input → q outputs) | `Viz.ReportBuilder` | `secInteractiveMultiOut`, `mkInteractiveMOLinear`, `mkInteractiveMOKernelRBF` |
+
+> **Phase M1-M8 (multi-output unification)**: All major models (Regularized / Spline / Kernel / RFF / GP / GPRobust / GLM / GLMM / HBM) follow a unified policy where **multi-output (Y :: Matrix n×q) is the primary API and single-output is a thin wrapper that lifts to a 1-column matrix**. Each module exposes a `fitXMulti` / `XFitMulti` family, callable from both Reportable and CLI layers. See [io/02-multireg.md](io/02-multireg.md).

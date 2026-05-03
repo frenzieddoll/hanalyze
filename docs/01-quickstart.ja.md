@@ -48,6 +48,9 @@ cabal run hanalyze -- regress data.csv x y LM --report    # 既存の回帰 (= b
 | `quantile` | ✅ | 分位点回帰 (τ-quantile, MM-IRLS) |
 | `gam` | ✅ | Generalized Additive Model |
 | `rf` | ✅ | Random Forest 回帰 |
+| `clean` | ✅ | 列クリーニング DSL (StripUnits / ParseCurrency / ParseDecimalEU / TrimText / CoerceNumeric) |
+| `melt` | ✅ | wide → long 変形 (`--id`/`--vars`/`--var`/`--value`) |
+| `multireg` | ✅ | 真の多出力回帰 (1 入力 → q 出力カーブ; linear / kernel-rbf + 対話的 HTML) |
 
 ---
 
@@ -196,7 +199,8 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | Ridge / Lasso / Elastic Net | `Model.Regularized` | `fitRegularized` (sum-type penalty) |
 | **RFF (Random Fourier Features)** | `Model.RFF` | `sampleRFFRBF`, `rffRidge`, `rffGP` |
 | 多変量 LR / RRR / PLS / CCA | `Model.MultiLM` / `Model.Multivariate` | |
-| ガウス過程 / Multi-output GP | `Model.GP` / `Model.MultiGP` | `optimizeGP`, `fitGP` |
+| **多出力共通基盤 (Phase M1-M8)** | `Model.MultiOutput` | `asMultiY`, `fromMultiY`, `r2Multi`, `rmseMulti` |
+| ガウス過程 / Multi-output GP | `Model.GP` / `Model.MultiGP` | `optimizeGP`, `fitGP`, `fitGPMulti` |
 | **ロバスト GP** (StudentT/Cauchy) | `Model.GPRobust` | `fitGPRobust`, `predictGPRobust` |
 | **Quantile regression** (τ-quantile) | `Model.Quantile` | `fitQuantile`, `predictQuantile` |
 | **GAM** (additive B-spline) | `Model.GAM` | `fitGAM`, `predictGAM`, `predictGAMComponent` |
@@ -257,3 +261,6 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | Pareto front (5 種) | `Viz.Pareto` | `paretoScatter`, `parallelCoordinates` |
 | 散布 / 棒 / ヒスト | `Viz.Scatter` / `Viz.Bar` / `Viz.Histogram` | |
 | 多モデル比較レポート | `Viz.ReportBuilder` (★ 標準) / `Viz.AnalysisReport` (非推奨) | `renderReport` / `writeAnalysisReport` |
+| 対話的予測 (1 入力 → q 出力) | `Viz.ReportBuilder` | `secInteractiveMultiOut`, `mkInteractiveMOLinear`, `mkInteractiveMOKernelRBF` |
+
+> **Phase M1-M8 (多出力統一)**: 全主要モデル (Regularized / Spline / Kernel / RFF / GP / GPRobust / GLM / GLMM / HBM) で **多出力 (Y :: Matrix n×q) を主 API、1 出力は 1 列行列化して委譲する薄いラッパ** という統一ポリシ。各モジュールに `fitXMulti` / `XFitMulti` 系列があり、Reportable / CLI 両方から利用可能。詳細は [io/02-multireg.ja.md](io/02-multireg.ja.md)。
