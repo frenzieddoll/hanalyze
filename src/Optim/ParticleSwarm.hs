@@ -30,7 +30,7 @@ data PSOConfig = PSOConfig
   , psoInertia  :: !Double             -- ^ w (典型 0.4-0.9)
   , psoCog      :: !Double             -- ^ c_1 (typical 1.5-2.0)
   , psoSoc      :: !Double             -- ^ c_2 (typical 1.5-2.0)
-  , psoBounds   :: ![(Double, Double)] -- ^ (lo, hi) per dim
+  , psoBounds   :: !Bounds              -- ^ (lo, hi) per dim
   , psoVMax     :: !Double             -- ^ |v_i| の上限 (range の比率、0.5 等)
   , psoDir      :: !Direction
   } deriving (Show, Eq)
@@ -67,9 +67,7 @@ runPSOWith cfg fUser gen = do
       vMaxes = [ psoVMax cfg * (hi - lo) | (lo, hi) <- bs ]
 
   -- 初期化
-  xs0 <- replicateM np $ forM bs $ \(lo, hi) -> do
-           u <- MWC.uniformR (0, 1) gen
-           return (lo + (u :: Double) * (hi - lo))
+  xs0 <- replicateM np (sampleUniformIn bs gen)
   vs0 <- replicateM np $ forM (zip bs vMaxes) $ \((lo, hi), vM) -> do
            u <- MWC.uniformR (-1, 1) gen
            return ((u :: Double) * vM * 0.1)
@@ -104,10 +102,7 @@ runPSOWith cfg fUser gen = do
               -- vMax クリップ
               let vClipped = zipWith (\vi vM -> max (-vM) (min vM vi)) vNew vMaxes
               -- 位置更新 + bounds 反射
-              let xNew = zipWith3 (\xi vi (lo, hi) ->
-                          let v = xi + vi
-                          in max lo (min hi v))
-                          x vClipped bs
+              let xNew = clipToBounds bs (zipWith (+) x vClipped)
               let fNew = f xNew
               -- pbest 更新
               let (pxN, pfN) = if fNew < pf then (xNew, fNew) else (px, pf)

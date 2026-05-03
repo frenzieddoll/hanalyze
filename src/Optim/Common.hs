@@ -17,7 +17,17 @@ module Optim.Common
   , defaultStopCriteria
   , Direction (..)
   , flipFor
+    -- * Box constraints (探索範囲)
+  , Bounds
+  , clipToBounds
+  , projectToBounds
+  , sampleUniformIn
+  , boundsPenalty
+  , inBounds
   ) where
+
+import Control.Monad (forM)
+import qualified System.Random.MWC as MWC
 
 -- | 最適化方向。
 data Direction = Minimize | Maximize deriving (Show, Eq)
@@ -58,3 +68,51 @@ data OptimResult = OptimResult
 flipFor :: Direction -> ([Double] -> Double) -> ([Double] -> Double)
 flipFor Minimize f = f
 flipFor Maximize f = negate . f
+
+-- ---------------------------------------------------------------------------
+-- Box constraints (各次元の上下限)
+-- ---------------------------------------------------------------------------
+
+-- | 各次元の (下限, 上限) のリスト。
+type Bounds = [(Double, Double)]
+
+-- | 反射 (reflection) で範囲外を内側に折り返す。
+-- 過大な逸脱は範囲幅でクランプ。
+clipToBounds :: Bounds -> [Double] -> [Double]
+clipToBounds bs xs = zipWith reflect bs xs
+  where
+    reflect (lo, hi) x
+      | x < lo    = let d = lo - x in lo + min d (hi - lo)
+      | x > hi    = let d = x - hi in hi - min d (hi - lo)
+      | otherwise = x
+
+-- | 単純切り捨て (clip)。範囲外を境界値に貼り付ける。
+projectToBounds :: Bounds -> [Double] -> [Double]
+projectToBounds bs xs =
+  zipWith (\(lo, hi) x -> max lo (min hi x)) bs xs
+
+-- | 一様乱数で 1 個体生成 (DE/PSO/SA/NSGA 共通の初期化)。
+sampleUniformIn :: Bounds -> MWC.GenIO -> IO [Double]
+sampleUniformIn bs gen = forM bs $ \(lo, hi) -> MWC.uniformR (lo, hi) gen
+
+-- | 範囲外への soft penalty。L-BFGS / Nelder-Mead で目的関数に加算する想定。
+-- 範囲内なら 0、範囲外なら $\sum_i (\text{距離}_i)^2 \cdot k$ (k は十分大きい定数)。
+--
+-- @
+-- objWithPenalty xs = f xs + boundsPenalty (Just bs) xs
+-- @
+boundsPenalty :: Maybe Bounds -> [Double] -> Double
+boundsPenalty Nothing   _  = 0
+boundsPenalty (Just bs) xs =
+  let k = 1e6 :: Double
+      dists = zipWith dist bs xs
+  in k * sum [d * d | d <- dists]
+  where
+    dist (lo, hi) x
+      | x < lo    = lo - x
+      | x > hi    = x - hi
+      | otherwise = 0
+
+-- | 全次元が bounds 内なら True。
+inBounds :: Bounds -> [Double] -> Bool
+inBounds bs xs = all (\((lo, hi), x) -> x >= lo && x <= hi) (zip bs xs)

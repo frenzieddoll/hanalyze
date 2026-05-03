@@ -36,7 +36,7 @@ data DEConfig = DEConfig
   , dePopSize   :: !Int        -- ^ 集団サイズ N (典型 5*D 〜 10*D)
   , deF         :: !Double     -- ^ mutation 係数 F (典型 0.5-0.8)
   , deCR        :: !Double     -- ^ crossover 確率 CR (典型 0.7-0.9)
-  , deBounds    :: ![(Double, Double)]   -- ^ 各次元 (lo, hi)、初期化と境界補正に使用
+  , deBounds    :: !Bounds                -- ^ 各次元 (lo, hi)、初期化と境界補正に使用
   , deDir       :: !Direction
   } deriving (Show, Eq)
 
@@ -67,7 +67,7 @@ runDEWith cfg fUser gen = do
       d      = length (deBounds cfg)
       n      = dePopSize cfg
   -- 初期集団: 各次元 (lo, hi) 一様乱数
-  pop0 <- forM [1 .. n] $ \_ -> sampleUniform (deBounds cfg) gen
+  pop0 <- forM [1 .. n] $ \_ -> sampleUniformIn (deBounds cfg) gen
   let fPop0 = map f pop0
   popRef  <- newIORef (zip pop0 fPop0)
   histRef <- newIORef [minimum fPop0]
@@ -125,7 +125,7 @@ stepDE cfg f gen pop = do
         xb = fst (pop !! b)
         xc = fst (pop !! c)
         v  = zipWith3 (\xai xbi xci -> xai + f0 * (xbi - xci)) xa xb xc
-        v' = zipWith clipBound v bs
+        v' = clipToBounds bs v
     -- crossover (binomial)
     jRand <- MWC.uniformR (0, d - 1) gen
     let (xi, fi) = pop !! i
@@ -147,17 +147,5 @@ pickThree n i gen = do
   c <- pickOne [i, a, b]
   return [a, b, c]
 
--- | 一様乱数で 1 個体生成。
-sampleUniform :: [(Double, Double)] -> MWC.GenIO -> IO [Double]
-sampleUniform bs gen = forM bs $ \(lo, hi) -> MWC.uniformR (lo, hi) gen
-
--- | 境界外なら反射 (= 鏡像)。
-clipBound :: Double -> (Double, Double) -> Double
-clipBound x (lo, hi)
-  | x < lo    = lo + (lo - x) `min` (hi - lo)
-  | x > hi    = hi - (x - hi) `min` (hi - lo)
-  | otherwise = x
-
--- | _Helper for deferred execution_
-_d :: ([Double] -> Double) -> [Double] -> Double
-_d = ($)
+-- | (`sampleUniform` and `clipBound` are now provided by `Optim.Common`
+--    as `sampleUniformIn` / `clipToBounds`.)

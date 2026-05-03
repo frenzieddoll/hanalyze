@@ -36,6 +36,8 @@ data NMConfig = NMConfig
   , nmGamma  :: !Double        -- ^ 縮小係数 γ
   , nmSigma  :: !Double        -- ^ 全体縮小係数 σ
   , nmDir    :: !Direction
+  , nmBounds :: !(Maybe Bounds)  -- ^ box 制約 (任意)。指定時は目的関数に
+                                  --   `boundsPenalty` を加算する soft penalty 方式
   } deriving (Show, Eq)
 
 defaultNMConfig :: NMConfig
@@ -47,6 +49,7 @@ defaultNMConfig = NMConfig
   , nmGamma    = 0.5
   , nmSigma    = 0.5
   , nmDir      = Minimize
+  , nmBounds   = Nothing
   }
 
 -- | 既定設定で実行。
@@ -62,7 +65,8 @@ runNelderMeadWith :: NMConfig
                   -> IO OptimResult
 runNelderMeadWith cfg fUser x0 =
   let n         = length x0
-      f         = flipFor (nmDir cfg) fUser   -- 内部は常に最小化
+      fPenal xs = fUser xs + boundsPenalty (nmBounds cfg) xs
+      f         = flipFor (nmDir cfg) fPenal   -- 内部は常に最小化
       step      = nmInitStep cfg
       -- 初期単体: x0 + step*e_i
       vertices0 = (x0, f x0) : [ (x, f x) | i <- [0 .. n - 1]

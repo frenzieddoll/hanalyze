@@ -47,13 +47,14 @@ import Control.Monad (zipWithM)
 import Data.List (sortBy)
 import Data.Ord  (comparing)
 import System.Random.MWC (GenIO, uniform, uniformR)
+import qualified Optim.Common as OC
 
 -- ---------------------------------------------------------------------------
 -- 型
 -- ---------------------------------------------------------------------------
 
--- | 各次元の探索範囲 (lo, hi)。
-type Bounds = [(Double, Double)]
+-- | 各次元の探索範囲 (lo, hi)。`Optim.Common.Bounds` の再エクスポート。
+type Bounds = OC.Bounds
 
 -- | 個体: 決定変数 + 評価結果 (目的関数値ベクトル) + 制約違反量。
 data Solution = Solution
@@ -475,12 +476,9 @@ mutateOneVar etaM pMut gen (lo, hi) x = do
       return (min hi (max lo y))
 
 -- | 各次元の範囲から uniform にランダムドロー (初期母集団生成用)。
+-- `Optim.Common.sampleUniformIn` の thin wrapper (後方互換のため残置)。
 randomInBounds :: Bounds -> GenIO -> IO [Double]
-randomInBounds bounds gen =
-  mapM (\(lo, hi) -> do
-           u <- uniform gen :: IO Double
-           return (lo + u * (hi - lo)))
-       bounds
+randomInBounds = OC.sampleUniformIn
 
 -- | NSGA-II の crowded comparison operator:
 --   1. rank が低い (front 番号小) 方が良い

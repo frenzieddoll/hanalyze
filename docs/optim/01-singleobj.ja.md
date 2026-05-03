@@ -3,6 +3,7 @@
 > 🌐 [English](01-singleobj.md) | **日本語**
 
 > 関連: [02-multi-objective.ja.md](02-multi-objective.ja.md) (多目的)、
+> [03-algorithm-guide.ja.md](03-algorithm-guide.ja.md) (**アルゴリズム選択 + 制約指定の統合ガイド**)、
 > [theory-singleobj.ja.md](theory-singleobj.ja.md) (理論)、
 > [theory-bayesopt.ja.md](theory-bayesopt.ja.md) (BO)
 

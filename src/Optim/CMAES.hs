@@ -31,6 +31,8 @@ data CMAESConfig = CMAESConfig
   , cmSigma0  :: !Double         -- ^ 初期ステップ幅 σ
   , cmLambda  :: !(Maybe Int)    -- ^ 集団サイズ λ (Nothing なら 4 + 3 ln D)
   , cmDir     :: !Direction
+  , cmBounds  :: !(Maybe Bounds)  -- ^ box 制約 (任意)。指定時はサンプル後に
+                                   --   `clipToBounds` で範囲内へ反射する
   } deriving (Show, Eq)
 
 defaultCMAESConfig :: CMAESConfig
@@ -39,6 +41,7 @@ defaultCMAESConfig = CMAESConfig
   , cmSigma0 = 0.5
   , cmLambda = Nothing
   , cmDir    = Minimize
+  , cmBounds = Nothing
   }
 
 -- | 既定設定で実行。
@@ -90,7 +93,10 @@ loop cfg f gen iter m sigma diag ws lam mu bestV hist
       -- λ 個サンプル
       samples <- replicateM lam $ do
         z <- replicateM (length m) (MWCD.standard gen)
-        let x = zipWith3 (\mi di zi -> mi + sigma * di * zi) m diag z
+        let xRaw = zipWith3 (\mi di zi -> mi + sigma * di * zi) m diag z
+            x    = case cmBounds cfg of
+                     Nothing -> xRaw
+                     Just bs -> clipToBounds bs xRaw
         return (x, z, f x)
       let sorted   = sortBy (comparing (\(_, _, v) -> v)) samples
           topMu    = take mu sorted

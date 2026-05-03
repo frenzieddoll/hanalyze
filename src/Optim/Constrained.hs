@@ -21,6 +21,7 @@ module Optim.Constrained
   , defaultConstrainedConfig
   , runAugmentedLagrangian
   , penaltyMethod
+  , boxToIneq
   ) where
 
 import qualified Optim.LBFGS  as LBFGS
@@ -109,6 +110,22 @@ runAugmentedLagrangian cfg f cs x0 = do
       let eqV = sum [(g xs)^(2::Int) | g <- csEq cs]
           ineqV = sum [(max 0 (h xs))^(2::Int) | h <- csIneq cs]
       in sqrt (eqV + ineqV)
+
+-- | box 制約 (各次元 lo_i ≤ x_i ≤ hi_i) を 2 本ずつの不等式制約 (≤ 0) に展開。
+--
+-- 各次元 i から `lo_i - x_i ≤ 0` (下限) と `x_i - hi_i ≤ 0` (上限) を生成。
+-- 戻り値は @2 * length bs@ 本の `[Double] -> Double` リスト。
+--
+-- @
+-- let cs = ConstraintSet { csEq = []
+--                        , csIneq = boxToIneq bs ++ otherIneq }
+-- (r, viol) <- runAugmentedLagrangian defaultConstrainedConfig f cs x0
+-- @
+boxToIneq :: OC.Bounds -> [[Double] -> Double]
+boxToIneq bs = concat
+  [ [ \xs -> lo - (xs !! i)
+    , \xs -> (xs !! i) - hi ]
+  | (i, (lo, hi)) <- zip [0 ..] bs ]
 
 -- | シンプルな **罰則法** (penalty method)。
 -- 拡張 Lagrangian の簡易版で、乗数更新を省略し罰則だけを増加させる。

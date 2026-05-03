@@ -26,8 +26,9 @@ import System.Random.MWC (GenIO, uniform)
 import Model.GP (Kernel (..), GPModel (..), GPResult (..),
                  fitGP, optimizeGP, initParamsFromData)
 import Optim.Acquisition (ei, ucb, parEGO)
-import Optim.NSGA       (Bounds, NSGAConfig (..), defaultNSGAConfig,
+import Optim.NSGA       (NSGAConfig (..), defaultNSGAConfig,
                          Solution (..), nsga2)
+import Optim.Common     (Bounds)
 import qualified Optim.LineSearch as LS
 import qualified Optim.LBFGS      as LBFGS
 import qualified Optim.Common     as OC

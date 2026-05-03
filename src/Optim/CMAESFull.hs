@@ -30,6 +30,9 @@ data CMAESFConfig = CMAESFConfig
   , cmfSigma0  :: !Double          -- ^ 初期ステップ幅 σ
   , cmfLambda  :: !(Maybe Int)     -- ^ 集団サイズ λ (Nothing なら 4 + ⌊3 ln n⌋)
   , cmfDir     :: !Direction
+  , cmfBounds  :: !(Maybe Bounds)  -- ^ box 制約 (任意)。サンプル x を範囲内へ
+                                    --   反射 (clipToBounds) してから評価。
+                                    --   y (= (x-m)/σ) は元のまま保持し共分散更新を歪めない
   } deriving (Show, Eq)
 
 defaultCMAESFConfig :: CMAESFConfig
@@ -38,6 +41,7 @@ defaultCMAESFConfig = CMAESFConfig
   , cmfSigma0 = 0.5
   , cmfLambda = Nothing
   , cmfDir    = Minimize
+  , cmfBounds = Nothing
   }
 
 -- | 既定設定で実行。
@@ -131,10 +135,13 @@ loop cfg f gen iter p m sigma c psig pc bestV hist
       -- λ 個サンプル
       samples <- replicateM lam $ do
         z <- LA.fromList <$> replicateM n (MWCD.standard gen)
-        let y = bd LA.#> z
-            x = m + LA.scale sigma y
-            fx = f (LA.toList x)
-        return (x, y, fx)
+        let y    = bd LA.#> z
+            xRaw = m + LA.scale sigma y
+            xEval = case cmfBounds cfg of
+                      Nothing -> xRaw
+                      Just bs -> LA.fromList (clipToBounds bs (LA.toList xRaw))
+            fx   = f (LA.toList xEval)
+        return (xEval, y, fx)
       let sortedAll = sortBy (comparing (\(_,_,v) -> v)) samples
           topMu = take (pMu p) sortedAll
           ys    = [ y | (_, y, _) <- topMu ]

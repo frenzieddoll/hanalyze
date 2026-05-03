@@ -30,7 +30,7 @@ data SAConfig = SAConfig
   , saAlpha     :: !Double          -- ^ 冷却係数 α (0.85 〜 0.99)
   , saStepSigma :: !Double          -- ^ 提案分布の sd
   , saStepDecay :: !Double          -- ^ sd の冷却係数 (1.0 で固定)
-  , saBounds    :: ![(Double, Double)]   -- ^ (lo, hi) per dim、反射用
+  , saBounds    :: !Bounds                -- ^ (lo, hi) per dim、反射用
   , saDir       :: !Direction
   } deriving (Show, Eq)
 
@@ -72,10 +72,10 @@ runSAWith cfg fUser x0 gen = do
       | temp < 1e-12 =
           mkRes (saDir cfg) xBest fBest hist iter True
       | otherwise = do
-          xCand <- forM (zip x (saBounds cfg)) $ \(xi, (lo, hi)) -> do
+          xRaw <- forM x $ \xi -> do
                     eps <- MWCD.normal 0 sigma gen
-                    let v = xi + eps
-                    pure (max lo (min hi v))
+                    pure (xi + eps)
+          let xCand = clipToBounds (saBounds cfg) xRaw
           let fNew = f xCand
           u <- MWC.uniformR (0, 1 :: Double) gen
           let dF = fNew - fx

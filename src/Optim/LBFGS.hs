@@ -28,6 +28,9 @@ data LBFGSConfig = LBFGSConfig
   , lbLSC1    :: !Double     -- ^ Armijo 定数 c1 (典型 1e-4)
   , lbLSShrink :: !Double    -- ^ backtracking 縮小率 (典型 0.5)
   , lbDir     :: !Direction
+  , lbBounds  :: !(Maybe Bounds)  -- ^ box 制約 (任意)。指定時は f と ∇f に
+                                   --   `boundsPenalty` の二次罰則を加算する
+                                   --   soft penalty 方式 (k=1e6)
   } deriving (Show, Eq)
 
 defaultLBFGSConfig :: LBFGSConfig
@@ -38,6 +41,7 @@ defaultLBFGSConfig = LBFGSConfig
   , lbLSC1     = 1e-4
   , lbLSShrink = 0.5
   , lbDir      = Minimize
+  , lbBounds   = Nothing
   }
 
 -- | 解析勾配を渡す版。
@@ -47,10 +51,23 @@ runLBFGSWith :: LBFGSConfig
              -> [Double]                    -- x0
              -> IO OptimResult
 runLBFGSWith cfg fUser gUser x0 =
-  let f = flipFor (lbDir cfg) fUser
+  let mbs       = lbBounds cfg
+      fPenal xs = fUser xs + boundsPenalty mbs xs
+      gPenal xs =
+        let base = gUser xs
+            -- ∂/∂x_i (k * d_i^2) = 2k * d_i * (sign 反映) — clip 範囲外時のみ
+            grad = case mbs of
+              Nothing -> map (const 0) xs
+              Just bs -> let k = 1e6 :: Double
+                         in [ if x < lo then 2*k*(x - lo)
+                              else if x > hi then 2*k*(x - hi)
+                              else 0
+                            | ((lo, hi), x) <- zip bs xs ]
+        in zipWith (+) base grad
+      f = flipFor (lbDir cfg) fPenal
       g = case lbDir cfg of
-            Minimize -> gUser
-            Maximize -> map negate . gUser
+            Minimize -> gPenal
+            Maximize -> map negate . gPenal
       f0 = f x0
       g0 = g x0
       (xEnd, fEnd, hist, iters, conv) =
