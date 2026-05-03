@@ -2,8 +2,7 @@
 {-# LANGUAGE RankNTypes #-}
 module Main where
 
-import DataIO.CSV        (loadAuto, loadAutoSafe, loadAutoSafeWith,
-                          LoadOpts (..), defaultLoadOpts)
+import DataIO.CSV        (loadAutoSafeWith, LoadOpts (..), defaultLoadOpts)
 import qualified DataIO.Log as Log
 import qualified DataIO.Preprocess as Pp
 import qualified DataFrame                    as DX
@@ -97,6 +96,7 @@ data Config = Config
   , cfgFitDist  :: Maybe Distribution  -- --fit DIST PARAMS
   , cfgReport   :: Maybe FilePath    -- --report [FILE]: generate HTML report
   , cfgWAIC     :: Bool              -- --waic: compute WAIC/LOO-CV
+  , cfgLoadOpts :: LoadOpts           -- --no-header / --skip / --comment / --strict
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
@@ -140,38 +140,42 @@ usageMsg = unlines
   ]
 
 parseArgs :: [String] -> Either String Config
-parseArgs (file : xColsStr : yColsStr : rest) = do
-  let xCols = map T.pack (words xColsStr)
-      yCols = map T.pack (words yColsStr)
-  if null xCols
-    then Left "Error: xcols must not be empty"
-    else if null yCols
-    then Left "Error: ycols must not be empty"
-    else do
-      (model, rest1)                                              <- parseModelType rest
-      (mDist, mLink, degSpec, band, fmt, mGrp, hist, mFit, mRpt, waicF, rest2) <- parseOptions rest1
-      if not (null rest2)
-        then Left ("Unexpected argument(s): " ++ unwords rest2)
+parseArgs args0 =
+  let (lopts, args) = parseLoadOpts args0
+  in case args of
+    (file : xColsStr : yColsStr : rest) -> do
+      let xCols = map T.pack (words xColsStr)
+          yCols = map T.pack (words yColsStr)
+      if null xCols
+        then Left "Error: xcols must not be empty"
+        else if null yCols
+        then Left "Error: ycols must not be empty"
         else do
-          let dist = maybe Gaussian id mDist
-              lnk  = maybe (canonicalLink dist) id mLink
-          Right Config
-            { cfgFile     = file
-            , cfgXCols    = xCols
-            , cfgYCols    = yCols
-            , cfgModel    = model
-            , cfgDist     = dist
-            , cfgLink     = lnk
-            , cfgDegree   = degSpec
-            , cfgBand     = band
-            , cfgFormat   = fmt
-            , cfgGroup    = mGrp
-            , cfgHistMode = hist
-            , cfgFitDist  = mFit
-            , cfgReport   = mRpt
-            , cfgWAIC     = waicF
-            }
-parseArgs _ = Left usageMsg
+          (model, rest1)                                              <- parseModelType rest
+          (mDist, mLink, degSpec, band, fmt, mGrp, hist, mFit, mRpt, waicF, rest2) <- parseOptions rest1
+          if not (null rest2)
+            then Left ("Unexpected argument(s): " ++ unwords rest2)
+            else do
+              let dist = maybe Gaussian id mDist
+                  lnk  = maybe (canonicalLink dist) id mLink
+              Right Config
+                { cfgFile     = file
+                , cfgXCols    = xCols
+                , cfgYCols    = yCols
+                , cfgModel    = model
+                , cfgDist     = dist
+                , cfgLink     = lnk
+                , cfgDegree   = degSpec
+                , cfgBand     = band
+                , cfgFormat   = fmt
+                , cfgGroup    = mGrp
+                , cfgHistMode = hist
+                , cfgFitDist  = mFit
+                , cfgReport   = mRpt
+                , cfgWAIC     = waicF
+                , cfgLoadOpts = lopts
+                }
+    _ -> Left usageMsg
 
 parseModelType :: [String] -> Either String (ModelType, [String])
 parseModelType ("LM"    : rest) = Right (LM,    rest)
@@ -705,22 +709,26 @@ countTop xs =
 -- ---------------------------------------------------------------------------
 
 runHistCmd :: [String] -> IO ()
-runHistCmd args = case parseHistArgs args of
-  Left err  -> hPutStrLn stderr err
-  Right ho  -> runHistOpts ho
+runHistCmd args0 =
+  let (lopts, args) = parseLoadOpts args0
+  in case parseHistArgs args of
+       Left err  -> hPutStrLn stderr err
+       Right ho  -> runHistOpts (ho { hoLoadOpts = lopts })
 
 data HistOpts = HistOpts
-  { hoFile   :: FilePath
-  , hoCol    :: T.Text
-  , hoFit    :: Maybe Distribution
-  , hoFormat :: OutputFormat
-  , hoOut    :: FilePath
+  { hoFile     :: FilePath
+  , hoCol      :: T.Text
+  , hoFit      :: Maybe Distribution
+  , hoFormat   :: OutputFormat
+  , hoOut      :: FilePath
+  , hoLoadOpts :: LoadOpts
   } deriving (Show)
 
 parseHistArgs :: [String] -> Either String HistOpts
 parseHistArgs (file : col : rest) = goHistOpts rest
   HistOpts { hoFile = file, hoCol = T.pack col
-           , hoFit = Nothing, hoFormat = HTML, hoOut = "histogram.html" }
+           , hoFit = Nothing, hoFormat = HTML, hoOut = "histogram.html"
+           , hoLoadOpts = defaultLoadOpts }
 parseHistArgs _ = Left $ unlines
   [ "Usage: hanalyze hist <file> <col> [options]"
   , ""
@@ -752,25 +760,27 @@ goHistOpts (flag       : _)        _  =
 
 runHistOpts :: HistOpts -> IO ()
 runHistOpts ho = do
-  result <- loadAuto (hoFile ho)
+  result <- loadAutoSafeWith (hoLoadOpts ho) (hoFile ho)
   case result of
     Left err -> hPutStrLn stderr ("Parse error: " ++ err)
-    Right df -> case getDoubleVec (hoCol ho) df of
-      Nothing -> hPutStrLn stderr $
-        "Error: column '" ++ T.unpack (hoCol ho) ++ "' not found or not numeric"
-      Just xVec -> do
-        let vals    = V.toList xVec
-            histCfg = defaultConfig ("Histogram: " <> hoCol ho)
-            outPath = hoOut ho
-            fmt     = hoFormat ho
-        case hoFit ho of
-          Nothing -> do
-            histogramPlotFile fmt outPath histCfg (hoCol ho) vals Nothing
-            putStrLn $ "Histogram:           " ++ outPath
-          Just dist -> do
-            histogramWithDensityFile fmt outPath histCfg (hoCol ho) vals Nothing dist
-            putStrLn $ "Histogram + density: " ++ outPath
-        openInBrowser outPath
+    Right (df, lg) -> do
+      Log.printLogReport lg
+      case getDoubleVec (hoCol ho) df of
+        Nothing -> hPutStrLn stderr $
+          "Error: column '" ++ T.unpack (hoCol ho) ++ "' not found or not numeric"
+        Just xVec -> do
+          let vals    = V.toList xVec
+              histCfg = defaultConfig ("Histogram: " <> hoCol ho)
+              outPath = hoOut ho
+              fmt     = hoFormat ho
+          case hoFit ho of
+            Nothing -> do
+              histogramPlotFile fmt outPath histCfg (hoCol ho) vals Nothing
+              putStrLn $ "Histogram:           " ++ outPath
+            Just dist -> do
+              histogramWithDensityFile fmt outPath histCfg (hoCol ho) vals Nothing dist
+              putStrLn $ "Histogram + density: " ++ outPath
+          openInBrowser outPath
 
 runConfig :: Config -> IO ()
 runConfig cfg = do
@@ -785,10 +795,11 @@ runConfig cfg = do
       hPutStrLn stderr "Warning: GP requires exactly one x column and one y column."
     _ -> return ()
 
-  result <- loadAuto (cfgFile cfg)
+  result <- loadAutoSafeWith (cfgLoadOpts cfg) (cfgFile cfg)
   case result of
     Left err -> putStrLn ("Parse error: " ++ err)
-    Right df -> do
+    Right (df, lg) -> do
+      Log.printLogReport lg
       putStrLn $ "Loaded " ++ show ((fst (DX.dimensions df))) ++ " rows from " ++ cfgFile cfg
       putStrLn "Columns:"
       mapM_ (TIO.putStrLn . ("  - " <>)) (DX.columnNames df)
@@ -1586,16 +1597,19 @@ defaultTgAnalyzeOpts :: TgAnalyzeOpts
 defaultTgAnalyzeOpts = TgAnalyzeOpts [] Nothing TG.SmallerBetter Nothing
 
 runTaguchiAnalyze :: [String] -> IO ()
-runTaguchiAnalyze [] = hPutStrLn stderr "taguchi analyze: missing array name"
-runTaguchiAnalyze (arrayStr : rest) =
-  case OA.lookupOA (T.pack arrayStr) of
-    Nothing -> hPutStrLn stderr $
-      "taguchi analyze: unknown array '" ++ arrayStr ++ "'"
-    Just oa -> case parseTgAnalyzeOpts rest defaultTgAnalyzeOpts of
-      Left err   -> hPutStrLn stderr ("taguchi analyze: " ++ err)
-      Right opts -> case toCSV opts of
-        Nothing   -> hPutStrLn stderr "taguchi analyze: --csv FILE required"
-        Just path -> doTaguchiAnalyze oa opts path
+runTaguchiAnalyze args0 =
+  let (lopts, args) = parseLoadOpts args0
+  in case args of
+       []                  -> hPutStrLn stderr "taguchi analyze: missing array name"
+       (arrayStr : rest)   ->
+         case OA.lookupOA (T.pack arrayStr) of
+           Nothing -> hPutStrLn stderr $
+             "taguchi analyze: unknown array '" ++ arrayStr ++ "'"
+           Just oa -> case parseTgAnalyzeOpts rest defaultTgAnalyzeOpts of
+             Left err   -> hPutStrLn stderr ("taguchi analyze: " ++ err)
+             Right opts -> case toCSV opts of
+               Nothing   -> hPutStrLn stderr "taguchi analyze: --csv FILE required"
+               Just path -> doTaguchiAnalyze oa opts path lopts
 
 parseTgAnalyzeOpts :: [String] -> TgAnalyzeOpts -> Either String TgAnalyzeOpts
 parseTgAnalyzeOpts [] acc = Right acc
@@ -1620,12 +1634,13 @@ parseTgAnalyzeOpts (flag : rest) acc
       _ -> parseTgAnalyzeOpts rest (acc { toReport = Just "taguchi.html" })
   | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
 
-doTaguchiAnalyze :: OA.OA -> TgAnalyzeOpts -> FilePath -> IO ()
-doTaguchiAnalyze oa opts path = do
-  result <- loadAuto path
+doTaguchiAnalyze :: OA.OA -> TgAnalyzeOpts -> FilePath -> LoadOpts -> IO ()
+doTaguchiAnalyze oa opts path lopts = do
+  result <- loadAutoSafeWith lopts path
   case result of
-    Left err -> hPutStrLn stderr ("Parse error: " ++ err)
-    Right df -> do
+    Left err          -> hPutStrLn stderr ("Parse error: " ++ err)
+    Right (df, lg)    -> do
+      Log.printLogReport lg
       let specs = [ OA.FactorSpec name (map toLevelValue lvls)
                   | (name, lvls) <- toFactors opts ]
       case OA.assignFactors oa specs of
@@ -1782,17 +1797,20 @@ doTaguchiCross innerOA outerOA opts = do
 -- ---------------------------------------------------------------------------
 
 -- | CSV を読み、x 列(複数可) と y 列(1) を numeric vector で取り出す。
-loadXY :: FilePath -> [T.Text] -> T.Text
+-- 'LoadOpts' を反映 (--no-header / --skip / --comment / --strict)。
+loadXY :: LoadOpts -> FilePath -> [T.Text] -> T.Text
        -> IO (Either String (DXD.DataFrame, [V.Vector Double], V.Vector Double))
-loadXY path xCols yCol = do
-  result <- loadAuto path
+loadXY lopts path xCols yCol = do
+  result <- loadAutoSafeWith lopts path
   case result of
-    Left err -> return (Left err)
-    Right df -> case (mapM (\c -> getDoubleVec c df) xCols, getDoubleVec yCol df) of
-      (Just xs, Just y) -> return (Right (df, xs, y))
-      _ -> return (Left $ "Numeric column(s) not found: x="
-                    ++ T.unpack (T.intercalate "," xCols)
-                    ++ ", y=" ++ T.unpack yCol)
+    Left err          -> return (Left err)
+    Right (df, lg)    -> do
+      Log.printLogReport lg
+      case (mapM (\c -> getDoubleVec c df) xCols, getDoubleVec yCol df) of
+        (Just xs, Just y) -> return (Right (df, xs, y))
+        _ -> return (Left $ "Numeric column(s) not found: x="
+                      ++ T.unpack (T.intercalate "," xCols)
+                      ++ ", y=" ++ T.unpack yCol)
 
 -- | RMSE 計算。
 rmseV :: [Double] -> [Double] -> Double
@@ -1855,11 +1873,14 @@ defaultRidgeOpts :: RidgeOpts
 defaultRidgeOpts = RidgeOpts "ridge" 0.1 0.5 HTML "ridge.html" Nothing
 
 runRidgeCmd :: [String] -> IO ()
-runRidgeCmd (file : xColsStr : yColStr : rest) =
-  case parseRidgeOpts rest defaultRidgeOpts of
-    Left err   -> hPutStrLn stderr ("ridge: " ++ err)
-    Right opts -> doRidge file xColsStr yColStr opts
-runRidgeCmd _ = putStrLn ridgeUsage
+runRidgeCmd args0 =
+  let (lopts, args) = parseLoadOpts args0
+  in case args of
+       (file : xColsStr : yColStr : rest) ->
+         case parseRidgeOpts rest defaultRidgeOpts of
+           Left err   -> hPutStrLn stderr ("ridge: " ++ err)
+           Right opts -> doRidge file xColsStr yColStr opts lopts
+       _ -> putStrLn ridgeUsage
 
 parseRidgeOpts :: [String] -> RidgeOpts -> Either String RidgeOpts
 parseRidgeOpts [] acc = Right acc
@@ -1893,11 +1914,11 @@ parseRidgeOpts (flag : rest) acc
       _ -> parseRidgeOpts rest (acc { roReport = Just "ridge.html" })
   | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
 
-doRidge :: FilePath -> String -> String -> RidgeOpts -> IO ()
-doRidge file xColsStr yColStr opts = do
+doRidge :: FilePath -> String -> String -> RidgeOpts -> LoadOpts -> IO ()
+doRidge file xColsStr yColStr opts lopts = do
   let xCols = map T.pack (words xColsStr)
       yCol  = T.pack yColStr
-  result <- loadXY file xCols yCol
+  result <- loadXY lopts file xCols yCol
   case result of
     Left err -> hPutStrLn stderr err
     Right (df, xVecs, yVec) -> do
@@ -2064,11 +2085,14 @@ parseKernelKind s = case s of
   _              -> Left ("unknown kernel '" ++ s ++ "'")
 
 runKernelCmd :: [String] -> IO ()
-runKernelCmd (file : xColStr : yColStr : rest) =
-  case parseKernelOpts rest defaultKernelOpts of
-    Left err   -> hPutStrLn stderr ("kernel: " ++ err)
-    Right opts -> doKernel file xColStr yColStr opts
-runKernelCmd _ = putStrLn kernelUsage
+runKernelCmd args0 =
+  let (lopts, args) = parseLoadOpts args0
+  in case args of
+       (file : xColStr : yColStr : rest) ->
+         case parseKernelOpts rest defaultKernelOpts of
+           Left err   -> hPutStrLn stderr ("kernel: " ++ err)
+           Right opts -> doKernel file xColStr yColStr opts lopts
+       _ -> putStrLn kernelUsage
 
 parseKernelOpts :: [String] -> KernelOpts -> Either String KernelOpts
 parseKernelOpts [] acc = Right acc
@@ -2112,11 +2136,11 @@ parseKernelOpts (flag : rest) acc
       _ -> parseKernelOpts rest (acc { koReport = Just "kernel.html" })
   | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
 
-doKernel :: FilePath -> String -> String -> KernelOpts -> IO ()
-doKernel file xColStr yColStr opts = do
+doKernel :: FilePath -> String -> String -> KernelOpts -> LoadOpts -> IO ()
+doKernel file xColStr yColStr opts lopts = do
   let xCol = T.pack xColStr
       yCol = T.pack yColStr
-  result <- loadXY file [xCol] yCol
+  result <- loadXY lopts file [xCol] yCol
   case result of
     Left err -> hPutStrLn stderr err
     Right (df, [xVec], yVec) ->
@@ -2263,11 +2287,14 @@ defaultSplineOpts :: SplineOpts
 defaultSplineOpts = SplineOpts "bspline" 5 3 HTML "spline.html" Nothing
 
 runSplineCmd :: [String] -> IO ()
-runSplineCmd (file : xColStr : yColStr : rest) =
-  case parseSplineOpts rest defaultSplineOpts of
-    Left err   -> hPutStrLn stderr ("spline: " ++ err)
-    Right opts -> doSpline file xColStr yColStr opts
-runSplineCmd _ = putStrLn splineUsage
+runSplineCmd args0 =
+  let (lopts, args) = parseLoadOpts args0
+  in case args of
+       (file : xColStr : yColStr : rest) ->
+         case parseSplineOpts rest defaultSplineOpts of
+           Left err   -> hPutStrLn stderr ("spline: " ++ err)
+           Right opts -> doSpline file xColStr yColStr opts lopts
+       _ -> putStrLn splineUsage
 
 parseSplineOpts :: [String] -> SplineOpts -> Either String SplineOpts
 parseSplineOpts [] acc = Right acc
@@ -2301,11 +2328,11 @@ parseSplineOpts (flag : rest) acc
       _ -> parseSplineOpts rest (acc { soReport = Just "spline.html" })
   | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
 
-doSpline :: FilePath -> String -> String -> SplineOpts -> IO ()
-doSpline file xColStr yColStr opts = do
+doSpline :: FilePath -> String -> String -> SplineOpts -> LoadOpts -> IO ()
+doSpline file xColStr yColStr opts lopts = do
   let xCol = T.pack xColStr
       yCol = T.pack yColStr
-  result <- loadXY file [xCol] yCol
+  result <- loadXY lopts file [xCol] yCol
   case result of
     Left err -> hPutStrLn stderr err
     Right (df, [xVec], yVec) -> do
@@ -2452,11 +2479,14 @@ defaultQuantileOpts :: QuantileOpts
 defaultQuantileOpts = QuantileOpts 0.5 [] HTML "quantile.html" Nothing
 
 runQuantileCmd :: [String] -> IO ()
-runQuantileCmd (file : xColsStr : yColStr : rest) =
-  case parseQuantileOpts rest defaultQuantileOpts of
-    Left err   -> hPutStrLn stderr ("quantile: " ++ err)
-    Right opts -> doQuantile file xColsStr yColStr opts
-runQuantileCmd _ = putStrLn quantileUsage
+runQuantileCmd args0 =
+  let (lopts, args) = parseLoadOpts args0
+  in case args of
+       (file : xColsStr : yColStr : rest) ->
+         case parseQuantileOpts rest defaultQuantileOpts of
+           Left err   -> hPutStrLn stderr ("quantile: " ++ err)
+           Right opts -> doQuantile file xColsStr yColStr opts lopts
+       _ -> putStrLn quantileUsage
 
 parseQuantileOpts :: [String] -> QuantileOpts -> Either String QuantileOpts
 parseQuantileOpts [] acc = Right acc
@@ -2495,11 +2525,11 @@ splitOnComma s = case break (== ',') s of
   (a, ',' : rest) -> a : splitOnComma rest
   (a, _)          -> [a]
 
-doQuantile :: FilePath -> String -> String -> QuantileOpts -> IO ()
-doQuantile file xColsStr yColStr opts = do
+doQuantile :: FilePath -> String -> String -> QuantileOpts -> LoadOpts -> IO ()
+doQuantile file xColsStr yColStr opts lopts = do
   let xCols = map T.pack (words xColsStr)
       yCol  = T.pack yColStr
-  result <- loadXY file xCols yCol
+  result <- loadXY lopts file xCols yCol
   case result of
     Left err -> hPutStrLn stderr err
     Right (df, xVecs, yVec) -> do
@@ -2670,11 +2700,14 @@ defaultGAMOpts :: GAMOpts
 defaultGAMOpts = GAMOpts 5 3 0.01 Nothing
 
 runGAMCmd :: [String] -> IO ()
-runGAMCmd (file : xColsStr : yColStr : rest) =
-  case parseGAMOpts rest defaultGAMOpts of
-    Left err   -> hPutStrLn stderr ("gam: " ++ err)
-    Right opts -> doGAM file xColsStr yColStr opts
-runGAMCmd _ = putStrLn gamUsage
+runGAMCmd args0 =
+  let (lopts, args) = parseLoadOpts args0
+  in case args of
+       (file : xColsStr : yColStr : rest) ->
+         case parseGAMOpts rest defaultGAMOpts of
+           Left err   -> hPutStrLn stderr ("gam: " ++ err)
+           Right opts -> doGAM file xColsStr yColStr opts lopts
+       _ -> putStrLn gamUsage
 
 parseGAMOpts :: [String] -> GAMOpts -> Either String GAMOpts
 parseGAMOpts [] acc = Right acc
@@ -2700,11 +2733,11 @@ parseGAMOpts (flag:rest) acc
       _ -> parseGAMOpts rest (acc { goReport = Just "gam.html" })
   | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
 
-doGAM :: FilePath -> String -> String -> GAMOpts -> IO ()
-doGAM file xColsStr yColStr opts = do
+doGAM :: FilePath -> String -> String -> GAMOpts -> LoadOpts -> IO ()
+doGAM file xColsStr yColStr opts lopts = do
   let xCols = map T.pack (words xColsStr)
       yCol  = T.pack yColStr
-  result <- loadXY file xCols yCol
+  result <- loadXY lopts file xCols yCol
   case result of
     Left err -> hPutStrLn stderr err
     Right (df, xVecs, yVec) -> do
@@ -2788,11 +2821,14 @@ defaultRFOpts :: RFOpts
 defaultRFOpts = RFOpts 100 12 3 Nothing Nothing
 
 runRFCmd :: [String] -> IO ()
-runRFCmd (file : xColsStr : yColStr : rest) =
-  case parseRFOpts rest defaultRFOpts of
-    Left err   -> hPutStrLn stderr ("rf: " ++ err)
-    Right opts -> doRF file xColsStr yColStr opts
-runRFCmd _ = putStrLn rfUsage
+runRFCmd args0 =
+  let (lopts, args) = parseLoadOpts args0
+  in case args of
+       (file : xColsStr : yColStr : rest) ->
+         case parseRFOpts rest defaultRFOpts of
+           Left err   -> hPutStrLn stderr ("rf: " ++ err)
+           Right opts -> doRF file xColsStr yColStr opts lopts
+       _ -> putStrLn rfUsage
 
 parseRFOpts :: [String] -> RFOpts -> Either String RFOpts
 parseRFOpts [] acc = Right acc
@@ -2823,11 +2859,11 @@ parseRFOpts (flag:rest) acc
       _ -> parseRFOpts rest (acc { roReport_ = Just "rf.html" })
   | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
 
-doRF :: FilePath -> String -> String -> RFOpts -> IO ()
-doRF file xColsStr yColStr opts = do
+doRF :: FilePath -> String -> String -> RFOpts -> LoadOpts -> IO ()
+doRF file xColsStr yColStr opts lopts = do
   let xCols = map T.pack (words xColsStr)
       yCol  = T.pack yColStr
-  result <- loadXY file xCols yCol
+  result <- loadXY lopts file xCols yCol
   case result of
     Left err -> hPutStrLn stderr err
     Right (df, xVecs, yVec) -> do

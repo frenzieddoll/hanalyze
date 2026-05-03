@@ -1,0 +1,7 @@
+# Source: Lab A, generated 2026-05-03
+# Note: x = dose (mg), y = response (mV)
+# ---
+x,y
+1.0,2.0
+2.0,4.1
+3.0,5.9
