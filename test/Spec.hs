@@ -34,6 +34,7 @@ import qualified Model.Kernel      as K
 import qualified Model.Core        as Core
 import qualified Model.GLM         as GLM
 import qualified Optim.NelderMead  as NM
+import qualified Optim.LBFGS       as LBFGS
 import qualified Optim.Common      as OC
 import qualified System.Random.MWC as MWC
 
@@ -911,3 +912,32 @@ main = hspec $ do
       OC.orValue r `shouldSatisfy` (\v -> v > -1e-6)
       -- 最良点は原点近傍
       l2 (OC.orBest r) [0, 0, 0] `shouldSatisfy` (< 1e-2)
+
+  -- ===========================================================================
+  -- 単目的オプティマイザ (Optim.LBFGS)
+  -- ===========================================================================
+  describe "Optim.LBFGS" $ do
+    let l2 :: [Double] -> [Double] -> Double
+        l2 a b = sqrt (sum (zipWith (\x y -> (x-y)^(2::Int)) a b))
+        sphere xs = sum [x*x | x <- xs]
+        sphereGrad xs = [2*x | x <- xs]
+        rosen [x, y] = (1-x)^(2::Int) + 100*(y - x*x)^(2::Int)
+        rosen _ = error "rosen: 2D"
+        rosenGrad [x, y] =
+          [ -2*(1-x) - 400*x*(y - x*x), 200*(y - x*x) ]
+        rosenGrad _ = error "rosenGrad: 2D"
+
+    it "minimises sphere 5D with analytic grad to ~0" $ do
+      r <- LBFGS.runLBFGS sphere sphereGrad [3, -2, 1, 0.5, -1.5]
+      OC.orValue r `shouldSatisfy` (< 1e-8)
+
+    it "minimises Rosenbrock 2D within 0.01 of (1,1)" $ do
+      let cfg = LBFGS.defaultLBFGSConfig
+                  { LBFGS.lbStop = OC.defaultStopCriteria { OC.stMaxIter = 500 } }
+      r <- LBFGS.runLBFGSWith cfg rosen rosenGrad [-1.2, 1.0]
+      l2 (OC.orBest r) [1, 1] `shouldSatisfy` (< 0.01)
+
+    it "numeric gradient: sphere 30D converges" $ do
+      let x0 = take 30 (cycle [1.5, -2.0, 0.5])
+      r <- LBFGS.runLBFGSNumeric LBFGS.defaultLBFGSConfig sphere x0
+      OC.orValue r `shouldSatisfy` (< 1e-4)

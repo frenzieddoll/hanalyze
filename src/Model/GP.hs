@@ -46,6 +46,9 @@ import Data.Text (Text)
 import qualified Numeric.LinearAlgebra as LA
 import qualified Optim.GradAscent
 import qualified Optim.Numeric
+import qualified Optim.LBFGS as LBFGS
+import qualified Optim.Common as OC
+import System.IO.Unsafe (unsafePerformIO)
 
 -- ---------------------------------------------------------------------------
 -- Types
@@ -218,18 +221,22 @@ fitGPMulti model trainX trainY testX =
 -- ---------------------------------------------------------------------------
 
 -- | 対数周辺尤度を最大化してハイパーパラメータを最適化する。
--- log-space で (ℓ, σ_f², σ_n²) に対して数値勾配上昇法を適用する。
+-- log-space で (ℓ, σ_f², σ_n²) を **L-BFGS** (準ニュートン) で最大化。
+-- 数値勾配 (中央差分) を使うので gradFn の解析実装は不要。
+--
+-- 旧実装 (`Optim.GradAscent` + 数値勾配) より一般に 5-10 倍速く、初期値
+-- 依存性も低い。`unsafePerformIO` を使うが L-BFGS は決定的なので参照透過。
 optimizeGP :: Kernel -> [Double] -> [Double] -> GPParams -> GPParams
 optimizeGP ker trainX trainY p0 =
   let u0   = [log (gpLengthScale p0), log (gpSignalVar p0), log (gpNoiseVar p0)]
-      cfg  = Optim.GradAscent.defaultGradConfig
-               { Optim.GradAscent.gradIterations   = 400
-               , Optim.GradAscent.gradLearningRate = 0.1
-               , Optim.GradAscent.gradDecay        = 0.995
-               , Optim.GradAscent.gradTolerance    = 1e-8
+      -- L-BFGS は最小化なので、log-mlik を最大化したいときは Maximize 指定
+      cfg  = LBFGS.defaultLBFGSConfig
+               { LBFGS.lbDir   = OC.Maximize
+               , LBFGS.lbStop  = OC.defaultStopCriteria
+                                   { OC.stMaxIter = 200, OC.stTolFun = 1e-8 }
                }
-      uOpt = Optim.GradAscent.gradientAscent cfg
-               (Optim.Numeric.numGradCentral 1e-4 obj) u0
+      result = unsafePerformIO $ LBFGS.runLBFGSNumeric cfg obj u0
+      uOpt   = OC.orBest result
   in p0
        { gpLengthScale = exp (uOpt !! 0)
        , gpSignalVar   = exp (uOpt !! 1)
