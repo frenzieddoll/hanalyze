@@ -36,6 +36,7 @@ import qualified Model.GLM         as GLM
 import qualified Optim.NelderMead  as NM
 import qualified Optim.LBFGS       as LBFGS
 import qualified Optim.LineSearch  as LS
+import qualified Optim.DifferentialEvolution as DE
 import qualified Optim.Common      as OC
 import qualified System.Random.MWC as MWC
 
@@ -972,3 +973,29 @@ main = hspec $ do
           (hG, _) = K.gridSearchBandwidth K.Gaussian xs ys [0.5, 0.8, 1.0, 1.5, 2.0, 3.0]
           (hB, _) = K.autoBandwidthBrent K.Gaussian xs ys 0.3 4.0
       abs (hB - hG) `shouldSatisfy` (< 1.0)   -- グリッドと近い領域
+
+  -- ===========================================================================
+  -- 大域オプティマイザ (Optim.DifferentialEvolution)
+  -- ===========================================================================
+  describe "Optim.DifferentialEvolution" $ do
+    let sphere xs = sum [x*x | x <- xs]
+        rastrigin xs =
+          10 * fromIntegral (length xs) +
+          sum [x*x - 10 * cos (2 * pi * x) | x <- xs]
+        l2 a b = sqrt (sum (zipWith (\x y -> (x-y)^(2::Int)) a b))
+
+    it "DE: sphere 5D が原点付近に到達" $ do
+      gen <- MWC.create
+      let bs = replicate 5 (-5, 5)
+          cfg = (DE.defaultDEConfig bs)
+                  { DE.deStop = OC.defaultStopCriteria { OC.stMaxIter = 200 } }
+      r <- DE.runDEWith cfg sphere gen
+      OC.orValue r `shouldSatisfy` (< 1e-3)
+
+    it "DE: Rastrigin 3D の大域最小 (原点) を見つける" $ do
+      gen <- MWC.create
+      let bs = replicate 3 (-5.12, 5.12)
+          cfg = (DE.defaultDEConfig bs)
+                  { DE.deStop = OC.defaultStopCriteria { OC.stMaxIter = 400 } }
+      r <- DE.runDEWith cfg rastrigin gen
+      l2 (OC.orBest r) [0, 0, 0] `shouldSatisfy` (< 0.5)

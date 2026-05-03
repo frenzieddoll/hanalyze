@@ -78,6 +78,7 @@ library
     Optim.NelderMead
     Optim.LBFGS
     Optim.LineSearch
+    Optim.DifferentialEvolution
     Optim.NSGA
     Optim.Pareto
     Optim.Acquisition
