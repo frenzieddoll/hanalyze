@@ -40,9 +40,13 @@ dataDir = "data/dirty"
 -- | (ファイル名, 期待される W コード, 「修復策」のオプション)。
 fixtures :: [(FilePath, [T.Text], Maybe CSV.LoadOpts)]
 fixtures =
+  -- 期待 W コードは Sniff (loSniff=True デフォルト) 適用後の値。
+  -- Sniff で自動修復される ([] になる) ものはコメントで元の警告を残す。
   [ ("01_clean.csv",              [],            Nothing)
-  , ("02_no_header.csv",          ["W001"],      Just (CSV.defaultLoadOpts { CSV.loNoHeader = True }))
-  , ("03_preamble.csv",           ["W002"],      Just (CSV.defaultLoadOpts { CSV.loSkip = 3 }))
+  , ("02_no_header.csv",          [], -- sniff: header off で W001 → 0
+       Just (CSV.defaultLoadOpts { CSV.loNoHeader = True }))
+  , ("03_preamble.csv",           [], -- sniff: skip=3 で W002 → 0
+       Just (CSV.defaultLoadOpts { CSV.loSkip = 3 }))
   , ("04_ragged.csv",             [],            Nothing)
   , ("05_dup_header.csv",         ["W004", "W004"],                       Nothing)
   , ("06_blank_unnamed.csv",      ["W004", "W004", "W004", "W004"],       Nothing)
@@ -50,10 +54,13 @@ fixtures =
   , ("08_thousands_currency.csv", ["W008"],      Nothing)
   , ("09_quotes_commas.csv",      [],            Nothing)
   , ("10_bom.csv",                [],            Nothing)
-  , ("11_semicolon_eu.csv",       ["W005"],      Nothing)
+  , ("11_semicolon_eu.csv",       ["W008", "W008", "W008"], -- sniff で ;、ただし "1,5" が桁区切りに誤検出 (Phase C 課題)
+       Nothing)
   , ("12_real.tsv",               [],            Nothing)
-  , ("13_crlf.csv",               ["W005"],      Nothing)
-  , ("14_wrong_ext.csv",          ["W005"],      Nothing)
+  , ("13_crlf.csv",               [], -- sniff で tab → 0
+       Nothing)
+  , ("14_wrong_ext.csv",          [], -- sniff で tab → 0
+       Nothing)
   , ("15_trailing_blank.csv",     [],            Nothing)
   , ("16_dates_units.csv",        ["W007"],      Nothing)
   , ("17_empty.csv",              ["LeftError"], Nothing)

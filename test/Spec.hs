@@ -528,12 +528,54 @@ main = hspec $ do
         case r of
           Left e -> expectationFailure ("unexpected Left: " ++ e)
           Right (df, _) -> DX.columnNames df `shouldBe` ["x", "y"]
-    it "--strict + 警告ありデータ → Left" $
+    it "sniff: ヘッダ無し CSV を自動推論で col0... に変える" $
+      withSystemTempFile "ha-sniff-noh.csv" $ \fp h -> do
+        hPutStr h "1.0,2.0\n3.0,4.0\n"
+        hClose h
+        r <- CSV.loadAutoSafeWith CSV.defaultLoadOpts fp
+        case r of
+          Left e -> expectationFailure ("unexpected Left: " ++ e)
+          Right (df, lg) -> do
+            DX.columnNames df `shouldBe` ["col0", "col1"]
+            map Log.lgCode (Log.entries lg) `shouldContain` ["I013"]
+    it "sniff: コメント行 # を skip 推論" $
+      withSystemTempFile "ha-sniff-skip.csv" $ \fp h -> do
+        hPutStr h "# comment 1\n# comment 2\nx,y\n1,2\n3,4\n"
+        hClose h
+        r <- CSV.loadAutoSafeWith CSV.defaultLoadOpts fp
+        case r of
+          Left e -> expectationFailure ("unexpected Left: " ++ e)
+          Right (df, _) -> DX.columnNames df `shouldBe` ["x", "y"]
+    it "sniff: セミコロン区切りを自動検出" $
+      withSystemTempFile "ha-sniff-semi.csv" $ \fp h -> do
+        hPutStr h "a;b;c\n1;2;3\n4;5;6\n"
+        hClose h
+        r <- CSV.loadAutoSafeWith CSV.defaultLoadOpts fp
+        case r of
+          Left e -> expectationFailure ("unexpected Left: " ++ e)
+          Right (df, _) -> DX.columnNames df `shouldBe` ["a", "b", "c"]
+    it "sniff: --no-sniff で自動推論を切れる" $
+      withSystemTempFile "ha-no-sniff.csv" $ \fp h -> do
+        hPutStr h "1.0,2.0\n3.0,4.0\n"
+        hClose h
+        r <- CSV.loadAutoSafeWith
+               (CSV.defaultLoadOpts { CSV.loSniff = False }) fp
+        case r of
+          Left e -> expectationFailure ("unexpected Left: " ++ e)
+          Right (df, lg) -> do
+            -- ヘッダ無しの自動修復は走らないので col0 にはならない
+            DX.columnNames df `shouldBe` ["1.0", "2.0"]
+            -- 代わりに W001 が出る
+            map Log.lgCode (Log.entries lg) `shouldContain` ["W001"]
+
+    it "--strict + 警告ありデータ (sniff off) → Left" $
       withSystemTempFile "ha-strict.csv" $ \fp h -> do
         hPutStr h "1.0,2.0\n3.0,4.0\n"  -- ヘッダ無し疑い W001
         hClose h
+        -- sniff を切ると W001 が残るので strict が短絡する
         r <- CSV.loadAutoSafeWith
-               (CSV.defaultLoadOpts { CSV.loStrict = True }) fp
+               (CSV.defaultLoadOpts { CSV.loStrict = True
+                                    , CSV.loSniff  = False }) fp
         case r of
           Left _   -> return ()
-          Right _  -> expectationFailure "expected Left under --strict"
+          Right _  -> expectationFailure "expected Left under --strict --no-sniff"

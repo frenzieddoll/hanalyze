@@ -21,6 +21,7 @@ library
     DataIO.Convert
     DataIO.Log
     DataIO.Health
+    DataIO.Sniff
     Viz.Core
     Viz.Scatter
     Viz.Histogram

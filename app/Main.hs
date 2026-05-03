@@ -626,6 +626,7 @@ parseLoadOpts = go defaultLoadOpts []
     go acc rs []                              = (acc, reverse rs)
     go acc rs ("--no-header":xs)              = go acc { loNoHeader = True } rs xs
     go acc rs ("--strict":xs)                 = go acc { loStrict   = True } rs xs
+    go acc rs ("--no-sniff":xs)               = go acc { loSniff    = False } rs xs
     go acc rs ("--skip":n:xs)
       | Just k <- readMaybeInt n              = go acc { loSkip = k } rs xs
     go acc rs ("--comment":cs:xs)

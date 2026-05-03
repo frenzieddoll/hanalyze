@@ -24,6 +24,7 @@ module DataIO.CSV
   ) where
 
 import qualified DataFrame                    as DX
+import qualified DataFrame.IO.CSV             as DXIO
 import qualified DataFrame.Internal.DataFrame as DXD
 
 import Control.Exception (SomeException, try, evaluate)
@@ -42,6 +43,7 @@ import Text.Read (readMaybe)
 
 import DataIO.Log (Loaded, LogReport, mkInfo, hasWarnings, logReport, entries)
 import DataIO.Health (inspectWithPreview)
+import qualified DataIO.Sniff as Sniff
 import qualified System.IO.Temp as Tmp
 import System.IO (hClose)
 
@@ -217,33 +219,103 @@ data LoadOpts = LoadOpts
   , loComment  :: !(Maybe Char)
   , loNoHeader :: !Bool
   , loStrict   :: !Bool
+  , loSniff    :: !Bool        -- ^ 自動推論を有効にする (デフォルト True)
+  , loDelim    :: !(Maybe Char) -- ^ delimiter 上書き (Nothing なら拡張子 / sniff)
   } deriving (Eq, Show)
 
 defaultLoadOpts :: LoadOpts
-defaultLoadOpts = LoadOpts 0 Nothing False False
+defaultLoadOpts = LoadOpts 0 Nothing False False True Nothing
 
 -- | 'LoadOpts' を反映して 'loadAutoSafe' を呼ぶ。skip/comment/noHeader が
 -- いずれも無指定のときは元ファイルを直接読む。指定があれば一時ファイルに
 -- 前処理結果を書き出してから読む。
+--
+-- 'loSniff' が True (デフォルト) のときは、ユーザ未指定の項目に限り
+-- 'DataIO.Sniff.sniffBytes' の結果で自動補完する:
+--
+-- * 'loSkip == 0' なら sniff の skip 値で上書き
+-- * 'loComment == Nothing' なら sniff のコメント文字で上書き
+-- * 'loNoHeader == False' で sniff が「ヘッダ無し」を強く示唆したら上書き
+--
+-- 自動推論で値が変わったときは I013 (Info コード) として LogReport に残す。
 loadAutoSafeWith
   :: LoadOpts -> FilePath
   -> IO (Either ParseError (Loaded DXD.DataFrame))
-loadAutoSafeWith opts path
-  | needRewrite opts = withRewritten opts path go
-  | otherwise        = go path mempty
+loadAutoSafeWith opts0 path = do
+  -- Sniff: 必要なら冒頭バイト列を読んでオプションを補完する
+  (opts, sniffLog) <- if loSniff opts0
+    then do
+      eRaw <- try (BS.readFile path) :: IO (Either SomeException BS.ByteString)
+      case eRaw of
+        Left _    -> return (opts0, mempty)
+        Right raw -> return (applySniff opts0 (Sniff.sniffBytes (BS.take 8192 raw)))
+    else return (opts0, mempty)
+  if needRewrite opts
+    then withRewritten opts path (\p extra -> go opts p (sniffLog <> extra))
+    else go opts path sniffLog
   where
-    go p extraLog = do
-      r <- loadAutoSafe p
+    go effOpts p extraLog = do
+      -- delimiter 指定があれば Hackage の readCsvWithOpts を使う
+      r <- case loDelim effOpts of
+        Nothing -> loadAutoSafe p
+        Just c  -> loadCsvWithDelim c p
       case r of
         Left  e        -> return (Left e)
         Right (df, lg) ->
           let lg' = extraLog <> lg
-          in if loStrict opts && hasWarnings lg'
+          in if loStrict opts0 && hasWarnings lg'
                then return $ Left
                       ("strict: 警告が発生しました ("
                          <> show (length (entries lg'))
-                         <> " 件)。--strict を外すか、--skip / --comment / --no-header で対処してください。")
+                         <> " 件)。--strict を外すか、--skip / --comment / --no-header / --no-sniff で対処してください。")
                else return (Right (df, lg'))
+
+-- | 指定 delimiter で CSV を読み、loadAutoSafe 同等の Loaded を返す。
+loadCsvWithDelim
+  :: Char -> FilePath -> IO (Either ParseError (Loaded DXD.DataFrame))
+loadCsvWithDelim c path = do
+  pre <- preflight path
+  case pre of
+    Left e  -> return (Left e)
+    Right rs -> do
+      let opts = DXIO.defaultReadOptions { DXIO.columnSeparator = c }
+      r <- try (DXIO.readCsvWithOpts opts path >>= evaluate)
+             :: IO (Either SomeException DXD.DataFrame)
+      return $ case r of
+        Left  e  -> Left (cleanError (show e))
+        Right df -> Right (df, inspectWithPreview (previewBytes rs) df)
+
+-- | sniff 結果を 'LoadOpts' に反映する。ユーザ指定がある項目 (>0 / Just /
+-- True) は尊重し、未指定のところだけ書き換える。書き換えた項目は
+-- I013 ログに残す。
+applySniff :: LoadOpts -> Sniff.Sniff -> (LoadOpts, LogReport)
+applySniff o s =
+  let (skip', noteSkip)   =
+        if loSkip o == 0 && Sniff.sfSkip s > 0
+          then (Sniff.sfSkip s,
+                Just $ "先頭 " <> tShow (Sniff.sfSkip s) <> " 行を skip (sniff)")
+          else (loSkip o, Nothing)
+      (comm', noteComm)  =
+        case (loComment o, Sniff.sfCommentChar s) of
+          (Nothing, Just c) -> (Just c,
+                                Just $ "コメント文字 '" <> T.singleton c <> "' を採用 (sniff)")
+          _                 -> (loComment o, Nothing)
+      (nohd', noteHdr)   =
+        if not (loNoHeader o) && not (Sniff.sfHasHeader s)
+          then (True,
+                Just "ヘッダ無しと推論 (sniff): col0... を生成")
+          else (loNoHeader o, Nothing)
+      (delim', noteDelim) =
+        case (loDelim o, Sniff.sfDelim s) of
+          (Nothing, c) | c /= ',' ->
+            (Just c, Just $ "delimiter '" <> T.singleton c <> "' を採用 (sniff)")
+          _                       -> (loDelim o, Nothing)
+      lg = mconcat
+             [ logReport (mkInfo "I013" m Nothing)
+             | Just m <- [noteSkip, noteComm, noteHdr, noteDelim]
+             ]
+  in (o { loSkip = skip', loComment = comm', loNoHeader = nohd'
+        , loDelim = delim' }, lg)
 
 needRewrite :: LoadOpts -> Bool
 needRewrite o = loSkip o > 0
