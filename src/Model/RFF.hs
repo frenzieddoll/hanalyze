@@ -27,10 +27,13 @@ module Model.RFF
   , sampleRFFMatern52
   , rffFeatures
   , rffApproxKernel
-    -- * RFF Ridge 回帰
+    -- * RFF Ridge 回帰 (主 API: 多 y)
   , RFFRidgeFit (..)
   , rffRidge
   , predictRFFRidge
+  , RFFRidgeFitMulti (..)
+  , rffRidgeMulti
+  , predictRFFRidgeMulti
     -- * RFF GP (事後 mean + variance)
   , RFFGPFit (..)
   , rffGP
@@ -43,6 +46,9 @@ module Model.RFF
   , RFFRidgeFitMV (..)
   , rffRidgeMV
   , predictRFFRidgeMV
+  , RFFRidgeFitMVMO (..)
+  , rffRidgeMVMulti
+  , predictRFFRidgeMVMulti
     -- * 周辺尤度最大化 (Phase 2: ℓ, σ_f, σ_n の自動チューニング)
   , logMarginalLikRBFMV
   , maximizeMarginalLikRBFMV
@@ -155,17 +161,12 @@ data RFFRidgeFit = RFFRidgeFit
   , rffrLambda   :: Double
   } deriving (Show)
 
--- | RFF Ridge: w = (ΦᵀΦ + λI)⁻¹ Φᵀ y。
--- λ → 0 で通常 Kernel Ridge に近づき、Φ が正確に kernel を再現するなら一致。
+-- | RFF Ridge (単出力)。多出力 'rffRidgeMulti' に y を 1 列行列化して委譲。
 rffRidge :: RFFFeatures -> [Double] -> [Double] -> Double -> RFFRidgeFit
 rffRidge rff xs ys lam =
-  let phi   = rffFeatures rff xs        -- n × D
-      d     = rffDim rff
-      yV    = LA.fromList ys
-      gram  = LA.tr phi LA.<> phi       -- D × D
-      regK  = gram + LA.scale lam (LA.ident d)
-      rhs   = LA.tr phi LA.#> yV        -- D
-      w     = regK LA.<\> rhs
+  let yMat = LA.asColumn (LA.fromList ys)
+      mf   = rffRidgeMulti rff xs yMat lam
+      w    = LA.flatten (rffrmWeights mf LA.¿ [0])
   in RFFRidgeFit rff w lam
 
 predictRFFRidge :: RFFRidgeFit -> [Double] -> [Double]
@@ -173,6 +174,30 @@ predictRFFRidge fit xNew =
   let phi  = rffFeatures (rffrFeatures fit) xNew
       yhat = phi LA.#> rffrWeights fit
   in LA.toList yhat
+
+-- | 多出力 RFF Ridge (1D 入力)。Y は n × q、重み W は D × q。
+data RFFRidgeFitMulti = RFFRidgeFitMulti
+  { rffrmFeatures :: RFFFeatures
+  , rffrmWeights  :: LA.Matrix Double   -- ^ D × q
+  , rffrmLambda   :: Double
+  } deriving (Show)
+
+-- | 多出力 RFF Ridge: W = (ΦᵀΦ + λI)⁻¹ Φᵀ Y。
+rffRidgeMulti :: RFFFeatures -> [Double] -> LA.Matrix Double -> Double
+              -> RFFRidgeFitMulti
+rffRidgeMulti rff xs ys lam =
+  let phi   = rffFeatures rff xs           -- n × D
+      d     = rffDim rff
+      gram  = LA.tr phi LA.<> phi          -- D × D
+      regK  = gram + LA.scale lam (LA.ident d)
+      rhs   = LA.tr phi LA.<> ys           -- D × q
+      w     = regK LA.<\> rhs
+  in RFFRidgeFitMulti rff w lam
+
+predictRFFRidgeMulti :: RFFRidgeFitMulti -> [Double] -> LA.Matrix Double
+predictRFFRidgeMulti fit xNew =
+  let phi = rffFeatures (rffrmFeatures fit) xNew
+  in phi LA.<> rffrmWeights fit
 
 -- ---------------------------------------------------------------------------
 -- RFF GP (ベイズ線形回帰 with prior w ~ N(0, I))
@@ -292,23 +317,43 @@ data RFFRidgeFitMV = RFFRidgeFitMV
   , rffrmvLambda   :: Double
   } deriving (Show)
 
--- | 多変量 RFF Ridge: w = (ΦᵀΦ + λI)⁻¹ Φᵀ y。X は n×p。
+-- | 多変量 RFF Ridge (単出力)。多出力 'rffRidgeMVMulti' に y を 1 列行列化して委譲。
 rffRidgeMV :: RFFFeaturesMV -> LA.Matrix Double -> [Double] -> Double
            -> RFFRidgeFitMV
 rffRidgeMV rff x ys lam =
-  let phi  = rffFeaturesMV rff x         -- n × D
-      d    = LA.cols (rffmvOmegas rff)
-      yV   = LA.fromList ys
-      gram = LA.tr phi LA.<> phi
-      regK = gram + LA.scale lam (LA.ident d)
-      rhs  = LA.tr phi LA.#> yV
-      w    = regK LA.<\> rhs
+  let yMat = LA.asColumn (LA.fromList ys)
+      mf   = rffRidgeMVMulti rff x yMat lam
+      w    = LA.flatten (rffrmvmWeights mf LA.¿ [0])
   in RFFRidgeFitMV rff w lam
 
 predictRFFRidgeMV :: RFFRidgeFitMV -> LA.Matrix Double -> [Double]
 predictRFFRidgeMV fit xNew =
   let phi = rffFeaturesMV (rffrmvFeatures fit) xNew
   in LA.toList (phi LA.#> rffrmvWeights fit)
+
+-- | 多変量入力 + 多出力 RFF Ridge。X は n×p、Y は n×q、W は D×q。
+data RFFRidgeFitMVMO = RFFRidgeFitMVMO
+  { rffrmvmFeatures :: RFFFeaturesMV
+  , rffrmvmWeights  :: LA.Matrix Double   -- ^ D × q
+  , rffrmvmLambda   :: Double
+  } deriving (Show)
+
+-- | 多変量入力 + 多出力 RFF Ridge: W = (ΦᵀΦ + λI)⁻¹ Φᵀ Y。
+rffRidgeMVMulti :: RFFFeaturesMV -> LA.Matrix Double -> LA.Matrix Double
+                -> Double -> RFFRidgeFitMVMO
+rffRidgeMVMulti rff x ys lam =
+  let phi  = rffFeaturesMV rff x           -- n × D
+      d    = LA.cols (rffmvOmegas rff)
+      gram = LA.tr phi LA.<> phi
+      regK = gram + LA.scale lam (LA.ident d)
+      rhs  = LA.tr phi LA.<> ys            -- D × q
+      w    = regK LA.<\> rhs
+  in RFFRidgeFitMVMO rff w lam
+
+predictRFFRidgeMVMulti :: RFFRidgeFitMVMO -> LA.Matrix Double -> LA.Matrix Double
+predictRFFRidgeMVMulti fit xNew =
+  let phi = rffFeaturesMV (rffrmvmFeatures fit) xNew
+  in phi LA.<> rffrmvmWeights fit
 
 -- ---------------------------------------------------------------------------
 -- 周辺尤度最大化 (RFF GP 流の HP チューニング、Phase 2)

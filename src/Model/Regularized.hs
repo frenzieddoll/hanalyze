@@ -20,10 +20,11 @@ module Model.Regularized
   , predictRegularized
   , standardize
   , unstandardizeBeta
-    -- * 多出力 (Phase T2)
+    -- * 多出力 (主 API)
   , RegFitMulti (..)
   , fitRegularizedMulti
   , predictRegularizedMulti
+  , regFitFromMulti
     -- * 正則化パス
   , regularizationPath
   ) where
@@ -59,15 +60,14 @@ data RegFit = RegFit
 -- メイン API
 -- ---------------------------------------------------------------------------
 
--- | ペナルティ付き回帰を fit。
+-- | ペナルティ付き回帰を fit (単出力)。
+-- 多出力 'fitRegularizedMulti' に Y を 1 列行列化して委譲し、
+-- 結果の列 0 を 'RegFit' として返す。
 fitRegularized :: Penalty -> LA.Matrix Double -> LA.Vector Double -> RegFit
-fitRegularized pen x y = case pen of
-  NoPen        -> fitOLS x y
-  L2 lambda    -> fitRidge lambda x y
-  L1 lambda    -> fitLasso lambda x y 1000 1e-7
-  ElasticNet l1 l2 -> fitElasticNet l1 l2 x y 1000 1e-7
+fitRegularized pen x y =
+  regFitFromMulti 0 (fitRegularizedMulti pen x (LA.asColumn y))
 
--- | 予測。
+-- | 予測 (単出力)。
 predictRegularized :: RegFit -> LA.Matrix Double -> LA.Vector Double
 predictRegularized fit xNew = xNew LA.#> rfBeta fit
 
@@ -244,34 +244,88 @@ unstandardizeBeta sds betaStd =
        | j <- [0 .. p - 1] ]
 
 -- ---------------------------------------------------------------------------
--- 多出力対応 (Phase T2)
+-- 多出力対応 (主 API)
 -- ---------------------------------------------------------------------------
 
--- | 多出力正則化回帰のフィット結果。各列ごとに RegFit を持つ。
+-- | 多出力正則化回帰のフィット結果。
+-- Y は n × q、係数 B は p × q、予測 Ŷ = X B。
+-- 'rfmFits' は列ごとの単出力 'RegFit' (R²、|β|>0 の数、反復回数を提供)。
 data RegFitMulti = RegFitMulti
-  { rfmFits     :: [RegFit]            -- 列ごとの単出力 fit
-  , rfmBeta     :: LA.Matrix Double    -- p × q
-  , rfmYHat     :: LA.Matrix Double    -- n × q
-  , rfmResid    :: LA.Matrix Double    -- n × q
-  , rfmR2       :: [Double]            -- 列ごとの R²
+  { rfmFits     :: [RegFit]            -- ^ 列ごとの単出力 fit
+  , rfmBeta     :: LA.Matrix Double    -- ^ p × q
+  , rfmYHat     :: LA.Matrix Double    -- ^ n × q
+  , rfmResid    :: LA.Matrix Double    -- ^ n × q
+  , rfmR2       :: [Double]            -- ^ 列ごとの R²
   , rfmPenalty  :: Penalty
   } deriving (Show)
 
--- | 多出力正則化回帰: Y は n × q、各列を独立に fitRegularized で解く。
+-- | 多出力正則化回帰: Y は n × q。
+--
+-- - OLS / Ridge: 行列形式 1 回の線形求解で全 q 列を一括処理 (高速)。
+-- - Lasso / Elastic Net: 列ごと座標降下 (列間に依存なし、独立並列可)。
 fitRegularizedMulti :: Penalty -> LA.Matrix Double -> LA.Matrix Double
                     -> RegFitMulti
-fitRegularizedMulti pen x y =
-  let q        = LA.cols y
-      colFit j = fitRegularized pen x (LA.flatten (y LA.¿ [j]))
-      fits     = [colFit j | j <- [0 .. q - 1]]
-      betaMat  = LA.fromColumns [rfBeta f | f <- fits]
-      yHatMat  = LA.fromColumns [rfYHat f | f <- fits]
-      residMat = LA.fromColumns [rfResid f | f <- fits]
-      r2List   = [rfR2 f | f <- fits]
-  in RegFitMulti fits betaMat yHatMat residMat r2List pen
+fitRegularizedMulti pen x y = case pen of
+  NoPen        -> fitOLSMulti x y
+  L2 lambda    -> fitRidgeMulti lambda x y
+  L1 lambda    -> fitColumnwise (fitLasso lambda) pen x y
+  ElasticNet l1 l2 -> fitColumnwise (fitElasticNet l1 l2) pen x y
 
 predictRegularizedMulti :: RegFitMulti -> LA.Matrix Double -> LA.Matrix Double
 predictRegularizedMulti mf xNew = xNew LA.<> rfmBeta mf
+
+-- | RegFitMulti の j 列目を 'RegFit' として取り出す。
+regFitFromMulti :: Int -> RegFitMulti -> RegFit
+regFitFromMulti j mf
+  | j < length (rfmFits mf) = rfmFits mf !! j
+  | otherwise = error ("regFitFromMulti: column " ++ show j ++ " out of range")
+
+-- | 行列形式の OLS: B = X \\ Y (LAPACK 1 回)。
+fitOLSMulti :: LA.Matrix Double -> LA.Matrix Double -> RegFitMulti
+fitOLSMulti x y =
+  let beta = x LA.<\> y
+  in mkRegFitMulti beta x y NoPen (replicate (LA.cols y) 0)
+
+-- | 行列形式の Ridge: B = (XᵀX + λI)⁻¹ XᵀY (1 回の Cholesky/LU)。
+fitRidgeMulti :: Double -> LA.Matrix Double -> LA.Matrix Double -> RegFitMulti
+fitRidgeMulti lambda x y =
+  let p    = LA.cols x
+      reg  = LA.tr x LA.<> x + LA.scale lambda (LA.ident p)
+      xty  = LA.tr x LA.<> y
+      beta = reg LA.<\> xty
+  in mkRegFitMulti beta x y (L2 lambda) (replicate (LA.cols y) 0)
+
+-- | 列ごと CD (Lasso / Elastic Net 用)。
+fitColumnwise
+  :: (LA.Matrix Double -> LA.Vector Double -> Int -> Double -> RegFit)
+  -> Penalty
+  -> LA.Matrix Double -> LA.Matrix Double
+  -> RegFitMulti
+fitColumnwise fitCol pen x y =
+  let q     = LA.cols y
+      fits  = [ fitCol x (LA.flatten (y LA.¿ [j])) 1000 1e-7
+              | j <- [0 .. q - 1] ]
+      bMat  = LA.fromColumns [rfBeta f | f <- fits]
+      yHat  = LA.fromColumns [rfYHat f | f <- fits]
+      res   = LA.fromColumns [rfResid f | f <- fits]
+      r2s   = [rfR2 f | f <- fits]
+  in RegFitMulti fits bMat yHat res r2s pen
+
+-- | 共通: B 行列から RegFitMulti を組み立て。各列の R² と非零係数数も計算。
+mkRegFitMulti :: LA.Matrix Double -> LA.Matrix Double -> LA.Matrix Double
+              -> Penalty -> [Int] -> RegFitMulti
+mkRegFitMulti beta x y pen iters =
+  let yHat  = x LA.<> beta
+      res   = y - yHat
+      q     = LA.cols y
+      colFit j =
+        let b   = LA.flatten (beta LA.¿ [j])
+            yh  = LA.flatten (yHat LA.¿ [j])
+            rj  = LA.flatten (res LA.¿ [j])
+            yj  = LA.flatten (y LA.¿ [j])
+        in mkRegFit b yh rj yj pen (iters !! j)
+      fits  = [colFit j | j <- [0 .. q - 1]]
+  in RegFitMulti fits beta yHat res [rfR2 f | f <- fits] pen
 
 -- ---------------------------------------------------------------------------
 -- Regularization path

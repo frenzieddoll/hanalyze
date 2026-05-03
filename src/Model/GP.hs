@@ -35,6 +35,7 @@ module Model.GP
     -- * 推論
   , logMarginalLikelihood
   , fitGP
+  , fitGPMulti
   , optimizeGP
     -- * 対話的予測用データ
   , GPPredData (..)
@@ -172,28 +173,17 @@ logMarginalLikelihood trainX trainY ker params =
       dataFit = LA.dot y alpha
   in -0.5 * dataFit - 0.5 * logDet - fromIntegral n / 2 * log (2 * pi)
 
--- | テスト点 testX での GP 事後予測を行う。
+-- | テスト点 testX での GP 事後予測 (単出力)。
+-- 多出力 'fitGPMulti' に y を 1 列行列化して委譲、列 0 を取り出す。
 --
 -- 事後平均: μ_* = K_*ᵀ Ky⁻¹ y
 -- 事後分散: σ²_i = k(x*_i, x*_i) − K_*[i] Ky⁻¹ K_*[i]ᵀ
 fitGP :: GPModel -> [Double] -> [Double] -> [Double] -> GPResult
 fitGP model trainX trainY testX =
-  let ker    = gpKernel model
-      params = gpParams model
-      ky     = noiseKernel ker params trainX
-      y      = LA.fromList trainY
-      kyInv  = LA.inv ky
-      -- 事後平均
-      alpha   = kyInv LA.#> y
-      kStar   = buildKernelMatrix ker params testX trainX  -- (m, n)
-      meanVec = kStar LA.#> alpha                          -- (m,)
-      -- 事後分散
-      w        = kStar LA.<> kyInv             -- (m, n): K_* Ky⁻¹
-      diagKss  = [kernelFn ker params x x | x <- testX]
-      varList  = zipWith3 (\d ks wi -> max 0 (d - LA.dot ks wi))
-                   diagKss (LA.toRows kStar) (LA.toRows w)
-      stdList  = map sqrt varList
-      mu       = LA.toList meanVec
+  let yMat = LA.asColumn (LA.fromList trainY)
+      (meanMat, varList) = fitGPMulti model trainX yMat testX
+      mu = LA.toList (LA.flatten (meanMat LA.¿ [0]))
+      stdList = map sqrt varList
   in GPResult
        { gpTestX  = testX
        , gpMean   = mu
@@ -201,6 +191,27 @@ fitGP model trainX trainY testX =
        , gpLower  = zipWith (\m s -> m - 2 * s) mu stdList
        , gpUpper  = zipWith (\m s -> m + 2 * s) mu stdList
        }
+
+-- | 多出力 GP 事後予測。Y は n × q (列 = 出力タスク)、すべて同じカーネルと
+-- ハイパーパラメータを共有する (Cholesky / Ky⁻¹ も共有)。
+--
+-- 戻り値: (事後平均行列 m × q, 事後分散ベクトル 長さ m)。
+-- 分散は y に依らないため q 出力で共通。
+fitGPMulti :: GPModel -> [Double] -> LA.Matrix Double -> [Double]
+           -> (LA.Matrix Double, [Double])
+fitGPMulti model trainX trainY testX =
+  let ker    = gpKernel model
+      params = gpParams model
+      ky     = noiseKernel ker params trainX
+      kyInv  = LA.inv ky
+      alpha  = kyInv LA.<> trainY                  -- (n × q)
+      kStar  = buildKernelMatrix ker params testX trainX  -- (m × n)
+      meanMt = kStar LA.<> alpha                    -- (m × q)
+      w      = kStar LA.<> kyInv                    -- (m × n)
+      diagKss = [kernelFn ker params x x | x <- testX]
+      varList = zipWith3 (\d ks wi -> max 0 (d - LA.dot ks wi))
+                  diagKss (LA.toRows kStar) (LA.toRows w)
+  in (meanMt, varList)
 
 -- ---------------------------------------------------------------------------
 -- Hyperparameter optimisation

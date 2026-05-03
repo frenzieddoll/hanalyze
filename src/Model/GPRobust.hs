@@ -27,6 +27,10 @@ module Model.GPRobust
     RobustGPFit (..)
   , fitGPRobust
   , predictGPRobust
+    -- * 多出力 (主 API)
+  , RobustGPFitMulti (..)
+  , fitGPRobustMulti
+  , predictGPRobustMulti
   ) where
 
 import qualified Numeric.LinearAlgebra as LA
@@ -163,3 +167,41 @@ predictGPRobust fit testX =
       varList = zipWith3 (\d ksRow wRow -> max 0 (d - LA.dot ksRow wRow))
                   diagKss (LA.toRows kStar) (LA.toRows ws)
   in zip means varList
+
+-- ---------------------------------------------------------------------------
+-- 多出力 (列ごと IRLS、カーネル行列を共有)
+-- ---------------------------------------------------------------------------
+
+-- | 多出力ロバスト GP の結果。q 出力ぶんの 'RobustGPFit' を保持し、
+-- カーネル / ハイパラ / 尤度は共通。
+data RobustGPFitMulti = RobustGPFitMulti
+  { rgmKernel :: Kernel
+  , rgmParams :: GPParams
+  , rgmLik    :: RobustLikelihood
+  , rgmTrainX :: [Double]
+  , rgmFits   :: [RobustGPFit]   -- ^ 列ごとの単出力 fit
+  } deriving (Show)
+
+-- | 多出力ロバスト GP fit。Y は n × q、各列ごとに IRLS (重みは出力依存)。
+fitGPRobustMulti
+  :: Kernel
+  -> GPParams
+  -> RobustLikelihood
+  -> [Double]            -- ^ 訓練 X
+  -> LA.Matrix Double    -- ^ Y (n × q)
+  -> RobustGPFitMulti
+fitGPRobustMulti ker params lik trainX yMat =
+  let q     = LA.cols yMat
+      yCols = [ LA.toList (LA.flatten (yMat LA.¿ [j])) | j <- [0 .. q - 1] ]
+      fits  = [ fitGPRobust ker params lik trainX y | y <- yCols ]
+  in RobustGPFitMulti ker params lik trainX fits
+
+-- | 多出力ロバスト GP 予測。戻り値: (mean 行列 m × q, 列ごとの分散リスト)。
+predictGPRobustMulti :: RobustGPFitMulti -> [Double]
+                     -> (LA.Matrix Double, [[Double]])
+predictGPRobustMulti mf testX =
+  let preds = [ predictGPRobust f testX | f <- rgmFits mf ]
+      meansCols = map (map fst) preds
+      varsCols  = map (map snd) preds
+      meansMat  = LA.fromColumns [ LA.fromList col | col <- meansCols ]
+  in (meansMat, varsCols)

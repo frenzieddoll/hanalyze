@@ -11,14 +11,20 @@ module Model.Kernel
   ( Kernel (..)
   , kernelEval
   , nwRegression
+  , nwRegressionMulti
   , KernelRidgeFit (..)
   , kernelRidge
   , predictKernelRidge
   , gridSearchBandwidth
-    -- * 多出力
+    -- * 多出力 (主 API)
   , KernelRidgeFitMulti (..)
   , kernelRidgeMulti
   , predictKernelRidgeMulti
+  , fittedKernelRidgeMulti
+  , r2Multi
+  , autoTuneKernelRidgeMulti
+  , defaultHGrid
+  , defaultLamGrid
   ) where
 
 import qualified Data.Vector as V
@@ -62,16 +68,36 @@ kernelEval k u = case k of
 --   * @h@      — bandwidth (h > 0)
 --   * @xs@, @ys@ — 観測
 --   * @xNew@   — 予測点
+-- | 単出力 NW (多出力 'nwRegressionMulti' に Y を 1 列行列化して委譲)。
 nwRegression :: Kernel -> Double
              -> V.Vector Double -> V.Vector Double
              -> V.Vector Double -> V.Vector Double
-nwRegression kern h xs ys xNew = V.map predict xNew
-  where
-    predict xStar =
-      let weights = V.map (\xi -> kernelEval kern ((xStar - xi) / h)) xs
-          num     = V.sum (V.zipWith (*) weights ys)
-          den     = V.sum weights
-      in if den == 0 then 0 else num / den
+nwRegression kern h xs ys xNew =
+  let yMat = LA.asColumn (LA.fromList (V.toList ys))
+      mat  = nwRegressionMulti kern h xs yMat xNew
+  in V.fromList (LA.toList (LA.flatten (mat LA.¿ [0])))
+
+-- | 多出力 NW: 同じ重み行列を全 q 列で再利用。
+-- W は (m × n)、Y は (n × q)、戻り値 = (W·Y) を行ごとに正規化した (m × q)。
+nwRegressionMulti :: Kernel -> Double
+                  -> V.Vector Double      -- xs (n)
+                  -> LA.Matrix Double     -- ys (n × q)
+                  -> V.Vector Double      -- xNew (m)
+                  -> LA.Matrix Double     -- (m × q)
+nwRegressionMulti kern h xs ys xNew =
+  let n  = V.length xs
+      m  = V.length xNew
+      q  = LA.cols ys
+      wMat = LA.fromLists
+               [ [ kernelEval kern ((xStar - xi) / h)
+                 | xi <- V.toList xs ]
+               | xStar <- V.toList xNew ]   -- (m × n)
+      num  = wMat LA.<> ys                  -- (m × q)
+      dens = LA.toList (wMat LA.#> LA.konst 1 n)
+      rows = [ if d == 0 then replicate q 0
+                 else [ (num `LA.atIndex` (i, j)) / d | j <- [0 .. q - 1] ]
+             | (i, d) <- zip [0 .. m - 1] dens ]
+  in LA.fromLists rows
 
 -- ---------------------------------------------------------------------------
 -- Kernel Ridge regression
@@ -95,17 +121,16 @@ gramMatrix kern h xs =
        [ kernelEval kern ((xi - xj) / h)
        | xi <- xv, xj <- xv ]
 
--- | Kernel Ridge regression: α = (K + λ I)⁻¹ y、予測 ŷ(x*) = k(x*)ᵀ α。
+-- | Kernel Ridge regression (単出力)。多出力 'kernelRidgeMulti' に
+-- Y を 1 列行列化して委譲し、α 行列の列 0 を取り出す。
 kernelRidge :: Kernel -> Double -> Double
             -> V.Vector Double -> V.Vector Double
             -> KernelRidgeFit
 kernelRidge kern h lam xs ys =
-  let n     = V.length xs
-      kMat  = gramMatrix kern h xs
-      regK  = kMat + LA.scale lam (LA.ident n)
-      yV    = LA.fromList (V.toList ys)
-      alpha = LA.flatten (regK LA.<\> LA.asColumn yV)
-  in KernelRidgeFit kern h lam xs alpha
+  let yMat = LA.asColumn (LA.fromList (V.toList ys))
+      mf   = kernelRidgeMulti kern h lam xs yMat
+      a    = LA.flatten (krmAlpha mf LA.¿ [0])
+  in KernelRidgeFit kern h lam xs a
 
 predictKernelRidge :: KernelRidgeFit -> V.Vector Double -> V.Vector Double
 predictKernelRidge fit xNew =
@@ -187,3 +212,82 @@ predictKernelRidgeMulti fit xNew =
                   | xi <- V.toList xs ]
                 | xStar <- V.toList xNew ]
   in kMat LA.<> alpha
+
+-- | 学習点での予測 (= ŷ_train)。
+fittedKernelRidgeMulti :: KernelRidgeFitMulti -> LA.Matrix Double
+fittedKernelRidgeMulti fit = predictKernelRidgeMulti fit (krmXs fit)
+
+-- | 多出力 R² (q ベクトル)。Y 観測, Ŷ 予測, n×q 同形。
+r2Multi :: LA.Matrix Double -> LA.Matrix Double -> V.Vector Double
+r2Multi ys yhat =
+  let n  = LA.rows ys
+      q  = LA.cols ys
+      colR2 j =
+        let yc  = LA.toList (LA.flatten (ys     LA.¿ [j]))
+            yhc = LA.toList (LA.flatten (yhat   LA.¿ [j]))
+            mu  = sum yc / fromIntegral n
+            sst = sum [(y - mu)^(2::Int) | y <- yc]
+            sse = sum [(y - p)^(2::Int) | (y, p) <- zip yc yhc]
+        in if sst == 0 then 0 else 1 - sse / sst
+  in V.fromList [ colR2 j | j <- [0 .. q - 1] ]
+
+-- | LOOCV 解析解で (h, λ) 同時グリッドサーチ。Hat 行列の対角を 1 回計算し
+-- 全 q 出力の LOO 残差を一括評価。
+--
+-- 戻り値: (best fit, best h, best λ, best mean LOO MSE)
+autoTuneKernelRidgeMulti
+  :: Kernel
+  -> V.Vector Double      -- xs (n)
+  -> LA.Matrix Double     -- ys (n × q)
+  -> [Double]             -- h candidates
+  -> [Double]             -- λ candidates
+  -> (KernelRidgeFitMulti, Double, Double, Double)
+autoTuneKernelRidgeMulti kern xs ys hs lams =
+  let n   = V.length xs
+      q   = LA.cols ys
+      tot = fromIntegral (n * q) :: Double
+      score h lam =
+        let kMat = gramMatrix kern h xs
+            regK = kMat + LA.scale lam (LA.ident n)
+            ainv = LA.inv regK
+            hat  = kMat LA.<> ainv          -- (n × n)
+            diagH = LA.takeDiag hat
+            yhat = hat LA.<> ys             -- (n × q)
+            res  = ys - yhat                -- (n × q)
+            -- LOO 残差: r_i / (1 - H_ii)、列方向ブロードキャスト
+            denom = LA.cmap (\h_ii -> 1 - h_ii) diagH
+            invDenom = LA.cmap (\d -> if abs d < 1e-10 then 0 else 1/d) denom
+            scaler = LA.fromColumns (replicate q invDenom)
+            looR  = res * scaler
+            sse   = LA.sumElements (looR * looR)
+        in sse / tot
+      grid = [ (h, lam, score h lam) | h <- hs, lam <- lams ]
+      best@(bestH, bestL, bestS) = head [ p | p@(_,_,s) <- grid
+                                             , s == minimum (map (\(_,_,x) -> x) grid) ]
+      _ = best
+      fit  = kernelRidgeMulti kern bestH bestL xs ys
+  in (fit, bestH, bestL, bestS)
+
+-- | log-spaced bandwidth 候補。`defaultHGrid xs` で xs のレンジに合わせた 30 候補。
+defaultHGrid :: V.Vector Double -> [Double]
+defaultHGrid xs =
+  let xv  = V.toList xs
+      mn  = minimum xv
+      mx  = maximum xv
+      rng = mx - mn
+      lo  = max 1e-3 (rng / 100)
+      hi  = max (lo * 10) rng
+      n   = 30
+      lLo = log lo
+      lHi = log hi
+      step = (lHi - lLo) / fromIntegral (n - 1)
+  in [ exp (lLo + fromIntegral i * step) | i <- [0 .. n - 1 :: Int] ]
+
+-- | log-spaced λ 候補 (10 値、1e-6 .. 1e0)。
+defaultLamGrid :: [Double]
+defaultLamGrid =
+  let n = 10
+      lLo = log 1e-6
+      lHi = log 1e0
+      step = (lHi - lLo) / fromIntegral (n - 1)
+  in [ exp (lLo + fromIntegral i * step) | i <- [0 .. n - 1 :: Int] ]

@@ -1,7 +1,13 @@
 module Model.GLMM
   ( GLMMResult (..)
+  , fitLME
+  , fitGLMM
   , fitLMEDataFrame
   , fitGLMMDataFrame
+    -- * 多出力 (列ごと EM/Laplace、Family/Link は共有)
+  , GLMMResultMulti (..)
+  , fitLMEMulti
+  , fitGLMMMulti
   ) where
 
 import qualified DataFrame.Internal.DataFrame as DXD
@@ -378,3 +384,34 @@ fitGLMMDataFrame family link colDegs groupCol yCol df = do
       y                    = LA.fromList (V.toList yVec)
       (labels, idx, sizes) = buildGroups gVec
   return (fitGLMM family link dm y idx labels sizes)
+
+-- ---------------------------------------------------------------------------
+-- 多出力 GLMM (列ごとに EM/Laplace、グループ化情報は共有)
+-- ---------------------------------------------------------------------------
+
+data GLMMResultMulti = GLMMResultMulti
+  { glmmFits   :: [GLMMResult]   -- ^ 列ごと結果
+  , glmmGrpsM  :: V.Vector Text  -- ^ ソート済グループラベル (全列共通)
+  } deriving (Show)
+
+-- | 多出力 LME (Gaussian)。Y は n × q、列ごとに独立に fitLME。
+fitLMEMulti :: LA.Matrix Double -> LA.Matrix Double
+            -> V.Vector Int -> V.Vector Text -> V.Vector Int
+            -> GLMMResultMulti
+fitLMEMulti x y idx labels sizes =
+  let q     = LA.cols y
+      yCol j = LA.flatten (y LA.¿ [j])
+      fits  = [fitLME x (yCol j) idx labels sizes | j <- [0 .. q - 1]]
+  in GLMMResultMulti fits labels
+
+-- | 多出力 GLMM (non-Gaussian)。Y は n × q、列ごとに独立に fitGLMM。
+fitGLMMMulti :: Family -> LinkFn
+             -> LA.Matrix Double -> LA.Matrix Double
+             -> V.Vector Int -> V.Vector Text -> V.Vector Int
+             -> GLMMResultMulti
+fitGLMMMulti family link x y idx labels sizes =
+  let q     = LA.cols y
+      yCol j = LA.flatten (y LA.¿ [j])
+      fits  = [fitGLMM family link x (yCol j) idx labels sizes
+              | j <- [0 .. q - 1]]
+  in GLMMResultMulti fits labels

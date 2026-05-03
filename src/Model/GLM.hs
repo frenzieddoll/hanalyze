@@ -8,6 +8,9 @@ module Model.GLM
   , fitGLM
   , fitGLMFull
   , fitGLMWithSmooth
+    -- * 多出力 (列ごと IRLS、Family/Link は共有)
+  , GLMFitMulti (..)
+  , fitGLMMulti
   ) where
 
 import qualified DataFrame.Internal.DataFrame as DXD
@@ -270,3 +273,32 @@ glmDeviance Poisson y mu =
 xlogy :: Double -> Double -> Double
 xlogy 0 _ = 0
 xlogy x y = x * log y
+
+-- ---------------------------------------------------------------------------
+-- 多出力 GLM (列ごと IRLS)
+-- ---------------------------------------------------------------------------
+
+-- | 多出力 GLM の結果。q 出力ぶん同じ Family/Link で IRLS を実行。
+data GLMFitMulti = GLMFitMulti
+  { gfmFamily   :: Family
+  , gfmLinkFn   :: LinkFn
+  , gfmFits     :: [FitResult]            -- ^ 列ごと FitResult
+  , gfmFisher   :: [LA.Matrix Double]     -- ^ 列ごと (XᵀWX)⁻¹
+  , gfmBeta     :: LA.Matrix Double       -- ^ 係数行列 p × q
+  , gfmFitted   :: LA.Matrix Double       -- ^ 予測 n × q
+  , gfmResid    :: LA.Matrix Double       -- ^ 残差 n × q
+  } deriving (Show)
+
+-- | 多出力 GLM fit。Y は n × q。Family/Link は全列共通。
+fitGLMMulti :: Family -> LinkFn -> LA.Matrix Double -> LA.Matrix Double
+            -> GLMFitMulti
+fitGLMMulti family linkFn x y =
+  let q     = LA.cols y
+      perCol j = runIRLS family linkFn x (LA.flatten (y LA.¿ [j]))
+      pairs = [perCol j | j <- [0 .. q - 1]]
+      fits  = map fst pairs
+      fishs = map snd pairs
+      betaM = LA.fromColumns [LA.flatten (coefficients f) | f <- fits]
+      fitM  = LA.fromColumns [LA.flatten (fitted     f) | f <- fits]
+      resM  = LA.fromColumns [LA.flatten (residuals  f) | f <- fits]
+  in GLMFitMulti family linkFn fits fishs betaM fitM resM

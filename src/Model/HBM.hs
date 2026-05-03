@@ -56,6 +56,7 @@ module Model.HBM
   , sample
   , observe
   , observeMV
+  , observeColumns
   , potential
   , deterministic
   , runDeterministics
@@ -1111,6 +1112,20 @@ observe n d ys = liftF (Observe n d ys ())
 -- 内部的には @concat@ で flatten され、評価時に Distribution の次元 k で chunk される。
 observeMV :: Text -> Distribution a -> [[Double]] -> Model a ()
 observeMV n d obss = liftF (Observe n d (concat obss) ())
+
+-- | 多出力観測のヘルパ。q 個の (Distribution, 観測ベクトル) 組について
+-- @observe (prefix <> \"_\" <> j) dist_j ys_j@ を順に発行する。
+--
+-- 多出力回帰の尤度を 1 行で書きたいときに使う:
+--
+-- @
+-- observeColumns \"y\" [(Normal mu_j sigma_j, ysCol j) | j <- [0 .. q - 1]]
+-- @
+observeColumns :: Text -> [(Distribution a, [Double])] -> Model a ()
+observeColumns prefix pairs =
+  mapM_ (\(j, (d, ys)) ->
+           observe (prefix <> "_" <> T.pack (show (j :: Int))) d ys)
+        (zip [0..] pairs)
 
 -- | 任意の log-prob 項をモデルに加える (PyMC `pm.Potential` 相当)。
 --

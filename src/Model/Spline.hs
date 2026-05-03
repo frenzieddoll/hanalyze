@@ -26,8 +26,8 @@ module Model.Spline
 import qualified Data.Vector as V
 import qualified Numeric.LinearAlgebra as LA
 import Data.List (sort)
-import Model.Core (FitResult (..), coefficientsV)
-import Model.LM (fitLM, fitLMVec)
+import Model.Core (FitResult (..))
+import Model.LM (fitLM)
 
 -- | スプラインの種類。
 data SplineKind
@@ -138,14 +138,13 @@ naturalSplineBasis knots xs =
 -- Fit / predict
 -- ---------------------------------------------------------------------------
 
+-- | 単出力スプライン回帰。多出力 'fitSplineMulti' に Y を 1 列行列化して委譲。
 fitSpline :: SplineKind -> [Double] -> V.Vector Double -> V.Vector Double -> SplineFit
 fitSpline kind knots xs ys =
-  let dm = case kind of
-        BSpline k     -> bsplineBasis k knots xs
-        NaturalCubic  -> naturalSplineBasis knots xs
-      yV = LA.fromList (V.toList ys)
-      r  = fitLMVec dm yV
-  in SplineFit kind knots (coefficientsV r) r
+  let yMat = LA.asColumn (LA.fromList (V.toList ys))
+      mf   = fitSplineMulti kind knots xs yMat
+      beta = LA.flatten (smfBeta mf LA.¿ [0])
+  in SplineFit kind knots beta (smfResult mf)
 
 predictSpline :: SplineFit -> V.Vector Double -> V.Vector Double
 predictSpline fit xsNew =
