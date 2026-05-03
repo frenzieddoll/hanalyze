@@ -63,11 +63,12 @@ let hp = GPParams 0.6 1.0 0.05 1.0
 
 ### データ前処理 (欠損値補完・派生列・groupBy・Parquet/JSON)
 ```haskell
-import DataIO.External    (loadCSVExt, loadParquet, loadJSON)
+import DataIO.CSV         (loadAuto)
+import DataIO.External    (loadParquet, loadJSON)
 import DataIO.Preprocess  (countMissing, imputeMean, deriveNumeric,
                            filterRowsByNumeric, groupByMean, groupByCount)
-Right df0 <- loadCSVExt "data.csv"   -- dataframe lib 経由 (型推論↑、欠損→"NA")
-let Just df1     = imputeMean "score" df0           -- TextCol → NumericCol
+Right df0 <- loadAuto "data.csv"          -- Hackage dataframe を直接返す
+let df1          = imputeMean "score" df0          -- 欠損→平均で埋める
     df2          = filterRowsByNumeric "score" (>= 50) df1
     Just summary = groupByMean "category" "score" df2  -- グループ別平均
 ```
@@ -348,7 +349,7 @@ cabal run hanalyze -- info data.csv
 #   y                    numeric   100    -1.20       8.71       3.45       3.21       1.95
 ```
 
-TextCol で `NA` / `null` 等の欠損文字列が含まれる場合は末尾に `NA=N` が表示されます。
+テキスト列で `NA` / `null` 等の欠損文字列または null bitmap 上の欠損が含まれる場合は末尾に `NA=N` が表示されます。
 
 ### `hist` — ヒストグラム単体
 
@@ -477,9 +478,10 @@ cabal run hanalyze -- taguchi analyze L9 \
 
 ```
 DataIO/
-  CSV.hs           -- cassava ベース CSV/TSV/SSV 読込 (loadAuto)
-  External.hs      -- Hackage dataframe ラッパー (Parquet / JSON / 高度型推論)
-  Preprocess.hs    -- 欠損補完 / フィルタ / 派生列 / 列選択
+  CSV.hs           -- cassava ベース CSV/TSV/SSV 読込 (loadAuto, Hackage DataFrame を直接返す)
+  External.hs      -- Hackage dataframe を活用した Parquet / JSON ローダ
+  Convert.hs       -- DataFrame から V.Vector Double / Text を取り出す共通ヘルパ
+  Preprocess.hs    -- 欠損補完 / フィルタ / 派生列 / 列選択 / groupBy
 
 Stat/
   Distribution.hs  -- 確率分布 (Normal / Gamma / Beta / ...)

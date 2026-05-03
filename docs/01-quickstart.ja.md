@@ -204,8 +204,9 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 ### データ I/O・前処理
 | 用途 | モジュール | 主要関数 |
 |---|---|---|
-| CSV / TSV / SSV (cassava) | `DataIO.CSV` | `loadAuto`, `loadCSV`, `loadTSV` |
-| Parquet / JSON / 高度型推論 | `DataIO.External` | `loadCSVExt`, `loadParquet`, `loadJSON` |
+| CSV / TSV / SSV (cassava) | `DataIO.CSV` | `loadAuto`, `loadCSV`, `loadTSV` (Hackage `DataFrame` を直接返す) |
+| Parquet / JSON | `DataIO.External` | `loadParquet`, `loadJSON` |
+| DataFrame → ベクタ抽出 | `DataIO.Convert` | `getDoubleVec`, `getTextVec` |
 | 欠損補完 / フィルタ / 派生列 | `DataIO.Preprocess` | `imputeMean`, `imputeMedian`, `dropMissingRows`, `filterRowsByNumeric`, `deriveNumeric`, `mapNumeric` |
 | groupBy / aggregate | `DataIO.Preprocess` | `groupByMean`, `groupBySum`, `groupByMin`, `groupByMax`, `groupByMedian`, `groupByCount`, `groupByAggregate` |
 

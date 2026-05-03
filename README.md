@@ -64,11 +64,12 @@ With 3 outliers injected, Gaussian GP gives RMSE=0.44 while Cauchy GP gives
 
 ### Data preprocessing (missing-value imputation, derivations, groupBy, Parquet/JSON)
 ```haskell
-import DataIO.External    (loadCSVExt, loadParquet, loadJSON)
+import DataIO.CSV         (loadAuto)
+import DataIO.External    (loadParquet, loadJSON)
 import DataIO.Preprocess  (countMissing, imputeMean, deriveNumeric,
                            filterRowsByNumeric, groupByMean, groupByCount)
-Right df0 <- loadCSVExt "data.csv"   -- via dataframe lib (better type inference, NA → "NA")
-let Just df1     = imputeMean "score" df0           -- TextCol → NumericCol with mean fill
+Right df0 <- loadAuto "data.csv"          -- returns Hackage DataFrame directly
+let df1          = imputeMean "score" df0          -- mean-fill missing values
     df2          = filterRowsByNumeric "score" (>= 50) df1
     Just summary = groupByMean "category" "score" df2  -- per-group mean
 ```
@@ -349,7 +350,7 @@ cabal run hanalyze -- info data.csv
 #   y                    numeric   100    -1.20       8.71       3.45       3.21       1.95
 ```
 
-When a TextCol contains missing-value strings (`NA`, `null`, ...) a `NA=N` suffix is shown.
+When a text column contains missing-value strings (`NA`, `null`, ...) or null-bitmap missings, a `NA=N` suffix is shown.
 
 ### `hist` — standalone histogram
 
@@ -484,9 +485,10 @@ Add `hanalyze` to the `build-depends` field of `hanalyze.cabal`.
 
 ```
 DataIO/
-  CSV.hs           -- cassava-based CSV/TSV/SSV loader (loadAuto)
-  External.hs      -- Hackage `dataframe` wrapper (Parquet / JSON / advanced typing)
-  Preprocess.hs    -- missing-value imputation / filter / derived columns / column selection
+  CSV.hs           -- cassava-based CSV/TSV/SSV loader (loadAuto, returns Hackage DataFrame)
+  External.hs      -- Parquet / JSON loaders backed by Hackage `dataframe`
+  Convert.hs       -- helpers to extract V.Vector Double / Text from a DataFrame
+  Preprocess.hs    -- missing-value imputation / filter / derived columns / column selection / groupBy
 
 Stat/
   Distribution.hs  -- probability distributions (Normal / Gamma / Beta / ...)
