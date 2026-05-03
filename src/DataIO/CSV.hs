@@ -36,7 +36,8 @@ import qualified Data.Vector as V
 import System.IO.Error (tryIOError)
 import Text.Read (readMaybe)
 
-import DataIO.Log (Loaded, noLog)
+import DataIO.Log (Loaded)
+import DataIO.Health (inspectWithPreview)
 
 type ParseError = String
 
@@ -164,11 +165,11 @@ loadHackageSafe reader path = do
   pre <- preflight path
   case pre of
     Left e   -> return (Left e)
-    Right _  -> do
+    Right rs -> do
       r <- runHackageSafe reader path
       return $ case r of
         Left  e  -> Left e
-        Right df -> Right (df, noLog)
+        Right df -> Right (df, inspectWithPreview (previewBytes rs) df)
 
 -- | SSV の安全版。
 loadSsvSafe :: FilePath -> IO (Either ParseError (Loaded DXD.DataFrame))
@@ -176,11 +177,17 @@ loadSsvSafe path = do
   pre <- preflight path
   case pre of
     Left e  -> return (Left e)
-    Right _ -> do
+    Right rs -> do
       r <- loadSSV path
       return $ case r of
         Left  e  -> Left e
-        Right df -> Right (df, noLog)
+        Right df -> Right (df, inspectWithPreview (previewBytes rs) df)
+
+-- | 先頭 8 KB 程度を健全性検査のプレビュー用に切り出す。
+previewBytes :: [BS.ByteString] -> BS.ByteString
+previewBytes rs =
+  let joined = BS.intercalate "\n" rs
+  in BS.take 8192 joined
 
 -- | 拡張子で自動振り分けする安全版。
 loadAutoSafe :: FilePath -> IO (Either ParseError (Loaded DXD.DataFrame))
