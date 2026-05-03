@@ -2221,6 +2221,8 @@ kernelUsage = unlines
   , "Multivariate RFF (--method rff with multiple x columns):"
   , "  --group COL       group column for color-coded scatter+fit (e.g. name)"
   , "  --xaxis COL       column to use as horizontal axis in the plot (e.g. t)"
+  , "  --interactive     スライダで副軸を変えると JS が予測曲線を再計算"
+  , "                    (--report と併用、--xaxis の列以外がスライダになる)"
   , ""
   , "Examples:"
   , "  hanalyze kernel data.csv x y --method kr --bandwidth 0.5"
@@ -2243,6 +2245,7 @@ data KernelOpts = KernelOpts
   , koReport    :: Maybe FilePath
   , koGroup     :: Maybe T.Text  -- 多変量 RFF プロット用 group 列
   , koXAxis     :: Maybe T.Text  -- 多変量 RFF プロット用 横軸列名
+  , koInteractive :: Bool        -- インタラクティブ予測 (--report と併用)
   }
 
 defaultKernelOpts :: KernelOpts
@@ -2257,6 +2260,7 @@ defaultKernelOpts = KernelOpts
   , koReport    = Nothing
   , koGroup     = Nothing
   , koXAxis     = Nothing
+  , koInteractive = False
   }
 
 parseKernelKind :: String -> Either String Kern.Kernel
@@ -2324,6 +2328,8 @@ parseKernelOpts (flag : rest) acc
   | flag == "--xaxis" = case rest of
       (v:rs) -> parseKernelOpts rs (acc { koXAxis = Just (T.pack v) })
       []     -> Left "--xaxis requires a column name"
+  | flag == "--interactive" =
+      parseKernelOpts rest (acc { koInteractive = True })
   | otherwise = Left ("unexpected argument '" ++ flag ++ "'")
 
 doKernel :: FilePath -> String -> String -> KernelOpts -> LoadOpts -> IO ()
@@ -2394,9 +2400,10 @@ runKernelMV df xCols yCol xVecs yVec opts = do
       -- --report 指定時は ReportBuilder で統合 HTML を出力
       case koReport opts of
         Just rpath -> do
-          let rep    = RI.RFFMVReport fit gCol xCol
+          let rep    = RI.RFFMVReport fit gCol xCol (koInteractive opts)
               cfg    = RB.defaultReportConfig
-                         (yCol <> " — Multivariate RFF Ridge")
+                         (yCol <> " — Multivariate RFF Ridge"
+                            <> if koInteractive opts then " (interactive)" else "")
               secs   = RB.toReport cfg df xCols yCol rep
           RB.renderReport rpath cfg secs
           putStrLn $ "Report: " ++ rpath

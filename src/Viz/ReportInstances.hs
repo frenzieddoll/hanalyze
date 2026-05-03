@@ -1081,9 +1081,11 @@ instance Reportable HBMReport where
 -- | 多変量 RFF Ridge のレポート。`rfmvGroup` 列で色分けし、`rfmvXAxis` 列
 -- (xCols のいずれか) を横軸にして観測点 + 予測曲線を描く。
 data RFFMVReport = RFFMVReport
-  { rfmvFit   :: RFFRidgeFitMV
-  , rfmvGroup :: Text
-  , rfmvXAxis :: Text
+  { rfmvFit         :: RFFRidgeFitMV
+  , rfmvGroup       :: Text
+  , rfmvXAxis       :: Text
+  , rfmvInteractive :: Bool
+    -- ^ True なら 'secInteractiveRFFMV' (スライダ + リアルタイム JS 予測) を含める
   } deriving (Show)
 
 instance Reportable RFFMVReport where
@@ -1137,6 +1139,32 @@ instance Reportable RFFMVReport where
             vega = scatterWithGroups plotCfg (rfmvXAxis r) yCol ptData lnData
             formula = yCol <> " ~ φ(" <> T.intercalate "," xCols <> ")ᵀ w  (D="
                        <> T.pack (show d) <> ")"
+            -- インタラクティブセクション (スライダで副軸を変えると JS が予測を再計算)
+            sliderRows = mkSliders xCols xColIdx cols
+            omegasRowMaj =
+              concat [ LA2.toList (LA2.flatten (rffmvOmegas feats)) ]
+              -- LA.flatten は row-major なので OK
+            iSection
+              | rfmvInteractive r =
+                  [ secInteractiveRFFMV "対話的予測 (副軸スライダ)"
+                      InteractiveRFFMV
+                        { irfXCols       = xCols
+                        , irfYCol        = yCol
+                        , irfXObs        = cols
+                        , irfYObs        = ys
+                        , irfGroups      = groups
+                        , irfMainAxis    = rfmvXAxis r
+                        , irfMainGrid    = xGrid
+                        , irfSliders     = sliderRows
+                        , irfOmegasRowMaj = omegasRowMaj
+                        , irfBs          = V.toList (rffmvBs feats)
+                        , irfSigmaF      = rffmvSigmaF feats
+                        , irfDim         = d
+                        , irfP           = length xCols
+                        , irfWeights     = LA2.toList (rffrmvWeights (rfmvFit r))
+                        }
+                  ]
+              | otherwise = []
         in [ secDataOverview df xCols yCol
            , secModelOverview "Multivariate RFF Ridge" formula Nothing
            , secKeyValue "Fit summary"
@@ -1149,8 +1177,8 @@ instance Reportable RFFMVReport where
                , ("n",              T.pack (show n))
                ]
            , secVega ("予測曲線 + 観測点 (" <> rfmvGroup r <> " で色分け)") vega
-           , secResiduals yhat (zipWith (-) ys yhat)
-           ]
+           ] ++ iSection ++
+           [ secResiduals yhat (zipWith (-) ys yhat) ]
       _ -> [ secDataOverview df xCols yCol
            , secModelOverview "Multivariate RFF Ridge"
                "(必要な列が取得できません: x_i, y, group の数値/Text 列を確認してください)"
@@ -1160,3 +1188,15 @@ instance Reportable RFFMVReport where
 uniq2 :: Ord a => [a] -> [a]
 uniq2 []     = []
 uniq2 (x:xs) = x : uniq2 (filter (/= x) xs)
+
+-- | 副軸 (= 横軸以外) について (列名, min, mid, max) のスライダ情報を作る。
+mkSliders :: [Text] -> Int -> [[Double]] -> [(Text, Double, Double, Double)]
+mkSliders xCols mainIdx cols =
+  [ (xCols !! j, minimum c, mid c, maximum c)
+  | (j, c) <- zip [0..] cols
+  , j /= mainIdx
+  ]
+  where
+    mid xs = let s = sortBy compare xs
+                 n = length s
+             in if n == 0 then 0 else s !! (n `div` 2)

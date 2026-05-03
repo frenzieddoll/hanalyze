@@ -257,6 +257,17 @@ executable dirty-data-demo
     , text       >= 1.2  && < 2.2
     , dataframe  >= 0.3  && < 2
 
+executable potential-gen
+  import:           warnings
+  main-is:          PotentialGen.hs
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , bytestring >= 0.11 && < 0.13
+    , mwc-random >= 0.15 && < 0.16
+
 executable external-io-demo
   import:           warnings
   main-is:          ExternalIODemo.hs

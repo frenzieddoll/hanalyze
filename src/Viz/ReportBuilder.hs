@@ -70,6 +70,9 @@ module Viz.ReportBuilder
   , secInteractiveLM
   , secInteractiveMulti
   , InteractiveModel (..)
+    -- * 対話的予測 (多変量 RFF Ridge)
+  , secInteractiveRFFMV
+  , InteractiveRFFMV (..)
     -- * レンダリング
   , renderReport
     -- * Reportable typeclass
@@ -136,6 +139,32 @@ data SmoothCurve = SmoothCurve
 --   y = invLink(β₀ + β₁ x_1 + β₂ x_2 + ... + β_p x_p)
 --
 -- 信頼帯は副軸を slider 値に固定したときの平均応答 CI (現状は 95% 等幅近似)。
+-- | 多変量 RFF Ridge の対話的予測モデル (Phase B-RFF)。
+--
+-- ブラウザ JS 側で以下を計算して曲線を更新する:
+--
+-- * @x_full[k] = (k == mainAxisIdx) ? z : sliderValues[k]@ for each z in mainGrid
+-- * @arg_j = b_j + Σ_k ω_jk · x_full[k]@
+-- * @ŷ(z) = Σ_j w_j · σ_f √(2/D) · cos(arg_j)@
+data InteractiveRFFMV = InteractiveRFFMV
+  { irfXCols       :: [Text]              -- ^ 全説明変数名 (length = p)
+  , irfYCol        :: Text
+  , irfXObs        :: [[Double]]          -- ^ p × n の観測 x (列ごと)
+  , irfYObs        :: [Double]
+  , irfGroups      :: [Text]              -- ^ n 個の group ラベル (色分け用)
+  , irfMainAxis    :: Text                -- ^ 横軸として変化させる列名 (例 "z")
+  , irfMainGrid    :: [Double]            -- ^ 横軸グリッド (例 z 線形空間 100 点)
+  , irfSliders     :: [(Text, Double, Double, Double)]
+                                          -- ^ 副軸スライダ [(name, min, mid, max)]
+                                          --   横軸列以外の全列に対応
+  , irfOmegasRowMaj :: [Double]           -- ^ p × D 行列を row-major に
+  , irfBs          :: [Double]            -- ^ D
+  , irfSigmaF      :: Double
+  , irfDim         :: Int                 -- ^ D
+  , irfP           :: Int                 -- ^ p
+  , irfWeights     :: [Double]            -- ^ D
+  } deriving (Show)
+
 data InteractiveModel = InteractiveModel
   { imXCols     :: [Text]                  -- ^ 説明変数名 (length = p)
   , imYCol      :: Text                    -- ^ 応答名
@@ -180,6 +209,8 @@ data ReportSection
   | SecInteractiveLM Text Text Text [Double] [Double] SmoothCurve (Double, Double)
     -- | 多変量対話的予測。主軸選択 dropdown + 各副軸 slider + 散布図。
   | SecInteractiveMulti Text InteractiveModel
+    -- | 多変量 RFF Ridge の対話的予測。横軸固定 + 副軸スライダ + 散布図。
+  | SecInteractiveRFFMV Text InteractiveRFFMV
     -- | 折りたたみ可能なグループ。子セクションを 1 つの details で囲む。
     --   フィールド: title / openByDefault / 子セクション
   | SecCollapsible Text Bool [ReportSection]
@@ -570,6 +601,10 @@ secInteractiveLM = SecInteractiveLM
 secInteractiveMulti :: Text -> InteractiveModel -> ReportSection
 secInteractiveMulti = SecInteractiveMulti
 
+-- | 多変量 RFF Ridge の対話的予測セクション。
+secInteractiveRFFMV :: Text -> InteractiveRFFMV -> ReportSection
+secInteractiveRFFMV = SecInteractiveRFFMV
+
 -- ---------------------------------------------------------------------------
 -- Reportable typeclass
 -- ---------------------------------------------------------------------------
@@ -664,6 +699,7 @@ mkNavBar cfg pairs =
       SecHtml t _            -> if T.null t then "付録" else t
       SecInteractiveLM {}    -> "対話的予測"
       SecInteractiveMulti {} -> "対話的予測"
+      SecInteractiveRFFMV {} -> "対話的予測"
       SecCollapsible t _ _   -> if T.null t then "詳細" else t
       SecCard t _            -> if T.null t then "" else t
       SecStatRow _           -> ""
@@ -694,6 +730,7 @@ renderSection sid sec = case sec of
     "<div id=\"" <> sid <> "\" class=\"raw-section\">" <> html <> "</div>"
   SecInteractiveLM t xc yc xs ys sc rng -> renderInteractiveLM sid t xc yc xs ys sc rng
   SecInteractiveMulti t im   -> renderInteractiveMulti sid t im
+  SecInteractiveRFFMV t r    -> renderInteractiveRFFMV sid t r
   SecCollapsible t open children ->
     renderCollapsible sid t open children
   SecCard t children     -> renderCard sid t children
@@ -1267,6 +1304,8 @@ sectionScript sid sec = case sec of
     interactiveLMScript sid xc yc xs ys sc
   SecInteractiveMulti _ im ->
     interactiveMultiScript sid im
+  SecInteractiveRFFMV _ r ->
+    interactiveRFFMVScript sid r
   SecCollapsible _ _ children ->
     T.intercalate "\n"
       [ sectionScript (childId sid i) child
@@ -1855,3 +1894,155 @@ css = T.unlines
   , ".md-body a { color: #2980b9; text-decoration: none; }"
   , ".md-body a:hover { text-decoration: underline; }"
   ]
+
+-- ---------------------------------------------------------------------------
+-- Interactive RFF MV (多変量 RFF Ridge の対話的予測) -----------------------
+-- ---------------------------------------------------------------------------
+
+renderInteractiveRFFMV :: Text -> Text -> InteractiveRFFMV -> Text
+renderInteractiveRFFMV sid title r =
+  let sliderHtml = T.intercalate "\n"
+        [ T.unlines
+            [ "<div class=\"slider-row\">"
+            , "  <label>" <> col <> ":"
+            , "    <input type=\"range\" id=\"i-" <> sid <> "-s" <> T.pack (show i) <> "\""
+            , "      min=\"" <> showD4 mn <> "\""
+            , "      max=\"" <> showD4 mx <> "\""
+            , "      step=\"" <> showD4 ((mx - mn) / 200) <> "\""
+            , "      value=\"" <> showD4 mid <> "\""
+            , "      oninput=\"window.__updRFFMV_" <> sid <> "()\">"
+            , "    <span id=\"i-" <> sid <> "-s" <> T.pack (show i)
+              <> "-val\">" <> showD4 mid <> "</span>"
+            , "  </label>"
+            , "</div>"
+            ]
+        | (i, (col, mn, mid, mx)) <- zip [0::Int ..] (irfSliders r) ]
+      tFull = "<span class=\"sec-icon\">&#127919;</span> "
+              <> (if T.null title then "対話的予測" else title)
+  in collapsibleSection sid tFull True $
+       T.unlines
+         [ "<div class=\"interactive-multi\">"
+         , "  <div class=\"i-controls\">"
+         , "    <div class=\"slider-row\"><em>主軸: " <> irfMainAxis r
+            <> " (横軸固定。副軸を以下のスライダで動かすと予測曲線が更新されます)</em></div>"
+         , sliderHtml
+         , "  </div>"
+         , "  <div class=\"i-chart\">"
+         , "    <div class=\"vl-wrap\"><div id=\"vl-" <> sid <> "\"></div></div>"
+         , "  </div>"
+         , "</div>"
+         ]
+
+interactiveRFFMVScript :: Text -> InteractiveRFFMV -> Text
+interactiveRFFMVScript sid r =
+  let mainAxis  = irfMainAxis r
+      yCol      = irfYCol r
+      xColsAll  = irfXCols r
+      mainIdx   = case [ i | (i, c) <- zip [0::Int ..] xColsAll, c == mainAxis ] of
+                    (i:_) -> i
+                    []    -> 0
+      sliderCols = [ c | c <- xColsAll, c /= mainAxis ]
+      sliderIdx = [ i | (i, c) <- zip [0::Int ..] xColsAll, c /= mainAxis ]
+      arrD xs = "[" <> T.intercalate "," (map showD4 xs) <> "]"
+      arrS xs = "[" <> T.intercalate "," (map (\s -> "\"" <> s <> "\"") xs) <> "]"
+      omegasArr = arrD (irfOmegasRowMaj r)
+      bsArr     = arrD (irfBs r)
+      wArr      = arrD (irfWeights r)
+      xObsJson  =
+        "[" <> T.intercalate ","
+                  [ arrD col | col <- irfXObs r ] <> "]"
+      yObsJson  = arrD (irfYObs r)
+      groupsJson = arrS (irfGroups r)
+      mainGridJson = arrD (irfMainGrid r)
+      sliderColsJson = arrS sliderCols
+      sliderIdxJson  = "[" <> T.intercalate "," (map (T.pack . show) sliderIdx) <> "]"
+  in T.unlines
+       [ "(() => {"
+       , "  const sid       = \"" <> sid <> "\";"
+       , "  const xCols     = " <> arrS xColsAll <> ";"
+       , "  const yCol      = \"" <> yCol <> "\";"
+       , "  const mainAxis  = \"" <> mainAxis <> "\";"
+       , "  const mainIdx   = " <> T.pack (show mainIdx) <> ";"
+       , "  const sliderCols = " <> sliderColsJson <> ";"
+       , "  const sliderIdx  = " <> sliderIdxJson <> ";"
+       , "  const omegas   = " <> omegasArr <> ";"  -- length p*D, row-major
+       , "  const bs       = " <> bsArr <> ";"
+       , "  const sigmaF   = " <> showD4 (irfSigmaF r) <> ";"
+       , "  const Ddim     = " <> T.pack (show (irfDim r)) <> ";"
+       , "  const pDim     = " <> T.pack (show (irfP r)) <> ";"
+       , "  const weights  = " <> wArr <> ";"
+       , "  const xObs     = " <> xObsJson <> ";"  -- p arrays (each n)
+       , "  const yObs     = " <> yObsJson <> ";"
+       , "  const groups   = " <> groupsJson <> ";"
+       , "  const mainGrid = " <> mainGridJson <> ";"
+       , "  const coef     = sigmaF * Math.sqrt(2 / Ddim);"
+       , "  function predictY(xVec) {"
+       , "    let y = 0;"
+       , "    for (let j = 0; j < Ddim; j++) {"
+       , "      let arg = bs[j];"
+       , "      for (let k = 0; k < pDim; k++) {"
+       , "        arg += omegas[k * Ddim + j] * xVec[k];"
+       , "      }"
+       , "      y += weights[j] * coef * Math.cos(arg);"
+       , "    }"
+       , "    return y;"
+       , "  }"
+       , "  function readSliders() {"
+       , "    const vals = new Array(pDim).fill(0);"
+       , "    for (let s = 0; s < sliderCols.length; s++) {"
+       , "      const el = document.getElementById('i-' + sid + '-s' + s);"
+       , "      const v  = parseFloat(el.value);"
+       , "      vals[sliderIdx[s]] = v;"
+       , "      const lbl = document.getElementById('i-' + sid + '-s' + s + '-val');"
+       , "      if (lbl) lbl.textContent = (Math.round(v*1000)/1000).toString();"
+       , "    }"
+       , "    return vals;"
+       , "  }"
+       , "  function buildSpec() {"
+       , "    const sliders = readSliders();"
+       , "    // 観測点 (固定)"
+       , "    const obs = [];"
+       , "    const n = yObs.length;"
+       , "    for (let i = 0; i < n; i++) {"
+       , "      obs.push({ z: xObs[mainIdx][i], y: yObs[i], group: groups[i] });"
+       , "    }"
+       , "    // 予測曲線 (現在のスライダ値で)"
+       , "    const pred = [];"
+       , "    for (const z of mainGrid) {"
+       , "      const xVec = sliders.slice();"
+       , "      xVec[mainIdx] = z;"
+       , "      pred.push({ z: z, yhat: predictY(xVec) });"
+       , "    }"
+       , "    return {"
+       , "      $schema: 'https://vega.github.io/schema/vega-lite/v5.json',"
+       , "      width: 720, height: 480,"
+       , "      layer: ["
+       , "        { data: { values: obs },"
+       , "          mark: { type: 'point', filled: true, opacity: 0.6 },"
+       , "          encoding: {"
+       , "            x: { field: 'z', type: 'quantitative', title: mainAxis },"
+       , "            y: { field: 'y', type: 'quantitative', title: yCol },"
+       , "            color: { field: 'group', type: 'nominal' },"
+       , "            tooltip: ["
+       , "              { field: 'group' }, { field: 'z' }, { field: 'y' }"
+       , "            ]"
+       , "          } },"
+       , "        { data: { values: pred },"
+       , "          mark: { type: 'line', strokeWidth: 3, color: '#333' },"
+       , "          encoding: {"
+       , "            x: { field: 'z', type: 'quantitative' },"
+       , "            y: { field: 'yhat', type: 'quantitative' }"
+       , "          } }"
+       , "      ]"
+       , "    };"
+       , "  }"
+       , "  function update() {"
+       , "    const spec = buildSpec();"
+       , "    if (window.vegaEmbed) {"
+       , "      window.vegaEmbed('#vl-' + sid, spec, { actions: false });"
+       , "    }"
+       , "  }"
+       , "  window['__updRFFMV_' + sid] = update;"
+       , "  setTimeout(update, 0);"
+       , "})();"
+       ]
