@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Cycle 1 で追加した 4 つの新セクション
--- (`secComparisonTable` / `secForestPlot` / `secFeatureImportance` / `secPPC`)
+-- | Cycle 1 と Cycle 9 で追加した計 7 つの新セクション
+-- (`secComparisonTable` / `secForestPlot` / `secFeatureImportance` / `secPPC`
+--  + `secCalibration` / `sec3DScatter` / `secHeatmap`)
 -- を 1 つのレポートで端から端まで使うショーケース。
 --
 -- 動作:
@@ -56,6 +57,12 @@ gaussian sigma gen = do
   u2 <- MWC.uniform gen
   let z = sqrt (-2 * log (max 1e-12 u1)) * cos (2 * pi * u2)
   return (sigma * z)
+
+quickSort :: Ord a => [a] -> [a]
+quickSort [] = []
+quickSort (p:rs) = quickSort [x | x <- rs, x <= p]
+                ++ [p]
+                ++ quickSort [x | x <- rs, x > p]
 
 -- ---------------------------------------------------------------------------
 -- メイン
@@ -145,20 +152,37 @@ main = do
     eps <- mapM (\_ -> gaussian sigmaHat gen) xs
     return (zipWith (+) lmYhat eps)
 
+  -- Calibration: LM yhat を sigmoid で 0..1 に圧縮 → 予測確率、観測 = (y > median) の二値
+  let medY = let s = quickSort ys in s !! (length s `div` 2)
+      pPred = [ 1 / (1 + exp (-(h - medY))) | h <- lmYhat ]
+      yBin  = [ if y > medY then 1 else 0 | y <- ys ]
+
+  -- 3D scatter: (x, yhat, residual)
+  let zs3d = lmResid
+
+  -- Heatmap: 3 モデルの (RMSE, R², 1-R²) を 3×3 メトリック行列として表示
+  let heatRows  = ["LM", "GAM", "RF"]
+      heatCols  = ["RMSE", "R²", "1−R²"]
+      heatVals  =
+        [ [lmRMSE,  lmR2,   1 - lmR2]
+        , [gamRMSE, gamR2_, 1 - gamR2_]
+        , [rfRMSE,  rfR2,   1 - rfR2]
+        ]
+
   -- レポート組立
   let cfg = RB.defaultReportConfig
-              "新セクション 4 種ショーケース (Comparison / Forest / Importance / PPC)"
+              "新セクション 7 種ショーケース (Comparison / Forest / Importance / PPC / Calibration / 3D / Heatmap)"
       sections =
         [ RB.secMarkdown "概要"
             (T.unlines
-              [ "Cycle 1 で `Viz.ReportBuilder` に追加した 4 つのセクション "
-              , "(`secComparisonTable` / `secForestPlot` / `secFeatureImportance` "
-              , "/ `secPPC`) を 1 つのレポートで使うデモ。"
+              [ "Cycle 1 + Cycle 9 で `Viz.ReportBuilder` に追加した計 7 つのセクションを"
+              , "1 つのレポートで使うデモ。"
               , ""
               , "データ: `data/regression/test_lm.csv` (50 行、x, y 二列)。"
               , "LM / GAM / RandomForest の 3 モデルをフィットして RMSE/R² を比較し、"
               , "LM の係数 95% CI を Forest plot、RF の特徴量重要度をバーで表示、"
               , "LM の予測分布からの replicate を観測と重ね描きで表示する。"
+              , "さらに Calibration plot / 3D scatter / Heatmap を順に追加。"
               ])
         , RB.secComparisonTable
             "モデル比較 (RMSE 最小行をハイライト)"
@@ -167,6 +191,15 @@ main = do
         , RB.secFeatureImportance "Random Forest 特徴量重要度" importPairs
         , RB.secPPC "Posterior Predictive Check (LM 予測分布、30 replicate)"
             ys reps
+        , RB.secCalibration
+            "Calibration plot (sigmoid(yhat - median y) vs (y > median))"
+            pPred (map fromIntegral yBin)
+        , RB.sec3DScatter
+            "3D scatter (擬似: x / yhat / 残差を色エンコード)"
+            "x" "yhat" "residual" xs lmYhat zs3d
+        , RB.secHeatmap
+            "モデル × メトリック ヒートマップ (値の色で大小表現)"
+            heatCols heatRows heatVals
         ]
 
   RB.renderReport "trash/new_sections_demo.html" cfg sections

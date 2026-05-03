@@ -156,6 +156,7 @@ class Reportable a where
 | `GLMMReport`     | `Viz.ReportInstances` | DataOverview / ModelOverviewLink / Collapsible(R²/σ²_u/σ²/ICC + 固定効果 + **BLUP 表** + 残差) / InteractiveMulti |
 | `GPReport`       | `Viz.ReportInstances` | DataOverview / ModelOverviewExtras (カーネル) / Collapsible(ハイパーパラメータ + LML + 残差) / InteractiveLM (信頼帯付き) |
 | `HBMLinearReport`| `Viz.ReportInstances` | DataOverview / ModelOverviewExtras (サンプラー + DAG) / Collapsible(R²/受容率 + 事後平均係数 + **MCMC 診断 (KDE/トレース/自己相関/ペア)** + 残差) / InteractiveLM (信用区間付き) |
+| `HBMReport`      | `Viz.ReportInstances` | **一般 HBM** (multi-x / 非線形対応)。ユーザーが `hbmrPostSummaryG` と `hbmrYHatG`、必要なら `hbmrRibbonG` (`HBMRibbon`) を渡す。サンプラー名・DAG・ペア散布対象も自由に設定可能。 |
 | `QRFit`          | `Model.Quantile`    | DataOverview / ModelOverview / Collapsible(τ-分位点 + Pseudo R¹ + Pinball + 係数 + 散布図 + 残差) |
 | `GAMFit`         | `Model.GAM`         | DataOverview / ModelOverview / Collapsible(R²/degree/knots + **特徴ごとの partial effect カード** + 残差) |
 | `RFReport`       | `Viz.ReportInstances` | DataOverview / ModelOverview / Collapsible(R² + Trees/Features + **Feature importance** + 残差) |
@@ -229,6 +230,14 @@ main = do
 | `secForestPlot title rows`                       | Forest plot — `[(name, lower, mean, upper)]` から HDI/CI 横棒 + 中央値点を描画。階層モデルの BLUP やベイズ係数比較に。 |
 | `secFeatureImportance title items`               | 特徴量重要度バー — `[(label, value)]` を **降順ソート** して `secBarChart` 化。RF / GBM の importance 表示用。 |
 | `secPPC title observed reps`                     | Posterior Predictive Check — 観測 KDE (太線) + 各 replicate KDE (薄線) を重ね描き。`reps :: [[Double]]` は事後予測サンプル群。 |
+
+### 追加可視化セクション (Cycle 9 で追加)
+
+| 関数 | 内容 |
+|---|---|
+| `secCalibration title pPred yObs`                | Calibration plot — 二値分類器の予測確率 vs 観測頻度。10 ビン分割で点を描画 + 対角線 (理想曲線)。点サイズ = ビン内サンプル数。`yObs` は 0/1 の値。 |
+| `sec3DScatter title xL yL zL xs ys zs`           | 3D scatter (擬似)。Vega-Lite は 3D 非対応のため、x/y 軸 + z を viridis 色エンコードで表現。多変量探索向け。 |
+| `secHeatmap title colLabels rowLabels values`    | 2D heatmap (rect + 色エンコード)。相関行列・混同行列・要因×水準効果などに。`values :: [[Double]]` は rows × cols 行列。 |
 
 ### Markdown appendix
 

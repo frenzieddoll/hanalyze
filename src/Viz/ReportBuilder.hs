@@ -62,6 +62,10 @@ module Viz.ReportBuilder
   , secForestPlot
   , secFeatureImportance
   , secPPC
+    -- * 追加可視化セクション (Cycle 9)
+  , secCalibration
+  , sec3DScatter
+  , secHeatmap
     -- * 対話的予測 (LM/GLM 用)
   , secInteractiveLM
   , secInteractiveMulti
@@ -74,6 +78,9 @@ module Viz.ReportBuilder
   , regPathSpec
   , forestPlotSpec
   , ppcSpec
+  , calibrationSpec
+  , scatter3DSpec
+  , heatmapSpec
   ) where
 
 import Data.Aeson (encode)
@@ -495,6 +502,42 @@ secPPC
   -> [[Double]]   -- ^ 事後予測サンプル (replicate ごと、各長さ ~ length y_obs)
   -> ReportSection
 secPPC title observed reps = SecVega title (ppcSpec observed reps)
+
+-- | Calibration plot — 二値分類器の予測確率と観測頻度の対応図。
+-- 入力データを 10 個のビン (`[0,0.1)..[0.9,1.0]`) に分割し、各ビンで
+-- 予測確率の平均と観測 1 の頻度を計算し、対角線 (y = x) と重ねて描画。
+-- 観測値は 0/1 (Bool 相当)。
+secCalibration
+  :: Text         -- ^ タイトル
+  -> [Double]     -- ^ 予測確率 p ∈ [0, 1]
+  -> [Double]     -- ^ 観測値 y ∈ {0, 1}
+  -> ReportSection
+secCalibration title pPred yObs =
+  SecVega title (calibrationSpec pPred yObs)
+
+-- | 3D scatter (Vega-Lite は 3D 非対応のため、x/y 軸 + 色エンコード z で代用)。
+-- z が連続なら viridis 系のグラデーション、離散ならカテゴリ色。
+sec3DScatter
+  :: Text         -- ^ セクションタイトル
+  -> Text         -- ^ x ラベル
+  -> Text         -- ^ y ラベル
+  -> Text         -- ^ z ラベル (色エンコード)
+  -> [Double] -> [Double] -> [Double]
+  -> ReportSection
+sec3DScatter title xL yL zL xs ys zs =
+  SecVega title (scatter3DSpec xL yL zL xs ys zs)
+
+-- | 2D heatmap (rect mark + 値の色エンコード)。
+-- 行ラベル × 列ラベルのグリッドに値を配置し、色強度で表現。
+-- 例: 相関行列、混同行列、要因 × 水準の効果。
+secHeatmap
+  :: Text         -- ^ タイトル
+  -> [Text]       -- ^ 列ラベル
+  -> [Text]       -- ^ 行ラベル
+  -> [[Double]]   -- ^ 値 (rows × cols)
+  -> ReportSection
+secHeatmap title colLabels rowLabels values =
+  SecVega title (heatmapSpec colLabels rowLabels values)
 
 -- ---------------------------------------------------------------------------
 -- 対話的予測 (LM/GLM 単変数)
@@ -1531,6 +1574,119 @@ ppcSpec observed reps =
            ]
        , width 640
        , height 280
+       ]
+
+-- | Calibration spec: 10 ビンに分割し (mean p, observed freq) を点 + 対角線で描画。
+calibrationSpec :: [Double] -> [Double] -> VegaLite
+calibrationSpec pPred yObs =
+  let pairs = zip pPred yObs
+      bin p
+        | p >= 1.0  = 9
+        | p <= 0.0  = 0
+        | otherwise = max 0 (min 9 (floor (p * 10) :: Int))
+      bins = [0 .. 9 :: Int]
+      perBin =
+        [ let inB = [ (p, y) | (p, y) <- pairs, bin p == k ]
+              n   = length inB
+              mP  = if n == 0 then fromIntegral k / 10 + 0.05
+                    else sum (map fst inB) / fromIntegral n
+              mY  = if n == 0 then 0
+                    else sum (map snd inB) / fromIntegral n
+          in (k, n, mP, mY)
+        | k <- bins ]
+      nonEmpty = [ (mP, mY, n) | (_, n, mP, mY) <- perBin, n > 0 ]
+      meanPs = [ p | (p, _, _) <- nonEmpty ]
+      meanYs = [ y | (_, y, _) <- nonEmpty ]
+      counts = [ fromIntegral n :: Double | (_, _, n) <- nonEmpty ]
+      diagXs = [0, 1] :: [Double]
+      diagYs = [0, 1] :: [Double]
+  in toVegaLite
+       [ layer
+           [ asSpec
+               [ dataFromColumns []
+                   . dataColumn "x" (Numbers diagXs)
+                   . dataColumn "y" (Numbers diagYs)
+                   $ []
+               , mark Line [MStrokeWidth 1.2, MColor "#888", MStrokeDash [4, 4]]
+               , encoding
+                   . position X [PName "x", PmType Quantitative,
+                                 PScale [SDomain (DNumbers [0, 1])],
+                                 PAxis [AxTitle "予測確率 (mean)"]]
+                   . position Y [PName "y", PmType Quantitative,
+                                 PScale [SDomain (DNumbers [0, 1])],
+                                 PAxis [AxTitle "観測頻度"]]
+                   $ []
+               ]
+           , asSpec
+               [ dataFromColumns []
+                   . dataColumn "p"     (Numbers meanPs)
+                   . dataColumn "y"     (Numbers meanYs)
+                   . dataColumn "count" (Numbers counts)
+                   $ []
+               , mark Circle [MOpacity 0.85, MColor "#1e3a5c"]
+               , encoding
+                   . position X [PName "p", PmType Quantitative]
+                   . position Y [PName "y", PmType Quantitative]
+                   . size [MName "count", MmType Quantitative,
+                           MLegend [LTitle "n"]]
+                   $ []
+               ]
+           ]
+       , width 480
+       , height 380
+       ]
+
+-- | 3D scatter (z は色エンコード)。
+scatter3DSpec :: Text -> Text -> Text -> [Double] -> [Double] -> [Double]
+              -> VegaLite
+scatter3DSpec xL yL zL xs ys zs =
+  toVegaLite
+    [ dataFromColumns []
+        . dataColumn xL (Numbers xs)
+        . dataColumn yL (Numbers ys)
+        . dataColumn zL (Numbers zs)
+        $ []
+    , mark Circle [MSize 80, MOpacity 0.85]
+    , encoding
+        . position X [PName xL, PmType Quantitative,
+                      PAxis [AxTitle xL]]
+        . position Y [PName yL, PmType Quantitative,
+                      PAxis [AxTitle yL]]
+        . color [MName zL, MmType Quantitative,
+                 MScale [SScheme "viridis" []],
+                 MLegend [LTitle zL]]
+        $ []
+    , width 560
+    , height 380
+    ]
+
+-- | 2D heatmap (rect + 色エンコード)。
+heatmapSpec :: [Text] -> [Text] -> [[Double]] -> VegaLite
+heatmapSpec colLabels rowLabels values =
+  let rows = [ (rLbl, cLbl, v)
+             | (rLbl, rowVals) <- zip rowLabels values
+             , (cLbl, v)       <- zip colLabels rowVals ]
+      rs   = [ r | (r, _, _) <- rows ]
+      cs   = [ c | (_, c, _) <- rows ]
+      vs   = [ v | (_, _, v) <- rows ]
+  in toVegaLite
+       [ dataFromColumns []
+           . dataColumn "row" (Strings rs)
+           . dataColumn "col" (Strings cs)
+           . dataColumn "val" (Numbers vs)
+           $ []
+       , mark Rect [MStroke "#fff", MStrokeWidth 0.5]
+       , encoding
+           . position X [PName "col", PmType Nominal,
+                         PAxis [AxTitle "", AxLabelAngle (-30)]]
+           . position Y [PName "row", PmType Nominal,
+                         PAxis [AxTitle ""]]
+           . color [MName "val", MmType Quantitative,
+                    MScale [SScheme "viridis" []],
+                    MLegend [LTitle "値"]]
+           $ []
+       , width 520
+       , height 380
        ]
 
 -- ---------------------------------------------------------------------------

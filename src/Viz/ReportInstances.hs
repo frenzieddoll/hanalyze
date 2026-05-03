@@ -31,6 +31,8 @@ module Viz.ReportInstances
   , GLMMReport (..)
   , GPReport (..)
   , HBMLinearReport (..)
+  , HBMReport (..)
+  , HBMRibbon (..)
   ) where
 
 import Data.Text (Text)
@@ -938,3 +940,129 @@ instance Reportable HBMLinearReport where
 mean0 :: [Double] -> Double
 mean0 [] = 0
 mean0 xs = sum xs / fromIntegral (length xs)
+
+-- ---------------------------------------------------------------------------
+-- HBM (一般) - multi-x / 非線形対応の汎用ラッパ (Cycle 7)
+-- ---------------------------------------------------------------------------
+
+-- | 単変数 x 上の予測リボン (中央値 + 信用区間)。
+--
+-- 任意の HBM (非線形を含む) に対しユーザー側で事後ドローから計算したものを渡す。
+-- 'HBMReport' に含めると散布図 + リボン + 対話的予測 (信用帯付き) が描かれる。
+data HBMRibbon = HBMRibbon
+  { hribXCol :: Text          -- ^ x 軸ラベル (列名)
+  , hribXObs :: [Double]      -- ^ 学習データ x
+  , hribYObs :: [Double]      -- ^ 学習データ y
+  , hribGrid :: [Double]      -- ^ 予測グリッド X (推奨: ±50% 外挿)
+  , hribMid  :: [Double]      -- ^ 各グリッド点での事後中央値
+  , hribLow  :: [Double]      -- ^ 各グリッド点での 2.5% 分位
+  , hribHigh :: [Double]      -- ^ 各グリッド点での 97.5% 分位
+  } deriving Show
+
+-- | HBM (一般) レポート用ラッパ。multi-x / 非線形 / 任意の構造に対応。
+--
+-- 'HBMLinearReport' は @α + β·x@ という線形 HBM に特化したショートカット。
+-- 一般のモデルでは 'HBMReport' に以下の情報をユーザー側で集約して渡す:
+--
+-- * `hbmrChainG` — MCMC チェーン (診断プロット用)
+-- * `hbmrPostSummaryG` — 事後要約 (mean/SD/quantile/ESS/R-hat) を直接指定
+-- * `hbmrYHatG` — 学習データへの予測値 (例: 事後中央値による予測)
+-- * `hbmrRibbonG` — 単変数 x 上の予測リボン (省略可)
+-- * `hbmrPairsG` — 興味のあるパラメータペア散布
+--
+-- @
+-- let postRows =
+--       [ ("alpha", aMean, aSD, aQ025, aQ975, aESS, Just aRhat)
+--       , ...
+--       ]
+--     rep = HBMReport { hbmrChainG = chain, hbmrParamsG = ["alpha","beta","sigma"]
+--                     , hbmrFormulaG = "$y_i \\sim ...$"
+--                     , hbmrSamplerG = "NUTS"
+--                     , hbmrModelTypeG = "HBM(NUTS)"
+--                     , hbmrGraphG = Just dag
+--                     , hbmrPostSummaryG = postRows
+--                     , hbmrYObsG = ys, hbmrYHatG = yHat
+--                     , hbmrRibbonG = Just ribbon
+--                     , hbmrPairsG = [("alpha","beta")]
+--                     }
+-- renderReport "out.html" cfg (toReport cfg df xCols yCol rep)
+-- @
+data HBMReport = HBMReport
+  { hbmrChainG       :: MC.Chain
+  , hbmrParamsG      :: [Text]
+  , hbmrFormulaG     :: Text
+  , hbmrSamplerG     :: Text
+  , hbmrModelTypeG   :: Text
+  , hbmrGraphG       :: Maybe Text
+  , hbmrPostSummaryG ::
+      [(Text, Double, Double, Double, Double, Double, Maybe Double)]
+  , hbmrYObsG        :: [Double]
+  , hbmrYHatG        :: [Double]
+  , hbmrRibbonG      :: Maybe HBMRibbon
+  , hbmrPairsG       :: [(Text, Text)]
+  }
+
+instance Reportable HBMReport where
+  toReport _cfg df xCols yCol rep =
+    let chain    = hbmrChainG rep
+        params   = hbmrParamsG rep
+        ys       = hbmrYObsG rep
+        yHat     = hbmrYHatG rep
+        resid    = zipWith (-) ys yHat
+        n        = length ys
+        meanY    = if n == 0 then 0 else sum ys / fromIntegral n
+        ssTot    = sum [ (y - meanY) ^ (2 :: Int) | y <- ys ]
+        ssRes    = sum [ r * r | r <- resid ]
+        r2       = if ssTot > 1e-12 then 1 - ssRes / ssTot else 0
+        nP       = length params
+        (_sH, rmse, maxAbs) = residStats resid (max 1 nP)
+
+        accept   = MC.chainAccepted chain
+        total    = max 1 (MC.chainTotal chain)
+        accRate :: Double
+        accRate  = fromIntegral accept / fromIntegral total
+
+        statRow =
+          secStatRow
+            [ ("R²",         T.pack (printf "%.4f" r2))
+            , ("サンプル数", T.pack (show total))
+            , ("受容率",     T.pack (printf "%.1f%%" (accRate * 100)))
+            , ("RMSE",       T.pack (printf "%.4f" rmse))
+            , ("最大絶対残差", T.pack (printf "%.4f" maxAbs))
+            ]
+
+        postCard = secCard "事後要約"
+          [ secPosteriorSummary "" (hbmrPostSummaryG rep) ]
+
+        diagSecs =
+          [ secMCMCDiagnostics "Posterior + trace" params chain
+          , secMCMCAutocorr "自己相関 (max lag 40)" 40 params chain
+          ]
+          ++ [ secMCMCPair ("ペア散布 (" <> a <> ", " <> b <> ")") a b chain
+             | (a, b) <- hbmrPairsG rep ]
+        diagCard = secCard "MCMC 診断" diagSecs
+
+        residCard = secCard "残差プロット" [ secResiduals yHat resid ]
+
+        resultSec =
+          secCollapsible "<span class=\"sec-icon\">&#128200;</span> 回帰結果" True
+            [ statRow, postCard, diagCard, residCard ]
+
+        -- 単変数の予測リボンセクション (オプション)
+        ribbonSecs = case hbmrRibbonG rep of
+          Nothing -> []
+          Just rb ->
+            let smooth = SmoothCurve (hribGrid rb) (hribMid rb)
+                                     (hribLow rb)  (hribHigh rb)
+                gMin = if null (hribGrid rb) then 0 else minimum (hribGrid rb)
+                gMax = if null (hribGrid rb) then 1 else maximum (hribGrid rb)
+            in [ secInteractiveLM "対話的予測 (信用区間付)"
+                   (hribXCol rb) yCol
+                   (hribXObs rb) (hribYObs rb)
+                   smooth (gMin, gMax) ]
+
+    in [ secDataOverview df xCols yCol
+       , secModelOverviewExtras (hbmrModelTypeG rep) (hbmrFormulaG rep)
+           [("サンプラー", hbmrSamplerG rep)] (hbmrGraphG rep)
+       , resultSec
+       ] ++ ribbonSecs
