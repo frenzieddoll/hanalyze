@@ -10,7 +10,8 @@ module Model.GLM
   , fitGLMWithSmooth
   ) where
 
-import DataFrame.Core
+import qualified DataFrame.Internal.DataFrame as DXD
+import DataIO.Convert (getDoubleVec)
 import Model.Core
 import Model.LM (multiPolyDesignMatrix, linspace, SmoothFit (..))
 
@@ -170,12 +171,12 @@ fitGLMWithSmooth
   -> [(Text, Int)]   -- ^ [(x column name, polynomial degree)]
   -> Band            -- ^ uncertainty band specification
   -> Int             -- ^ grid resolution for smooth curve
-  -> DataFrame
+  -> DXD.DataFrame
   -> Text            -- ^ y column
   -> Maybe (FitResult, Maybe SmoothFit)
 fitGLMWithSmooth family linkFn colDegs band nGrid df yCol = do
-  xVecs <- mapM (flip getNumeric df . fst) colDegs
-  yVec  <- getNumeric yCol df
+  xVecs <- mapM (flip getDoubleVec df . fst) colDegs
+  yVec  <- getDoubleVec yCol df
 
   let degrees       = map snd colDegs
       dm            = multiPolyDesignMatrix (zip xVecs degrees)

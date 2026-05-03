@@ -4,7 +4,8 @@ module Model.GLMM
   , fitGLMMDataFrame
   ) where
 
-import DataFrame.Core (DataFrame, getNumeric, getText)
+import qualified DataFrame.Internal.DataFrame as DXD
+import DataIO.Convert (getDoubleVec, getTextVec)
 import Model.Core     (FitResult (..))
 import Model.GLM      (Family (..), LinkFn (..))
 import Model.LM       (multiPolyDesignMatrix)
@@ -347,12 +348,12 @@ fitLMEDataFrame
   :: [(Text, Int)]   -- ^ x column specs
   -> Text            -- ^ grouping column (text/categorical)
   -> Text            -- ^ response column
-  -> DataFrame
+  -> DXD.DataFrame
   -> Maybe GLMMResult
 fitLMEDataFrame colDegs groupCol yCol df = do
-  xVecs <- mapM (\(col, _) -> getNumeric col df) colDegs
-  yVec  <- getNumeric yCol df
-  gVec  <- getText    groupCol df
+  xVecs <- mapM (\(col, _) -> getDoubleVec col df) colDegs
+  yVec  <- getDoubleVec yCol df
+  gVec  <- getTextVec   groupCol df
   let degrees              = map snd colDegs
       dm                   = multiPolyDesignMatrix (zip xVecs degrees)
       y                    = LA.fromList (V.toList yVec)
@@ -366,12 +367,12 @@ fitGLMMDataFrame
   -> [(Text, Int)]   -- ^ x column specs
   -> Text            -- ^ grouping column (text/categorical)
   -> Text            -- ^ response column
-  -> DataFrame
+  -> DXD.DataFrame
   -> Maybe GLMMResult
 fitGLMMDataFrame family link colDegs groupCol yCol df = do
-  xVecs <- mapM (\(col, _) -> getNumeric col df) colDegs
-  yVec  <- getNumeric yCol df
-  gVec  <- getText    groupCol df
+  xVecs <- mapM (\(col, _) -> getDoubleVec col df) colDegs
+  yVec  <- getDoubleVec yCol df
+  gVec  <- getTextVec   groupCol df
   let degrees              = map snd colDegs
       dm                   = multiPolyDesignMatrix (zip xVecs degrees)
       y                    = LA.fromList (V.toList yVec)
