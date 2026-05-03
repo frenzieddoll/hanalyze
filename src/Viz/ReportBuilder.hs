@@ -73,6 +73,12 @@ module Viz.ReportBuilder
     -- * 対話的予測 (多変量 RFF Ridge)
   , secInteractiveRFFMV
   , InteractiveRFFMV (..)
+    -- * 対話的予測 (多出力: 1 入力 → q 出力カーブ)
+  , secInteractiveMultiOut
+  , InteractiveMultiOut (..)
+  , InteractivePredictor (..)
+  , mkInteractiveMOLinear
+  , mkInteractiveMOKernelRBF
     -- * レンダリング
   , renderReport
     -- * Reportable typeclass
@@ -168,6 +174,36 @@ data InteractiveRFFMV = InteractiveRFFMV
   , irfStdSd       :: Maybe [Double]      -- ^ 同 σ
   } deriving (Show)
 
+-- | 多出力対話的予測のモデル情報 (1 入力 x → q 出力 y(z_1..z_q))。
+--
+-- 散布図の横軸は z (出力グリッド)、縦軸は y。スライダ 1 本で入力 x を
+-- 動かすと、q 個の出力すべてを再計算して曲線として描画する。
+data InteractiveMultiOut = InteractiveMultiOut
+  { imoXCol     :: Text                          -- ^ 入力変数名 (例 "dose")
+  , imoYCol     :: Text                          -- ^ 出力名 (例 "potential V")
+  , imoOutAxis  :: Text                          -- ^ 出力軸ラベル (例 "z [nm]")
+  , imoOutGrid  :: [Double]                      -- ^ 出力グリッド (長さ q)
+  , imoXObs     :: [Double]                      -- ^ 観測 x (長さ n)
+  , imoYObs     :: [[Double]]                    -- ^ 観測 Y (n × q、行 = sample)
+  , imoXSlider  :: (Double, Double, Double)      -- ^ (min, mid, max) スライダ範囲
+  , imoPred     :: InteractivePredictor          -- ^ predictor 種別
+  } deriving (Show)
+
+-- | 多出力 predictor 種別。将来 RFF / GP 等を追加する余地あり。
+data InteractivePredictor
+  = -- | 線形: ŷ_j(x) = β0_j + β1_j · x
+    PredLinearMO
+      { plmoIntercepts :: [Double]   -- ^ 長さ q
+      , plmoSlopes     :: [Double]   -- ^ 長さ q
+      }
+    -- | 1D RBF Kernel Ridge: ŷ_j(x) = Σ_i exp(-(x-x_i)²/(2h²)) · α_{ij}
+  | PredKernelRBF1
+      { pkrXTrain :: [Double]        -- ^ 長さ n
+      , pkrAlpha  :: [[Double]]      -- ^ n × q (行 = sample)
+      , pkrH      :: Double          -- ^ bandwidth
+      }
+  deriving (Show)
+
 data InteractiveModel = InteractiveModel
   { imXCols     :: [Text]                  -- ^ 説明変数名 (length = p)
   , imYCol      :: Text                    -- ^ 応答名
@@ -214,6 +250,8 @@ data ReportSection
   | SecInteractiveMulti Text InteractiveModel
     -- | 多変量 RFF Ridge の対話的予測。横軸固定 + 副軸スライダ + 散布図。
   | SecInteractiveRFFMV Text InteractiveRFFMV
+    -- | 多出力対話的予測 (1 入力 → q 出力)。
+  | SecInteractiveMultiOut Text InteractiveMultiOut
     -- | 折りたたみ可能なグループ。子セクションを 1 つの details で囲む。
     --   フィールド: title / openByDefault / 子セクション
   | SecCollapsible Text Bool [ReportSection]
@@ -608,6 +646,43 @@ secInteractiveMulti = SecInteractiveMulti
 secInteractiveRFFMV :: Text -> InteractiveRFFMV -> ReportSection
 secInteractiveRFFMV = SecInteractiveRFFMV
 
+-- | 多出力対話的予測セクション (1 入力 → q 出力カーブ)。
+secInteractiveMultiOut :: Text -> InteractiveMultiOut -> ReportSection
+secInteractiveMultiOut = SecInteractiveMultiOut
+
+-- | 線形多出力 fit から 'InteractiveMultiOut' を作る。
+-- 入力: 列名・観測 x・観測 Y (n×q)・出力グリッド・intercepts (q)・slopes (q)・スライダ範囲
+mkInteractiveMOLinear
+  :: Text          -- xCol
+  -> Text          -- yCol
+  -> Text          -- outAxis label
+  -> [Double]      -- output grid (length q)
+  -> [Double]      -- observed x (length n)
+  -> [[Double]]    -- observed Y (n × q)
+  -> [Double]      -- intercepts (length q)
+  -> [Double]      -- slopes (length q)
+  -> (Double, Double, Double)   -- slider (min, mid, max)
+  -> InteractiveMultiOut
+mkInteractiveMOLinear xc yc oa grid xs ys ints slps slider =
+  InteractiveMultiOut xc yc oa grid xs ys slider (PredLinearMO ints slps)
+
+-- | RBF Kernel Ridge 多出力 fit から 'InteractiveMultiOut' を作る。
+-- alpha 行列は (n × q)、行 = sample。
+mkInteractiveMOKernelRBF
+  :: Text          -- xCol
+  -> Text          -- yCol
+  -> Text          -- outAxis label
+  -> [Double]      -- output grid (length q)
+  -> [Double]      -- observed x (length n)
+  -> [[Double]]    -- observed Y (n × q)
+  -> [Double]      -- training x (length n) — 通常は xObs と同じ
+  -> [[Double]]    -- alpha (n × q)
+  -> Double        -- bandwidth h
+  -> (Double, Double, Double)
+  -> InteractiveMultiOut
+mkInteractiveMOKernelRBF xc yc oa grid xs ys xtr alpha h slider =
+  InteractiveMultiOut xc yc oa grid xs ys slider (PredKernelRBF1 xtr alpha h)
+
 -- ---------------------------------------------------------------------------
 -- Reportable typeclass
 -- ---------------------------------------------------------------------------
@@ -703,6 +778,7 @@ mkNavBar cfg pairs =
       SecInteractiveLM {}    -> "対話的予測"
       SecInteractiveMulti {} -> "対話的予測"
       SecInteractiveRFFMV {} -> "対話的予測"
+      SecInteractiveMultiOut {} -> "対話的予測"
       SecCollapsible t _ _   -> if T.null t then "詳細" else t
       SecCard t _            -> if T.null t then "" else t
       SecStatRow _           -> ""
@@ -734,6 +810,7 @@ renderSection sid sec = case sec of
   SecInteractiveLM t xc yc xs ys sc rng -> renderInteractiveLM sid t xc yc xs ys sc rng
   SecInteractiveMulti t im   -> renderInteractiveMulti sid t im
   SecInteractiveRFFMV t r    -> renderInteractiveRFFMV sid t r
+  SecInteractiveMultiOut t imo -> renderInteractiveMultiOut sid t imo
   SecCollapsible t open children ->
     renderCollapsible sid t open children
   SecCard t children     -> renderCard sid t children
@@ -1309,6 +1386,8 @@ sectionScript sid sec = case sec of
     interactiveMultiScript sid im
   SecInteractiveRFFMV _ r ->
     interactiveRFFMVScript sid r
+  SecInteractiveMultiOut _ imo ->
+    interactiveMultiOutScript sid imo
   SecCollapsible _ _ children ->
     T.intercalate "\n"
       [ sectionScript (childId sid i) child
@@ -2055,6 +2134,132 @@ interactiveRFFMVScript sid r =
        , "    }"
        , "  }"
        , "  window['__updRFFMV_' + sid] = update;"
+       , "  setTimeout(update, 0);"
+       , "})();"
+       ]
+
+-- ---------------------------------------------------------------------------
+-- 多出力対話的予測 (1 入力 → q 出力)
+-- ---------------------------------------------------------------------------
+
+renderInteractiveMultiOut :: Text -> Text -> InteractiveMultiOut -> Text
+renderInteractiveMultiOut sid title imo =
+  let (mn, mid, mx) = imoXSlider imo
+      tFull = "<span class=\"sec-icon\">&#127919;</span> "
+              <> (if T.null title then "対話的予測" else title)
+  in collapsibleSection sid tFull True $
+       T.unlines
+         [ "<div class=\"interactive-multi\">"
+         , "  <div class=\"i-controls\">"
+         , "    <div class=\"slider-row\"><em>入力 " <> imoXCol imo
+            <> " を動かすと " <> imoYCol imo <> "(" <> imoOutAxis imo
+            <> ") の予測曲線が更新されます</em></div>"
+         , "    <div class=\"slider-row\">"
+         , "      <label><b>" <> imoXCol imo <> "</b>:"
+         , "        <input type=\"range\" id=\"i-" <> sid <> "-x\""
+         , "          min=\"" <> showD4 mn <> "\""
+         , "          max=\"" <> showD4 mx <> "\""
+         , "          step=\"" <> showD4 ((mx - mn) / 200) <> "\""
+         , "          value=\"" <> showD4 mid <> "\""
+         , "          oninput=\"window.__updMO_" <> sid <> "()\">"
+         , "        <span id=\"i-" <> sid <> "-x-val\">" <> showD4 mid <> "</span>"
+         , "      </label>"
+         , "    </div>"
+         , "  </div>"
+         , "  <div class=\"i-chart\">"
+         , "    <div class=\"vl-wrap\"><div id=\"vl-" <> sid <> "\"></div></div>"
+         , "  </div>"
+         , "</div>"
+         ]
+
+interactiveMultiOutScript :: Text -> InteractiveMultiOut -> Text
+interactiveMultiOutScript sid imo =
+  let arrD xs = "[" <> T.intercalate "," (map showD4 xs) <> "]"
+      arr2D xss = "[" <> T.intercalate "," (map arrD xss) <> "]"
+      gridArr = arrD (imoOutGrid imo)
+      xObsArr = arrD (imoXObs imo)
+      yObsArr = arr2D (imoYObs imo)
+      predBlock = case imoPred imo of
+        PredLinearMO ints slps -> T.unlines
+          [ "  const model = 'linear-mo';"
+          , "  const intercepts = " <> arrD ints <> ";"
+          , "  const slopes     = " <> arrD slps <> ";"
+          , "  function predict(x) {"
+          , "    const out = new Array(intercepts.length);"
+          , "    for (let j = 0; j < intercepts.length; j++)"
+          , "      out[j] = intercepts[j] + slopes[j] * x;"
+          , "    return out;"
+          , "  }"
+          ]
+        PredKernelRBF1 xtr alpha h -> T.unlines
+          [ "  const model = 'kernel-rbf-1d';"
+          , "  const xTrain = " <> arrD xtr <> ";"
+          , "  const alpha  = " <> arr2D alpha <> ";"  -- n × q
+          , "  const hBand  = " <> showD4 h <> ";"
+          , "  function predict(x) {"
+          , "    const n = xTrain.length;"
+          , "    const q = alpha[0].length;"
+          , "    const out = new Array(q).fill(0);"
+          , "    for (let i = 0; i < n; i++) {"
+          , "      const u = (x - xTrain[i]) / hBand;"
+          , "      const k = Math.exp(-0.5 * u * u) / Math.sqrt(2 * Math.PI);"
+          , "      const row = alpha[i];"
+          , "      for (let j = 0; j < q; j++) out[j] += k * row[j];"
+          , "    }"
+          , "    return out;"
+          , "  }"
+          ]
+  in T.unlines
+       [ "(() => {"
+       , "  const sid = \"" <> sid <> "\";"
+       , "  const xCol = \"" <> imoXCol imo <> "\";"
+       , "  const yCol = \"" <> imoYCol imo <> "\";"
+       , "  const outAxis = \"" <> imoOutAxis imo <> "\";"
+       , "  const outGrid = " <> gridArr <> ";"
+       , "  const xObs    = " <> xObsArr <> ";"
+       , "  const yObs    = " <> yObsArr <> ";"
+       , predBlock
+       , "  function buildSpec() {"
+       , "    const slider = document.getElementById('i-' + sid + '-x');"
+       , "    const x = parseFloat(slider.value);"
+       , "    const lbl = document.getElementById('i-' + sid + '-x-val');"
+       , "    if (lbl) lbl.textContent = (Math.round(x*1000)/1000).toString();"
+       , "    const yPred = predict(x);"
+       , "    const predData = outGrid.map((z, j) => ({ z: z, y: yPred[j] }));"
+       , "    const obsData = [];"
+       , "    for (let i = 0; i < xObs.length; i++) {"
+       , "      const lab = xCol + '=' + xObs[i].toFixed(2);"
+       , "      for (let j = 0; j < outGrid.length; j++) {"
+       , "        obsData.push({ z: outGrid[j], y: yObs[i][j], src: lab });"
+       , "      }"
+       , "    }"
+       , "    return {"
+       , "      $schema: 'https://vega.github.io/schema/vega-lite/v5.json',"
+       , "      width: 760, height: 420,"
+       , "      layer: ["
+       , "        { data: { values: obsData },"
+       , "          mark: { type: 'circle', size: 18, opacity: 0.35 },"
+       , "          encoding: {"
+       , "            x: { field: 'z', type: 'quantitative', title: outAxis },"
+       , "            y: { field: 'y', type: 'quantitative', title: yCol },"
+       , "            color: { field: 'src', type: 'nominal', title: 'observed', legend: null }"
+       , "          } },"
+       , "        { data: { values: predData },"
+       , "          mark: { type: 'line', strokeWidth: 3, color: '#d62728' },"
+       , "          encoding: {"
+       , "            x: { field: 'z', type: 'quantitative' },"
+       , "            y: { field: 'y', type: 'quantitative' }"
+       , "          } }"
+       , "      ]"
+       , "    };"
+       , "  }"
+       , "  function update() {"
+       , "    const spec = buildSpec();"
+       , "    if (window.vegaEmbed) {"
+       , "      window.vegaEmbed('#vl-' + sid, spec, { actions: false });"
+       , "    }"
+       , "  }"
+       , "  window['__updMO_' + sid] = update;"
        , "  setTimeout(update, 0);"
        , "})();"
        ]
