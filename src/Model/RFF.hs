@@ -43,10 +43,16 @@ module Model.RFF
   , RFFRidgeFitMV (..)
   , rffRidgeMV
   , predictRFFRidgeMV
+    -- * 周辺尤度最大化 (Phase 2: ℓ, σ_f, σ_n の自動チューニング)
+  , logMarginalLikRBFMV
+  , maximizeMarginalLikRBFMV
+  , MLikResult (..)
   ) where
 
+import Control.Exception (SomeException, try, evaluate)
 import qualified Data.Vector as V
 import qualified Numeric.LinearAlgebra as LA
+import System.IO.Unsafe (unsafePerformIO)
 import System.Random.MWC (GenIO, uniformR)
 import qualified System.Random.MWC.Distributions as MWCD
 
@@ -299,3 +305,157 @@ predictRFFRidgeMV :: RFFRidgeFitMV -> LA.Matrix Double -> [Double]
 predictRFFRidgeMV fit xNew =
   let phi = rffFeaturesMV (rffrmvFeatures fit) xNew
   in LA.toList (phi LA.#> rffrmvWeights fit)
+
+-- ---------------------------------------------------------------------------
+-- 周辺尤度最大化 (RFF GP 流の HP チューニング、Phase 2)
+-- ---------------------------------------------------------------------------
+
+-- | 多変量入力 X (n×p), 観測 y に対する RBF カーネルの log-marginal-likelihood。
+--
+--   K_ij = σ_f² · exp(-‖x_i - x_j‖² / (2 ℓ²))
+--   y | θ ~ N(0, K + σ_n² I)
+--
+--   log p(y|θ) = -½ yᵀ (K+σ_n² I)⁻¹ y - ½ log|K+σ_n² I| - n/2 log(2π)
+--
+-- Cholesky 分解で安定計算。ℓ が極小で K が特異化したら -∞ 近似値を返す。
+logMarginalLikRBFMV
+  :: LA.Matrix Double      -- ^ X (n × p)
+  -> LA.Vector Double      -- ^ y (n)
+  -> Double                -- ^ ℓ
+  -> Double                -- ^ σ_f
+  -> Double                -- ^ σ_n
+  -> Double
+logMarginalLikRBFMV x y ell sf sn =
+  let n     = LA.rows x
+      kMat  = rbfKernelMat x ell sf
+      cMat  = kMat + LA.scale (sn * sn) (LA.ident n)
+      -- Cholesky: cMat = Rᵀ R (R 上三角)。失敗時は jitter を加えて再試行。
+      tryChol c =
+        let result = unsafePerformIO $ try (evaluate (LA.chol (LA.sym c))) :: Either SomeException (LA.Matrix Double)
+        in case result of
+             Right r -> Just r
+             Left _  -> Nothing
+      mR = case tryChol cMat of
+             Just r  -> Just r
+             Nothing -> tryChol (cMat + LA.scale 1e-6 (LA.ident n))
+  in case mR of
+       Nothing -> -1e30  -- 特異 → ペナルティ
+       Just r  ->
+         let logDet  = 2 * sum (map log (LA.toList (LA.takeDiag r)))
+             alpha   = cMat LA.<\> y
+             dataFit = LA.dot y alpha
+         in -0.5 * dataFit - 0.5 * logDet
+            - fromIntegral n / 2 * log (2 * pi)
+
+-- | RBF カーネル行列 (X が n×p)。K[i,j] = σ_f² · exp(-‖x_i - x_j‖² / (2ℓ²))
+rbfKernelMat :: LA.Matrix Double -> Double -> Double -> LA.Matrix Double
+rbfKernelMat x ell sf =
+  let n     = LA.rows x
+      sf2   = sf * sf
+      twol2 = 2 * ell * ell
+      rows  = LA.toRows x
+  in LA.fromLists
+       [ [ sf2 * exp (negate (LA.norm_2 (rows !! i - rows !! j) ^ (2::Int)) / twol2)
+         | j <- [0 .. n-1] ]
+       | i <- [0 .. n-1] ]
+
+-- | 周辺尤度最大化結果。
+data MLikResult = MLikResult
+  { mlEll      :: !Double
+  , mlSigmaF   :: !Double
+  , mlSigmaN   :: !Double
+  , mlLogMlik  :: !Double
+  , mlGridPts  :: !Int      -- ^ 評価したグリッド点数 (debug 用)
+  } deriving (Show)
+
+-- | (ℓ, σ_f, σ_n) のグリッド探索で marg-lik を最大化。
+--
+-- 戦略:
+--
+-- 1. ℓ は median pairwise distance を中心に log 等間隔で n_ℓ 点
+-- 2. σ_f は std(y) を中心に log で n_σf 点
+-- 3. σ_n は std(y)·{0.001..0.5} の log 等間隔で n_σn 点
+-- 4. 全 n_ℓ × n_σf × n_σn 点で log-mlik を評価し最良を取る
+-- 5. 最良点周辺で 1/3 の幅で同点数のグリッドを再探索 (1 段の coarse-to-fine)
+--
+-- デフォルトは (20, 8, 8) = 1280 点。最終的に 2560 点 (再探索込)。
+-- n=200 までは数秒。
+maximizeMarginalLikRBFMV
+  :: LA.Matrix Double
+  -> LA.Vector Double
+  -> Maybe (Int, Int, Int)         -- ^ (n_ℓ, n_σf, n_σn). Default (20,8,8)
+  -> MLikResult
+maximizeMarginalLikRBFMV x y mGrid =
+  let (nL, nSF, nSN) = case mGrid of
+        Just g  -> g
+        Nothing -> (20, 8, 8)
+      yStd  = sampleStd (LA.toList y)
+      ellM  = max 1e-3 (medianPairwiseDist x)
+      sfM   = max 1e-6 yStd
+      -- Stage 1: 広めグリッド
+      ellGrid1 = logSpace (ellM * 0.05) (ellM * 20)   nL
+      sfGrid1  = logSpace (sfM  * 0.25) (sfM  * 4)    nSF
+      snGrid1  = logSpace (yStd * 1e-3) (yStd * 0.5)  nSN
+      stage1   = bestOver x y ellGrid1 sfGrid1 snGrid1
+      -- Stage 2: 最良点周辺で 1/3 幅
+      (ell1, sf1, sn1, _) = stage1
+      ellGrid2 = logSpace (ell1 / 3) (ell1 * 3) nL
+      sfGrid2  = logSpace (sf1  / 2) (sf1  * 2) nSF
+      snGrid2  = logSpace (sn1  / 3) (sn1  * 3) nSN
+      stage2   = bestOver x y ellGrid2 sfGrid2 snGrid2
+      (ell2, sf2, sn2, ml2) = stage2
+  in MLikResult ell2 sf2 sn2 ml2
+       (nL * nSF * nSN * 2)
+
+-- | 与えられた (ellGrid, sfGrid, snGrid) 全組合せで log-mlik 最良を返す。
+bestOver
+  :: LA.Matrix Double -> LA.Vector Double
+  -> [Double] -> [Double] -> [Double]
+  -> (Double, Double, Double, Double)
+bestOver x y ells sfs sns =
+  let evaluations =
+        [ (ell, sf, sn, logMarginalLikRBFMV x y ell sf sn)
+        | ell <- ells, sf <- sfs, sn <- sns ]
+      best = foldr1 (\a@(_,_,_,la) b@(_,_,_,lb) ->
+                       if la >= lb then a else b) evaluations
+  in best
+
+-- | log 等間隔な n 点。
+logSpace :: Double -> Double -> Int -> [Double]
+logSpace lo hi n
+  | n <= 1    = [lo]
+  | lo <= 0   = logSpace 1e-9 hi n  -- 安全フォールバック
+  | otherwise =
+      let lLo = log lo
+          lHi = log hi
+          step = (lHi - lLo) / fromIntegral (n - 1)
+      in [ exp (lLo + fromIntegral i * step) | i <- [0 .. n - 1] ]
+
+-- | 行ペアの median pairwise distance (median heuristic for RBF ℓ)。
+medianPairwiseDist :: LA.Matrix Double -> Double
+medianPairwiseDist x =
+  let rows = LA.toRows x
+      pairs = [ LA.norm_2 (rows !! i - rows !! j)
+              | i <- [0 .. length rows - 1]
+              , j <- [i+1 .. length rows - 1] ]
+  in case pairs of
+       [] -> 1.0
+       _  ->
+         let sorted = LA.toList (LA.fromList pairs)  -- to immutable
+             sorted2 = qSort sorted
+             k       = length sorted2 `div` 2
+         in if null sorted2 then 1.0 else sorted2 !! k
+
+qSort :: Ord a => [a] -> [a]
+qSort []     = []
+qSort (p:xs) = qSort [x | x <- xs, x <= p] ++ [p] ++ qSort [x | x <- xs, x > p]
+
+sampleStd :: [Double] -> Double
+sampleStd xs
+  | length xs <= 1 = 1.0
+  | otherwise =
+      let n = fromIntegral (length xs)
+          m = sum xs / n
+          v = sum [ (x - m) * (x - m) | x <- xs ] / (n - 1)
+      in if v <= 0 then 1.0 else sqrt v
+

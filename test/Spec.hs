@@ -379,6 +379,30 @@ main = hspec $ do
       abs (LA.sumElements c0) `shouldSatisfy` (< 1e-9)
 
   describe "Model.RFF (multivariate, Phase B-RFF)" $ do
+    it "logMarginalLikRBFMV: 既知 ℓ で最大化される (合成データで)" $ do
+      -- y = sin(x) (1D) で ℓ をスキャンし、データの z-score 後の長さスケールに
+      -- 近い値で marg-lik が最大になることを確認。
+      let xs = [0.0, 0.3 .. 6.0]
+          ys = map sin xs
+          xMat = LA.fromLists [[x] | x <- xs]
+          yV   = LA.fromList ys
+          ells = [0.05, 0.2, 0.5, 1.0, 2.0, 5.0]
+          mliks = [ RFF.logMarginalLikRBFMV xMat yV ell 1.0 0.05 | ell <- ells ]
+          best  = snd (maximum (zip mliks ells))
+      best `shouldSatisfy` (\b -> b >= 0.2 && b <= 2.0)
+    it "maximizeMarginalLikRBFMV: 雑音ありデータで mlik が改善する" $ do
+      let xs = [0.0, 0.5 .. 10.0]
+          ys = [ sin (x/2) + 0.05 * (fromIntegral i / 21) - 0.025
+               | (i, x) <- zip [0::Int ..] xs ]
+          xMat = LA.fromLists [[x] | x <- xs]
+          yV   = LA.fromList ys
+          res  = RFF.maximizeMarginalLikRBFMV xMat yV (Just (8, 4, 4))
+      -- 最適 mlik > 任意の "ヘンな" 値 (ℓ=100, σ_n=10) より高い
+          weak = RFF.logMarginalLikRBFMV xMat yV 100 1.0 10.0
+      RFF.mlLogMlik res `shouldSatisfy` (> weak)
+      RFF.mlEll res     `shouldSatisfy` (> 0)
+      RFF.mlSigmaN res  `shouldSatisfy` (> 0)
+
     it "rffRidgeMV: y = x1 * t を完全にフィット" $ do
       let xs = [(x1, t) | x1 <- [1, 2, 3, 5, 7], t <- [1..10]]
           xss = [[x1, t] | (x1, t) <- xs]
