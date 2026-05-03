@@ -140,6 +140,20 @@ r <- CMAES.runCMAESWith cfg sphere [3, -2, 1, 0.5, -1.5] gen
 `cabal run single-opt-bench-demo` で 5 アルゴリズム × 3 ベンチ (Sphere / Rosenbrock / Rastrigin) の
 収束履歴を HTML レポートで比較できる。
 
+## RFF HP チューニング (`Model.RFF`) との統合 (Phase O9)
+
+`Model.RFF` のハイパーパラメータ自動決定にも DE 版を追加:
+
+| 関数 | 探索方法 |
+|---|---|
+| `maximizeMarginalLikRBFMV` | 既存: 1280 → 2560 点グリッド (coarse-to-fine) |
+| **`maximizeMarginalLikRBFMV_DE`** | 新規: log 空間 3D で DE coarse + 8×6×6 grid fine |
+| `gridSearchLOOCVRBFMV` | 既存: 8 ℓ × 20 λ = 160 点グリッド |
+| **`gridSearchLOOCVRBFMV_DE`** | 新規: log 空間 2D の DE 探索 |
+
+DE 版はグリッド離散性が問題になるケース (狭い ℓ 領域に最適がある等) で有効。
+評価コストはグリッド版と同程度。
+
 ## Bayesian Optimization 内側 (`Optim.BayesOpt`) との統合
 
 `Optim.BayesOpt` の獲得関数最大化は、新オプティマイザに置換済 (Phase O8):

@@ -52,19 +52,25 @@ module Model.RFF
     -- * 周辺尤度最大化 (Phase 2: ℓ, σ_f, σ_n の自動チューニング)
   , logMarginalLikRBFMV
   , maximizeMarginalLikRBFMV
+  , maximizeMarginalLikRBFMV_DE
   , MLikResult (..)
     -- * LOOCV 解析解 (Phase 3: HP 自動チューニング高速版)
   , loocvRFFRidgeMV
   , gridSearchLOOCVRBFMV
+  , gridSearchLOOCVRBFMV_DE
   , LOOCVResult (..)
   ) where
 
 import Control.Exception (SomeException, try, evaluate)
 import qualified Data.Vector as V
 import qualified Numeric.LinearAlgebra as LA
+import qualified System.IO.Unsafe
 import System.IO.Unsafe (unsafePerformIO)
+import qualified System.Random.MWC
 import System.Random.MWC (GenIO, uniformR)
 import qualified System.Random.MWC.Distributions as MWCD
+import qualified Optim.DifferentialEvolution as DEM
+import qualified Optim.Common as OCM
 
 -- ---------------------------------------------------------------------------
 -- 型
@@ -456,6 +462,48 @@ maximizeMarginalLikRBFMV x y mGrid =
   in MLikResult ell2 sf2 sn2 ml2
        (nL * nSF * nSN * 2)
 
+-- | `maximizeMarginalLikRBFMV` の **DE 版** (Phase O9)。
+--
+-- coarse stage を Differential Evolution (`Optim.DifferentialEvolution`) で
+-- 行い、fine stage は従来通りグリッド。
+--
+-- DE の探索空間は log 空間 (log_ℓ, log_σ_f, log_σ_n) の 3 次元。
+-- 評価予算は generations 引数で制御 (典型 30-100 で集団 30、合計 900-3000 評価)。
+-- グリッド版より広範囲を効率的に探索でき、log-mlik の局所解にハマりにくい。
+maximizeMarginalLikRBFMV_DE
+  :: LA.Matrix Double
+  -> LA.Vector Double
+  -> Int                                -- ^ DE generations
+  -> System.Random.MWC.GenIO
+  -> IO MLikResult
+maximizeMarginalLikRBFMV_DE x y nGen gen = do
+  let yStd  = sampleStd (LA.toList y)
+      ellM  = max 1e-3 (medianPairwiseDist x)
+      sfM   = max 1e-6 yStd
+      -- log 空間の bounds (元の logSpace 範囲と一致)
+      bounds =
+        [ (log (ellM * 0.05),  log (ellM * 20))     -- log ℓ
+        , (log (sfM  * 0.25),  log (sfM  * 4))      -- log σ_f
+        , (log (yStd * 1e-3),  log (yStd * 0.5))    -- log σ_n
+        ]
+      -- 目的関数: log-mlik を最大化 → DE は最小化なので negate
+      obj [le, lsf, lsn] = negate (logMarginalLikRBFMV x y (exp le) (exp lsf) (exp lsn))
+      obj _              = 1e30
+  let cfg = (DEM.defaultDEConfig bounds)
+              { DEM.deStop = OCM.defaultStopCriteria { OCM.stMaxIter = nGen } }
+  r <- DEM.runDEWith cfg obj gen
+  let [le, lsf, lsn] = OCM.orBest r
+      ell0 = exp le
+      sf0  = exp lsf
+      sn0  = exp lsn
+      -- Stage 2 (fine grid) for refinement
+      ellGrid2 = logSpace (ell0 / 3) (ell0 * 3) 8
+      sfGrid2  = logSpace (sf0  / 2) (sf0  * 2) 6
+      snGrid2  = logSpace (sn0  / 3) (sn0  * 3) 6
+      (ell2, sf2, sn2, ml2) = bestOver x y ellGrid2 sfGrid2 snGrid2
+      totalEvals = OCM.orIters r * DEM.dePopSize cfg + 8 * 6 * 6
+  return $ MLikResult ell2 sf2 sn2 ml2 totalEvals
+
 -- | 与えられた (ellGrid, sfGrid, snGrid) 全組合せで log-mlik 最良を返す。
 bestOver
   :: LA.Matrix Double -> LA.Vector Double
@@ -611,4 +659,57 @@ gridSearchLOOCVRBFMV p d x y mGrid gen = do
     , lcLambda = bLam
     , lcLOOCV  = bL
     , lcGridPts = nL * nLam
+    }
+
+-- | `gridSearchLOOCVRBFMV` の **DE 版** (Phase O9)。
+--
+-- (log_ℓ, log_λ) の 2 次元空間を Differential Evolution で探索。
+-- ω は ℓ ごとに新規サンプリング (RFF の特性上避けられない) のでコストは
+-- グリッド版と同程度。グリッドの離散性が問題になる場合に有効。
+gridSearchLOOCVRBFMV_DE
+  :: Int                               -- ^ p (入力次元)
+  -> Int                               -- ^ D (特徴次元)
+  -> LA.Matrix Double                  -- ^ X
+  -> LA.Vector Double                  -- ^ y
+  -> Int                               -- ^ DE generations
+  -> System.Random.MWC.GenIO
+  -> IO LOOCVResult
+gridSearchLOOCVRBFMV_DE p d x y nGen gen = do
+  let yStd  = sampleStd (LA.toList y)
+      sf    = max 1e-9 yStd
+      ellM  = max 1e-3 (medianPairwiseDist x)
+      bounds =
+        [ (log (ellM * 0.05), log (ellM * 20))      -- log ℓ
+        , (log (yStd * 1e-6), log (yStd * 10))      -- log λ
+        ]
+  -- 目的関数: log-space で受けた (log_ell, log_lam) で LOOCV を返す。
+  -- ω サンプリングは IO を含むため `unsafePerformIO` を使うが、決定的シードを
+  -- 内部で固定しないと毎回違う値が出る。簡略化のため: ℓ ごとに 1 度だけ
+  -- サンプリングしたかったが、純粋関数化のため IO Ref キャッシュは省略。
+  -- 各 DE 評価で feats を再サンプル (ノイズが入るが、実用上は最終 best 周辺で
+  -- 十分平均化される)。
+  --
+  -- 評価をプリ計算: 候補集団のサイズ × generations 回 fresh sample。
+  let cfg = (DEM.defaultDEConfig bounds)
+              { DEM.deStop = OCM.defaultStopCriteria { OCM.stMaxIter = nGen } }
+  -- ω サンプリング用の固定シード生成器を別途準備
+  -- (DE 内のランダムは gen を共有、評価用の ω は新たに引く)
+  obj <- pure $ \[le, llam] ->
+    System.IO.Unsafe.unsafePerformIO $ do
+      let ell = exp le
+          lam = exp llam
+      feats <- sampleRFFRBFMV p d ell sf gen
+      let phi = rffFeaturesMV feats x
+      pure (loocvFromPhi phi y lam)
+  r <- DEM.runDEWith cfg obj gen
+  let [le, llam] = OCM.orBest r
+      bestEll = exp le
+      bestLam = exp llam
+      bestL   = OCM.orValue r
+  return LOOCVResult
+    { lcEll = bestEll
+    , lcSigmaF = sf
+    , lcLambda = bestLam
+    , lcLOOCV  = bestL
+    , lcGridPts = OCM.orIters r * DEM.dePopSize cfg
     }

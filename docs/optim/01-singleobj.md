@@ -142,6 +142,20 @@ r <- CMAES.runCMAESWith cfg sphere [3, -2, 1, 0.5, -1.5] gen
 `cabal run single-opt-bench-demo` produces an HTML report comparing convergence histories
 of all 5 algorithms × 3 benchmarks (Sphere / Rosenbrock / Rastrigin).
 
+## Integration with RFF HP tuning (`Model.RFF`) (Phase O9)
+
+DE-based variants for RFF hyperparameter auto-tuning:
+
+| Function | Search method |
+|---|---|
+| `maximizeMarginalLikRBFMV` | Existing: 1280 → 2560-point grid (coarse-to-fine) |
+| **`maximizeMarginalLikRBFMV_DE`** | New: 3D log-space DE coarse + 8×6×6 fine grid |
+| `gridSearchLOOCVRBFMV` | Existing: 8 ℓ × 20 λ = 160-point grid |
+| **`gridSearchLOOCVRBFMV_DE`** | New: 2D log-space DE search |
+
+The DE variants help when grid discretization is a problem (e.g. narrow ℓ regions
+containing the optimum). Evaluation cost is comparable to the grid versions.
+
 ## Integration with Bayesian Optimization (`Optim.BayesOpt`)
 
 `Optim.BayesOpt`'s acquisition maximisation has been swapped to the new optimisers (Phase O8):

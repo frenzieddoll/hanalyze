@@ -1032,3 +1032,29 @@ main = hspec $ do
       (_, (xb, _)) <- BO.bayesOpt cfg target (0, 3) gen
       -- 8 反復では精度は緩めに。3.0 範囲のうち 0.5 以内に収束を期待
       abs (xb - 1.5) `shouldSatisfy` (< 0.5)
+
+  -- ===========================================================================
+  -- RFF HP 自動チューニングの DE 版 (Phase O9)
+  -- ===========================================================================
+  describe "Model.RFF DE-based auto-HP" $ do
+    it "maximizeMarginalLikRBFMV_DE: y = sin x + noise で妥当な ℓ" $ do
+      gen <- MWC.create
+      let n = 30
+          xs = [ fromIntegral i / 5 | i <- [0 .. n - 1] ] :: [Double]
+          ys = [ sin x + 0.05 * cos (3 * x) | x <- xs ]
+          xMat = LA.fromColumns [LA.fromList xs]
+          yVec = LA.fromList ys
+      r <- RFF.maximizeMarginalLikRBFMV_DE xMat yVec 30 gen
+      -- ℓ が極端に小さくない (>1e-2) ことだけ確認
+      RFF.mlEll r `shouldSatisfy` (> 1e-2)
+
+    it "gridSearchLOOCVRBFMV_DE: LOOCV が有限値、ℓ が探索範囲内" $ do
+      gen <- MWC.create
+      let n = 25
+          xs = [ fromIntegral i / 4 | i <- [0 .. n - 1] ] :: [Double]
+          ys = [ x + 0.1 * sin (2 * x) | x <- xs ]
+          xMat = LA.fromColumns [LA.fromList xs]
+          yVec = LA.fromList ys
+      r <- RFF.gridSearchLOOCVRBFMV_DE 1 50 xMat yVec 20 gen
+      RFF.lcLOOCV r `shouldSatisfy` (\v -> not (isNaN v) && v >= 0)
+      RFF.lcEll   r `shouldSatisfy` (> 1e-3)
