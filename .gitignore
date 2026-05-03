@@ -10,3 +10,6 @@
 
 # Ignore the trash directory entirely (output artifacts; user-managed cleanup)
 /trash/
+
+# データ生成器は git 管理外 (確認用、CSV だけ commit する)
+/demo/io/PotentialGen.hs
