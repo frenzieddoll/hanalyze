@@ -123,17 +123,19 @@ hanalyze kernel data/io/melted_sample.csv "x1 t" y --method rff \
 ```
 
 Adding `--interactive` produces a JS-driven interactive prediction: drag the
-side-axis sliders and the curve updates in real time. Useful when you want to
-explore "how does the curve change as I tweak conditions?" — e.g. an ion
-implantation potential depth profile across energy / dose:
+side-axis sliders and the curve updates in real time. `--standardize` z-scores
+the inputs, and `--auto-hp` runs marginal-likelihood maximization to choose
+(ℓ, σ_f, σ_n) automatically. For an ion-implantation dopant concentration
+profile (8 conditions × 30 z points = 240 rows):
 ```
-cabal run potential-gen
-hanalyze kernel data/io/potential_long.csv "energy dose z" y --method rff \
-    --features 400 --bandwidth 30 --lambda 0.01 \
+hanalyze kernel data/io/potential_long.csv "energy dose z" y \
+    --method rff --features 400 \
+    --standardize --auto-hp \
     --group name --xaxis z \
     --out trash/potential_plot.html --report trash/potential_report.html \
     --interactive
-# → 920 KB report: drag energy / dose sliders, the z-vs-y curve updates live.
+# Auto-HP: ℓ=0.41, σ_f=1.0e13, σ_n=6.1e11, log_mlik=-7085
+# R²=0.9947; drag energy/dose sliders, the z-vs-y curve updates live.
 ```
 
 ### Design of Experiments

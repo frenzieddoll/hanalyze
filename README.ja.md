@@ -122,16 +122,18 @@ hanalyze kernel data/io/melted_sample.csv "x1 t" y --method rff \
 ```
 
 `--interactive` を加えると、副軸スライダで予測曲線が JS によりリアルタイム
-更新される。半導体 II のポテンシャル深さ分布のように「条件を変えると曲線が
-どう変わるか」を見たい用途に向く:
+更新される。`--standardize` で入力の z-score 化、`--auto-hp` で周辺尤度
+最大化による (ℓ, σ_f, σ_n) 自動決定もまとめて指定できる。
+半導体 II のドーパント濃度プロファイル (8 条件 × 30 z 点 = 240 行) で:
 ```
-cabal run potential-gen   # ダミー Sim データ生成 (data/io/potential_long.csv)
-hanalyze kernel data/io/potential_long.csv "energy dose z" y --method rff \
-    --features 400 --bandwidth 30 --lambda 0.01 \
+hanalyze kernel data/io/potential_long.csv "energy dose z" y \
+    --method rff --features 400 \
+    --standardize --auto-hp \
     --group name --xaxis z \
     --out trash/potential_plot.html --report trash/potential_report.html \
     --interactive
-# → energy / dose スライダで z-y 曲線が即時更新される 920KB のレポート
+# Auto-HP : ℓ=0.41, σ_f=1.0e13, σ_n=6.1e11, log_mlik=-7085
+# R²=0.9947、energy/dose スライダで曲線変化が JS により即時更新される
 ```
 
 ### 実験計画法

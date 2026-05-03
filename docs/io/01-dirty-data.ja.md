@@ -189,47 +189,74 @@ main = do
 おき、`φ_j(x_new) = σ_f √(2/D) cos(ω_jᵀx_new + b_j)` を JavaScript で評価する
 仕組みです。
 
-例: 半導体イオン注入 (II) のポテンシャル深さ分布を、エネルギー / ドーズで
-スライドさせて曲線変化を見る。
+### 入力標準化 (`--standardize`) と HP 自動決定 (`--auto-hp`)
+
+scale 差の大きい特徴 (energy 30–200 keV、dose 1e13–2e15 cm⁻²、z 0–200 nm
+など) を共通長さスケール ℓ で扱うと精度が出ません。これを 2 つのフラグで
+解決します。
+
+| フラグ | 動作 |
+|---|---|
+| `--standardize` | fit 前に X を z-score 化 (`Stat.Standardize`)。予測 / プロット / インタラクティブ JS は raw 単位で受け取った値を逆算で標準化空間に変換してから RFF を評価 |
+| `--auto-hp`     | `Model.RFF.maximizeMarginalLikRBFMV` で `(ℓ, σ_f, σ_n)` を周辺尤度最大化で自動決定。`--bandwidth` / `--lambda` は無視 (σ_n² が λ に対応) |
+
+周辺尤度最大化のアルゴリズム:
+
+1. K_ij = σ_f² · exp(-‖x_i - x_j‖² / (2ℓ²)) を厳密に構築
+2. log p(y|θ) = -½yᵀ(K+σ_n²I)⁻¹y - ½log|K+σ_n²I| - n/2 log(2π) を Cholesky 経由で計算
+3. (log ℓ, log σ_f, log σ_n) を log-spaced 20×8×8 グリッドで全評価
+4. 最良点周辺で 1/3 幅の coarse-to-fine 1 段
+5. 確定した ℓ で改めて RFF (D 個の ω) を sampling し、Ridge fit
+
+コードは正攻法ですがグリッドベースで最適化は局所最適のリスクあり。n が小さい
+うち (n ≤ 200 程度) は全 2560 点評価でも数秒で終わります。
+
+### 例: 半導体ポテンシャル風データ
+
+8 条件 (energy/dose) × 30 z 点 = 240 行のドーパント濃度プロファイル
+(`data/io/potential_long.csv`)。物理係数 (B in Si 簡易):
+`Rp(E) = 1.5·E^0.7`、`σ(E) = 0.4·Rp`、`N_peak = D / (√(2π)·σ)`。
 
 ```bash
-# 6 条件のダミーデータを生成 (各条件で z グリッドが異なる、 SimRun 風)
-cabal run potential-gen   # → data/io/potential_long.csv
+# 生成器は git 管理外 (確認用)。再生成は cabal exe を一時的に追加して実行。
 
-# 横軸 z 固定、energy / dose スライダで予測曲線が動く
+# 横軸 z 固定、energy / dose スライダで予測曲線が動く + 自動 HP + 標準化
 hanalyze kernel data/io/potential_long.csv "energy dose z" y \
-    --method rff --features 400 --bandwidth 30 --lambda 0.01 \
+    --method rff --features 400 \
+    --standardize --auto-hp \
     --group name --xaxis z \
     --out trash/potential_plot.html \
     --report trash/potential_report.html \
     --interactive
 ```
 
-ブラウザで `potential_report.html` を開くと、**energy / dose のスライダ** が
-表示され、操作するたびに予測曲線がリアルタイムで再計算されます。観測点
-(各条件の sim 結果) は色分けで重ねて常時表示されます。
+stdout 例:
+```
+  Standardize: ON
+    μ = [105, 8.3e14, 63.7]
+    σ = [60, 7.7e14, 47]
+  Auto-HP: 周辺尤度最大化を実行中...
+    ℓ = 0.41   (標準化空間)
+    σ_f = 1.0e13
+    σ_n = 6.1e11   (λ = σ_n² = 3.7e23)
+    log_mlik = -7085   (2560 点評価)
+RFF (multivariate) Ridge fit:
+  R^2 = 0.9947
+  RMSE = 8.3e11
+```
 
-> **z グリッドが条件ごとに違うデータの扱い**: `Model.RFF` の RBF カーネル
-> はもともと「z が近いと出力が近くなる」滑らかさ事前を持つので、long-form
-> にしてしまえば不揃いグリッドはそのまま受け入れられます。予測時は
-> mainAxis (z) に細かい等間隔グリッド (100 点) を使って曲線を描きます。
+ブラウザで `potential_report.html` を開くと、energy / dose のスライダが
+**raw 単位** で表示され、操作するたびに JS が `(v-μ)/σ` で標準化空間に変換 →
+予測曲線を再描画します。
 
-### 「z が近いと y が近い」をより明示的にする回帰 (将来計画)
+### 残課題 — ARD-RFF (将来)
 
-現状の `rffRidgeMV` は **共通長さスケール ℓ** を使うため、scale 差の大きな
-特徴 (例: energy 50–200 keV、dose 0.5–2.0、z 0–200 nm) では、どれか 1 つの
-スケールに合わせると他がうまく学習されません。
-
-これを解決する方向性:
-
-| 案 | 概要 | 実装規模 |
-|---|---|---|
-| **A. ARD-RFF** (Automatic Relevance Determination) | ω_jk ~ N(0, 1/ℓ_k²) と次元ごと独立に長さスケールを持つ。`rffmvOmegas` を生成する際に列ごとの ℓ_k を指定 | 小 (`sampleRFFRBFMV` の引数を `[Double]` に変えるだけ) |
-| **B. 入力標準化 + 共通 ℓ** | 学習前に各列を mean-0/std-1 に正規化し、内部では共通 ℓ で学習 → 予測時に逆変換 | 中 |
-| **C. GP の多変量化** | `Model.GP` を多次元入力 (各次元独立 ℓ) に拡張。事後分散も得られる | 中〜大 |
-
-**推奨: A → B** の段階導入。A だけで多くのケースを救え、B は更に頑健。
-C は予測の不確実性が必要になったタイミングで。
+`--standardize` で全特徴を共通スケールに揃えた後でも、本当に「物理的に
+重要な変数」と「ほぼ無関係な変数」を区別したい場合は、**列ごとに独立な
+長さスケール ℓ_k** を持つ ARD (Automatic Relevance Determination) RFF が
+有効。実装は `sampleRFFRBFMV` の引数を `[Double]` (各次元 ℓ) に拡張する
+だけ、CV / 周辺尤度のグリッド次元数だけ計算量が増えます。標準化単独で
+十分なケースは多いので、現状は ARD は未実装。
 
 melt 後は通常の DataFrame なので原則どのモデルにも乗せられますが、複数
 説明変数 (例 `"x1 t"`) を CLI / Model API 両方で扱えるかは個別:
