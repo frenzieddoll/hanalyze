@@ -22,8 +22,8 @@ import Data.List (sort)
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import DataFrame.Core    (Column (..), DataFrame)
-import qualified DataFrame.Core as DF
+import qualified DataFrame                    as DX
+import qualified DataFrame.Internal.DataFrame as DXD
 import MCMC.Core (Chain (..), chainVals, posteriorMean, posteriorSD,
                   posteriorQuantile)
 import MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
@@ -111,11 +111,10 @@ makeSmoothData ch =
 -- DataFrame の組み立て
 -- ---------------------------------------------------------------------------
 
-mkDataFrame :: DataFrame
-mkDataFrame = DF.mkDataFrame
-  [ ("x", NumericCol (V.fromList xs))
-  , ("y", NumericCol (V.fromList ys))
-  ]
+mkDataFrame :: DXD.DataFrame
+mkDataFrame = DX.insertColumn "x" (DX.fromList (xs :: [Double]))
+            $ DX.insertColumn "y" (DX.fromList (ys :: [Double]))
+            $ DX.empty
 
 -- ---------------------------------------------------------------------------
 -- HBM フィット結果から FitSummary を構築

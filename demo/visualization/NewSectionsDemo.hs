@@ -25,7 +25,7 @@ import qualified Data.Text as T
 import Control.Monad (replicateM)
 
 import DataIO.CSV          (loadAuto)
-import DataFrame.Core      (getNumeric)
+import DataIO.Convert      (getDoubleVec)
 import qualified Model.LM  as LM
 import qualified Model.GAM as GAM
 import qualified Model.RandomForest as RF
@@ -77,8 +77,8 @@ main = do
   putStrLn "============================================================"
 
   Right df <- loadAuto "data/regression/test_lm.csv"
-  let Just xVec = getNumeric "x" df
-      Just yVec = getNumeric "y" df
+  let Just xVec = getDoubleVec "x" df
+      Just yVec = getDoubleVec "y" df
       xs = V.toList xVec
       ys = V.toList yVec
       n  = length xs

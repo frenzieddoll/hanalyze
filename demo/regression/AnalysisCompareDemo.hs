@@ -14,7 +14,9 @@ import qualified Numeric.LinearAlgebra as LA
 import System.Random.MWC (createSystemRandom)
 import Text.Printf (printf)
 
-import DataFrame.Core
+import qualified DataFrame                    as DX
+import qualified DataFrame.Internal.DataFrame as DXD
+import DataIO.Convert      (getDoubleVec, getTextVec)
 import DataIO.CSV          (loadAuto)
 import qualified Model.Core as Core
 import qualified Model.LM   as LM
@@ -63,9 +65,9 @@ main = do
 
   putStrLn "Loaded:"
   putStrLn $ "  data/regression/test_lm.csv      ("
-             ++ show (numRows dfLM) ++ " rows)"
+             ++ show ((fst (DX.dimensions dfLM))) ++ " rows)"
   putStrLn $ "  data/regression/test_poisson.csv ("
-             ++ show (numRows dfPois) ++ " rows)"
+             ++ show ((fst (DX.dimensions dfPois))) ++ " rows)"
   putStrLn ""
 
   doLMDemo  dfLM
@@ -89,16 +91,16 @@ main = do
 -- LM
 -- ---------------------------------------------------------------------------
 
-doLMDemo :: DataFrame -> IO ()
+doLMDemo :: DXD.DataFrame -> IO ()
 doLMDemo df = do
   putStrLn "--- LM ---"
-  case (getNumeric "x" df, getNumeric "y" df) of
+  case (getDoubleVec "x" df, getDoubleVec "y" df) of
     (Just xVec, Just yVec) -> do
       writeARLM df
       writeRBLM df xVec yVec
     _ -> putStrLn "  (LM data not loaded)"
 
-writeARLM :: DataFrame -> IO ()
+writeARLM :: DXD.DataFrame -> IO ()
 writeARLM df = do
   case LM.fitPolyWithSmooth (Core.CI 0.95) 100 df "x" "y" of
     Just (fit, sf) -> do
@@ -116,7 +118,7 @@ writeARLM df = do
       putStrLn "  AR: trash/cmp_lm_AR.html"
     Nothing -> putStrLn "  AR: fit failed"
 
-writeRBLM :: DataFrame -> V.Vector Double -> V.Vector Double -> IO ()
+writeRBLM :: DXD.DataFrame -> V.Vector Double -> V.Vector Double -> IO ()
 writeRBLM df _xVec _yVec = do
   appendixSec <- RB.secAppendixFromMd "付録: モデルの原理"
                    "docs/principles/lm.ja.md"
@@ -133,24 +135,24 @@ writeRBLM df _xVec _yVec = do
 -- GLM (Poisson)
 -- ---------------------------------------------------------------------------
 
-doGLMDemo :: DataFrame -> IO ()
+doGLMDemo :: DXD.DataFrame -> IO ()
 doGLMDemo df = do
   putStrLn "--- GLM (Poisson) ---"
   -- データの y 列名を判別
   let yCol = if columnInDF "count" df then "count"
              else if columnInDF "y" df then "y" else "count"
       xCol = "x"
-  case (getNumeric xCol df, getNumeric yCol df) of
+  case (getDoubleVec xCol df, getDoubleVec yCol df) of
     (Just xVec, Just yVec) -> do
       writeARGLM df xCol yCol
       writeRBGLM df xVec yVec xCol yCol
     _ -> putStrLn $ "  (columns " ++ T.unpack xCol ++ "/"
                                   ++ T.unpack yCol ++ " not numeric)"
 
-columnInDF :: T.Text -> DataFrame -> Bool
-columnInDF c df = c `elem` columnNames df
+columnInDF :: T.Text -> DXD.DataFrame -> Bool
+columnInDF c df = c `elem` DX.columnNames df
 
-writeARGLM :: DataFrame -> T.Text -> T.Text -> IO ()
+writeARGLM :: DXD.DataFrame -> T.Text -> T.Text -> IO ()
 writeARGLM df xCol yCol = do
   case GLM.fitGLMWithSmooth GLM.Poisson GLM.Log [(xCol, 1)]
                               Core.NoBand 100 df yCol of
@@ -170,7 +172,7 @@ writeARGLM df xCol yCol = do
       putStrLn "  AR: trash/cmp_glm_AR.html"
     Nothing -> putStrLn "  AR: fit failed"
 
-writeRBGLM :: DataFrame -> V.Vector Double -> V.Vector Double
+writeRBGLM :: DXD.DataFrame -> V.Vector Double -> V.Vector Double
            -> T.Text -> T.Text -> IO ()
 writeRBGLM df _xVec _yVec xCol yCol = do
   appendixSec <- RB.secAppendixFromMd "付録: モデルの原理"
@@ -195,17 +197,17 @@ doGLMMDemo = do
   let xs = V.fromList [1,2,3,4, 1,2,3,4, 1,2,3,4 :: Double]
       ys = V.fromList [7.1,6.9,7.0,7.0, 5.0,4.9,5.1,5.0, 3.0,2.9,3.1,3.0]
       gs = V.fromList ["A","A","A","A","B","B","B","B","C","C","C","C"]
-      df = mkDataFrame
-             [ ("x",     NumericCol xs)
-             , ("y",     NumericCol ys)
-             , ("group", TextCol    gs) ]
+      df = DX.insertColumn "x"     (DX.fromList (V.toList xs :: [Double]))
+         $ DX.insertColumn "y"     (DX.fromList (V.toList ys :: [Double]))
+         $ DX.insertColumn "group" (DX.fromList (V.toList gs :: [T.Text]))
+         $ DX.empty
   case GLMM.fitLMEDataFrame [("x", 1)] "group" "y" df of
     Just gr -> do
       writeARGLMM df gr
       writeRBGLMM df gr
     Nothing -> putStrLn "  GLMM fit failed"
 
-writeARGLMM :: DataFrame -> GLMM.GLMMResult -> IO ()
+writeARGLMM :: DXD.DataFrame -> GLMM.GLMMResult -> IO ()
 writeARGLMM df gr = do
   let summary = AR.mkGLMMSummary GLM.Gaussian GLM.Identity [("x", 1)]
                                   "group" Nothing gr
@@ -214,7 +216,7 @@ writeARGLMM df gr = do
     (AR.MixFit summary) []
   putStrLn "  AR: trash/cmp_glmm_AR.html"
 
-writeRBGLMM :: DataFrame -> GLMM.GLMMResult -> IO ()
+writeRBGLMM :: DXD.DataFrame -> GLMM.GLMMResult -> IO ()
 writeRBGLMM df gr = do
   appendixSec <- RB.secAppendixFromMd "付録: モデルの原理"
                    "docs/principles/glmm.ja.md"
@@ -228,10 +230,10 @@ writeRBGLMM df gr = do
 -- GP
 -- ---------------------------------------------------------------------------
 
-doGPDemo :: DataFrame -> IO ()
+doGPDemo :: DXD.DataFrame -> IO ()
 doGPDemo df = do
   putStrLn "--- GP (RBF) ---"
-  case (getNumeric "x" df, getNumeric "y" df) of
+  case (getDoubleVec "x" df, getDoubleVec "y" df) of
     (Just xVec, Just yVec) -> do
       let xs = V.toList xVec
           ys = V.toList yVec
@@ -248,7 +250,7 @@ doGPDemo df = do
       writeRBGP df xs ys gridX res paramsOpt
     _ -> putStrLn "  (GP data not loaded)"
 
-writeARGP :: DataFrame -> [Double] -> [Double]
+writeARGP :: DXD.DataFrame -> [Double] -> [Double]
           -> GP.GPResult -> GP.GPModel -> GP.GPParams -> IO ()
 writeARGP df xs ys res model params = do
   let pd = GP.gpPredData model xs ys
@@ -272,7 +274,7 @@ writeARGP df xs ys res model params = do
     (AR.GPFit gfSummary) []
   putStrLn "  AR: trash/cmp_gp_AR.html"
 
-writeRBGP :: DataFrame -> [Double] -> [Double] -> [Double]
+writeRBGP :: DXD.DataFrame -> [Double] -> [Double] -> [Double]
           -> GP.GPResult -> GP.GPParams -> IO ()
 writeRBGP df xs ys gridX res params = do
   appendixSec <- RB.secAppendixFromMd "付録: モデルの原理"
@@ -296,10 +298,10 @@ hbmModel xs ys = do
   mapM_ (\(x, y) -> HBM.observe "y" (HBM.Normal (a + b * realToFrac x) s) [y])
         (zip xs ys)
 
-doHBMDemo :: DataFrame -> IO ()
+doHBMDemo :: DXD.DataFrame -> IO ()
 doHBMDemo df = do
   putStrLn "--- HBM (Bayesian LM via NUTS) ---"
-  case (getNumeric "x" df, getNumeric "y" df) of
+  case (getDoubleVec "x" df, getDoubleVec "y" df) of
     (Just xVec, Just yVec) -> do
       let xs = V.toList xVec
           ys = V.toList yVec
@@ -334,7 +336,7 @@ makeHBMSmoothAR xs chain =
       (mid, lo, hi) = unzip3 preds
   in AR.SmoothData grid mid lo hi True
 
-writeARHBM :: DataFrame -> [Double] -> [Double] -> MCMCcore.Chain -> IO ()
+writeARHBM :: DXD.DataFrame -> [Double] -> [Double] -> MCMCcore.Chain -> IO ()
 writeARHBM df xs ys chain = do
   let aMean = maybe 0 id (MCMCcore.posteriorMean "alpha" chain)
       bMean = maybe 0 id (MCMCcore.posteriorMean "beta"  chain)
@@ -380,7 +382,7 @@ mkPosteriorRows chain =
      maybe 0 id (MCMCcore.posteriorQuantile 0.975 p chain))
   | p <- ["alpha", "beta", "sigma"] ]
 
-writeRBHBM :: DataFrame -> [Double] -> [Double] -> MCMCcore.Chain -> IO ()
+writeRBHBM :: DXD.DataFrame -> [Double] -> [Double] -> MCMCcore.Chain -> IO ()
 writeRBHBM df xs ys chain = do
   appendixSec <- RB.secAppendixFromMd "付録: モデルの原理"
                    "docs/principles/hbm.ja.md"

@@ -25,8 +25,8 @@ import Data.Maybe (fromMaybe)
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import DataFrame.Core (Column (..), DataFrame)
-import qualified DataFrame.Core as DF
+import qualified DataFrame                    as DX
+import qualified DataFrame.Internal.DataFrame as DXD
 
 import MCMC.Core (Chain (..), chainVals, posteriorMean, posteriorSD,
                   posteriorQuantile, acceptanceRate)
@@ -81,12 +81,11 @@ allGroups = replicate (length dataA) "A"
          ++ replicate (length dataB) "B"
          ++ replicate (length dataC) "C"
 
-mkDataFrame :: DataFrame
-mkDataFrame = DF.mkDataFrame
-  [ ("x",     NumericCol (V.fromList allXs))
-  , ("y",     NumericCol (V.fromList allYs))
-  , ("group", TextCol    (V.fromList allGroups))
-  ]
+mkDataFrame :: DXD.DataFrame
+mkDataFrame = DX.insertColumn "x"     (DX.fromList (allXs :: [Double]))
+            $ DX.insertColumn "y"     (DX.fromList (allYs :: [Double]))
+            $ DX.insertColumn "group" (DX.fromList (allGroups :: [T.Text]))
+            $ DX.empty
 
 -- ---------------------------------------------------------------------------
 -- M1: ランダム切片のみ (β は全グループ共通)

@@ -15,7 +15,6 @@ library
   hs-source-dirs:   src
   default-language: GHC2021
   exposed-modules:
-    DataFrame.Core
     DataIO.CSV
     DataIO.Preprocess
     DataIO.External
@@ -132,6 +131,8 @@ executable glmm-demo
     , hanalyze
     , vector   >= 0.12 && < 0.14
     , hmatrix  >= 0.20 && < 0.22
+    , text     >= 1.2  && < 2.2
+    , dataframe
 
 executable hbm-example
   import:           warnings
@@ -265,6 +266,7 @@ executable analysis-compare-demo
     , hmatrix    >= 0.20 && < 0.22
     , mwc-random >= 0.15 && < 0.16
     , containers >= 0.6  && < 0.8
+    , dataframe
 
 executable new-sections-demo
   import:           warnings
@@ -784,6 +786,7 @@ executable hbm-random-slope
     , containers >= 0.6  && < 0.8
     , mwc-random >= 0.15 && < 0.16
     , vector     >= 0.12 && < 0.14
+    , dataframe
 
 executable simpson-paradox
   import:           warnings
@@ -798,6 +801,7 @@ executable simpson-paradox
     , mwc-random >= 0.15 && < 0.16
     , vector     >= 0.12 && < 0.14
     , hmatrix    >= 0.20 && < 0.22
+    , dataframe
 
 executable hbm-regression
   import:           warnings
@@ -811,6 +815,7 @@ executable hbm-regression
     , containers >= 0.6  && < 0.8
     , mwc-random >= 0.15 && < 0.16
     , vector     >= 0.12 && < 0.14
+    , dataframe
 
 test-suite hanalyze-test
   import:           warnings

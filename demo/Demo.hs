@@ -1,12 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import DataFrame.Core
+import qualified DataFrame as DX
 import Model.GLMM
 import Model.Core (coeffList, rSquared1, fittedList)
 import Model.LM   (multiPolyDesignMatrix, fitLMVec)
 
 import qualified Data.Vector           as V
+import qualified Data.Text             as T
 import qualified Numeric.LinearAlgebra as LA
 import Data.List   (zip4)
 import Text.Printf (printf)
@@ -40,11 +41,11 @@ schoolVec = V.fromList
 
 main :: IO ()
 main = do
-  let df = mkDataFrame
-             [ ("hours",  NumericCol hoursVec)
-             , ("score",  NumericCol scoresVec)
-             , ("school", TextCol (V.fromList
-                 ["A","A","A","A","A","B","B","B","B","B","C","C","C","C","C"])) ]
+  let df = DX.insertColumn "hours"  (DX.fromList (V.toList hoursVec :: [Double]))
+         $ DX.insertColumn "score"  (DX.fromList (V.toList scoresVec :: [Double]))
+         $ DX.insertColumn "school" (DX.fromList
+             (["A","A","A","A","A","B","B","B","B","B","C","C","C","C","C"] :: [T.Text]))
+         $ DX.empty
 
   -- ── OLS (school を無視した単純回帰) ──────────────────────────────────
   let dm     = multiPolyDesignMatrix [(hoursVec, 1)]
