@@ -3,8 +3,8 @@
 > 🌐 **English** | [日本語](02-multi-objective.ja.md)
 
 > NSGA-II / Pareto utilities / Bayesian Multi-Objective Optimization.
-> Theory: [docs/doe-optim/theory-pareto-moo.md](theory-pareto-moo.md) and
-> [docs/doe-optim/theory-bayesopt.md](theory-bayesopt.md).
+> Theory: [docs/optim/theory-pareto-moo.md](theory-pareto-moo.md) and
+> [docs/optim/theory-bayesopt.md](theory-bayesopt.md).
 
 ## Module quick reference
 

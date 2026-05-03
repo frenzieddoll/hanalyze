@@ -533,7 +533,7 @@ y  = max(0, y*)  (観測値、検出下限 0 で打ち切り)
 5. **次のレベルへ**:
    - 因果推論 (DoWhy, IV, DID)
    - Gaussian Process (`gp-demo`)
-   - 多目的最適化 ([../doe-optim/02-multi-objective.ja.md](../doe-optim/02-multi-objective.ja.md))
+   - 多目的最適化 ([../optim/02-multi-objective.ja.md](../optim/02-multi-objective.ja.md))
 
 ---
 

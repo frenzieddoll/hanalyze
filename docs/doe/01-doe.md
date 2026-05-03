@@ -2,7 +2,7 @@
 
 > Statistical design techniques for collecting data efficiently and
 > extracting maximum information.
-> For theory, see [docs/doe-optim/theory-doe.md](theory-doe.md).
+> For theory, see [docs/doe/theory-doe.md](theory-doe.md).
 
 ## Module quick reference
 
@@ -386,6 +386,6 @@ let nA = sampleSizeOneWayAnova 0.25 3 0.8 0.05
 
 ## See also
 
-- Theory: [docs/doe-optim/theory-doe.md](theory-doe.md)
+- Theory: [docs/doe/theory-doe.md](theory-doe.md)
 - Demos: `doe-demo`, `rsm-demo`, `optimaldoe-demo`
 - Related regression: fit factor effects with `Model.LM`

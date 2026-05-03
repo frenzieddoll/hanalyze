@@ -128,16 +128,18 @@ myModel = do
 | [理論 — 回帰拡張](docs/regression/theory-regression-extensions.ja.md) | スプライン基底、カーネルメソッド、L1/L2 正則化、bias-variance |
 | [理論 — 多変量回帰](docs/regression/theory-multivariate.ja.md) | OLS / RRR / PLS / CCA / Multi-GP の数学的背景 |
 
-### 2. 実験計画と最適化 — `docs/doe-optim/`
+### 2. 実験計画 — `docs/doe/` / 最適化 — `docs/optim/`
 
 | ページ | 内容 |
 |---|---|
-| [実験計画法 (DOE)](docs/doe-optim/01-doe.ja.md) | 完全/部分要因 / ラテン方格 / 乱塊 / RSM / D-optimal / ANOVA / Power 解析 |
-| [多目的最適化](docs/doe-optim/02-multi-objective.ja.md) | NSGA-II / Pareto / Bayesian MOO |
-| [直交表とタグチメソッド](docs/doe-optim/03-orthogonal-taguchi.ja.md) | Lₙ 表、SN 比 4 種、内/外配置、ロバスト設計 (★ 統合ガイド) |
-| [理論 — 実験計画法](docs/doe-optim/theory-doe.ja.md) | 直交性、効率指標、RSM、検出力、サンプルサイズ |
-| [理論 — Pareto 効率と MOO](docs/doe-optim/theory-pareto-moo.ja.md) | NSGA-II アルゴリズム、HV/IGD、scalarization、ZDT |
-| [理論 — Bayesian Optimization](docs/doe-optim/theory-bayesopt.ja.md) | EI / UCB / PI / EHVI / ParEGO / q-EHVI |
+| [実験計画法 (DOE)](docs/doe/01-doe.ja.md) | 完全/部分要因 / ラテン方格 / 乱塊 / RSM / D-optimal / ANOVA / Power 解析 |
+| [直交表とタグチメソッド](docs/doe/02-orthogonal-taguchi.ja.md) | Lₙ 表、SN 比 4 種、内/外配置、ロバスト設計 (★ 統合ガイド) |
+| [理論 — 実験計画法](docs/doe/theory-doe.ja.md) | 直交性、効率指標、RSM、検出力、サンプルサイズ |
+| [単目的最適化](docs/optim/01-singleobj.ja.md) | Nelder-Mead / L-BFGS / Brent / DE / CMA-ES (Optim.* 統一インターフェース) |
+| [多目的最適化](docs/optim/02-multi-objective.ja.md) | NSGA-II / Pareto / Bayesian MOO |
+| [理論 — 単目的最適化](docs/optim/theory-singleobj.ja.md) | 各アルゴリズムの数学的背景と選択指針 |
+| [理論 — Pareto 効率と MOO](docs/optim/theory-pareto-moo.ja.md) | NSGA-II アルゴリズム、HV/IGD、scalarization、ZDT |
+| [理論 — Bayesian Optimization](docs/optim/theory-bayesopt.ja.md) | EI / UCB / PI / EHVI / ParEGO / q-EHVI |
 
 ### 3. ベイズ統計と確率モデリング — `docs/bayesian/`
 

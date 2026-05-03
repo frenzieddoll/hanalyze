@@ -542,7 +542,7 @@ Suggested order for newcomers:
 5. **Next level**:
    - Causal inference (DoWhy, IV, DID).
    - Gaussian Processes (`gp-demo`).
-   - Multi-objective optimisation ([../doe-optim/02-multi-objective.md](../doe-optim/02-multi-objective.md)).
+   - Multi-objective optimisation ([../optim/02-multi-objective.md](../optim/02-multi-objective.md)).
 
 ---
 

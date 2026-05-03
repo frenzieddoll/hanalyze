@@ -421,5 +421,5 @@ renderReport path cfg augmented
 ## Related documents
 
 - [01-visualization.md](01-visualization.md) — single-shot plots (bar, histogram, scatter, Mermaid DAG)
-- [../doe-optim/03-orthogonal-taguchi.md](../doe-optim/03-orthogonal-taguchi.md) — orthogonal arrays and Taguchi method (incl. `Viz.Taguchi`)
+- [../doe/02-orthogonal-taguchi.md](../doe/02-orthogonal-taguchi.md) — orthogonal arrays and Taguchi method (incl. `Viz.Taguchi`)
 - [../regression/06-quantile-gam-rf.md](../regression/06-quantile-gam-rf.md) — Quantile / GAM / Random Forest

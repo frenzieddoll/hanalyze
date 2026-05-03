@@ -3,7 +3,7 @@
 > 🌐 **English** | [日本語](theory-doe.ja.md)
 
 > Mathematical foundations for efficient data-collection design.
-> Practical usage: [docs/doe-optim/01-doe.md](01-doe.md).
+> Practical usage: [docs/doe/01-doe.md](01-doe.md).
 
 ## 1. What is statistical experimental design?
 

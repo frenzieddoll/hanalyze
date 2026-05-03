@@ -130,16 +130,18 @@ A free-monad DSL from which **four interpretations** (structural inspection / lo
 | [Theory — regression extensions](docs/regression/theory-regression-extensions.md) | Spline bases, kernel methods, L1/L2 regularization, bias-variance |
 | [Theory — multivariate regression](docs/regression/theory-multivariate.md) | Mathematical background of OLS / RRR / PLS / CCA / Multi-GP |
 
-### 2. Design of Experiments and optimization — `docs/doe-optim/`
+### 2. Design of Experiments — `docs/doe/` / Optimization — `docs/optim/`
 
 | Page | Contents |
 |---|---|
-| [Design of Experiments (DOE)](docs/doe-optim/01-doe.md) | Full/fractional factorial / Latin square / RCBD / RSM / D-optimal / ANOVA / power analysis |
-| [Multi-objective optimization](docs/doe-optim/02-multi-objective.md) | NSGA-II / Pareto / Bayesian MOO |
-| [Orthogonal arrays and Taguchi method](docs/doe-optim/03-orthogonal-taguchi.md) | Lₙ tables, four SN ratios, inner/outer arrays, robust design (★ unified guide) |
-| [Theory — Design of Experiments](docs/doe-optim/theory-doe.md) | Orthogonality, efficiency criteria, RSM, power, sample size |
-| [Theory — Pareto efficiency and MOO](docs/doe-optim/theory-pareto-moo.md) | NSGA-II algorithm, HV/IGD, scalarization, ZDT |
-| [Theory — Bayesian Optimization](docs/doe-optim/theory-bayesopt.md) | EI / UCB / PI / EHVI / ParEGO / q-EHVI |
+| [Design of Experiments (DOE)](docs/doe/01-doe.md) | Full/fractional factorial / Latin square / RCBD / RSM / D-optimal / ANOVA / power analysis |
+| [Orthogonal arrays and Taguchi method](docs/doe/02-orthogonal-taguchi.md) | Lₙ tables, four SN ratios, inner/outer arrays, robust design (★ unified guide) |
+| [Theory — Design of Experiments](docs/doe/theory-doe.md) | Orthogonality, efficiency criteria, RSM, power, sample size |
+| [Single-objective optimization](docs/optim/01-singleobj.md) | Nelder-Mead / L-BFGS / Brent / DE / CMA-ES (unified Optim.* interface) |
+| [Multi-objective optimization](docs/optim/02-multi-objective.md) | NSGA-II / Pareto / Bayesian MOO |
+| [Theory — Single-objective optimization](docs/optim/theory-singleobj.md) | Mathematical background and selection guide for each algorithm |
+| [Theory — Pareto efficiency and MOO](docs/optim/theory-pareto-moo.md) | NSGA-II algorithm, HV/IGD, scalarization, ZDT |
+| [Theory — Bayesian Optimization](docs/optim/theory-bayesopt.md) | EI / UCB / PI / EHVI / ParEGO / q-EHVI |
 
 ### 3. Bayesian statistics and probabilistic modeling — `docs/bayesian/`
 
