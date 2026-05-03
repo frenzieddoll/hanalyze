@@ -37,6 +37,7 @@ import qualified Optim.NelderMead  as NM
 import qualified Optim.LBFGS       as LBFGS
 import qualified Optim.LineSearch  as LS
 import qualified Optim.DifferentialEvolution as DE
+import qualified Optim.CMAES       as CMAES
 import qualified Optim.Common      as OC
 import qualified System.Random.MWC as MWC
 
@@ -999,3 +1000,18 @@ main = hspec $ do
                   { DE.deStop = OC.defaultStopCriteria { OC.stMaxIter = 400 } }
       r <- DE.runDEWith cfg rastrigin gen
       l2 (OC.orBest r) [0, 0, 0] `shouldSatisfy` (< 0.5)
+
+  -- ===========================================================================
+  -- 大域オプティマイザ (Optim.CMAES、簡易対角版)
+  -- ===========================================================================
+  describe "Optim.CMAES" $ do
+    let sphere xs = sum [x*x | x <- xs]
+        l2 a b = sqrt (sum (zipWith (\x y -> (x-y)^(2::Int)) a b))
+
+    it "CMA-ES: sphere 5D を最小化、原点近傍に到達" $ do
+      gen <- MWC.create
+      let cfg = CMAES.defaultCMAESConfig
+                  { CMAES.cmStop = OC.defaultStopCriteria { OC.stMaxIter = 200 }
+                  , CMAES.cmSigma0 = 1.0 }
+      r <- CMAES.runCMAESWith cfg sphere [3, -2, 1, 0.5, -1.5] gen
+      l2 (OC.orBest r) [0,0,0,0,0] `shouldSatisfy` (< 0.5)
