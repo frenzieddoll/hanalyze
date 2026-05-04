@@ -41,21 +41,23 @@ import Text.Read (readMaybe)
 -- 型
 -- ---------------------------------------------------------------------------
 
--- | sniff 結果。
---
--- * 'sfDelim'      推測した delimiter (`,`/`;`/`\t`/space/`|`)
--- * 'sfHasHeader'  ヘッダ行が在りそうか (False なら 'col0' 系を生成すべき)
--- * 'sfSkip'       先頭何行を飛ばすべきか (コメント / メタデータ行数)
--- * 'sfCommentChar' コメント行の prefix 文字 (検出できれば)
--- * 'sfNotes'       推論根拠の人間可読メモ (LogReport 用)
+-- | Result of sniffing a file's structure.
 data Sniff = Sniff
-  { sfDelim       :: !Char
-  , sfHasHeader   :: !Bool
-  , sfSkip        :: !Int
-  , sfCommentChar :: !(Maybe Char)
-  , sfNotes       :: ![Text]
+  { sfDelim       :: !Char         -- ^ Inferred delimiter
+                                   --   (@\",\" \";\" \"\\t\" \" \" \"|\"@).
+  , sfHasHeader   :: !Bool         -- ^ Does the file appear to have a
+                                   --   header row? When 'False', generate
+                                   --   @col0@-style names.
+  , sfSkip        :: !Int          -- ^ Number of leading rows to skip
+                                   --   (comments / metadata).
+  , sfCommentChar :: !(Maybe Char) -- ^ Comment-line prefix character, if
+                                   --   detected.
+  , sfNotes       :: ![Text]       -- ^ Human-readable notes on the
+                                   --   inference (used by 'LogReport').
   } deriving (Eq, Show)
 
+-- | Default sniff result: comma-delimited, header present, no skip, no
+-- comment char.
 defaultSniff :: Sniff
 defaultSniff = Sniff
   { sfDelim       = ','
@@ -69,13 +71,13 @@ defaultSniff = Sniff
 -- 公開 API
 -- ---------------------------------------------------------------------------
 
--- | ファイル冒頭 8 KB を読んで推論する。
+-- | Sniff a file by reading its first 8 KB.
 sniffFile :: FilePath -> IO Sniff
 sniffFile path = do
   bs <- BS.readFile path
   return (sniffBytes (BS.take 8192 bs))
 
--- | バイト列を直接受けて推論する。
+-- | Sniff a byte buffer directly (for testing or non-file sources).
 sniffBytes :: BS.ByteString -> Sniff
 sniffBytes bs0 =
   let bs       = stripBOM bs0

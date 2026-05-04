@@ -48,15 +48,18 @@ import qualified DataIO.Sniff as Sniff
 import qualified System.IO.Temp as Tmp
 import System.IO (hClose)
 
+-- | Parse-error message (a plain 'String').
 type ParseError = String
 
 -- ---------------------------------------------------------------------------
 -- CSV / TSV: Hackage に直接委譲
 -- ---------------------------------------------------------------------------
 
+-- | Load a CSV file via Hackage's @readCsv@.
 loadCSV :: FilePath -> IO (Either ParseError DXD.DataFrame)
 loadCSV = loadHackage DX.readCsv
 
+-- | Load a TSV file via Hackage's @readTsv@.
 loadTSV :: FilePath -> IO (Either ParseError DXD.DataFrame)
 loadTSV = loadHackage DX.readTsv
 
@@ -72,6 +75,8 @@ loadHackage reader path = do
 -- SSV: cassava で読み、Hackage 'DataFrame' に詰め替える
 -- ---------------------------------------------------------------------------
 
+-- | Load a space-separated value file via @cassava@; the result is
+-- repackaged into a Hackage 'DXD.DataFrame'.
 loadSSV :: FilePath -> IO (Either ParseError DXD.DataFrame)
 loadSSV path = do
   content <- BL.readFile path
@@ -100,6 +105,8 @@ classifyCells key rows =
 -- 拡張子による自動振り分け
 -- ---------------------------------------------------------------------------
 
+-- | Auto-dispatch by file extension: @.tsv@ → 'loadTSV', @.ssv@ →
+-- 'loadSSV', otherwise 'loadCSV'.
 loadAuto :: FilePath -> IO (Either ParseError DXD.DataFrame)
 loadAuto path
   | ".tsv" `isSuffixOf` path = loadTSV path
@@ -160,10 +167,12 @@ runHackageSafe reader path = do
 cleanError :: String -> String
 cleanError = takeWhile (/= '\n')
 
--- | CSV の安全版。空 / ヘッダのみ / Hackage の internal error を 'Left' で返す。
+-- | Safe CSV loader. Returns 'Left' on empty input, header-only files,
+-- or Hackage internal errors instead of bubbling them up as exceptions.
 loadCsvSafe :: FilePath -> IO (Either ParseError (Loaded DXD.DataFrame))
 loadCsvSafe = loadHackageSafe DX.readCsv
 
+-- | Safe TSV loader (TSV analogue of 'loadCsvSafe').
 loadTsvSafe :: FilePath -> IO (Either ParseError (Loaded DXD.DataFrame))
 loadTsvSafe = loadHackageSafe DX.readTsv
 
@@ -180,7 +189,7 @@ loadHackageSafe reader path = do
         Left  e  -> Left e
         Right df -> Right (df, inspectWithPreview (previewBytes rs) df)
 
--- | SSV の安全版。
+-- | Safe SSV loader (SSV analogue of 'loadCsvSafe').
 loadSsvSafe :: FilePath -> IO (Either ParseError (Loaded DXD.DataFrame))
 loadSsvSafe path = do
   pre <- preflight path
@@ -198,7 +207,8 @@ previewBytes rs =
   let joined = BS.intercalate "\n" rs
   in BS.take 8192 joined
 
--- | 拡張子で自動振り分けする安全版。
+-- | Auto-dispatch safe loader: picks 'loadCsvSafe' / 'loadTsvSafe' /
+-- 'loadSsvSafe' from the file extension.
 loadAutoSafe :: FilePath -> IO (Either ParseError (Loaded DXD.DataFrame))
 loadAutoSafe path
   | ".tsv" `isSuffixOf` path = loadTsvSafe path
@@ -209,26 +219,26 @@ loadAutoSafe path
 -- Phase A4: ロードオプション
 -- ---------------------------------------------------------------------------
 
--- | CLI から渡せる読込オプション。
---
--- * 'loSkip'      — 先頭 N 行を読み飛ばす
--- * 'loComment'   — 指定文字で始まる行を読み飛ばす (例: @\'#\'@)
--- * 'loNoHeader'  — ヘッダ無しと見なし、@col0, col1, ...@ を生成
--- * 'loStrict'    — 'LogReport' に Warn が含まれていたら 'Left' で短絡する
+-- | Loading options that can be supplied from the CLI.
 data LoadOpts = LoadOpts
-  { loSkip     :: !Int
-  , loComment  :: !(Maybe Char)
-  , loNoHeader :: !Bool
-  , loStrict   :: !Bool
-  , loSniff    :: !Bool        -- ^ 自動推論を有効にする (デフォルト True)
-  , loDelim    :: !(Maybe Char) -- ^ delimiter 上書き (Nothing なら拡張子 / sniff)
+  { loSkip     :: !Int            -- ^ Skip the first @N@ rows.
+  , loComment  :: !(Maybe Char)   -- ^ Skip rows starting with this character (e.g. @\'#\'@).
+  , loNoHeader :: !Bool           -- ^ Treat the file as header-less and generate @col0, col1, …@.
+  , loStrict   :: !Bool           -- ^ Short-circuit to 'Left' if the
+                                  --   'LogReport' contains a 'Warn' entry.
+  , loSniff    :: !Bool           -- ^ Enable auto-inference (default 'True').
+  , loDelim    :: !(Maybe Char)   -- ^ Override the delimiter ('Nothing'
+                                  --   uses the file extension and sniff result).
   } deriving (Eq, Show)
 
+-- | Default loading options: no skip, no comment char, header expected,
+-- non-strict, sniff enabled, no delimiter override.
 defaultLoadOpts :: LoadOpts
 defaultLoadOpts = LoadOpts 0 Nothing False False True Nothing
 
--- | 'LoadOpts' を反映して 'loadAutoSafe' を呼ぶ。skip/comment/noHeader が
--- いずれも無指定のときは元ファイルを直接読む。指定があれば一時ファイルに
+-- | Run 'loadAutoSafe' with the given 'LoadOpts'. When @skip@,
+-- @comment@ and @noHeader@ are all unset the file is read directly;
+-- otherwise the request is realized by writing to a temporary file
 -- 前処理結果を書き出してから読む。
 --
 -- 'loSniff' が True (デフォルト) のときは、ユーザ未指定の項目に限り

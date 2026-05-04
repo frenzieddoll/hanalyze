@@ -85,22 +85,30 @@ import qualified Stat.AdaptiveGrid
 -- 値 / 行の表現 (deriveNumeric/deriveText 用の述語インタフェース)
 -- ---------------------------------------------------------------------------
 
+-- | A typed cell value used by 'deriveNumeric' / 'deriveText'-style
+-- predicates. Missing values become 'VMissing'.
 data Value = VNum Double | VText Text | VMissing
   deriving (Show, Eq)
 
+-- | True for 'VMissing'; useful inside row predicates.
 isVMissing :: Value -> Bool
 isVMissing VMissing = True
 isVMissing _        = False
 
+-- | A single row keyed by column name.
 type DataRow = Map.Map Text Value
 
 -- ---------------------------------------------------------------------------
 -- NA 検出 (Text レベル)
 -- ---------------------------------------------------------------------------
 
+-- | Strings recognised as missing values (case-sensitive on the trimmed
+-- text): @\"\"@, @\"NA\"@, @\"N/A\"@, @\"n/a\"@, @\"null\"@, @\"NULL\"@,
+-- @\"NaN\"@, @\"nan\"@, @\"?\"@.
 defaultNAStrings :: [Text]
 defaultNAStrings = ["", "NA", "N/A", "n/a", "null", "NULL", "NaN", "nan", "?"]
 
+-- | True when the trimmed input text is in 'defaultNAStrings'.
 isNAString :: Text -> Bool
 isNAString t = T.strip t `elem` defaultNAStrings
 
@@ -108,16 +116,20 @@ isNAString t = T.strip t `elem` defaultNAStrings
 -- 列の選択 / 削除 / リネーム
 -- ---------------------------------------------------------------------------
 
+-- | Keep only the named columns (silently ignoring names that are not
+-- present).
 selectColumns :: [Text] -> DXD.DataFrame -> DXD.DataFrame
 selectColumns names df =
   let present = filter (`elem` DX.columnNames df) names
   in DX.select present df
 
+-- | Drop the named columns (silently ignoring names that are not present).
 dropColumns :: [Text] -> DXD.DataFrame -> DXD.DataFrame
 dropColumns names df =
   let present = filter (`elem` DX.columnNames df) names
   in DX.exclude present df
 
+-- | Rename @old@ to @new@. No-op if @old@ is missing.
 renameColumn :: Text -> Text -> DXD.DataFrame -> DXD.DataFrame
 renameColumn old new df
   | old `elem` DX.columnNames df = DX.rename old new df
@@ -127,13 +139,13 @@ renameColumn old new df
 -- 内部: 列値の安全な取得 (型不一致時 Nothing)
 -- ---------------------------------------------------------------------------
 
--- | 列の長さ (列が無ければ 0)。
+-- | Length of a named column (0 if absent).
 colLength :: Text -> DXD.DataFrame -> Int
 colLength name df = case DXD.getColumn name df of
   Just c  -> DXC.columnLength c
   Nothing -> 0
 
--- | 「i 番目の要素が null か」。列が無ければ True。
+-- | Is the @i@-th cell null? Returns 'True' for missing columns.
 isNullAt :: Text -> Int -> DXD.DataFrame -> Bool
 isNullAt name i df = case DXD.getColumn name df of
   Just c  -> DXC.columnElemIsNull c i
@@ -156,8 +168,10 @@ tryColumnAsList name df = unsafePerformIO $ do
 -- 欠損値処理
 -- ---------------------------------------------------------------------------
 
--- | 列ごとの欠損数。null bitmap が無い列は 0、ある列は null 数を数える。
--- 加えて Text 列に含まれる NA 文字列も欠損として数える (CSV 由来互換)。
+-- | Per-column missing count. Columns without a null bitmap contribute
+-- 0; columns with a bitmap contribute their null count. Text columns
+-- additionally count cells whose value is in 'defaultNAStrings' (for
+-- CSV-source compatibility).
 countMissing :: DXD.DataFrame -> [(Text, Int)]
 countMissing df =
   [ (n, countOne n) | n <- DX.columnNames df ]
@@ -170,8 +184,8 @@ countMissing df =
                      Nothing -> 0
       in nulls + texts
 
--- | 指定した列のいずれかが null である行を削除。
--- Text 列の NA 文字列もまとめて欠損として扱う。
+-- | Drop rows where any of the listed columns is null. NA strings in
+-- Text columns are also treated as missing.
 dropMissingRows :: [Text] -> DXD.DataFrame -> DXD.DataFrame
 dropMissingRows targets df =
   let n = if null cols then 0 else maximum (map (`colLength` df) cols)
@@ -214,7 +228,8 @@ sliceColumn name df idxs = case DXD.getColumn name df of
       Just xs -> Just (DX.fromList [ xs !! i | i <- idxs, i < length xs ])
       Nothing -> fallback
 
--- | 定数で欠損補完して Double 列に統一する。
+-- | Impute missing values with a constant and homogenize to a 'Double'
+-- column.
 imputeConstant :: Text -> Double -> DXD.DataFrame -> Maybe DXD.DataFrame
 imputeConstant name fill df = case readMaybeDoubleColumn name df of
   Nothing -> Nothing
@@ -222,7 +237,8 @@ imputeConstant name fill df = case readMaybeDoubleColumn name df of
     let filled = map (maybe fill id) xs
     in Just (DX.insertColumn name (DX.fromList filled) df)
 
--- | 平均値で補完。非欠損が 0 件なら Nothing。
+-- | Impute missing values with the mean of the present cells. Returns
+-- 'Nothing' when the column has no non-missing cells.
 imputeMean :: Text -> DXD.DataFrame -> Maybe DXD.DataFrame
 imputeMean name df = case readMaybeDoubleColumn name df of
   Nothing -> Nothing
@@ -234,7 +250,8 @@ imputeMean name df = case readMaybeDoubleColumn name df of
            let m = sum nums / fromIntegral (length nums)
            in imputeConstant name m df
 
--- | 中央値で補完。非欠損が 0 件なら Nothing。
+-- | Impute missing values with the median. Returns 'Nothing' when the
+-- column has no non-missing cells.
 imputeMedian :: Text -> DXD.DataFrame -> Maybe DXD.DataFrame
 imputeMedian name df = case readMaybeDoubleColumn name df of
   Nothing -> Nothing
@@ -244,7 +261,8 @@ imputeMedian name df = case readMaybeDoubleColumn name df of
          then Nothing
          else imputeConstant name (s !! (length s `div` 2)) df
 
--- | Text/Double/Maybe Double/Int/Maybe Int いずれの列でも @[Maybe Double]@
+-- | Read any of Text / Double / Maybe Double / Int / Maybe Int as
+-- @[Maybe Double]@.
 -- に正規化して取り出す。Text 列の NA 文字列・parse 失敗は Nothing として扱う。
 --
 -- 注意: Hackage 'DX.columnAsList' は @Maybe a@ 列に対して @col @a@ を要求しても
@@ -271,7 +289,8 @@ readMaybeDoubleColumn name df = fmap (maskNulls . zip [0..]) raw
                   | t <- xs ]
                 Nothing -> Nothing
 
--- | Text 列を Double 列に変換。NA / parse 不能セルがあれば Nothing。
+-- | Convert a Text column into a Double column. Returns 'Nothing' if
+-- any cell is missing or fails to parse.
 parseNumericColumn :: Text -> DXD.DataFrame -> Maybe DXD.DataFrame
 parseNumericColumn name df =
   case tryColumnAsList @Double name df of
@@ -286,7 +305,8 @@ parseNumericColumn name df =
 -- 行フィルタ (DataRow ベース、レガシー API)
 -- ---------------------------------------------------------------------------
 
--- | 行を 'DataRow' のリストに展開する。NA 文字列は VMissing。
+-- | Expand a DataFrame into a list of 'DataRow'. NA strings become
+-- 'VMissing'.
 rowsOf :: DXD.DataFrame -> [DataRow]
 rowsOf df =
   let cols = DX.columnNames df
@@ -311,11 +331,14 @@ rowsOf df =
                    in if isNAString t then VMissing else VText t
                  _ -> VMissing
 
+-- | Keep only the rows for which the predicate evaluates to 'True'.
 filterRows :: (DataRow -> Bool) -> DXD.DataFrame -> DXD.DataFrame
 filterRows p df =
   let keep = [ i | (i, r) <- zip [0..] (rowsOf df), p r ]
   in selectRows keep df
 
+-- | Keep only the rows for which a numeric column satisfies the
+-- predicate.
 filterRowsByNumeric :: Text -> (Double -> Bool) -> DXD.DataFrame -> DXD.DataFrame
 filterRowsByNumeric name p df =
   case readMaybeDoubleColumn name df of
@@ -328,25 +351,31 @@ filterRowsByNumeric name p df =
 -- 派生列
 -- ---------------------------------------------------------------------------
 
+-- | Apply @f@ element-wise to a numeric column. The column is left
+-- unchanged when its type is not @Double@.
 mapNumeric :: Text -> (Double -> Double) -> DXD.DataFrame -> DXD.DataFrame
 mapNumeric name f df = case tryColumnAsList @Double name df of
   Just xs -> DX.insertColumn name (DX.fromList (map f xs)) df
   Nothing -> df
 
+-- | Derive a new numeric column from each row.
 deriveNumeric :: Text -> (DataRow -> Double) -> DXD.DataFrame -> DXD.DataFrame
 deriveNumeric newName f df =
   let vals = map f (rowsOf df)
   in DX.insertColumn newName (DX.fromList (vals :: [Double])) df
 
+-- | Derive a new text column from each row.
 deriveText :: Text -> (DataRow -> Text) -> DXD.DataFrame -> DXD.DataFrame
 deriveText newName f df =
   let vals = map f (rowsOf df)
   in DX.insertColumn newName (DX.fromList (vals :: [Text])) df
 
--- | 列の上書き / 追加 (Hackage 'DX.insertColumn' は既存列を置換する)。
+-- | Replace or insert a column (Hackage's 'DX.insertColumn' replaces an
+-- existing column).
 replaceColumn :: Text -> DX.Column -> DXD.DataFrame -> DXD.DataFrame
 replaceColumn = DX.insertColumn
 
+-- | Append a new column (or replace if the name already exists).
 addColumn :: Text -> DX.Column -> DXD.DataFrame -> DXD.DataFrame
 addColumn = DX.insertColumn
 
@@ -354,7 +383,8 @@ addColumn = DX.insertColumn
 -- groupBy / aggregate
 -- ---------------------------------------------------------------------------
 
--- | グループ列 (Text) ごとに数値列に集約関数を適用する。
+-- | Aggregate a numeric column with the given function, grouped by a
+-- text key column.
 -- カスタム集約 (任意の @[Double] -> Double@) を扱うため、Hackage の
 -- @groupBy + aggregate@ ではなく独自バケット実装。決まった集約は
 -- 'groupByMean' 等を経由した方が高速。
@@ -385,22 +415,27 @@ collectInOrder = foldl step []
       Just _  -> [ if k' == k then (k', vs ++ [v]) else (k', vs) | (k', vs) <- acc ]
       Nothing -> acc ++ [(k, [v])]
 
+-- | Group-by aggregation with the per-group mean.
 groupByMean   :: Text -> Text -> DXD.DataFrame -> Maybe DXD.DataFrame
 groupByMean g n = groupByAggregate g n meanD
 
+-- | Group-by aggregation with the per-group sum.
 groupBySum    :: Text -> Text -> DXD.DataFrame -> Maybe DXD.DataFrame
 groupBySum g n = groupByAggregate g n sum
 
+-- | Group-by aggregation with the per-group minimum.
 groupByMin    :: Text -> Text -> DXD.DataFrame -> Maybe DXD.DataFrame
 groupByMin g n = groupByAggregate g n minimum
 
+-- | Group-by aggregation with the per-group maximum.
 groupByMax    :: Text -> Text -> DXD.DataFrame -> Maybe DXD.DataFrame
 groupByMax g n = groupByAggregate g n maximum
 
+-- | Group-by aggregation with the per-group median.
 groupByMedian :: Text -> Text -> DXD.DataFrame -> Maybe DXD.DataFrame
 groupByMedian g n = groupByAggregate g n medianD
 
--- | グループごとの行数。count 列名は @"count"@ 固定。
+-- | Per-group row count. The output column is named @\"count\"@.
 groupByCount :: Text -> DXD.DataFrame -> Maybe DXD.DataFrame
 groupByCount gCol df = case tryColumnAsList @Text gCol df of
   Nothing -> Nothing

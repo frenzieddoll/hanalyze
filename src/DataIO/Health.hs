@@ -59,7 +59,8 @@ import DataIO.Preprocess (isNAString)
 -- 公開エントリポイント
 -- ---------------------------------------------------------------------------
 
--- | DataFrame だけから判定できる W コードを集約。
+-- | Aggregate every W-code that can be checked from the DataFrame
+-- alone (without the source bytes).
 inspectDataFrame :: DXD.DataFrame -> LogReport
 inspectDataFrame df = mconcat
   [ detectHeaderless df
@@ -70,7 +71,8 @@ inspectDataFrame df = mconcat
   , detectThousandsCurrency df
   ]
 
--- | DataFrame + ファイル冒頭の生バイト列でしか分からない W (W005 delimiter
+-- | DataFrame plus a leading raw-byte preview, used for the W-codes
+-- that need both inputs (e.g. W005 delimiter
 -- ミスマッチ / W004 ヘッダ行レベルの重複) も合わせて返す。
 inspectWithPreview :: BS.ByteString -> DXD.DataFrame -> LogReport
 inspectWithPreview preview df = mconcat

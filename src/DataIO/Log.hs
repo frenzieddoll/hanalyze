@@ -46,13 +46,14 @@ import qualified Data.Text.IO as TIO
 -- 型
 -- ---------------------------------------------------------------------------
 
--- | メッセージ重要度。
+-- | Message severity.
 data Severity = Info | Warn | Err
   deriving (Eq, Ord, Show)
 
--- | 1 件のログエントリ。
+-- | A single log entry.
 --
--- @lgCode@ は @W001@ / @E002@ 形式の安定した識別子。出力 grep やテストで使う。
+-- 'lgCode' is a stable identifier of the form @W001@ / @E002@ used for
+-- grepping output and writing tests against the log.
 data LogEntry = LogEntry
   { lgSev  :: !Severity
   , lgCode :: !Text
@@ -60,7 +61,7 @@ data LogEntry = LogEntry
   , lgHint :: !(Maybe Text)
   } deriving (Eq, Show)
 
--- | エントリのリストラッパ。'Monoid' で連結できる。
+-- | A 'Monoid' list-wrapper of 'LogEntry'.
 newtype LogReport = LogReport { entries :: [LogEntry] }
   deriving (Eq, Show)
 
@@ -70,31 +71,34 @@ instance Semigroup LogReport where
 instance Monoid LogReport where
   mempty = LogReport []
 
--- | 値とログのペア。loader / cleaner が共通に返す形。
+-- | A value paired with its log. Loaders and cleaners return this shape.
 type Loaded a = (a, LogReport)
 
 -- ---------------------------------------------------------------------------
 -- 構築
 -- ---------------------------------------------------------------------------
 
+-- | Build an 'Info' entry from @(code, message, optional hint)@.
 mkInfo :: Text -> Text -> Maybe Text -> LogEntry
 mkInfo c m h = LogEntry Info c m h
 
+-- | Build a 'Warn' entry.
 mkWarn :: Text -> Text -> Maybe Text -> LogEntry
 mkWarn c m h = LogEntry Warn c m h
 
+-- | Build an 'Err' entry.
 mkErr :: Text -> Text -> Maybe Text -> LogEntry
 mkErr c m h = LogEntry Err c m h
 
--- | エントリを末尾追加。
+-- | Append an entry to the end of a report.
 addEntry :: LogEntry -> LogReport -> LogReport
 addEntry e (LogReport xs) = LogReport (xs ++ [e])
 
--- | 単一エントリから 'LogReport' を作る。
+-- | Make a 'LogReport' that contains a single entry.
 logReport :: LogEntry -> LogReport
 logReport e = LogReport [e]
 
--- | 空のログ ('mempty' のエイリアス)。
+-- | The empty log (alias for 'mempty').
 noLog :: LogReport
 noLog = mempty
 
@@ -102,12 +106,15 @@ noLog = mempty
 -- 集約
 -- ---------------------------------------------------------------------------
 
+-- | True if the report contains any 'Err' entries.
 hasErrors :: LogReport -> Bool
 hasErrors (LogReport xs) = any ((== Err) . lgSev) xs
 
+-- | True if the report contains any 'Warn' entries.
 hasWarnings :: LogReport -> Bool
 hasWarnings (LogReport xs) = any ((== Warn) . lgSev) xs
 
+-- | Number of entries with the given severity.
 severityCount :: Severity -> LogReport -> Int
 severityCount s (LogReport xs) = length (filter ((== s) . lgSev) xs)
 
@@ -115,6 +122,8 @@ severityCount s (LogReport xs) = length (filter ((== s) . lgSev) xs)
 -- 出力
 -- ---------------------------------------------------------------------------
 
+-- | Pretty-print a single 'LogEntry' (severity tag + code + message,
+-- and optionally the hint on a second line).
 prettyEntry :: LogEntry -> Text
 prettyEntry e =
   let prefix = case lgSev e of
@@ -126,7 +135,7 @@ prettyEntry e =
         Just h  -> "\n        ヒント: " <> h
   in prefix <> lgCode e <> ": " <> lgMsg e <> hint
 
--- | ログを stdout に出す。空ログは何も書かない。
+-- | Print the log to stdout. Empty logs print nothing.
 printLogReport :: LogReport -> IO ()
 printLogReport (LogReport []) = return ()
 printLogReport (LogReport xs) = do

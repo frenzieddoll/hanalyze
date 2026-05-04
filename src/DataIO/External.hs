@@ -15,11 +15,11 @@ import qualified DataFrame.IO.JSON            as DXJ
 
 import Control.Exception (SomeException, try)
 
--- | Apache Parquet ファイルを読み込み (列指向、圧縮対応)。
+-- | Load an Apache Parquet file (columnar, supports compression).
 loadParquet :: FilePath -> IO (Either String DXD.DataFrame)
 loadParquet = loadRaw DX.readParquet
 
--- | JSON (records-of-objects 形式) を読み込み。
+-- | Load a JSON file in records-of-objects format.
 loadJSON :: FilePath -> IO (Either String DXD.DataFrame)
 loadJSON = loadRaw DXJ.readJSON
 

@@ -63,20 +63,23 @@ import DataIO.Log     (LogReport, mkInfo, mkWarn, logReport, noLog)
 -- 型
 -- ---------------------------------------------------------------------------
 
--- | 列単位の変換ルール。
+-- | A single column-cleaning rule.
 data ColumnRule
-  = StripUnits        -- ^ 末尾の英字を取り除く ("12.3kg"→12.3)
-  | ParseCurrency     -- ^ "$1,234.56" / "¥10,000" 等を Double 化
-  | ParseDecimalEU    -- ^ decimal point が ',' のセル ("3,14" → 3.14)
-  | TrimText          -- ^ 前後の空白除去 (text 列のまま)
-  | CoerceNumeric     -- ^ StripUnits → ParseCurrency → ParseDecimalEU を順に試す
+  = StripUnits     -- ^ Strip trailing alphabetic suffix and parse
+                   --   (@\"12.3kg\" → 12.3@).
+  | ParseCurrency  -- ^ Parse currency-like strings such as @\"$1,234.56\"@
+                   --   or @\"¥10,000\"@ into 'Double'.
+  | ParseDecimalEU -- ^ Decimal point as @\",\"@ (@\"3,14\" → 3.14@).
+  | TrimText       -- ^ Strip surrounding whitespace; column stays as 'Text'.
+  | CoerceNumeric  -- ^ Try @StripUnits@, then @ParseCurrency@, then
+                   --   @ParseDecimalEU@ in that order.
   deriving (Eq, Show)
 
 -- ---------------------------------------------------------------------------
 -- 個別ルール (列名指定)
 -- ---------------------------------------------------------------------------
 
--- | 単一ルールを単一列に適用する dispatch。
+-- | Apply a single 'ColumnRule' to a single named column.
 applyRule :: ColumnRule -> Text -> DXD.DataFrame -> (DXD.DataFrame, LogReport)
 applyRule r name df = case r of
   StripUnits     -> stripUnitsCol     name df
@@ -85,7 +88,8 @@ applyRule r name df = case r of
   TrimText       -> trimTextCol       name df
   CoerceNumeric  -> coerceNumericCol  name df
 
--- | "12.3kg" / "11.5cm" のように末尾の英字 (単位) を取り除いて Double 化。
+-- | Drop a trailing alphabetic unit suffix and parse the prefix as
+-- 'Double' (e.g. @\"12.3kg\"@, @\"11.5cm\"@).
 stripUnitsCol :: Text -> DXD.DataFrame -> (DXD.DataFrame, LogReport)
 stripUnitsCol = liftCellRule "I100" "stripUnits" $ \t ->
   let s = T.strip t
@@ -97,7 +101,8 @@ stripUnitsCol = liftCellRule "I100" "stripUnits" $ \t ->
               then readMaybe (T.unpack digits)
               else readMaybe (T.unpack digits)
 
--- | 通貨記号 / 桁区切りの数値を Double 化。"$1,234.56" → 1234.56。
+-- | Parse a currency-formatted string (with currency symbol and
+-- thousands separators) into 'Double': @\"$1,234.56\" → 1234.56@.
 parseCurrencyCol :: Text -> DXD.DataFrame -> (DXD.DataFrame, LogReport)
 parseCurrencyCol = liftCellRule "I101" "parseCurrency" $ \t ->
   let s1 = T.strip t
@@ -105,13 +110,13 @@ parseCurrencyCol = liftCellRule "I101" "parseCurrency" $ \t ->
       s3 = T.replace "," "" s2
   in readMaybe (T.unpack s3)
 
--- | decimal separator が ',' (EU style)。"3,14" → 3.14。
+-- | EU-style decimal separator @\",\"@: @\"3,14\" → 3.14@.
 parseDecimalEUCol :: Text -> DXD.DataFrame -> (DXD.DataFrame, LogReport)
 parseDecimalEUCol = liftCellRule "I102" "parseDecimalEU" $ \t ->
   let s = T.replace "," "." (T.strip t)
   in readMaybe (T.unpack s)
 
--- | 前後空白を除いた Text 列に書き戻す。
+-- | Strip surrounding whitespace and write back as a 'Text' column.
 trimTextCol :: Text -> DXD.DataFrame -> (DXD.DataFrame, LogReport)
 trimTextCol name df = case getMaybeTextVec name df of
   Nothing -> (df, logReport (mkWarn "I103W"
@@ -123,8 +128,10 @@ trimTextCol name df = case getMaybeTextVec name df of
     in ( DX.insertColumn name (DX.fromList (out :: [Maybe Text])) df
        , logReport (mkInfo "I103" ("trimText 適用: 列 '" <> name <> "'") Nothing))
 
--- | StripUnits → ParseCurrency → ParseDecimalEU を順に試す万能変換。
--- 最初に成功した変換を採用、どれも失敗なら null bitmap で詰める。
+-- | Catch-all numeric coercion: try @StripUnits@, then
+-- @ParseCurrency@, then @ParseDecimalEU@ in order. The first successful
+-- conversion wins; a cell that fails every rule is stored as a null
+-- (via the null bitmap).
 coerceNumericCol :: Text -> DXD.DataFrame -> (DXD.DataFrame, LogReport)
 coerceNumericCol = liftCellRule "I104" "coerceNumeric" $ \t ->
   let candidates =
@@ -154,12 +161,13 @@ coerceNumericCol = liftCellRule "I104" "coerceNumeric" $ \t ->
 -- 共通ヘルパ: text → Maybe Double 変換を 1 列に適用
 -- ---------------------------------------------------------------------------
 
--- | 任意の text → 'Maybe Double' 変換関数を 1 列に適用するヘルパ。
--- 列が text として取れない場合は警告のみ出して df を返す。
+-- | Helper: apply an arbitrary @text → 'Maybe Double'@ converter to a
+-- single column. If the column cannot be read as Text, the DataFrame
+-- is returned unchanged with a warning log entry.
 liftCellRule
-  :: Text                           -- ^ Info コード
-  -> Text                           -- ^ ルール名 (ログ用)
-  -> (Text -> Maybe Double)         -- ^ セル変換関数
+  :: Text                           -- ^ Info code.
+  -> Text                           -- ^ Rule name (for the log).
+  -> (Text -> Maybe Double)         -- ^ Cell converter.
   -> Text                           -- ^ 列名
   -> DXD.DataFrame
   -> (DXD.DataFrame, LogReport)
@@ -201,7 +209,7 @@ tShow = T.pack . show
 -- パイプライン
 -- ---------------------------------------------------------------------------
 
--- | 複数のルールを順次適用する。各ルールのログを連結して返す。
+-- | Apply several rules in order, concatenating the per-rule logs.
 cleanPipeline
   :: [(Text, ColumnRule)]
   -> DXD.DataFrame
@@ -216,7 +224,7 @@ cleanPipeline ((n, r):rs) df0 =
 -- DataFrame レベル操作
 -- ---------------------------------------------------------------------------
 
--- | 重複列名に @_2@, @_3@ ... のサフィックスを付けて衝突回避する。
+-- | Disambiguate duplicate column names by appending @_2@, @_3@, ...
 -- (Hackage の DataFrame は重複列を後勝ちでマージするため、ロード前に
 -- 行いたい場合は CSV テキスト側で。本関数はロード後の DataFrame に対して
 -- 行う suffix 付与で、新しい DataFrame を返す。)

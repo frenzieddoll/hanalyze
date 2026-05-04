@@ -28,25 +28,25 @@ import System.IO.Unsafe (unsafePerformIO)
 
 import DataIO.Preprocess (readMaybeDoubleColumn)
 
--- | DXD.DataFrame から数値列を 'V.Vector Double' として取り出す。
--- 欠損 / parse 失敗が含まれていれば 'Nothing'。
+-- | Extract a numeric column as 'V.Vector Double'. Returns 'Nothing'
+-- when any cell is missing or fails to parse.
 getDoubleVec :: Text -> DXD.DataFrame -> Maybe (V.Vector Double)
 getDoubleVec name df = do
   xs <- readMaybeDoubleColumn name df
   vs <- sequence xs
   return (V.fromList vs)
 
--- | DXD.DataFrame から Text 列を 'V.Vector Text' として取り出す。
--- null bitmap が立った要素を含む列は 'Nothing' を返す
--- (純粋に文字列だけが詰まっていることが保証される)。
+-- | Extract a Text column as 'V.Vector Text'. Returns 'Nothing' if any
+-- slot has its null bit set, guaranteeing the result holds only proper
+-- strings.
 getTextVec :: Text -> DXD.DataFrame -> Maybe (V.Vector Text)
 getTextVec name df = case tryColumnAsList @Text name df of
   Just xs -> Just (V.fromList xs)
   Nothing -> Nothing
 
--- | DXD.DataFrame から Text 列を 'V.Vector (Maybe Text)' として取り出す。
--- null セルが含まれていても 'Nothing' で表現したものを返す。
--- 'getTextVec' で 'Nothing' になった列の検査用に用いる (info 表示など)。
+-- | Extract a Text column as 'V.Vector (Maybe Text)'. Null cells become
+-- 'Nothing' instead of failing. Useful for inspecting columns where
+-- 'getTextVec' would return 'Nothing' (e.g. for @info@ display).
 getMaybeTextVec :: Text -> DXD.DataFrame -> Maybe (V.Vector (Maybe Text))
 getMaybeTextVec name df =
   case tryColumnAsList @(Maybe Text) name df of
