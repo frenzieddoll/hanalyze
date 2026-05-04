@@ -54,6 +54,13 @@ module DataIO.Preprocess
   , groupByCount
     -- * Wide ↔ Long 変形 (Phase B/C — melt)
   , meltLonger
+    -- * Long-form regrid (歯抜けデータの共通 grid 揃え, Phase G3)
+  , ZBoundsMode (..)
+  , RegridOpts (..)
+  , defaultRegridOpts
+  , RegridResult (..)
+  , PerIdStat (..)
+  , regridLong
   ) where
 
 import qualified DataFrame                    as DX
@@ -64,11 +71,15 @@ import qualified DataFrame.Internal.Types     as DXT
 import Control.DeepSeq (NFData, force)
 import Control.Exception (SomeException, try, evaluate)
 import Data.List (sort)
+import qualified Data.List
+import qualified Data.Ord
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 import System.IO.Unsafe (unsafePerformIO)
 import Text.Read (readMaybe)
+import qualified Stat.Interpolate
+import qualified Stat.AdaptiveGrid
 
 -- ---------------------------------------------------------------------------
 -- 値 / 行の表現 (deriveNumeric/deriveText 用の述語インタフェース)
@@ -524,3 +535,205 @@ valueAsMaybeDouble :: Text -> DXD.DataFrame -> [Maybe Double]
 valueAsMaybeDouble name df = case readMaybeDoubleColumn name df of
   Just xs -> xs
   Nothing -> replicate (fst (DX.dimensions df)) Nothing
+
+-- ---------------------------------------------------------------------------
+-- Long-form regrid (Phase G3): 歯抜けの long-form データを共通 grid に揃える
+-- ---------------------------------------------------------------------------
+
+-- | 共通 z 範囲の決定方式。
+data ZBoundsMode
+  = ZIntersection  -- ^ 全 id で観測がある区間: (max_id min_z, min_id max_z) — 外挿なし
+  | ZUnion         -- ^ 全 id をカバー: (min_id min_z, max_id max_z) — 外挿あり
+  deriving (Show, Eq)
+
+-- | 'regridLong' の設定。
+data RegridOpts = RegridOpts
+  { roInterp     :: !Stat.Interpolate.InterpKind
+  , roGridKind   :: !Stat.AdaptiveGrid.GridKind
+  , roN          :: !Int
+  , roZBoundsMode :: !ZBoundsMode
+  , roCoarseN    :: !Int     -- ^ adaptive 用粗 grid サイズ (default 200)
+  , roEpsRatio   :: !Double  -- ^ adaptive 用平坦部最低密度比 (default 0.05)
+  } deriving (Show, Eq)
+
+-- | 推奨デフォルト (PCHIP / Adaptive / N=30 / Intersection / coarse=200 / ε=0.05)。
+defaultRegridOpts :: RegridOpts
+defaultRegridOpts = RegridOpts
+  { roInterp      = Stat.Interpolate.PCHIP
+  , roGridKind    = Stat.AdaptiveGrid.Adaptive
+  , roN           = 30
+  , roZBoundsMode = ZIntersection
+  , roCoarseN     = 200
+  , roEpsRatio    = 0.05
+  }
+
+-- | id ごとの統計 (G4 のレポートで使用)。
+data PerIdStat = PerIdStat
+  { piId          :: !Text
+  , piNObserved   :: !Int        -- ^ 元観測点数
+  , piZMin        :: !Double     -- ^ 観測 z 最小
+  , piZMax        :: !Double     -- ^ 観測 z 最大
+  , piExtrapBelow :: !Double     -- ^ 共通 grid zmin が観測 zmin より小さい量 (>0 なら外挿)
+  , piExtrapAbove :: !Double     -- ^ 共通 grid zmax が観測 zmax より大きい量 (>0 なら外挿)
+  , piResidualMax :: !Double     -- ^ 補間関数を観測 z に再投入したときの最大残差
+  } deriving (Show, Eq)
+
+-- | regridLong の戻り値。data + レポート用統計。
+data RegridResult = RegridResult
+  { rrDataFrame   :: !DXD.DataFrame
+  , rrZGrid       :: ![Double]
+  , rrZMin        :: !Double
+  , rrZMax        :: !Double
+  , rrPerIdStats  :: ![PerIdStat]
+  , rrIds         :: ![Text]
+  , rrPerIdInterp :: ![(Text, [(Double, Double)], Double -> Double)]
+                       -- ^ id ごとに (id, 元観測点, 補間関数)。レポートのオーバーレイ用
+  , rrDensity     :: ![(Double, Double)]   -- ^ adaptive 時の (z, density) ペア (空: uniform 時)
+  }
+
+-- | 歯抜けの long-form @[idCol, zCol, yCol]@ を共通 grid に揃える。
+--
+-- 1. idCol で groupBy → id ごとに (z, y) ペア取得 (NA は除外)
+-- 2. ZBoundsMode に従って共通 (zmin, zmax) を決定
+-- 3. 'Stat.AdaptiveGrid.makeGrid' で N 点 grid を生成
+-- 4. 各 id を 'Stat.Interpolate.interp1d' で補間し grid 上で評価
+-- 5. id × grid の long-form DataFrame を返す
+--
+-- 観測点が < 2 の id は補間できないため除外され、レポートに記録される。
+regridLong
+  :: Text          -- ^ id 列名
+  -> Text          -- ^ z 列名
+  -> Text          -- ^ y 列名
+  -> RegridOpts
+  -> DXD.DataFrame
+  -> RegridResult
+regridLong idCol zCol yCol opts df =
+  let -- 列を取り出す
+      ids   = case tryColumnAsList @Text idCol df of
+                Just xs -> xs
+                Nothing -> case tryColumnAsList @(Maybe Text) idCol df of
+                  Just xs -> map (maybe "" id) xs
+                  Nothing -> case tryColumnAsList @Double idCol df of
+                    Just xs -> map (T.pack . show) xs
+                    Nothing -> case tryColumnAsList @Int idCol df of
+                      Just xs -> map (T.pack . show) xs
+                      Nothing -> []
+      zs    = valueAsMaybeDouble zCol df
+      ys    = valueAsMaybeDouble yCol df
+      -- (id, [(z, y)]) にグループ化、NA 行は除外
+      triples = [ (i, z, y)
+                | (i, mz, my) <- zip3 ids zs ys
+                , Just z <- [mz]
+                , Just y <- [my] ]
+      grouped =
+        let m = foldl (\acc (i, z, y) -> Map.insertWith (++) i [(z, y)] acc)
+                      Map.empty triples
+        in [ (i, sortBy (Data.Ord.comparing fst) pts)
+           | (i, pts) <- Map.toList m
+           , length pts >= 2 ]
+      idsKept = map fst grouped
+      perIdPts = map snd grouped
+      -- z 範囲
+      ranges = [ (minimum (map fst pts), maximum (map fst pts)) | pts <- perIdPts ]
+      (zmin, zmax) = case roZBoundsMode opts of
+        ZIntersection ->
+          if null ranges
+            then (0, 1)
+            else (maximum (map fst ranges), minimum (map snd ranges))
+        ZUnion        ->
+          if null ranges
+            then (0, 1)
+            else (minimum (map fst ranges), maximum (map snd ranges))
+      -- 共通 grid
+      gridSpec = Stat.AdaptiveGrid.GridSpec
+        { Stat.AdaptiveGrid.gsKind       = roGridKind opts
+        , Stat.AdaptiveGrid.gsN          = roN opts
+        , Stat.AdaptiveGrid.gsInterpKind = roInterp opts
+        , Stat.AdaptiveGrid.gsCoarseN    = roCoarseN opts
+        , Stat.AdaptiveGrid.gsEpsRatio   = roEpsRatio opts
+        }
+      grid = Stat.AdaptiveGrid.makeGrid perIdPts (zmin, zmax) gridSpec
+      -- id ごとに補間関数 + grid 上の y を評価
+      interpFns = [ (i, pts, Stat.Interpolate.interp1d (roInterp opts) pts)
+                  | (i, pts) <- grouped ]
+      perIdY    = [ map f grid | (_, _, f) <- interpFns ]
+      -- 統計
+      stats = [ let zMn = fst rg
+                    zMx = snd rg
+                    extL = max 0 (zMn - zmin)
+                    extU = max 0 (zmax - zMx)
+                    residMax = if null pts then 0
+                               else maximum [ abs (f z - y) | (z, y) <- pts ]
+                in PerIdStat
+                     { piId          = i
+                     , piNObserved   = length pts
+                     , piZMin        = zMn
+                     , piZMax        = zMx
+                     , piExtrapBelow = extL
+                     , piExtrapAbove = extU
+                     , piResidualMax = residMax
+                     }
+              | ((i, pts, f), rg) <- zip interpFns ranges
+              ]
+      -- 出力 long DataFrame: 行数 = nIds × len grid
+      n = length grid
+      idsOut    = concat [ replicate n i | i <- idsKept ]
+      zsOut     = concat (replicate (length idsKept) grid)
+      ysOut     = concat perIdY
+      dfOut     = DX.insertColumn yCol  (DX.fromList ysOut)
+                $ DX.insertColumn zCol  (DX.fromList zsOut)
+                $ DX.insertColumn idCol (DX.fromList idsOut)
+                $ DX.empty
+      -- adaptive density (レポート用): coarse grid 上の (z, density)
+      density = case roGridKind opts of
+        Stat.AdaptiveGrid.Uniform  -> []
+        Stat.AdaptiveGrid.Adaptive -> computeDensity perIdPts (roInterp opts)
+                                                    (roCoarseN opts) zmin zmax
+  in RegridResult
+       { rrDataFrame   = dfOut
+       , rrZGrid       = grid
+       , rrZMin        = zmin
+       , rrZMax        = zmax
+       , rrPerIdStats  = stats
+       , rrIds         = idsKept
+       , rrPerIdInterp = interpFns
+       , rrDensity     = density
+       }
+  where
+    sortBy = Data.List.sortBy
+
+-- | 内部: adaptive レポート用の (z, max_id |dy/dz|) 列を再計算 (G4 の R3 で表示)。
+computeDensity
+  :: [[(Double, Double)]] -> Stat.Interpolate.InterpKind -> Int
+  -> Double -> Double
+  -> [(Double, Double)]
+computeDensity perIdPts kind coarseN zmin zmax =
+  let coarse = Stat.AdaptiveGrid.uniformGrid coarseN zmin zmax
+      ysPerId = [ map (Stat.Interpolate.interp1d kind pts) coarse
+                | pts <- perIdPts, length pts >= 2 ]
+      slopeAbsLocal zs ys =
+        let n = length zs
+            zarr = zs
+            yarr = ys
+        in [ if n < 2 then 0
+             else if i == 0 then abs ((yarr !! 1 - yarr !! 0) /
+                                      (zarr !! 1 - zarr !! 0))
+             else if i == n - 1 then abs ((yarr !! (n-1) - yarr !! (n-2)) /
+                                          (zarr !! (n-1) - zarr !! (n-2)))
+             else abs ((yarr !! (i+1) - yarr !! (i-1)) /
+                       (zarr !! (i+1) - zarr !! (i-1)))
+           | i <- [0 .. n-1] ]
+      slopes = map (slopeAbsLocal coarse) ysPerId
+      peak = if null slopes
+               then replicate coarseN 0
+               else [ maximum [ s !! i | s <- slopes ] | i <- [0 .. coarseN - 1] ]
+  in zip coarse peak
+
+-- 既存モジュールでの import 追加
+-- (tryColumnAsList などは元々 import 済み、Map.insertWith / Data.List.sortBy /
+--  Data.Ord.comparing も import 済み)
+
+-- 補助 import (修飾名で参照するため)
+{-# NOINLINE _placeholderRegridImports #-}
+_placeholderRegridImports :: ()
+_placeholderRegridImports = ()

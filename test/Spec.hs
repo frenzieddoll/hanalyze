@@ -800,6 +800,36 @@ main = hspec $ do
         Just v  -> sort (V.toList v) `shouldBe` [1, 2, 2, 3]
         Nothing -> expectationFailure "expected t parsed as numeric"
 
+    it "Preprocess.regridLong: ZIntersection モードで全 id が共通範囲に収まる" $ do
+      -- id=a: z=0..3, id=b: z=1..4 → intersection は (1, 3)
+      let df0 = DX.insertColumn "id" (DX.fromList (["a","a","a","a","b","b","b","b"] :: [T.Text]))
+              $ DX.insertColumn "z"  (DX.fromList ([0,1,2,3,1,2,3,4] :: [Double]))
+              $ DX.insertColumn "y"  (DX.fromList ([0,1,4,9,1,4,9,16] :: [Double]))
+              $ DX.empty
+          opts = Pp.defaultRegridOpts
+                   { Pp.roN = 5, Pp.roZBoundsMode = Pp.ZIntersection
+                   , Pp.roGridKind = AG.Uniform }
+          rr = Pp.regridLong "id" "z" "y" opts df0
+      Pp.rrZMin rr `shouldBe` 1.0
+      Pp.rrZMax rr `shouldBe` 3.0
+      length (Pp.rrZGrid rr) `shouldBe` 5
+      length (Pp.rrIds rr) `shouldBe` 2
+
+    it "Preprocess.regridLong: ZUnion モードで [min,max] が和集合になる" $ do
+      let df0 = DX.insertColumn "id" (DX.fromList (["a","a","b","b"] :: [T.Text]))
+              $ DX.insertColumn "z"  (DX.fromList ([0,2,1,3] :: [Double]))
+              $ DX.insertColumn "y"  (DX.fromList ([0,4,1,9] :: [Double]))
+              $ DX.empty
+          opts = Pp.defaultRegridOpts
+                   { Pp.roN = 4, Pp.roZBoundsMode = Pp.ZUnion
+                   , Pp.roGridKind = AG.Uniform }
+          rr = Pp.regridLong "id" "z" "y" opts df0
+      Pp.rrZMin rr `shouldBe` 0.0
+      Pp.rrZMax rr `shouldBe` 3.0
+      -- 外挿が記録される (id=a の上端 0..2、共通 0..3 → above=1)
+      let stat_a = head [s | s <- Pp.rrPerIdStats rr, Pp.piId s == "a"]
+      Pp.piExtrapAbove stat_a `shouldBe` 1.0
+
     it "Clean.cleanPipeline: 複数列を一括変換" $ do
       let df0 = DX.insertColumn "p"
                    (DX.fromList (["$10", "$20"] :: [T.Text]))
