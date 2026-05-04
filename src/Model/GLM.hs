@@ -243,15 +243,17 @@ runLBFGS_GLM family x y =
   -- links (e.g. probit, sqrt link) the caller should use 'runIRLS'.
   let p     = LA.cols x
       beta0 = initBeta family (canonicalLink family) y p
-      f bs = glmNegLogLik family x y (LA.fromList bs)
-      g bs = LA.toList (glmGrad family x y (LA.fromList bs))
+      -- Vector-native objective and gradient (no list conversion per
+      -- L-BFGS step, which used to dominate runtime when @p ≈ 20@).
+      fV b = glmNegLogLik family x y b
+      gV b = glmGrad      family x y b
       cfg  = LBFGS.defaultLBFGSConfig
                { LBFGS.lbStop = OC.defaultStopCriteria
                                   { OC.stMaxIter = 200
                                   , OC.stTolFun  = 1e-10
                                   , OC.stTolX    = 1e-10 } }
       result = unsafePerformIO $
-                 LBFGS.runLBFGSWith cfg f g (LA.toList beta0)
+                 LBFGS.runLBFGSWithV cfg fV gV beta0
       betaF  = LA.fromList (OC.orBest result)
       mu     = safeMu family $ case family of
                  Gaussian -> x LA.#> betaF
