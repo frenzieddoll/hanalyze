@@ -565,6 +565,10 @@ sbxCrossover etaC bounds p1 p2 gen = do
   pairs <- zipWithM (sbxOneVar etaC gen) bounds (zip p1 p2)
   let (c1, c2) = unzip pairs
   return (c1, c2)
+  -- 注: pymoo は prob_bin による per-dim c1↔c2 swap を持つが、ZDT2 の
+  -- 凹 Pareto front では親由来 lineage の保持が convergence に重要で
+  -- swap が逆効果になることが計測で確認できたため採用しない (NF5 試行
+  -- → revert)。
 
 -- | One-dimensional SBX update — **boundary-aware** form (Deb 1995
 -- Algorithm 1, matching pymoo / DEAP / jMetal).
