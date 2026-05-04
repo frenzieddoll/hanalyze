@@ -38,24 +38,25 @@ import qualified Numeric.LinearAlgebra as LA
 -- 型
 -- ---------------------------------------------------------------------------
 
+-- | Quantile-regression fit result.
 data QRFit = QRFit
-  { qfTau     :: Double             -- ^ τ ∈ (0, 1)
-  , qfBeta    :: LA.Vector Double   -- ^ 係数
-  , qfYHat    :: LA.Vector Double   -- ^ 推定値 X β
-  , qfResid   :: LA.Vector Double   -- ^ y - X β
-  , qfPinball :: Double             -- ^ 総 pinball loss V̂_τ
-  , qfR1      :: Double             -- ^ pseudo R¹_τ (Koenker-Machado)
-  , qfIters   :: Int                -- ^ 反復回数
+  { qfTau     :: Double            -- ^ Quantile level @τ ∈ (0, 1)@.
+  , qfBeta    :: LA.Vector Double  -- ^ Coefficients.
+  , qfYHat    :: LA.Vector Double  -- ^ Fitted values @X β@.
+  , qfResid   :: LA.Vector Double  -- ^ Residuals @y − X β@.
+  , qfPinball :: Double            -- ^ Total pinball loss @V̂_τ@.
+  , qfR1      :: Double            -- ^ Koenker-Machado pseudo @R¹_τ@.
+  , qfIters   :: Int               -- ^ Number of iterations executed.
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
 -- フィット
 -- ---------------------------------------------------------------------------
 
--- | τ-分位点回帰を MM-IRLS で計算。
-fitQuantile :: Double             -- ^ τ ∈ (0, 1)
-            -> LA.Matrix Double   -- ^ X (intercept 列付き)
-            -> LA.Vector Double   -- ^ y
+-- | Fit a @τ@-quantile regression by Majorization-Minimization IRLS.
+fitQuantile :: Double             -- ^ Quantile level @τ ∈ (0, 1)@.
+            -> LA.Matrix Double   -- ^ Design matrix @X@ (must include the intercept column).
+            -> LA.Vector Double   -- ^ Response @y@.
             -> QRFit
 fitQuantile tau x y
   | tau <= 0 || tau >= 1 = error "fitQuantile: tau must be in (0, 1)"
@@ -109,7 +110,7 @@ fitQuantile tau x y
            , qfIters   = k
            }
 
--- | 新しい x に対する予測。
+-- | Predict at new inputs.
 predictQuantile :: QRFit -> LA.Matrix Double -> LA.Vector Double
 predictQuantile fit xNew = xNew LA.#> qfBeta fit
 
@@ -117,12 +118,12 @@ predictQuantile fit xNew = xNew LA.#> qfBeta fit
 -- 補助関数
 -- ---------------------------------------------------------------------------
 
--- | Pinball / check loss の総和: Σ ρ_τ(r_i)。
+-- | Total pinball / check loss: @Σ ρ_τ(r_i)@.
 pinballLoss :: Double -> [Double] -> Double
 pinballLoss tau rs =
   sum [ if r >= 0 then tau * r else (tau - 1) * r | r <- rs ]
 
--- | 経験 τ-分位点 (linear interpolation 風の単純実装)。
+-- | Empirical @τ@-quantile (simple linear-interpolation style).
 quantile :: Double -> [Double] -> Double
 quantile p xs
   | null xs = 0

@@ -34,28 +34,29 @@ import Data.List (sort)
 import Model.Core (FitResult (..))
 import Model.LM (fitLM)
 
--- | スプラインの種類。
+-- | Spline kind.
 data SplineKind
-  = BSpline Int    -- ^ 次数 k (通常 k=3 = cubic B-spline)
-  | NaturalCubic   -- ^ 自然立方スプライン
+  = BSpline Int    -- ^ B-spline of degree @k@ (3 = cubic is typical).
+  | NaturalCubic   -- ^ Natural cubic spline.
   deriving (Show, Eq)
 
--- | フィット結果と再現に必要な情報。
+-- | Spline fit result, with everything needed to reproduce predictions.
 data SplineFit = SplineFit
-  { sfKind    :: SplineKind
-  , sfKnots   :: [Double]   -- ^ 内部ノット (境界含む)
-  , sfBeta    :: LA.Vector Double
-  , sfResult  :: FitResult
+  { sfKind   :: SplineKind
+  , sfKnots  :: [Double]         -- ^ Interior knots (boundaries included).
+  , sfBeta   :: LA.Vector Double -- ^ Basis-coefficient vector.
+  , sfResult :: FitResult        -- ^ Underlying linear-model fit.
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
 -- B-spline basis (Cox-de Boor recursion)
 -- ---------------------------------------------------------------------------
 
--- | 1 つの x に対する B-spline 基底値を返す。
+-- | Evaluate every B-spline basis function at a single point.
 --
--- 入力: 次数 k、拡張ノット列 t (長さ n_basis + k + 1)、評価点 x
--- 出力: [B_0(x), B_1(x), ..., B_{n_basis-1}(x)]  (長さ n_basis)
+-- Inputs: degree @k@, extended knot sequence @t@ (length
+-- @n_basis + k + 1@), and the evaluation point @x@. Returns
+-- @[B_0(x), B_1(x), ..., B_{n_basis-1}(x)]@.
 bsplineEval :: Int -> [Double] -> Double -> [Double]
 bsplineEval k tKnots x =
   let nBasis = length tKnots - k - 1
@@ -87,16 +88,17 @@ bsplineEval k tKnots x =
       ord0 = [order0 i | i <- [0 .. length tKnots - 2]]
   in take nBasis (step 1 ord0)
 
--- | B-spline 基底行列。
+-- | B-spline basis matrix.
 --
--- 入力:
---   * @k@ — 次数 (通常 3)
---   * @intKnots@ — 内部ノット (境界含む、ソート済を想定)
---   * @xs@ — 評価点
+-- Inputs:
 --
--- 出力: 行列 (n × n_basis) where n_basis = length intKnots + k - 1
+--   * @k@        — degree (3 typical).
+--   * @intKnots@ — interior knots (boundaries included; assumed sorted).
+--   * @xs@       — evaluation points.
 --
--- 拡張ノット列は両端を `replicate (k+1)` で複製して構築 (clamped B-spline)。
+-- The output matrix has shape @n × n_basis@ where
+-- @n_basis = length intKnots + k - 1@. The extended knot sequence is
+-- built by replicating each boundary @k+1@ times (clamped B-spline).
 bsplineBasis :: Int -> [Double] -> V.Vector Double -> LA.Matrix Double
 bsplineBasis k intKnots xs =
   let knots = sort intKnots
@@ -114,7 +116,8 @@ bsplineBasis k intKnots xs =
 -- Natural cubic spline basis
 -- ---------------------------------------------------------------------------
 
--- | 自然立方スプライン基底 (境界の二階微分が 0 = 境界外で線形)。
+-- | Natural cubic-spline basis (zero second derivative at the
+-- boundaries; linear outside the boundary).
 --
 -- ノット K1 < K2 < ... < KN に対して、N 個の基底関数:
 --   N_1(x) = 1
@@ -143,7 +146,8 @@ naturalSplineBasis knots xs =
 -- Fit / predict
 -- ---------------------------------------------------------------------------
 
--- | 単出力スプライン回帰。多出力 'fitSplineMulti' に Y を 1 列行列化して委譲。
+-- | Single-output spline regression. Delegates to 'fitSplineMulti' by
+-- promoting @y@ to a one-column matrix.
 fitSpline :: SplineKind -> [Double] -> V.Vector Double -> V.Vector Double -> SplineFit
 fitSpline kind knots xs ys =
   let yMat = LA.asColumn (LA.fromList (V.toList ys))
@@ -151,6 +155,7 @@ fitSpline kind knots xs ys =
       beta = LA.flatten (smfBeta mf LA.¿ [0])
   in SplineFit kind knots beta (smfResult mf)
 
+-- | Predict at new @x@ values from a 'SplineFit'.
 predictSpline :: SplineFit -> V.Vector Double -> V.Vector Double
 predictSpline fit xsNew =
   let dm = case sfKind fit of
@@ -159,20 +164,21 @@ predictSpline fit xsNew =
       yPred = dm LA.#> sfBeta fit
   in V.fromList (LA.toList yPred)
 
--- | 多出力スプライン回帰: 同じ x グリッドで q 出力を同時 fit。
--- 内部は基底行列 + Multi LM。
+-- | Multi-output spline regression: fit @q@ outputs jointly on the same
+-- @x@ grid. Internally a basis matrix plus a multi-output LM.
 data SplineFitMulti = SplineFitMulti
-  { smfKind    :: SplineKind
-  , smfKnots   :: [Double]
-  , smfBeta    :: LA.Matrix Double  -- (basis_dim × q)
-  , smfResult  :: FitResult
+  { smfKind   :: SplineKind
+  , smfKnots  :: [Double]
+  , smfBeta   :: LA.Matrix Double  -- ^ Basis coefficients (@basis_dim × q@).
+  , smfResult :: FitResult
   } deriving (Show)
 
--- | Y は n × q (Matrix)。各列を独立に fit するが基底は共有。
+-- | Fit a multi-output spline. @Y@ has shape @n × q@; columns share the
+-- basis but are otherwise fit independently.
 fitSplineMulti :: SplineKind
-               -> [Double]            -- ノット
-               -> V.Vector Double     -- xs (n)
-               -> LA.Matrix Double    -- Y (n × q)
+               -> [Double]            -- ^ Knots.
+               -> V.Vector Double     -- ^ Inputs @xs@ (length @n@).
+               -> LA.Matrix Double    -- ^ Response @Y@ (@n × q@).
                -> SplineFitMulti
 fitSplineMulti kind knots xs ys =
   let dm = case kind of
@@ -181,6 +187,7 @@ fitSplineMulti kind knots xs ys =
       r  = fitLM dm ys
   in SplineFitMulti kind knots (coefficients r) r
 
+-- | Predict @Ŷ@ at new inputs from a 'SplineFitMulti'.
 predictSplineMulti :: SplineFitMulti -> V.Vector Double -> LA.Matrix Double
 predictSplineMulti fit xsNew =
   let dm = case smfKind fit of
@@ -192,14 +199,15 @@ predictSplineMulti fit xsNew =
 -- Knot helpers
 -- ---------------------------------------------------------------------------
 
--- | 等間隔ノット (両端含む、合計 n 個)。
+-- | Equal-spaced knots (both endpoints included, @n@ points total).
 equalSpacedKnots :: Int -> Double -> Double -> [Double]
 equalSpacedKnots n lo hi
   | n < 2     = [lo, hi]
   | otherwise = [lo + fromIntegral i * (hi - lo) / fromIntegral (n - 1)
                 | i <- [0 .. n - 1]]
 
--- | 標本分位点ベースのノット (両端は min/max、内部は等分位点)。
+-- | Quantile-based knots (boundaries at min/max, interior knots at
+-- evenly-spaced sample quantiles).
 quantileKnots :: Int -> V.Vector Double -> [Double]
 quantileKnots n xs
   | n < 2     = [V.minimum xs, V.maximum xs]

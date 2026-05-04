@@ -39,16 +39,17 @@ import qualified Optim.Common     as OC
 -- カーネル関数
 -- ---------------------------------------------------------------------------
 
--- | サポートしているカーネル。bandwidth h は外で渡す。
+-- | Supported kernels. The bandwidth @h@ is passed separately at the
+-- call site.
 data Kernel
-  = Gaussian       -- ^ exp(-u²/2)        (= RBF, 無限サポート)
-  | Epanechnikov   -- ^ 0.75(1-u²) on |u|≤1
-  | Triangular     -- ^ (1-|u|) on |u|≤1
-  | Uniform        -- ^ 0.5 on |u|≤1     (最も粗い)
-  | TriCube        -- ^ (1-|u|³)³ on |u|≤1
+  = Gaussian       -- ^ @exp(-u²/2)@ (= RBF, infinite support).
+  | Epanechnikov   -- ^ @0.75 (1-u²)@ on @|u| ≤ 1@.
+  | Triangular     -- ^ @1 - |u|@ on @|u| ≤ 1@.
+  | Uniform        -- ^ @0.5@ on @|u| ≤ 1@ (coarsest).
+  | TriCube        -- ^ @(1-|u|³)³@ on @|u| ≤ 1@.
   deriving (Show, Eq)
 
--- | u = (x - x_i) / h で評価。
+-- | Evaluate the kernel at @u = (x - x_i) / h@.
 kernelEval :: Kernel -> Double -> Double
 kernelEval k u = case k of
   Gaussian     -> exp (-0.5 * u * u) / sqrt (2 * pi)
@@ -64,31 +65,33 @@ kernelEval k u = case k of
 -- Nadaraya-Watson
 -- ---------------------------------------------------------------------------
 
--- | Nadaraya-Watson カーネル回帰。
+-- | Single-output Nadaraya-Watson kernel regression.
 --
--- ŷ(x*) = Σᵢ K_h(x* - xᵢ) yᵢ / Σᵢ K_h(x* - xᵢ)
+-- @ŷ(x*) = Σᵢ K_h(x* - xᵢ) yᵢ / Σᵢ K_h(x* - xᵢ)@
 --
--- 引数:
---   * @kern@   — カーネル
---   * @h@      — bandwidth (h > 0)
---   * @xs@, @ys@ — 観測
---   * @xNew@   — 予測点
--- | 単出力 NW (多出力 'nwRegressionMulti' に Y を 1 列行列化して委譲)。
-nwRegression :: Kernel -> Double
-             -> V.Vector Double -> V.Vector Double
-             -> V.Vector Double -> V.Vector Double
+-- Delegates to 'nwRegressionMulti' by promoting @y@ to a one-column
+-- matrix.
+nwRegression :: Kernel
+             -> Double             -- ^ Bandwidth @h@ (@> 0@).
+             -> V.Vector Double    -- ^ Training inputs.
+             -> V.Vector Double    -- ^ Training targets.
+             -> V.Vector Double    -- ^ Prediction inputs.
+             -> V.Vector Double    -- ^ Predictions.
 nwRegression kern h xs ys xNew =
   let yMat = LA.asColumn (LA.fromList (V.toList ys))
       mat  = nwRegressionMulti kern h xs yMat xNew
   in V.fromList (LA.toList (LA.flatten (mat LA.¿ [0])))
 
--- | 多出力 NW: 同じ重み行列を全 q 列で再利用。
--- W は (m × n)、Y は (n × q)、戻り値 = (W·Y) を行ごとに正規化した (m × q)。
-nwRegressionMulti :: Kernel -> Double
-                  -> V.Vector Double      -- xs (n)
-                  -> LA.Matrix Double     -- ys (n × q)
-                  -> V.Vector Double      -- xNew (m)
-                  -> LA.Matrix Double     -- (m × q)
+-- | Multi-output Nadaraya-Watson: reuse the same weight matrix across
+-- every output column. With @W@ of shape @m × n@ and @Y@ of shape
+-- @n × q@, the result is the row-normalized product @W · Y@ of shape
+-- @m × q@.
+nwRegressionMulti :: Kernel
+                  -> Double               -- ^ Bandwidth @h@.
+                  -> V.Vector Double      -- ^ Training inputs (length @n@).
+                  -> LA.Matrix Double     -- ^ Training response @Y@ (@n × q@).
+                  -> V.Vector Double      -- ^ Prediction inputs (length @m@).
+                  -> LA.Matrix Double     -- ^ Predictions (@m × q@).
 nwRegressionMulti kern h xs ys xNew =
   let n  = V.length xs
       m  = V.length xNew
@@ -108,16 +111,16 @@ nwRegressionMulti kern h xs ys xNew =
 -- Kernel Ridge regression
 -- ---------------------------------------------------------------------------
 
--- | Kernel Ridge regression のフィット結果。予測時に使う情報を保持。
+-- | Kernel ridge regression fit; carries everything needed to predict.
 data KernelRidgeFit = KernelRidgeFit
   { krKernel :: Kernel
   , krH      :: Double
   , krLambda :: Double
-  , krXs     :: V.Vector Double         -- 訓練点
-  , krAlpha  :: LA.Vector Double        -- α = (K + λI)⁻¹ y
+  , krXs     :: V.Vector Double   -- ^ Training inputs.
+  , krAlpha  :: LA.Vector Double  -- ^ Solution @α = (K + λI)⁻¹ y@.
   } deriving (Show)
 
--- | Gram 行列 K_{ij} = K_h(x_i - x_j) を構築。
+-- | Build the Gram matrix @K_{ij} = K_h(x_i - x_j)@.
 gramMatrix :: Kernel -> Double -> V.Vector Double -> LA.Matrix Double
 gramMatrix kern h xs =
   let n = V.length xs
@@ -126,10 +129,14 @@ gramMatrix kern h xs =
        [ kernelEval kern ((xi - xj) / h)
        | xi <- xv, xj <- xv ]
 
--- | Kernel Ridge regression (単出力)。多出力 'kernelRidgeMulti' に
--- Y を 1 列行列化して委譲し、α 行列の列 0 を取り出す。
-kernelRidge :: Kernel -> Double -> Double
-            -> V.Vector Double -> V.Vector Double
+-- | Single-output kernel ridge regression. Delegates to
+-- 'kernelRidgeMulti' by promoting @y@ to a one-column matrix and taking
+-- column 0 of the resulting @α@ matrix.
+kernelRidge :: Kernel
+            -> Double             -- ^ Bandwidth @h@.
+            -> Double             -- ^ Ridge penalty @λ@.
+            -> V.Vector Double    -- ^ Training inputs.
+            -> V.Vector Double    -- ^ Training targets.
             -> KernelRidgeFit
 kernelRidge kern h lam xs ys =
   let yMat = LA.asColumn (LA.fromList (V.toList ys))
@@ -137,6 +144,7 @@ kernelRidge kern h lam xs ys =
       a    = LA.flatten (krmAlpha mf LA.¿ [0])
   in KernelRidgeFit kern h lam xs a
 
+-- | Predict at new inputs from a 'KernelRidgeFit'.
 predictKernelRidge :: KernelRidgeFit -> V.Vector Double -> V.Vector Double
 predictKernelRidge fit xNew =
   V.map predict xNew
@@ -155,21 +163,22 @@ predictKernelRidge fit xNew =
 -- Bandwidth selection
 -- ---------------------------------------------------------------------------
 
--- | LOO-CV (Leave-One-Out Cross Validation) で bandwidth h を選ぶ。
--- 候補 hs から RMSE 最小のものを返す (簡易グリッドサーチ)。
+-- | Pick the bandwidth @h@ by leave-one-out cross-validation. Simple
+-- grid search: returns the candidate with the smallest LOO RMSE.
 gridSearchBandwidth
   :: Kernel
-  -> V.Vector Double      -- xs
-  -> V.Vector Double      -- ys
-  -> [Double]             -- 候補 h リスト
-  -> (Double, Double)     -- (best h, best LOO RMSE)
+  -> V.Vector Double      -- ^ Training inputs.
+  -> V.Vector Double      -- ^ Training targets.
+  -> [Double]             -- ^ Candidate bandwidths.
+  -> (Double, Double)     -- ^ @(best h, best LOO RMSE)@.
 gridSearchBandwidth kern xs ys hs =
   let results = [(h, looErrNW kern xs ys h) | h <- hs]
       best = head [ pair | pair <- results
                          , snd pair == minimum (map snd results) ]
   in best
 
--- | NW + LOO-CV の loss (1D 連続)。`autoBandwidthBrent` と内部共有。
+-- | NW LOO-CV loss as a continuous function of @h@; shared with
+-- 'autoBandwidthBrent'.
 looErrNW :: Kernel -> V.Vector Double -> V.Vector Double -> Double -> Double
 looErrNW kern xs ys h =
   let n = V.length xs
@@ -184,16 +193,18 @@ looErrNW kern xs ys h =
       err = V.zipWith (\y yh -> (y - yh)^(2::Int)) ys yPred
   in sqrt (V.sum err / fromIntegral n)
 
--- | bandwidth h を **Brent 法** で連続的に最適化 (LOO-CV を最小化)。
--- 区間 [h_lo, h_hi] が単峰前提。`gridSearchBandwidth` の候補列挙不要版。
+-- | Continuously optimize the bandwidth @h@ with Brent's method
+-- (minimizing the LOO-CV loss). Assumes the bracket @[h_lo, h_hi]@ is
+-- unimodal. Avoids enumerating discrete candidates the way
+-- 'gridSearchBandwidth' does.
 --
--- 戻り値: (best h, best LOO RMSE)。
+-- Returns @(best h, best LOO RMSE)@.
 autoBandwidthBrent
   :: Kernel
-  -> V.Vector Double
-  -> V.Vector Double
-  -> Double             -- ^ h_lo
-  -> Double             -- ^ h_hi
+  -> V.Vector Double    -- ^ Training inputs.
+  -> V.Vector Double    -- ^ Training targets.
+  -> Double             -- ^ Lower bound @h_lo@.
+  -> Double             -- ^ Upper bound @h_hi@.
   -> (Double, Double)
 autoBandwidthBrent kern xs ys hLo hHi =
   let cfg = LS.defaultBrentConfig { LS.bcMaxIter = 80, LS.bcTol = 1e-6 }
@@ -205,7 +216,8 @@ autoBandwidthBrent kern xs ys hLo hHi =
 -- 多出力 Kernel Ridge (Phase T2)
 -- ---------------------------------------------------------------------------
 
--- | 多出力 Kernel Ridge: Y は n × q。各列を独立に解くが、Gram 行列 K は共有。
+-- | Multi-output kernel ridge regression. With @Y@ of shape @n × q@,
+-- solves each column independently but shares the Gram matrix @K@.
 data KernelRidgeFitMulti = KernelRidgeFitMulti
   { krmKernel :: Kernel
   , krmH      :: Double
@@ -214,7 +226,7 @@ data KernelRidgeFitMulti = KernelRidgeFitMulti
   , krmAlpha  :: LA.Matrix Double   -- α (n × q)
   } deriving (Show)
 
--- | (K + λI)⁻¹ Y を 1 回計算で全列処理 (高速)。
+-- | Solve @(K + λI)⁻¹ Y@ once and reuse for every column (fast).
 kernelRidgeMulti :: Kernel -> Double -> Double
                  -> V.Vector Double -> LA.Matrix Double
                  -> KernelRidgeFitMulti
@@ -225,6 +237,7 @@ kernelRidgeMulti kern h lam xs ys =
       alpha = regK LA.<\> ys              -- n × q
   in KernelRidgeFitMulti kern h lam xs alpha
 
+-- | Predict @Ŷ@ for new inputs from a 'KernelRidgeFitMulti'.
 predictKernelRidgeMulti :: KernelRidgeFitMulti -> V.Vector Double
                         -> LA.Matrix Double
 predictKernelRidgeMulti fit xNew =
@@ -238,11 +251,12 @@ predictKernelRidgeMulti fit xNew =
                 | xStar <- V.toList xNew ]
   in kMat LA.<> alpha
 
--- | 学習点での予測 (= ŷ_train)。
+-- | Fitted values at the training inputs (= @ŷ_train@).
 fittedKernelRidgeMulti :: KernelRidgeFitMulti -> LA.Matrix Double
 fittedKernelRidgeMulti fit = predictKernelRidgeMulti fit (krmXs fit)
 
--- | 多出力 R² (q ベクトル)。Y 観測, Ŷ 予測, n×q 同形。
+-- | Multi-output R² returned as a length-@q@ vector. @Y@ observed and
+-- @Ŷ@ predicted both have shape @n × q@.
 r2Multi :: LA.Matrix Double -> LA.Matrix Double -> V.Vector Double
 r2Multi ys yhat =
   let n  = LA.rows ys
@@ -256,7 +270,8 @@ r2Multi ys yhat =
         in if sst == 0 then 0 else 1 - sse / sst
   in V.fromList [ colR2 j | j <- [0 .. q - 1] ]
 
--- | LOOCV 解析解で (h, λ) 同時グリッドサーチ。Hat 行列の対角を 1 回計算し
+-- | Joint @(h, λ)@ grid search using the closed-form LOOCV. Computes the
+-- hat-matrix diagonal once per
 -- 全 q 出力の LOO 残差を一括評価。
 --
 -- 戻り値: (best fit, best h, best λ, best mean LOO MSE)
@@ -293,7 +308,8 @@ autoTuneKernelRidgeMulti kern xs ys hs lams =
       fit  = kernelRidgeMulti kern bestH bestL xs ys
   in (fit, bestH, bestL, bestS)
 
--- | log-spaced bandwidth 候補。`defaultHGrid xs` で xs のレンジに合わせた 30 候補。
+-- | Log-spaced bandwidth candidates. @defaultHGrid xs@ produces 30
+-- candidates spanning the range of @xs@.
 defaultHGrid :: V.Vector Double -> [Double]
 defaultHGrid xs =
   let xv  = V.toList xs
@@ -308,7 +324,7 @@ defaultHGrid xs =
       step = (lHi - lLo) / fromIntegral (n - 1)
   in [ exp (lLo + fromIntegral i * step) | i <- [0 .. n - 1 :: Int] ]
 
--- | log-spaced λ 候補 (10 値、1e-6 .. 1e0)。
+-- | Log-spaced ridge-penalty candidates (10 values from 1e-6 to 1).
 defaultLamGrid :: [Double]
 defaultLamGrid =
   let n = 10

@@ -56,43 +56,44 @@ import System.IO.Unsafe (unsafePerformIO)
 -- Types
 -- ---------------------------------------------------------------------------
 
--- | GP カーネル関数の種類。
+-- | GP kernel kind.
 data Kernel
   = RBF
-    -- ^ Squared Exponential: k(x,x') = σ_f² exp(−r²/(2ℓ²))
-    --   滑らかな関数に適している。最もよく使われるカーネル。
+    -- ^ Squared exponential: @k(x,x') = σ_f² exp(−r²/(2ℓ²))@.
+    --   Best for smooth functions; the most commonly used kernel.
   | Matern52
-    -- ^ Matérn 5/2: k(x,x') = σ_f²(1+√5 r/ℓ+5r²/(3ℓ²))exp(−√5 r/ℓ)
-    --   RBF より少し荒れた関数に対応。物理系でよく使われる。
+    -- ^ Matérn 5/2: @k(x,x') = σ_f²(1+√5 r/ℓ+5r²/(3ℓ²)) exp(−√5 r/ℓ)@.
+    --   Slightly rougher than RBF; common in physical systems.
   | Periodic
-    -- ^ Periodic: k(x,x') = σ_f² exp(−2 sin²(π r/p)/ℓ²)
-    --   周期的なパターンを持つ関数に適している。gpPeriod を適切に設定する。
+    -- ^ Periodic: @k(x,x') = σ_f² exp(−2 sin²(π r/p)/ℓ²)@.
+    --   For periodic patterns; set 'gpPeriod' appropriately.
   deriving (Show, Eq)
 
--- | カーネル名 (表示用)。
+-- | Display name of a kernel.
 kernelName :: Kernel -> Text
 kernelName RBF       = "RBF"
 kernelName Matern52  = "Mat\xe9rn 5/2"
 kernelName Periodic  = "Periodic"
 
--- | GP ハイパーパラメータ。
+-- | GP hyperparameters.
 data GPParams = GPParams
   { gpLengthScale :: Double
-    -- ^ ℓ: 長さスケール。大きいほど滑らか。
+    -- ^ Length scale @ℓ@; larger means smoother.
   , gpSignalVar   :: Double
-    -- ^ σ_f²: シグナル分散。関数値の変動幅。
+    -- ^ Signal variance @σ_f²@; the variability of the function values.
   , gpNoiseVar    :: Double
-    -- ^ σ_n²: 観測ノイズ分散。0 に近いと補間、大きいと平滑化。
+    -- ^ Observation noise variance @σ_n²@; near 0 interpolates, larger
+    --   smooths.
   , gpPeriod      :: Double
-    -- ^ p: 周期 (Periodic カーネルのみ使用)。
+    -- ^ Period @p@ (only used by the @Periodic@ kernel).
   } deriving (Show)
 
--- | デフォルトハイパーパラメータ。
+-- | Default hyperparameters: @ℓ = σ_f² = p = 1@, @σ_n² = 0.1@.
 defaultGPParams :: GPParams
 defaultGPParams = GPParams 1.0 1.0 0.1 1.0
 
--- | データの統計量から初期ハイパーパラメータを設定する。
--- 最適化の初期値として使う。
+-- | Build a sensible initial 'GPParams' from data statistics, suitable
+-- as a starting point for optimization.
 initParamsFromData :: [Double] -> [Double] -> GPParams
 initParamsFromData xs ys = GPParams
   { gpLengthScale = max 0.01 ((xMax - xMin) / 4)
@@ -106,26 +107,26 @@ initParamsFromData xs ys = GPParams
     yMean = sum ys / fromIntegral (length ys)
     yVar  = sum (map (\y -> (y - yMean) ^ (2 :: Int)) ys) / fromIntegral (length ys)
 
--- | GP モデル: カーネルとハイパーパラメータの組み合わせ。
+-- | A GP model: a kernel paired with its hyperparameters.
 data GPModel = GPModel
   { gpKernel :: Kernel
   , gpParams :: GPParams
   } deriving (Show)
 
--- | GP 事後予測の結果。
+-- | GP posterior-predictive result.
 data GPResult = GPResult
-  { gpTestX  :: [Double]   -- ^ テスト点 x_*
-  , gpMean   :: [Double]   -- ^ 事後平均 μ(x_*)
-  , gpVar    :: [Double]   -- ^ 事後分散 σ²(x_*)
-  , gpLower  :: [Double]   -- ^ 平均 − 2σ (≈95% 信用区間下限)
-  , gpUpper  :: [Double]   -- ^ 平均 + 2σ (≈95% 信用区間上限)
+  { gpTestX :: [Double]   -- ^ Test points @x_*@.
+  , gpMean  :: [Double]   -- ^ Posterior mean @μ(x_*)@.
+  , gpVar   :: [Double]   -- ^ Posterior variance @σ²(x_*)@.
+  , gpLower :: [Double]   -- ^ @mean − 2σ@ (≈ 95 % credible-interval lower).
+  , gpUpper :: [Double]   -- ^ @mean + 2σ@ (≈ 95 % credible-interval upper).
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
 -- Kernel
 -- ---------------------------------------------------------------------------
 
--- | カーネル関数 k(x, x') の計算。
+-- | Evaluate the kernel function @k(x, x')@.
 kernelFn :: Kernel -> GPParams -> Double -> Double -> Double
 kernelFn RBF p x x' =
   let d = x - x'
@@ -142,7 +143,7 @@ kernelFn Periodic p x x' =
       s = sin (pi * d / gpPeriod p)
   in gpSignalVar p * exp (-2 * s * s / (l * l))
 
--- | カーネル行列 K(xs, xs') を構築する。結果のサイズは (|xs|, |xs'|)。
+-- | Build the kernel matrix @K(xs, xs')@ of shape @|xs| × |xs'|@.
 buildKernelMatrix :: Kernel -> GPParams -> [Double] -> [Double] -> LA.Matrix Double
 buildKernelMatrix ker p xs xs' =
   (n LA.>< m) [kernelFn ker p x x' | x <- xs, x' <- xs']
@@ -162,13 +163,14 @@ noiseKernel ker p xs =
       jitter = max (gpNoiseVar p) 1e-6
   in k `LA.add` LA.scale jitter (LA.ident n)
 
--- | 対数周辺尤度 log p(y | X, θ) を計算する。
--- ハイパーパラメータ最適化の目的関数として使用する。
+-- | Log marginal likelihood @log p(y | X, θ)@. Used as the objective
+-- when optimizing GP hyperparameters.
 --
--- log p = −½ yᵀ Ky⁻¹ y − ½ log|Ky| − n/2 log(2π)
+-- @log p = −½ yᵀ Ky⁻¹ y − ½ log|Ky| − n/2 log(2π)@.
 --
--- params が病的 (極小 length scale 等) で Cholesky が失敗した場合は
--- ペナルティ -1e30 を返し、optimizer が当該領域を避けるよう誘導する。
+-- When the parameters are pathological (e.g. very small length scales)
+-- and Cholesky fails, returns the penalty value @-10³⁰@ so the
+-- optimizer steers away from that region.
 logMarginalLikelihood :: [Double] -> [Double] -> Kernel -> GPParams -> Double
 logMarginalLikelihood trainX trainY ker params =
   let n      = length trainX
@@ -193,7 +195,7 @@ logMarginalLikelihood trainX trainY ker params =
              dataFit = LA.dot y alpha
          in -0.5 * dataFit - 0.5 * logDet - fromIntegral n / 2 * log (2 * pi)
 
--- | テスト点 testX での GP 事後予測 (単出力)。
+-- | Single-output GP posterior prediction at @testX@.
 -- 多出力 'fitGPMulti' に y を 1 列行列化して委譲、列 0 を取り出す。
 --
 -- 事後平均: μ_* = K_*ᵀ Ky⁻¹ y
@@ -212,7 +214,8 @@ fitGP model trainX trainY testX =
        , gpUpper  = zipWith (\m s -> m + 2 * s) mu stdList
        }
 
--- | 多出力 GP 事後予測。Y は n × q (列 = 出力タスク)、すべて同じカーネルと
+-- | Multi-output GP posterior prediction. @Y@ has shape @n × q@ (one
+-- column per output task) and shares a single kernel and
 -- ハイパーパラメータを共有する (Cholesky / Ky⁻¹ も共有)。
 --
 -- 戻り値: (事後平均行列 m × q, 事後分散ベクトル 長さ m)。
@@ -237,12 +240,15 @@ fitGPMulti model trainX trainY testX =
 -- Hyperparameter optimisation
 -- ---------------------------------------------------------------------------
 
--- | 対数周辺尤度を最大化してハイパーパラメータを最適化する。
--- log-space で (ℓ, σ_f², σ_n²) を **L-BFGS** (準ニュートン) で最大化。
--- 数値勾配 (中央差分) を使うので gradFn の解析実装は不要。
+-- | Optimize GP hyperparameters by maximizing the log marginal likelihood.
 --
--- 旧実装 (`Optim.GradAscent` + 数値勾配) より一般に 5-10 倍速く、初期値
--- 依存性も低い。`unsafePerformIO` を使うが L-BFGS は決定的なので参照透過。
+-- Operates in log-space on @(ℓ, σ_f², σ_n²)@ using L-BFGS (numerical
+-- central-difference gradients, no user-provided gradient required).
+--
+-- Typically 5-10× faster than the older @Optim.GradAscent@ + numeric
+-- gradient path, and less sensitive to the initial point.
+-- Internally uses 'System.IO.Unsafe.unsafePerformIO', but L-BFGS is
+-- deterministic so the result is referentially transparent.
 optimizeGP :: Kernel -> [Double] -> [Double] -> GPParams -> GPParams
 optimizeGP ker trainX trainY p0 =
   let u0   = [log (gpLengthScale p0), log (gpSignalVar p0), log (gpNoiseVar p0)]
