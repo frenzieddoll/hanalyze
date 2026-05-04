@@ -27,15 +27,16 @@ import qualified Numeric.LinearAlgebra as LA
 -- 変換
 -- ---------------------------------------------------------------------------
 
--- | 1D ベクトルを n×1 行列に昇格。
+-- | Promote a 1D 'V.Vector' to an @n × 1@ matrix.
 asMultiY :: V.Vector Double -> LA.Matrix Double
 asMultiY = LA.asColumn . LA.fromList . V.toList
 
--- | hmatrix 'LA.Vector' を n×1 行列に。
+-- | Promote an hmatrix 'LA.Vector' to an @n × 1@ matrix.
 asMultiYV :: LA.Vector Double -> LA.Matrix Double
 asMultiYV = LA.asColumn
 
--- | n×1 行列から 1D ベクトルへ。q ≠ 1 のときは最初の列を返す。
+-- | Convert an @n × 1@ matrix back to a 1D vector. When @q ≠ 1@, returns
+-- the first column.
 fromMultiY :: LA.Matrix Double -> V.Vector Double
 fromMultiY m
   | LA.cols m == 0 = V.empty
@@ -45,7 +46,7 @@ fromMultiY m
 -- 評価指標
 -- ---------------------------------------------------------------------------
 
--- | 全要素 MSE (sum-of-squares / n / q)。
+-- | Whole-matrix MSE: sum-of-squares divided by @n × q@.
 mseMulti :: LA.Matrix Double -> LA.Matrix Double -> Double
 mseMulti ys yhat =
   let n = LA.rows ys
@@ -53,11 +54,11 @@ mseMulti ys yhat =
       r = ys - yhat
   in LA.sumElements (r * r) / fromIntegral (n * q)
 
--- | 全要素 RMSE。
+-- | Whole-matrix RMSE.
 rmseMulti :: LA.Matrix Double -> LA.Matrix Double -> Double
 rmseMulti ys yhat = sqrt (mseMulti ys yhat)
 
--- | 列ごと R² (長さ q ベクトル)。
+-- | Per-column R² (vector of length @q@).
 r2Multi :: LA.Matrix Double -> LA.Matrix Double -> V.Vector Double
 r2Multi ys yhat =
   let n  = LA.rows ys

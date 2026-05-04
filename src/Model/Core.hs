@@ -30,42 +30,44 @@ module Model.Core
 
 import qualified Numeric.LinearAlgebra as LA
 
--- | 全フィット結果の共通型 (多出力対応)。
+-- | Multi-output regression fit result.
 --
--- 形状:
+-- Shapes:
 --
--- * 'coefficients' :: p × q  (p 列の特徴量、q 列の応答)
--- * 'fitted'       :: n × q  (n 観測、q 応答)
--- * 'residuals'    :: n × q
--- * 'rSquared'     :: q 次元 (応答ごとの R²)
+--   * 'coefficients' — @p × q@  (@p@ features × @q@ responses).
+--   * 'fitted'       — @n × q@  (@n@ observations × @q@ responses).
+--   * 'residuals'    — @n × q@.
+--   * 'rSquared'     — vector of length @q@ (one R² per response).
 --
--- 単一出力の場合は q = 1 (1 列の Matrix) になる。
+-- Single-output models use @q = 1@ (a one-column matrix).
 data FitResult = FitResult
-  { coefficients :: LA.Matrix Double
-  , fitted       :: LA.Matrix Double
-  , residuals    :: LA.Matrix Double
-  , rSquared     :: LA.Vector Double
+  { coefficients :: LA.Matrix Double  -- ^ Coefficient matrix @p × q@.
+  , fitted       :: LA.Matrix Double  -- ^ Fitted values @n × q@.
+  , residuals    :: LA.Matrix Double  -- ^ Residuals @n × q@.
+  , rSquared     :: LA.Vector Double  -- ^ Per-response R² (length @q@).
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
 -- Vec / Scalar アクセサ (q = 1 用)
 -- ---------------------------------------------------------------------------
 
--- | 1 出力のフィット結果から係数を Vector として取り出す。
--- 多出力の場合は 1 列目のみ。多出力で全列が必要なら 'coefficients' を直接使う。
+-- | Coefficients of a single-output fit as a 'Vector'. For multi-output
+-- fits this returns just the first column; use 'coefficients' to access
+-- all columns.
 coefficientsV :: FitResult -> LA.Vector Double
 coefficientsV = LA.flatten . coefficients
 
--- | 1 出力のフィット結果から ŷ を Vector として取り出す。
+-- | Fitted values @ŷ@ of a single-output fit as a 'Vector'.
 fittedV :: FitResult -> LA.Vector Double
 fittedV = LA.flatten . fitted
 
--- | 1 出力のフィット結果から残差を Vector として取り出す。
+-- | Residuals of a single-output fit as a 'Vector'.
 residualsV :: FitResult -> LA.Vector Double
 residualsV = LA.flatten . residuals
 
--- | 1 出力のフィット結果から R² (Double) を取り出す。
--- 多出力では 1 列目のみ; 全応答の R² が必要なら 'rSquared' を直接使う。
+-- | R² of a single-output fit as a scalar 'Double'. For multi-output
+-- fits this returns the first component; use 'rSquared' for all
+-- responses.
 rSquared1 :: FitResult -> Double
 rSquared1 r = case LA.toList (rSquared r) of
   (h : _) -> h
@@ -75,11 +77,11 @@ rSquared1 r = case LA.toList (rSquared r) of
 -- 後方互換ヘルパ (旧 Vec API 利用者用)
 -- ---------------------------------------------------------------------------
 
--- | ŷ を [Double] に変換 (1 出力前提)。
+-- | Fitted values as @[Double]@ (single-output).
 fittedList :: FitResult -> [Double]
 fittedList = LA.toList . fittedV
 
--- | 係数を [Double] に変換 (1 出力前提)。
+-- | Coefficients as @[Double]@ (single-output).
 coeffList :: FitResult -> [Double]
 coeffList = LA.toList . coefficientsV
 
@@ -87,15 +89,15 @@ coeffList = LA.toList . coefficientsV
 -- 列単位アクセス (多出力時)
 -- ---------------------------------------------------------------------------
 
--- | j 列目 (応答 j) の係数を Vector で取り出す。
+-- | Coefficients for response @j@ as a 'Vector'.
 coefficientsCol :: Int -> FitResult -> LA.Vector Double
 coefficientsCol j r = LA.flatten (coefficients r LA.¿ [j])
 
--- | j 列目 (応答 j) の予測 ŷ を Vector で取り出す。
+-- | Fitted values @ŷ@ for response @j@ as a 'Vector'.
 fittedCol :: Int -> FitResult -> LA.Vector Double
 fittedCol j r = LA.flatten (fitted r LA.¿ [j])
 
--- | j 列目 (応答 j) の残差を Vector で取り出す。
+-- | Residuals for response @j@ as a 'Vector'.
 residualsCol :: Int -> FitResult -> LA.Vector Double
 residualsCol j r = LA.flatten (residuals r LA.¿ [j])
 
@@ -103,24 +105,26 @@ residualsCol j r = LA.flatten (residuals r LA.¿ [j])
 -- 不確実性帯
 -- ---------------------------------------------------------------------------
 
--- | 平均応答に描く不確実性帯。
+-- | Uncertainty band drawn around the mean response.
 data Band
-  = NoBand      -- ^ 無し
-  | CI Double   -- ^ 信頼区間
-  | PI Double   -- ^ 予測区間 (Gaussian のみ)
+  = NoBand      -- ^ No band.
+  | CI Double   -- ^ Confidence interval at the given level (e.g. 0.95).
+  | PI Double   -- ^ Prediction interval (Gaussian models only).
   deriving (Show, Eq)
 
 -- ---------------------------------------------------------------------------
 -- Model クラス (多出力に対応)
 -- ---------------------------------------------------------------------------
 
--- | 各回帰モデルが満たすインタフェース。
+-- | Common interface implemented by every regression model.
 --
 -- @
 -- fit     m X Y        :: FitResult       -- X (n×p), Y (n×q)
--- predict m beta Xnew  :: Matrix          -- ŷ (m × q) where m = rows Xnew
+-- predict m beta Xnew  :: Matrix          -- ŷ (m × q), m = rows Xnew
 -- @
 class Model m where
   fit     :: m -> LA.Matrix Double -> LA.Matrix Double -> FitResult
-  predict :: m -> LA.Matrix Double -> LA.Matrix Double -> LA.Matrix Double
-  --             coefficients (p × q)  Xnew (m × p)      ŷ (m × q)
+  predict :: m
+          -> LA.Matrix Double  -- ^ Coefficients @β@ of shape @p × q@.
+          -> LA.Matrix Double  -- ^ Test input @X_new@ of shape @m × p@.
+          -> LA.Matrix Double  -- ^ Predictions @ŷ@ of shape @m × q@.

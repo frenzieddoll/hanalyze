@@ -20,37 +20,33 @@ module Model.MultiGP
 import Model.GP (Kernel (..), GPModel (..), GPParams, GPResult (..),
                  fitGP, optimizeGP, initParamsFromData)
 
--- | 多出力 GP モデル: 各出力に対して個別の Kernel + Hyperparameter。
--- 簡易のため全出力で同じ Kernel タイプを使う (lengthscale 等は個別最適化)。
+-- | Multi-output GP model with a per-output set of hyperparameters.
+-- All outputs share the same kernel /type/ for simplicity; their
+-- length-scales etc. are still optimized independently.
 data MultiGPModel = MultiGPModel
   { mgpKernel :: Kernel
-  , mgpParams :: [GPParams]   -- 出力ごとの hyperparams
+  , mgpParams :: [GPParams]   -- ^ Hyperparameters per output.
   } deriving (Show)
 
--- | 各出力ごとの GP fit 結果。
+-- | Per-output GP fit results.
 data MultiGPResult = MultiGPResult
-  { mgpMean   :: [[Double]]   -- 各出力の予測平均 (q 個のリスト)
-  , mgpLower  :: [[Double]]   -- 各出力の 95% lower (mean - 2σ)
-  , mgpUpper  :: [[Double]]   -- 各出力の 95% upper (mean + 2σ)
-  , mgpModels :: [GPModel]    -- 個別モデル (lookup 用)
+  { mgpMean   :: [[Double]]   -- ^ Predictive means, one list per output (length @q@).
+  , mgpLower  :: [[Double]]   -- ^ 95 % lower band (@mean − 2σ@) per output.
+  , mgpUpper  :: [[Double]]   -- ^ 95 % upper band (@mean + 2σ@) per output.
+  , mgpModels :: [GPModel]    -- ^ Underlying per-output 'GPModel's.
   } deriving (Show)
 
--- | mgpUpper - mgpMean から std (= σ) を計算。
+-- | Recover the per-output predictive standard deviation @σ@ from the
+-- @mean@ / @upper@ bands.
 mgpStd :: MultiGPResult -> [[Double]]
 mgpStd r = zipWith (zipWith (\m u -> (u - m) / 2)) (mgpMean r) (mgpUpper r)
 
--- | 多出力 GP を fit。各出力ごとに `optimizeGP` でハイパーパラメタを学習し、
--- 予測点 testX で評価する。
---
--- 引数:
---   * kernel — 全出力共通のカーネル種類
---   * trainX — 入力点 (1D, [Double])
---   * trainYs — 出力ごとの値 ([[Double]], 長さ q)
---   * testX — 予測点
-fitMultiGP :: Kernel
-           -> [Double]      -- trainX
-           -> [[Double]]    -- trainYs (q 出力)
-           -> [Double]      -- testX
+-- | Fit a multi-output GP. Each output is optimized independently via
+-- 'optimizeGP' and predicted at @testX@.
+fitMultiGP :: Kernel        -- ^ Kernel kind shared by every output.
+           -> [Double]      -- ^ Training inputs (1D).
+           -> [[Double]]    -- ^ Per-output training values (length @q@).
+           -> [Double]      -- ^ Test inputs.
            -> MultiGPResult
 fitMultiGP kern trainX trainYs testX =
   let perOutput :: [Double] -> (GPModel, GPResult)
@@ -70,9 +66,12 @@ fitMultiGP kern trainX trainYs testX =
        , mgpModels = models
        }
 
--- | 既存の MultiGPResult を新しい test 点で再予測 (再フィット不要)。
+-- | Re-predict an existing 'MultiGPModel' at new test inputs (no
+-- re-fitting).
 predictMultiGP :: MultiGPModel
-               -> [Double] -> [[Double]] -> [Double]   -- trainX, trainYs, testX
+               -> [Double]    -- ^ Training inputs.
+               -> [[Double]]  -- ^ Per-output training values.
+               -> [Double]    -- ^ Test inputs.
                -> MultiGPResult
 predictMultiGP mgp trainX trainYs testX =
   let kern    = mgpKernel mgp

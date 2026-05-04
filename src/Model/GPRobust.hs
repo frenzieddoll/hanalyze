@@ -46,15 +46,18 @@ import Model.GP
 -- 観測尤度
 -- ---------------------------------------------------------------------------
 
--- | 重い裾の観測尤度。
+-- | Heavy-tailed observation likelihood.
 data RobustLikelihood
-  = RGaussian Double            -- ^ Gaussian (σ_n) — 通常 GP に相当 (検算用)
-  | RStudentT Double Double     -- ^ StudentT(df=ν, scale=σ) — ν 小さいほど重い裾
-  | RCauchy   Double            -- ^ Cauchy(scale=γ) ≡ StudentT(1, γ)
+  = RGaussian Double            -- ^ Gaussian @(σ_n)@ — equivalent to a
+                                --   standard GP (sanity-check baseline).
+  | RStudentT Double Double     -- ^ Student-t @(df=ν, scale=σ)@; smaller
+                                --   @ν@ means heavier tails.
+  | RCauchy   Double            -- ^ Cauchy @(scale=γ)@, equivalent to
+                                --   @StudentT(1, γ)@.
   deriving (Show, Eq)
 
--- | 残差 r に対する IRLS 重み w(r)。
--- 有効ノイズ分散は σ_eff² / w_i で 1 ステップごとに更新。
+-- | IRLS weight @w(r)@ for residual @r@. The effective noise variance is
+-- @σ_eff² / w_i@ at each step.
 likelihoodWeight :: RobustLikelihood -> Double -> Double
 likelihoodWeight (RGaussian _)        _ = 1.0
 likelihoodWeight (RStudentT nu sigma) r =
@@ -64,7 +67,7 @@ likelihoodWeight (RCauchy gamma) r =
   let z = r / gamma
   in 2 / (1 + z * z)
 
--- | 重みのスケーリングに使う基準分散 σ_eff²。
+-- | Reference variance @σ_eff²@ used to scale the IRLS weights.
 likelihoodScale2 :: RobustLikelihood -> Double
 likelihoodScale2 (RGaussian s)      = s * s
 likelihoodScale2 (RStudentT _ s)    = s * s
@@ -74,29 +77,32 @@ likelihoodScale2 (RCauchy g)        = g * g
 -- フィット結果
 -- ---------------------------------------------------------------------------
 
+-- | Robust GP fit result.
 data RobustGPFit = RobustGPFit
-  { rgpKernel     :: Kernel
-  , rgpParams     :: GPParams
-  , rgpLik        :: RobustLikelihood
-  , rgpTrainX     :: [Double]
-  , rgpTrainY     :: [Double]
-  , rgpAlpha      :: LA.Vector Double      -- α = (K + σ² W⁻¹)⁻¹ y
-  , rgpKyInv      :: LA.Matrix Double      -- (K + σ² W⁻¹)⁻¹
-  , rgpWeights    :: LA.Vector Double      -- 収束時の IRLS 重み
-  , rgpIters      :: Int                   -- 反復回数
+  { rgpKernel  :: Kernel
+  , rgpParams  :: GPParams
+  , rgpLik     :: RobustLikelihood
+  , rgpTrainX  :: [Double]              -- ^ Training inputs.
+  , rgpTrainY  :: [Double]              -- ^ Training targets.
+  , rgpAlpha   :: LA.Vector Double      -- ^ @α = (K + σ² W⁻¹)⁻¹ y@.
+  , rgpKyInv   :: LA.Matrix Double      -- ^ @(K + σ² W⁻¹)⁻¹@ at convergence.
+  , rgpWeights :: LA.Vector Double      -- ^ IRLS weights at convergence.
+  , rgpIters   :: Int                   -- ^ Number of IRLS iterations executed.
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
 -- フィット
 -- ---------------------------------------------------------------------------
 
--- | IRLS 反復でロバスト GP の MAP を計算。
--- 反復は最大 50 回、収束判定 ||f_new − f||∞ < 1e-6。
+-- | Compute the MAP of a robust GP via IRLS iteration. At most 50
+-- iterations; convergence when @‖f_new − f‖∞ < 10⁻⁶@.
 fitGPRobust
   :: Kernel
-  -> GPParams                    -- ^ カーネルハイパラ (固定 — 別途最適化推奨)
+  -> GPParams                    -- ^ Kernel hyperparameters (held fixed —
+                                 --   optimize them separately).
   -> RobustLikelihood
-  -> [Double] -> [Double]        -- ^ 訓練 X, Y
+  -> [Double]                    -- ^ Training @X@.
+  -> [Double]                    -- ^ Training @Y@.
   -> RobustGPFit
 fitGPRobust ker params lik trainX trainY =
   let n         = length trainX
@@ -153,7 +159,7 @@ fitGPRobust ker params lik trainX trainY =
 -- 予測
 -- ---------------------------------------------------------------------------
 
--- | テスト点での (mean, var of f) を返す。
+-- | Predictive mean and variance of @f@ at the given test points.
 -- mean = k_*ᵀ α, var = k(x*,x*) − k_*ᵀ K_y⁻¹ k_*
 predictGPRobust :: RobustGPFit -> [Double] -> [(Double, Double)]
 predictGPRobust fit testX =

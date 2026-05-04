@@ -30,21 +30,22 @@ import qualified Numeric.LinearAlgebra as LA
 -- Reduced Rank Regression
 -- ---------------------------------------------------------------------------
 
--- | RRR の結果。係数行列 B が rank r に制約される。
+-- | Reduced-Rank Regression result. The coefficient matrix @B@ is
+-- constrained to rank @r@.
 data RRRFit = RRRFit
-  { rrrBeta   :: LA.Matrix Double  -- p × q (rank ≤ r)
-  , rrrU      :: LA.Matrix Double  -- p × r (左因子)
-  , rrrV      :: LA.Matrix Double  -- q × r (右因子)
-  , rrrRank   :: Int
+  { rrrBeta :: LA.Matrix Double  -- ^ @B@ of shape @p × q@ (rank @≤ r@).
+  , rrrU    :: LA.Matrix Double  -- ^ Left factor (@p × r@).
+  , rrrV    :: LA.Matrix Double  -- ^ Right factor (@q × r@).
+  , rrrRank :: Int               -- ^ Effective rank.
   } deriving (Show)
 
--- | Reduced Rank Regression: B = U V^T with rank r.
+-- | Reduced-Rank Regression: @B = U Vᵀ@ with rank @r@.
 --
--- アルゴリズム: OLS の B̂ を SVD 分解し、上位 r 特異値で truncate。
--- B̂_RRR = U_r Σ_r V_rᵀ
-reducedRankRegression :: Int                  -- rank r
-                     -> LA.Matrix Double      -- X (n × p)
-                     -> LA.Matrix Double      -- Y (n × q)
+-- The OLS estimate @B̂@ is SVD-truncated to its top @r@ singular values:
+-- @B̂_RRR = U_r Σ_r V_rᵀ@.
+reducedRankRegression :: Int                -- ^ Target rank @r@.
+                     -> LA.Matrix Double    -- ^ Design matrix @X@ (@n × p@).
+                     -> LA.Matrix Double    -- ^ Response @Y@ (@n × q@).
                      -> RRRFit
 reducedRankRegression r x y =
   let bOLS = x LA.<\> y                -- OLS: p × q
@@ -56,6 +57,7 @@ reducedRankRegression r x y =
       bRRR = uR LA.<> LA.diag sR LA.<> LA.tr vR
   in RRRFit bRRR uR vR r'
 
+-- | Predict @Ŷ@ for new inputs from a 'RRRFit'.
 predictRRR :: RRRFit -> LA.Matrix Double -> LA.Matrix Double
 predictRRR fit xNew = xNew LA.<> rrrBeta fit
 
@@ -63,27 +65,28 @@ predictRRR fit xNew = xNew LA.<> rrrBeta fit
 -- Partial Least Squares (NIPALS algorithm)
 -- ---------------------------------------------------------------------------
 
--- | PLS の結果。t_k スコア、p_k 重み、回帰係数 B。
+-- | PLS fit result.
 data PLSFit = PLSFit
-  { plsBeta    :: LA.Matrix Double   -- 回帰係数 (p × q)
-  , plsW       :: LA.Matrix Double   -- 重み (p × k)
-  , plsT       :: LA.Matrix Double   -- スコア (n × k)
-  , plsP       :: LA.Matrix Double   -- ローディング (p × k)
-  , plsQ       :: LA.Matrix Double   -- Y ローディング (q × k)
-  , plsK       :: Int                -- 成分数
+  { plsBeta :: LA.Matrix Double  -- ^ Regression coefficients (@p × q@).
+  , plsW    :: LA.Matrix Double  -- ^ Weights (@p × k@).
+  , plsT    :: LA.Matrix Double  -- ^ Scores (@n × k@).
+  , plsP    :: LA.Matrix Double  -- ^ Loadings (@p × k@).
+  , plsQ    :: LA.Matrix Double  -- ^ Y-loadings (@q × k@).
+  , plsK    :: Int               -- ^ Number of components extracted.
   } deriving (Show)
 
--- | NIPALS-PLS (Wold 1975)。k 成分を逐次抽出。
+-- | NIPALS-PLS (Wold 1975). Extracts @k@ components sequentially.
 --
--- 各成分:
---   1. w = X^T Y u / ||X^T Y u|| で X 重み (u は Y の方向)
---   2. t = X w
---   3. p = X^T t / (t^T t)
---   4. q = Y^T t / (t^T t)
---   5. X ← X − t pᵀ、Y ← Y − t qᵀ で deflate
-pls :: Int                       -- 成分数 k
-    -> LA.Matrix Double          -- X (n × p)
-    -> LA.Matrix Double          -- Y (n × q)
+-- For each component:
+--
+--   1. @w = Xᵀ Y u / ‖Xᵀ Y u‖@ — the X-side weight (@u@ is the Y direction).
+--   2. @t = X w@.
+--   3. @p = Xᵀ t / (tᵀ t)@.
+--   4. @q = Yᵀ t / (tᵀ t)@.
+--   5. Deflate: @X ← X − t pᵀ@, @Y ← Y − t qᵀ@.
+pls :: Int                      -- ^ Number of components @k@.
+    -> LA.Matrix Double         -- ^ Design matrix @X@ (@n × p@).
+    -> LA.Matrix Double         -- ^ Response @Y@ (@n × q@).
     -> PLSFit
 pls k x0 y0 =
   let p = LA.cols x0
@@ -116,6 +119,7 @@ pls k x0 y0 =
       _ = q
   in PLSFit bMat wM tM pM qM k
 
+-- | Predict @Ŷ@ for new inputs from a 'PLSFit'.
 predictPLS :: PLSFit -> LA.Matrix Double -> LA.Matrix Double
 predictPLS fit xNew = xNew LA.<> plsBeta fit
 
@@ -123,21 +127,23 @@ predictPLS fit xNew = xNew LA.<> plsBeta fit
 -- Canonical Correlation Analysis
 -- ---------------------------------------------------------------------------
 
--- | CCA の結果。
+-- | CCA fit result.
 data CCAFit = CCAFit
-  { ccaA           :: LA.Matrix Double  -- X 側基底 (p × r)
-  , ccaB           :: LA.Matrix Double  -- Y 側基底 (q × r)
-  , ccaCorr        :: LA.Vector Double  -- canonical correlations (r 次元)
-  , ccaScoresX     :: LA.Matrix Double  -- X scores (n × r)
-  , ccaScoresY     :: LA.Matrix Double  -- Y scores (n × r)
+  { ccaA       :: LA.Matrix Double  -- ^ X-side basis (@p × r@).
+  , ccaB       :: LA.Matrix Double  -- ^ Y-side basis (@q × r@).
+  , ccaCorr    :: LA.Vector Double  -- ^ Canonical correlations (length @r@).
+  , ccaScoresX :: LA.Matrix Double  -- ^ X scores (@n × r@).
+  , ccaScoresY :: LA.Matrix Double  -- ^ Y scores (@n × r@).
   } deriving (Show)
 
--- | CCA: X と Y の相関を最大化する基底ペア (a_k, b_k) を見つける。
+-- | Canonical Correlation Analysis: find basis pairs @(a_k, b_k)@ that
+-- maximize the correlation between @X@ and @Y@.
 --
--- アルゴリズム:
---   1. C_xx = XᵀX / (n-1)、C_yy、C_xy を計算
---   2. M = C_xx^{-1/2} C_xy C_yy^{-1/2} の SVD: M = U Σ Vᵀ
---   3. a = C_xx^{-1/2} U、b = C_yy^{-1/2} V、相関 = Σ
+-- Algorithm:
+--
+--   1. Compute @C_xx = XᵀX/(n-1)@, @C_yy@, @C_xy@.
+--   2. SVD of @M = C_xx^{−1/2} C_xy C_yy^{−1/2}@: @M = U Σ Vᵀ@.
+--   3. @a = C_xx^{−1/2} U@, @b = C_yy^{−1/2} V@, correlations = @Σ@.
 cca :: LA.Matrix Double -> LA.Matrix Double -> CCAFit
 cca x y =
   let n  = fromIntegral (LA.rows x) :: Double

@@ -32,35 +32,29 @@ import Model.Spline (bsplineBasis)
 -- 型
 -- ---------------------------------------------------------------------------
 
+-- | GAM fit result.
 data GAMFit = GAMFit
-  { gamDegree    :: Int
-  , gamKnots     :: [[Double]]            -- ^ 各説明変数の内部ノット
-  , gamBetas     :: [LA.Vector Double]    -- ^ 各説明変数の spline 係数 γ_j
-  , gamColMeans  :: [LA.Vector Double]    -- ^ 各 B_j の列平均 (中央化用)
-  , gamIntercept :: Double
-  , gamYHat      :: LA.Vector Double
-  , gamResid     :: LA.Vector Double
-  , gamR2        :: Double
-  , gamLambda    :: Double
+  { gamDegree    :: Int                  -- ^ B-spline degree.
+  , gamKnots     :: [[Double]]           -- ^ Per-feature interior knots.
+  , gamBetas     :: [LA.Vector Double]   -- ^ Per-feature spline coefficients @γ_j@.
+  , gamColMeans  :: [LA.Vector Double]   -- ^ Per-feature column means of @B_j@ (for centering).
+  , gamIntercept :: Double               -- ^ Intercept @β₀@.
+  , gamYHat      :: LA.Vector Double     -- ^ Fitted values.
+  , gamResid     :: LA.Vector Double     -- ^ Residuals.
+  , gamR2        :: Double               -- ^ R².
+  , gamLambda    :: Double               -- ^ Ridge penalty @λ@ used.
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
 -- フィット
 -- ---------------------------------------------------------------------------
 
--- | GAM をフィットする。
---
--- 引数:
---   * @degree@ — B-spline の次数 (通常 3 = cubic)
---   * @nKnots@ — 各特徴の内部ノット数 (両端含めず)
---   * @lambda@ — Ridge 正則化強度 (0 で純 OLS)
---   * @xs@     — 説明変数 (各 V.Vector)
---   * @y@      — 応答
-fitGAM :: Int                    -- ^ B-spline degree (3 推奨)
-       -> Int                    -- ^ 内部ノット数 (例: 5)
-       -> Double                 -- ^ Ridge λ
-       -> [V.Vector Double]      -- ^ 説明変数群 [x₁, x₂, ...]
-       -> V.Vector Double        -- ^ 応答 y
+-- | Fit a GAM.
+fitGAM :: Int                    -- ^ B-spline degree (3 = cubic recommended).
+       -> Int                    -- ^ Number of interior knots (e.g. 5).
+       -> Double                 -- ^ Ridge penalty @λ@ (0 disables regularization).
+       -> [V.Vector Double]      -- ^ Predictors @[x₁, x₂, …]@.
+       -> V.Vector Double        -- ^ Response @y@.
        -> GAMFit
 fitGAM degree nKnots lambda xss y =
   let n         = V.length y
@@ -130,7 +124,7 @@ fitGAM degree nKnots lambda xss y =
 -- 予測
 -- ---------------------------------------------------------------------------
 
--- | 新しい説明変数群に対する予測。
+-- | Predict at new predictors.
 predictGAM :: GAMFit -> [V.Vector Double] -> V.Vector Double
 predictGAM fit xss =
   let n = if null xss then 0 else V.length (head xss)
@@ -154,7 +148,7 @@ predictGAM fit xss =
           shiftV = LA.dot mu gamma
       in V.fromList [ ys LA.! i - shiftV | i <- [0 .. n' - 1] ]
 
--- | j 番目の特徴の寄与 s_j(x) のみ (intercept 除く)。
+-- | The contribution @s_j(x)@ from feature @j@ only (without the intercept).
 predictGAMComponent :: GAMFit -> Int -> V.Vector Double -> V.Vector Double
 predictGAMComponent fit j xs
   | j < 0 || j >= length (gamBetas fit) = V.empty

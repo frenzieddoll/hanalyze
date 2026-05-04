@@ -23,20 +23,21 @@ import qualified Numeric.LinearAlgebra as LA
 import Model.Core (FitResult (..))
 import qualified Model.LM as LM
 
--- | 多出力線形回帰の追加結果。
+-- | Augmented result for multi-output linear regression.
 data MultiFit = MultiFit
-  { mfFit         :: FitResult              -- ^ 基本フィット結果 (Matrix-based)
-  , mfResidCov    :: LA.Matrix Double       -- ^ 残差の共分散行列 Σ (q × q)
-  , mfResidCor    :: LA.Matrix Double       -- ^ 残差の相関行列 (q × q)
-  , mfNumOutputs  :: Int                    -- ^ q (出力次元)
-  , mfNumPredict  :: Int                    -- ^ p (説明変数の次元)
-  , mfNumSamples  :: Int                    -- ^ n (観測数)
+  { mfFit         :: FitResult        -- ^ Underlying matrix-based fit.
+  , mfResidCov    :: LA.Matrix Double -- ^ Residual covariance @Σ@ (@q × q@).
+  , mfResidCor    :: LA.Matrix Double -- ^ Residual correlation matrix (@q × q@).
+  , mfNumOutputs  :: Int              -- ^ Number of responses @q@.
+  , mfNumPredict  :: Int              -- ^ Number of predictors @p@.
+  , mfNumSamples  :: Int              -- ^ Number of observations @n@.
   } deriving (Show)
 
--- | 多出力線形回帰: Y = XB + E。
--- 内部は 'LM.fitLM' をそのまま使い、追加で残差共分散を計算。
-fitMultiLM :: LA.Matrix Double  -- X (n × p)
-           -> LA.Matrix Double  -- Y (n × q)
+-- | Multi-output linear regression: @Y = XB + E@.
+-- Delegates to 'LM.fitLM' and additionally returns the residual
+-- covariance.
+fitMultiLM :: LA.Matrix Double  -- ^ Design matrix @X@ (@n × p@).
+           -> LA.Matrix Double  -- ^ Response @Y@ (@n × q@).
            -> MultiFit
 fitMultiLM x y =
   let fit = LM.fitLM x y
@@ -60,16 +61,16 @@ fitMultiLM x y =
         , let di = diagS !! i ]
   in MultiFit fit sigma corr q p n
 
--- | 予測。X_new (m × p) → Ŷ (m × q)。
--- LM.predictLM の薄いラッパ。
+-- | Predict @Ŷ@ (@m × q@) for new inputs @X_new@ (@m × p@). A thin
+-- wrapper around 'LM.predictLM'.
 predictMultiLM :: MultiFit -> LA.Matrix Double -> LA.Matrix Double
 predictMultiLM mf xNew =
   LM.predictLM (coefficients (mfFit mf)) xNew
 
--- | 残差共分散行列を取得 (mfResidCov のエイリアス)。
+-- | Residual covariance matrix (alias for 'mfResidCov').
 residualCovariance :: MultiFit -> LA.Matrix Double
 residualCovariance = mfResidCov
 
--- | 残差相関行列を取得。
+-- | Residual correlation matrix.
 residualCorrelation :: MultiFit -> LA.Matrix Double
 residualCorrelation = mfResidCor
