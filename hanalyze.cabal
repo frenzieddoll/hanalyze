@@ -218,6 +218,16 @@ executable gibbs-demo
     , mwc-random >= 0.15 && < 0.16
     , time       >= 1.9  && < 1.15
 
+executable potential-gen
+  import:           warnings
+  main-is:          PotentialGen.hs
+  hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
+  default-language: GHC2021
+  build-depends:
+      base       >= 4.14 && < 5
+    , hanalyze
+    , mwc-random >= 0.15 && < 0.16
+
 executable bar-demo
   import:           warnings
   main-is:          BarDemo.hs
