@@ -15,6 +15,7 @@
 /demo/io/PotentialGen.hs
 
 bench/venv/
+/report.log
 !bench/requirements.txt
 !bench/**/*.csv
 !bench/**/*.txt
