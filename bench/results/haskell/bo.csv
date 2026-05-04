@@ -1,3 +1,3 @@
 system,suite,name,time_ms,acc_main,acc_aux,extra
-haskell,bo,Branin/BO,15835.625071,2.662737,0.397887,median over 5 seeds; star=0.397887
-haskell,bo,Hartmann6/BO,20226.368329,-2.359092,-3.322370,median over 5 seeds; star=-3.32237
+haskell,bo,Branin/BO,13091.185687,4.002591,0.397887,median over 5 seeds; star=0.397887
+haskell,bo,Hartmann6/BO,15753.884060,-2.826310,-3.322370,median over 5 seeds; star=-3.32237

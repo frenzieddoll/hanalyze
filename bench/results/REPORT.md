@@ -349,6 +349,32 @@ than pymoo. The remaining gap is per-iteration algorithmic, not an
 initial-design issue (e.g. pymoo's faster `nonDominatedSort` /
 incremental crowding distance / vectorized SBX in numpy).
 
+## After B6 (BayesOpt: Matérn 5/2 default + GP HP multi-restart) — partial result
+
+`Optim.BayesOpt.defaultBayesOptConfig` switches the kernel from RBF to
+**Matérn 5/2** (matches scikit-optimize's default). Matérn captures
+the @C²@ regularity typical of black-box engineering objectives,
+whereas RBF is too smooth (@C^∞@) for many real surfaces.
+
+`optimizeGPMVRestart` was added to give GP HP optimization multiple
+random restarts; however turning it on by default in `bayesOptND`
+hurt both problems (Branin 2.66 → 4.45 s; Hartmann6 −2.36 → −1.65),
+likely because the noisier random inits send the inner L-BFGS into
+worse log-likelihood basins. The helper is exported but the BO loop
+keeps a single fixed init for now.
+
+| Problem | Before B6 | After B6 (Matérn) | skopt | True optimum |
+|---|---|---|---|---|
+| Branin (2D) | 2.66 | 4.00 | 0.398 | 0.398 |
+| Hartmann6 (6D) | -2.36 | **-2.83** | -2.77 | -3.32 |
+
+Hartmann6 now **beats skopt** (-2.83 vs -2.77, 85 % of the way to the
+true optimum vs skopt's 83 %). Branin paradoxically regressed: it is
+@C^∞@ smooth, RBF is the right kernel for it, and Matérn's lower
+regularity costs accuracy on smooth problems. A heuristic kernel
+selection (smoothness pre-screen) would solve this; left for a future
+phase.
+
 ## High-leverage improvement queue
 
 In rough order of expected wall-time impact across the suite:

@@ -15,6 +15,8 @@ module Optim.BayesOpt
   , bayesOptND
   , bayesOptScalarMO
   , bayesOptMOWithNSGA
+    -- * GP HP optimization helpers
+  , optimizeGPMVRestart
   ) where
 
 import Control.Exception (SomeException, try, evaluate)
@@ -24,9 +26,10 @@ import Data.Ord (comparing)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Random.MWC (GenIO, uniform)
 
-import Model.GP (Kernel (..), GPModel (..), GPResult (..),
+import Model.GP (Kernel (..), GPModel (..), GPResult (..), GPParams (..),
                  fitGP, optimizeGP, initParamsFromData,
-                 GPResultMV (..), fitGPMV, optimizeGPMV)
+                 GPResultMV (..), fitGPMV, optimizeGPMV,
+                 logMarginalLikelihoodMV)
 import Optim.Acquisition (ei, ucb, parEGO)
 import Optim.NSGA       (NSGAConfig (..), defaultNSGAConfig,
                          Solution (..), nsga2)
@@ -46,13 +49,20 @@ data BayesOptConfig = BayesOptConfig
   , boGridSize   :: Int        -- ^ Inner-optimization grid density (1D).
   } deriving (Show)
 
--- | Default configuration: 30 iterations, 5 initial points, RBF kernel,
--- @β = 2.0@ for UCB, grid size 200 for 1D inner optimization.
+-- | Default configuration: 30 iterations, 5 initial points,
+-- **Matérn 5/2 kernel**, @β = 2.0@ for UCB, grid size 200 for 1D
+-- inner optimization.
+--
+-- Matérn 5/2 is the recommended default for general-purpose BO
+-- (matches scikit-optimize's defaults). RBF is too smooth for many
+-- real-world objective surfaces; Matérn captures the @C²@ regularity
+-- typical of engineering / black-box functions and is what the BO
+-- literature converged on.
 defaultBayesOptConfig :: BayesOptConfig
 defaultBayesOptConfig = BayesOptConfig
   { boIterations = 30
   , boInitPoints = 5
-  , boKernel     = RBF
+  , boKernel     = Matern52
   , boUCBBeta    = 2.0
   , boGridSize   = 200
   }
@@ -130,6 +140,52 @@ bayesOpt cfg f (lo, hi) gen = do
                             , y == minimum (map snd finalHist)]
   return (finalHist, bestPair)
 
+-- ---------------------------------------------------------------------------
+-- GP HP optimization with multiple random restarts
+-- ---------------------------------------------------------------------------
+
+-- | Optimize a GP's hyperparameters with multiple random restarts and
+-- pick the best (highest marginal likelihood). One restart corresponds
+-- to a single 'optimizeGPMV' call from a perturbed initial point.
+--
+-- Critical for BO performance: the marginal-likelihood surface is
+-- multi-modal, so a single fixed init is not robust. scikit-optimize
+-- defaults to @n_restarts_optimizer = 0@ (= 1 fit) but its kernel has
+-- the prior baked in; for our wider search we use 5 restarts.
+optimizeGPMVRestart
+  :: Int                       -- ^ Number of restarts.
+  -> Kernel
+  -> LA.Matrix Double          -- ^ Training X (n × p).
+  -> LA.Vector Double          -- ^ Training y (length n).
+  -> GenIO
+  -> IO GPParams
+optimizeGPMVRestart n kern x y gen = do
+  let p0base = initParamsFromData (concat (LA.toLists x)) (LA.toList y)
+  -- generate n random initial points: log-spaced perturbation of p0base
+  -- to cover several orders of magnitude.
+  let scaleVar = sqrt . max 1e-6
+  inits <- forM [1 .. n] $ \_ -> do
+    u1 <- uniform gen :: IO Double
+    u2 <- uniform gen :: IO Double
+    u3 <- uniform gen :: IO Double
+    -- log-uniform multipliers in [0.1, 10]
+    let m1 = exp ((u1 - 0.5) * 2 * log 10)
+        m2 = exp ((u2 - 0.5) * 2 * log 10)
+        m3 = exp ((u3 - 0.5) * 2 * log 10)
+    pure $ p0base
+      { gpLengthScale = max 1e-3 (gpLengthScale p0base * m1)
+      , gpSignalVar   = max 1e-6 (scaleVar (gpSignalVar p0base) * m2)
+      , gpNoiseVar    = max 1e-6 (gpNoiseVar p0base * m3)
+      }
+  let runOne p0 = do
+        let pOpt = optimizeGPMV kern x y p0
+            ll   = logMarginalLikelihoodMV x y kern pOpt
+        pure (pOpt, ll)
+  results <- mapM runOne inits
+  let (best, _) = head [ r | r@(_, ll) <- results
+                           , ll == maximum (map snd results) ]
+  pure best
+
 -- | N-dimensional single-objective Bayesian Optimization.
 -- 内側 acquisition 最大化を **L-BFGS multi-start** で行う:
 -- bounds 範囲内で nStarts 個の初期点を一様乱数で生成、各点から L-BFGS で
@@ -164,7 +220,7 @@ bayesOptND cfg nStarts f bounds gen = do
                 -- GP blind to most of the search-space geometry.
                 xMat = LA.fromLists xss
                 yVec = LA.fromList ys
-                p0   = initParamsFromData (concat xss) ys   -- coarse init
+                p0   = initParamsFromData (concat xss) ys
                 pOpt = optimizeGPMV kern xMat yVec p0
                 model = GPModel kern pOpt
                 negEI xVec = unsafePerformIO $ do
