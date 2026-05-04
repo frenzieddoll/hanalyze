@@ -9,6 +9,9 @@ import qualified Stat.Standardize as Std
 import qualified Stat.NumberFormat as NF
 import Data.Time.Clock (getCurrentTime, diffUTCTime, UTCTime)
 import qualified DataIO.Preprocess as Pp
+import qualified Stat.Interpolate  as Interp
+import qualified Stat.AdaptiveGrid as AG
+import Text.Read (readMaybe)
 import qualified DataFrame                    as DX
 import qualified DataFrame.Internal.Column    as DXC
 import qualified DataFrame.Internal.DataFrame as DXD
@@ -599,6 +602,7 @@ dispatch ("gam":rest)                 = runGAMCmd rest
 dispatch ("rf":rest)                  = runRFCmd rest
 dispatch ("clean":rest)               = runCleanCmd rest
 dispatch ("melt":rest)                = runMeltCmd rest
+dispatch ("regrid":rest)              = runRegridCmd rest
 dispatch ("multireg":rest)            = runMultiRegCmd rest
 dispatch (cmd:_) | isFutureSubcommand cmd = do
   hPutStrLn stderr $ "hanalyze: " ++ stubMessage cmd
@@ -802,6 +806,181 @@ wordsBy :: (Char -> Bool) -> String -> [String]
 wordsBy p s = case dropWhile p s of
   "" -> []
   s' -> let (w, rest) = break p s' in w : wordsBy p rest
+
+-- ---------------------------------------------------------------------------
+-- regrid subcommand (Phase G5)
+-- ---------------------------------------------------------------------------
+
+data RegridCliOpts = RegridCliOpts
+  { rcId         :: T.Text
+  , rcZ          :: T.Text
+  , rcY          :: T.Text
+  , rcN          :: Int
+  , rcInterp     :: Interp.InterpKind
+  , rcGrid       :: AG.GridKind
+  , rcZBounds    :: Pp.ZBoundsMode
+  , rcReport     :: Maybe FilePath
+  , rcReportExtra :: Bool
+  , rcOut        :: Maybe FilePath
+  } deriving (Show)
+
+defaultRegridCliOpts :: RegridCliOpts
+defaultRegridCliOpts = RegridCliOpts
+  { rcId          = "id"
+  , rcZ           = "z"
+  , rcY           = "y"
+  , rcN           = 30
+  , rcInterp      = Interp.PCHIP
+  , rcGrid        = AG.Adaptive
+  , rcZBounds     = Pp.ZIntersection
+  , rcReport      = Nothing
+  , rcReportExtra = False
+  , rcOut         = Nothing
+  }
+
+parseRegridFlags :: [String] -> (RegridCliOpts, [String])
+parseRegridFlags = go defaultRegridCliOpts []
+  where
+    go acc kept []                    = (acc, reverse kept)
+    go acc kept ("--id":v:xs)         = go acc { rcId = T.pack v } kept xs
+    go acc kept ("--z":v:xs)          = go acc { rcZ  = T.pack v } kept xs
+    go acc kept ("--y":v:xs)          = go acc { rcY  = T.pack v } kept xs
+    go acc kept ("--n":v:xs)          =
+      go acc { rcN = maybe 30 id (readMaybe v) } kept xs
+    go acc kept ("--interp":v:xs)     =
+      let k = case v of
+                "linear"        -> Interp.Linear
+                "spline"        -> Interp.NaturalSpline
+                "natural"       -> Interp.NaturalSpline
+                "naturalspline" -> Interp.NaturalSpline
+                "pchip"         -> Interp.PCHIP
+                _               -> Interp.PCHIP
+      in go acc { rcInterp = k } kept xs
+    go acc kept ("--grid":v:xs)       =
+      let g = case v of "uniform" -> AG.Uniform
+                        "adaptive" -> AG.Adaptive
+                        _          -> AG.Adaptive
+      in go acc { rcGrid = g } kept xs
+    go acc kept ("--zrange":v:xs)     =
+      let z = case v of "intersect" -> Pp.ZIntersection
+                        "intersection" -> Pp.ZIntersection
+                        "union"     -> Pp.ZUnion
+                        _           -> Pp.ZIntersection
+      in go acc { rcZBounds = z } kept xs
+    go acc kept ("--report":p:xs)     = go acc { rcReport = Just p } kept xs
+    go acc kept ("--report-extra":xs) = go acc { rcReportExtra = True } kept xs
+    go acc kept ("--output":p:xs)     = go acc { rcOut = Just p } kept xs
+    go acc kept ("-o":p:xs)           = go acc { rcOut = Just p } kept xs
+    go acc kept (x:xs)                = go acc (x:kept) xs
+
+runRegridCmd :: [String] -> IO ()
+runRegridCmd args0 = do
+  let (lopts, args1) = parseLoadOpts args0
+      (rcOpts, args2) = parseRegridFlags args1
+  case args2 of
+    []        -> hPutStrLn stderr regridUsage
+    (file:_)  -> do
+      result <- loadAutoSafeWith lopts file
+      case result of
+        Left err          -> hPutStrLn stderr ("Parse error: " ++ err)
+        Right (df0, lg)   -> do
+          Log.printLogReport lg
+          let opts = Pp.RegridOpts
+                       { Pp.roInterp      = rcInterp rcOpts
+                       , Pp.roGridKind    = rcGrid rcOpts
+                       , Pp.roN           = rcN rcOpts
+                       , Pp.roZBoundsMode = rcZBounds rcOpts
+                       , Pp.roCoarseN     = 200
+                       , Pp.roEpsRatio    = 0.05
+                       }
+              rr   = Pp.regridLong (rcId rcOpts) (rcZ rcOpts) (rcY rcOpts)
+                                   opts df0
+              df1  = Pp.rrDataFrame rr
+              (nrows, ncols) = DX.dimensions df1
+          putStrLn "Regridded long-form DataFrame:"
+          putStrLn $ "  Rows / Cols: " ++ show nrows ++ " × " ++ show ncols
+          putStrLn $ "  Z range: ["
+                  ++ show (Pp.rrZMin rr) ++ ", "
+                  ++ show (Pp.rrZMax rr) ++ "]"
+          putStrLn $ "  N grid: " ++ show (length (Pp.rrZGrid rr))
+          putStrLn $ "  IDs: " ++ show (length (Pp.rrIds rr))
+          case rcOut rcOpts of
+            Just path -> do
+              DX.writeCsv path df1
+              putStrLn $ "Wrote " ++ path
+            Nothing   -> return ()
+          case rcReport rcOpts of
+            Just path -> do
+              let kindStr = case rcInterp rcOpts of
+                              Interp.Linear        -> "Linear"
+                              Interp.NaturalSpline -> "NaturalSpline"
+                              Interp.PCHIP         -> "PCHIP"
+                  gridStr = case rcGrid rcOpts of
+                              AG.Uniform  -> "Uniform"
+                              AG.Adaptive -> "Adaptive"
+                  zbStr   = case rcZBounds rcOpts of
+                              Pp.ZIntersection -> "intersect"
+                              Pp.ZUnion        -> "union"
+                  perObs  = [ (i, pts) | (i, pts, _) <- Pp.rrPerIdInterp rr ]
+                  perInterp = [ (i, zip (Pp.rrZGrid rr) (map f (Pp.rrZGrid rr)))
+                              | (i, _, f) <- Pp.rrPerIdInterp rr ]
+                  perSummary = [ ( Pp.piId s, Pp.piNObserved s
+                                 , Pp.piZMin s, Pp.piZMax s
+                                 , Pp.piExtrapBelow s, Pp.piExtrapAbove s
+                                 , Pp.piResidualMax s)
+                               | s <- Pp.rrPerIdStats rr ]
+                  perYRange = [ let ysOrig = map snd pts
+                                    ysGrid = map (\(_,y) -> y) gys
+                                in (i, minimum ysOrig, maximum ysOrig
+                                  , minimum ysGrid, maximum ysGrid)
+                              | ((i, pts, _), gys) <-
+                                  zip (Pp.rrPerIdInterp rr) (map snd perInterp)
+                              ]
+                  ir = RB.InterpReport
+                         { RB.irTitle         = "Regrid summary"
+                         , RB.irInterpKind    = kindStr
+                         , RB.irGridKind      = gridStr
+                         , RB.irN             = rcN rcOpts
+                         , RB.irZBoundsMode   = zbStr
+                         , RB.irZMin          = Pp.rrZMin rr
+                         , RB.irZMax          = Pp.rrZMax rr
+                         , RB.irPerIdObserved = perObs
+                         , RB.irPerIdInterpY  = perInterp
+                         , RB.irGrid          = Pp.rrZGrid rr
+                         , RB.irDensity       = Pp.rrDensity rr
+                         , RB.irPerIdSummary  = perSummary
+                         , RB.irExtraEnabled  = rcReportExtra rcOpts
+                         , RB.irPerIdYRange   = perYRange
+                         }
+              RB.renderReport path
+                              (RB.defaultReportConfig "Regrid report")
+                              [RB.secInterpolation ir]
+              putStrLn $ "Wrote report " ++ path
+            Nothing   -> return ()
+
+regridUsage :: String
+regridUsage = unlines
+  [ "Usage: hanalyze regrid <file> [options] [load opts]"
+  , ""
+  , "歯抜けの long-form データ [id, z, y] を共通 grid に揃える。"
+  , ""
+  , "  --id COL          id 列名 (default: id)"
+  , "  --z  COL          z 列名 (default: z)"
+  , "  --y  COL          y 列名 (default: y)"
+  , "  --n  N            grid 点数 (default: 30)"
+  , "  --interp KIND     linear | spline | pchip (default: pchip)"
+  , "  --grid KIND       uniform | adaptive (default: adaptive)"
+  , "  --zrange MODE     intersect | union (default: intersect)"
+  , "  --output FILE     揃った long-form を CSV で出力"
+  , "  --report FILE     HTML レポート (R1-R7 必須要素)"
+  , "  --report-extra    --report に R8-R10 オプション要素も追加"
+  , ""
+  , "例:"
+  , "  hanalyze regrid data/io/potential_long_jagged.csv \\"
+  , "      --id name --z z --y y --n 30 \\"
+  , "      --interp pchip --grid adaptive --zrange intersect \\"
+  , "      --output regridded.csv --report regrid.html --report-extra"
+  ]
 
 meltUsage :: String
 meltUsage = unlines
