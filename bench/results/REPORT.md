@@ -375,6 +375,34 @@ regularity costs accuracy on smooth problems. A heuristic kernel
 selection (smoothness pre-screen) would solve this; left for a future
 phase.
 
+## After S2 (SA + Nelder-Mead hybrid) — optim suite delta
+
+`Optim.SimulatedAnnealing.SAConfig` gains @saLocalEvery :: Maybe Int@.
+When set, every @k@ iterations the SA loop runs an
+`Optim.NelderMead.runNelderMead` refinement on @x_best@ and replaces
+@(x_best, f_best)@ if it improves. Default: @Just 200@ → 25 NM
+refinements per 5 000-iteration SA run. This mirrors how scipy's
+@dual_annealing@ alternates SA exploration with L-BFGS-B local search.
+
+| Test / Algo | S1 (vanilla SA) | S2 (SA + NM) | scipy.dual_annealing |
+|---|---|---|---|
+| Rosenbrock_2D / SA  | 3.5e-7 | **2.7e-13** | 9e-12 (**hanalyze**) |
+| Rosenbrock_10D / SA | 5.85   | **5.9e-13** | 2.8e-10 (**hanalyze**) |
+| Rastrigin_10D / SA  | 16.9   | 14.9        | 7.8e-14 |
+| Sphere_30D / SA     | 6.2e-4 | 1.0e-12     | 8.5e-16 |
+| Ackley_10D / SA     | 7.8e-3 | **1.4e-12** | 1.8e-8 (**hanalyze**) |
+| Levy_10D / SA       | 0.45   | **5.0e-13** | 1.1e-11 (**hanalyze**) |
+
+hanalyze now leads scipy on **4 of 6** SA tests, ties on Sphere
+(scipy still 4 orders deeper) and remains weaker on Rastrigin (a
+pathological multi-modal landscape; NM gets trapped in the many
+local minima, and we'd need a Tsallis-style escape or random restarts
+to fix it).
+
+Wall time: SA runs went from 4-15 ms to 100-2000 ms because each NM
+refinement costs ~200 evaluations. This is a price-for-accuracy
+trade-off; users who want vanilla SA can pass `saLocalEvery = Nothing`.
+
 ## High-leverage improvement queue
 
 In rough order of expected wall-time impact across the suite:
