@@ -24,6 +24,7 @@ import qualified Stat.Standardize  as Std
 import qualified Stat.NumberFormat as NF
 import qualified Stat.Interpolate  as Interp
 import qualified Stat.AdaptiveGrid as AG
+import qualified Stat.KernelDist   as KD
 import qualified Viz.ReportBuilder as RB
 import qualified Data.ByteString   as BS
 import System.IO.Temp (withSystemTempFile)
@@ -51,6 +52,37 @@ import qualified System.Random.MWC as MWC
 
 main :: IO ()
 main = hspec $ do
+  describe "Stat.KernelDist" $ do
+    let xs = LA.fromLists [[0, 0], [3, 4], [1, 1]] :: LA.Matrix Double
+        d  = KD.pairwiseSqDist xs
+        -- naive reference
+        naive m =
+          let rows = LA.toRows m
+              n    = length rows
+          in (n LA.>< n)
+               [ let r = rows !! i - rows !! j in r `LA.dot` r
+               | i <- [0 .. n - 1], j <- [0 .. n - 1] ]
+        ref = naive xs
+
+    it "returns an n x n matrix with zero diagonal" $ do
+      LA.rows d `shouldBe` 3
+      LA.cols d `shouldBe` 3
+      LA.toList (LA.takeDiag d) `shouldBe` [0, 0, 0]
+
+    it "matches the naive reference within 1e-9" $
+      LA.norm_Inf (d - ref) < 1e-9 `shouldBe` True
+
+    it "pairwiseSqDistXY matches reference for cross-matrix" $ do
+      let ys  = LA.fromLists [[0, 0], [1, 0]] :: LA.Matrix Double
+          dXY = KD.pairwiseSqDistXY xs ys
+          rxs = LA.toRows xs
+          rys = LA.toRows ys
+          ref' = (LA.rows xs LA.>< LA.rows ys)
+                   [ let r = rxs !! i - rys !! j in r `LA.dot` r
+                   | i <- [0 .. LA.rows xs - 1]
+                   , j <- [0 .. LA.rows ys - 1] ]
+      LA.norm_Inf (dXY - ref') < 1e-9 `shouldBe` True
+
   describe "Model.GLMM" $ do
     -- Dataset: 3 groups × 4 obs, strong between-group signal, weak within-group noise.
     -- True: β₀≈5, β₁≈0, u_A≈2, u_B≈0, u_C≈-2, σ²_u≈4, σ²≈small → ICC≈high.
