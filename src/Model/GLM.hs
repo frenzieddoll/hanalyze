@@ -36,9 +36,11 @@ import Statistics.Distribution.StudentT (studentT)
 -- Family (response distribution)
 -- ---------------------------------------------------------------------------
 
+-- | GLM exponential-family distribution.
 data Family = Gaussian | Binomial | Poisson
   deriving (Show, Eq)
 
+-- | Parse a 'Family' name (case-sensitive).
 parseFamily :: String -> Either String Family
 parseFamily "gaussian" = Right Gaussian
 parseFamily "binomial" = Right Binomial
@@ -49,9 +51,11 @@ parseFamily s          = Left ("Unknown distribution '" ++ s ++ "'. Use: gaussia
 -- Link function
 -- ---------------------------------------------------------------------------
 
+-- | GLM link function.
 data LinkFn = Identity | Log | Logit | Sqrt
   deriving (Show, Eq)
 
+-- | Parse a 'LinkFn' name.
 parseLink :: String -> Either String LinkFn
 parseLink "identity" = Right Identity
 parseLink "log"      = Right Log
@@ -59,6 +63,7 @@ parseLink "logit"    = Right Logit
 parseLink "sqrt"     = Right Sqrt
 parseLink s          = Left ("Unknown link '" ++ s ++ "'. Use: identity | log | logit | sqrt")
 
+-- | The canonical link function for a given family.
 canonicalLink :: Family -> LinkFn
 canonicalLink Gaussian = Identity
 canonicalLink Binomial = Logit
@@ -67,6 +72,7 @@ canonicalLink Poisson  = Log
 -- Internal triple: (g, g⁻¹, g')
 type Link = (Double -> Double, Double -> Double, Double -> Double)
 
+-- | Resolve a 'LinkFn' to its triple @(g, g⁻¹, g')@.
 linkFnOf :: LinkFn -> Link
 linkFnOf Identity = (id,   id,                const 1.0)
 linkFnOf Log      = (log,  exp,               recip)
@@ -76,11 +82,13 @@ linkFnOf Logit    = ( \x  -> log (x / (1 - x))
                     )
 linkFnOf Sqrt     = (sqrt, \eta -> eta * eta, \mu -> 0.5 / sqrt (max 1e-10 mu))
 
+-- | Variance function @V(μ)@ for the given family.
 varOf :: Family -> Double -> Double
 varOf Gaussian _  = 1.0
 varOf Binomial mu = mu * (1 - mu)
 varOf Poisson  mu = mu
 
+-- | Clamp @μ@ to its valid range, avoiding boundary singularities.
 safeMu :: Family -> LA.Vector Double -> LA.Vector Double
 safeMu Binomial = LA.cmap (max 1e-8 . min (1 - 1e-8))
 safeMu Poisson  = LA.cmap (max 1e-8)
@@ -121,6 +129,9 @@ irlsStep (_, gInv, gDeriv) varFn clamp family x y beta =
       sqrtW = LA.diag (LA.cmap sqrt ws)
   in LA.flatten ((sqrtW LA.<> x) LA.<\> LA.asColumn (sqrtW LA.#> zs))
 
+-- | Run IRLS to fit a single-output GLM. Returns both the fit result
+-- and the inverse Fisher information @(XᵀWX)⁻¹@ used for standard
+-- errors and credible/predictive intervals.
 runIRLS :: Family -> LinkFn -> LA.Matrix Double -> LA.Vector Double
         -> (FitResult, LA.Matrix Double)
 runIRLS family linkFn x y = (mkResult betaFinal, fisherInv betaFinal)
@@ -162,11 +173,13 @@ runIRLS family linkFn x y = (mkResult betaFinal, fisherInv betaFinal)
 -- Public API
 -- ---------------------------------------------------------------------------
 
+-- | Fit a GLM with the canonical link, returning just the 'FitResult'.
 fitGLM :: Family -> LA.Matrix Double -> LA.Vector Double -> FitResult
 fitGLM family x y = fst (runIRLS family (canonicalLink family) x y)
 
--- | fitGLM に加えて Fisher 情報行列の逆行列 (Laplace 近似の共分散) を返す。
--- WAIC/LOO-CV の事後サンプリングに使用。
+-- | Like 'fitGLM' but also returns the inverse Fisher information
+-- (Laplace-approximate posterior covariance). Used by the WAIC / LOO-CV
+-- posterior-sampling helpers.
 fitGLMFull :: Family -> LinkFn -> LA.Matrix Double -> LA.Vector Double
            -> (FitResult, LA.Matrix Double)
 fitGLMFull = runIRLS
@@ -250,6 +263,7 @@ fitGLMWithSmooth family linkFn colDegs band nGrid df yCol = do
 -- Goodness of fit
 -- ---------------------------------------------------------------------------
 
+-- | McFadden-style pseudo-R² for GLMs.
 pseudoR2 :: Family -> LA.Vector Double -> LA.Vector Double -> Double
 pseudoR2 Gaussian y mu =
   let resid = y - mu
@@ -263,6 +277,7 @@ pseudoR2 family y mu =
       dNull  = glmDeviance family y muNull
   in if dNull == 0 then 1 else 1 - dFit / dNull
 
+-- | GLM deviance: @D(y, μ̂) = 2 (ℓ_sat − ℓ_model)@.
 glmDeviance :: Family -> LA.Vector Double -> LA.Vector Double -> Double
 glmDeviance Gaussian y mu =
   let r = y - mu in r `LA.dot` r
@@ -285,7 +300,8 @@ xlogy x y = x * log y
 -- 多出力 GLM (列ごと IRLS)
 -- ---------------------------------------------------------------------------
 
--- | 多出力 GLM の結果。q 出力ぶん同じ Family/Link で IRLS を実行。
+-- | Multi-output GLM result. The same family and link function are
+-- used for all @q@ output columns; IRLS is run column-wise.
 data GLMFitMulti = GLMFitMulti
   { gfmFamily   :: Family
   , gfmLinkFn   :: LinkFn
@@ -296,7 +312,8 @@ data GLMFitMulti = GLMFitMulti
   , gfmResid    :: LA.Matrix Double       -- ^ 残差 n × q
   } deriving (Show)
 
--- | 多出力 GLM fit。Y は n × q。Family/Link は全列共通。
+-- | Fit a multi-output GLM. @Y@ has shape @n × q@; family and link
+-- function are shared across all columns.
 fitGLMMulti :: Family -> LinkFn -> LA.Matrix Double -> LA.Matrix Double
             -> GLMFitMulti
 fitGLMMulti family linkFn x y =

@@ -41,19 +41,25 @@ import Data.IORef (newIORef, readIORef, modifyIORef')
 -- 型
 -- ---------------------------------------------------------------------------
 
+-- | A regression tree node.
 data Tree
-  = Leaf Double                 -- ^ 葉の予測値 (ノード内 y の平均)
-  | Node !Int !Double !Tree !Tree  -- ^ 分割特徴 idx / 閾値 / 左 (≤) / 右 (>)
+  = Leaf Double                       -- ^ Leaf prediction (mean of @y@ in the node).
+  | Node !Int !Double !Tree !Tree     -- ^ Split feature index, threshold,
+                                      --   left child (@≤@), right child (@>@).
   deriving (Show)
 
+-- | Random-forest configuration.
 data RFConfig = RFConfig
-  { rfTrees       :: Int      -- ^ ツリー数 (default 100)
-  , rfMaxDepth    :: Int      -- ^ 最大深さ (default 12)
-  , rfMinSamples  :: Int      -- ^ 葉になる最小サンプル数 (default 3)
-  , rfMtry        :: Maybe Int  -- ^ 各分割で試す特徴数 (default: max(1, d/3))
-  , rfBootstrap   :: Bool     -- ^ ブートストラップサンプリング使用 (default True)
+  { rfTrees      :: Int       -- ^ Number of trees (default 100).
+  , rfMaxDepth   :: Int       -- ^ Maximum tree depth (default 12).
+  , rfMinSamples :: Int       -- ^ Minimum samples per leaf (default 3).
+  , rfMtry       :: Maybe Int -- ^ Features tried per split
+                              --   (default @max(1, d/3)@).
+  , rfBootstrap  :: Bool      -- ^ Use bootstrap sampling (default 'True').
   } deriving (Show)
 
+-- | Default configuration: 100 trees, max depth 12, min-samples 3,
+-- default mtry, bootstrap enabled.
 defaultRFConfig :: RFConfig
 defaultRFConfig = RFConfig
   { rfTrees      = 100
@@ -63,20 +69,22 @@ defaultRFConfig = RFConfig
   , rfBootstrap  = True
   }
 
+-- | A trained random forest.
 data RandomForest = RandomForest
-  { rfTreesV     :: ![Tree]
-  , rfNFeatures  :: !Int
-  , rfImportance :: !(V.Vector Double)  -- ^ 各特徴の累計 variance reduction
+  { rfTreesV     :: ![Tree]              -- ^ The constituent trees.
+  , rfNFeatures  :: !Int                 -- ^ Number of input features @d@.
+  , rfImportance :: !(V.Vector Double)   -- ^ Per-feature accumulated variance reduction.
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
 -- 単一木の構築
 -- ---------------------------------------------------------------------------
 
--- | n × d の特徴行列、長さ n の y、CART で回帰木を構築。
+-- | Build a single CART regression tree from the @n × d@ feature matrix
+-- and length-@n@ response.
 buildTree :: RFConfig
-          -> [[Double]]            -- ^ 行 = サンプル、列 = 特徴
-          -> [Double]              -- ^ y
+          -> [[Double]]            -- ^ Rows = samples, columns = features.
+          -> [Double]              -- ^ Response @y@.
           -> MWC.GenIO
           -> IO Tree
 buildTree cfg rows ys gen = do
@@ -203,7 +211,8 @@ predictTree (Node j thr l r) xs =
 -- フォレスト
 -- ---------------------------------------------------------------------------
 
--- | n 本のツリーを bootstrap で構築 + feature importance を集計。
+-- | Fit @n@ trees on bootstrap samples and aggregate the feature
+-- importance.
 fitRF :: RFConfig -> [[Double]] -> [Double] -> MWC.GenIO -> IO RandomForest
 fitRF cfg rows ys gen = do
   let n = length ys
@@ -247,13 +256,14 @@ accumulateImportance ref tree = walk tree
 -- フォレスト予測
 -- ---------------------------------------------------------------------------
 
+-- | Predict for one input by averaging the trees' predictions.
 predictRF :: RandomForest -> [Double] -> Double
 predictRF rf xs =
   let preds = map (`predictTree` xs) (rfTreesV rf)
       n     = length preds
   in if n == 0 then 0 else sum preds / fromIntegral n
 
--- | 各特徴の正規化済み importance (合計 1 にリスケール)。
+-- | Per-feature importance, normalized to sum to 1.
 featureImportance :: RandomForest -> V.Vector Double
 featureImportance rf =
   let raw  = rfImportance rf

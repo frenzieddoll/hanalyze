@@ -37,37 +37,38 @@ import Data.List (foldl')
 -- ペナルティ型
 -- ---------------------------------------------------------------------------
 
--- | 正則化ペナルティ。
+-- | Regularization penalty.
 data Penalty
-  = NoPen                       -- ^ 通常 OLS (= λ = 0)
-  | L2 Double                   -- ^ Ridge: 0.5 λ ||β||₂²
-  | L1 Double                   -- ^ Lasso: λ ||β||₁
-  | ElasticNet Double Double    -- ^ ElasticNet: λ₁ ||β||₁ + 0.5 λ₂ ||β||₂²
+  = NoPen                       -- ^ Ordinary OLS (@λ = 0@).
+  | L2 Double                   -- ^ Ridge: @0.5 λ ‖β‖₂²@.
+  | L1 Double                   -- ^ Lasso: @λ ‖β‖₁@.
+  | ElasticNet Double Double    -- ^ Elastic Net: @λ₁ ‖β‖₁ + 0.5 λ₂ ‖β‖₂²@.
   deriving (Show, Eq)
 
--- | フィット結果。
+-- | Regularized-regression fit result.
 data RegFit = RegFit
-  { rfBeta     :: LA.Vector Double
-  , rfYHat     :: LA.Vector Double
-  , rfResid    :: LA.Vector Double
-  , rfR2       :: Double
-  , rfPenalty  :: Penalty
-  , rfNonZero  :: Int           -- ^ |β_j| > 1e-8 の数 (Lasso の sparsity 評価)
-  , rfIters    :: Int           -- ^ 反復回数 (CD アルゴリズム用; 閉形式は 0)
+  { rfBeta    :: LA.Vector Double
+  , rfYHat    :: LA.Vector Double
+  , rfResid   :: LA.Vector Double
+  , rfR2      :: Double
+  , rfPenalty :: Penalty
+  , rfNonZero :: Int           -- ^ Number of @|β_j| > 1e-8@ (Lasso sparsity).
+  , rfIters   :: Int           -- ^ Iteration count (coordinate descent;
+                               --   0 for closed-form solvers).
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
 -- メイン API
 -- ---------------------------------------------------------------------------
 
--- | ペナルティ付き回帰を fit (単出力)。
--- 多出力 'fitRegularizedMulti' に Y を 1 列行列化して委譲し、
--- 結果の列 0 を 'RegFit' として返す。
+-- | Single-output regularized-regression fit. Delegates to
+-- 'fitRegularizedMulti' by promoting @y@ to a one-column matrix and
+-- returns column 0 as a 'RegFit'.
 fitRegularized :: Penalty -> LA.Matrix Double -> LA.Vector Double -> RegFit
 fitRegularized pen x y =
   regFitFromMulti 0 (fitRegularizedMulti pen x (LA.asColumn y))
 
--- | 予測 (単出力)。
+-- | Single-output prediction.
 predictRegularized :: RegFit -> LA.Matrix Double -> LA.Vector Double
 predictRegularized fit xNew = xNew LA.#> rfBeta fit
 
@@ -75,6 +76,7 @@ predictRegularized fit xNew = xNew LA.#> rfBeta fit
 -- OLS (NoPen)
 -- ---------------------------------------------------------------------------
 
+-- | Plain ordinary-least-squares fit (no penalty).
 fitOLS :: LA.Matrix Double -> LA.Vector Double -> RegFit
 fitOLS x y =
   let beta = LA.flatten (x LA.<\> LA.asColumn y)
@@ -86,7 +88,7 @@ fitOLS x y =
 -- Ridge (closed form)
 -- ---------------------------------------------------------------------------
 
--- | Ridge 回帰: β = (XᵀX + λI)⁻¹ Xᵀy
+-- | Ridge regression: @β = (XᵀX + λI)⁻¹ Xᵀy@.
 fitRidge :: Double -> LA.Matrix Double -> LA.Vector Double -> RegFit
 fitRidge lambda x y =
   let p    = LA.cols x
@@ -102,21 +104,28 @@ fitRidge lambda x y =
 -- Lasso (Coordinate Descent + Soft-thresholding)
 -- ---------------------------------------------------------------------------
 
--- | ソフト閾値関数: S(z, γ) = sign(z) × max(|z| − γ, 0)
+-- | Soft-threshold operator: @S(z, γ) = sign(z) × max(|z| − γ, 0)@.
 softThreshold :: Double -> Double -> Double
 softThreshold z gamma
   | z >  gamma = z - gamma
   | z < -gamma = z + gamma
   | otherwise  = 0
 
--- | Lasso 回帰: β = argmin (1/2n) ||y - Xβ||² + λ ||β||₁
+-- | Lasso regression: @β = argmin (1/2n) ‖y − Xβ‖² + λ ‖β‖₁@.
 --
--- Coordinate descent: 各 β_j を順に更新。
---   r = y - X β
---   ρ_j = (1/n) X_jᵀ r + β_j × (1/n) ||X_j||²
---   β_j ← S(ρ_j, λ) / ((1/n) ||X_j||²)
-fitLasso :: Double -> LA.Matrix Double -> LA.Vector Double
-         -> Int -> Double -> RegFit
+-- Solved by coordinate descent (one update per @β_j@):
+--
+-- @
+-- r   = y − X β
+-- ρ_j = (1/n) X_jᵀ r + β_j × (1/n) ‖X_j‖²
+-- β_j ← S(ρ_j, λ) / ((1/n) ‖X_j‖²)
+-- @
+fitLasso :: Double                -- ^ Penalty @λ@.
+         -> LA.Matrix Double      -- ^ Design matrix @X@.
+         -> LA.Vector Double      -- ^ Response @y@.
+         -> Int                   -- ^ Maximum CD iterations.
+         -> Double                -- ^ Convergence tolerance.
+         -> RegFit
 fitLasso lambda x y maxIter tol =
   let n       = fromIntegral (LA.rows x) :: Double
       p       = LA.cols x
@@ -153,9 +162,11 @@ fitLasso lambda x y maxIter tol =
 -- Elastic Net (Coordinate Descent)
 -- ---------------------------------------------------------------------------
 
--- | Elastic Net: β = argmin (1/2n) ||y - Xβ||² + λ₁ ||β||₁ + 0.5 λ₂ ||β||²
+-- | Elastic-Net regression:
+-- @β = argmin (1/2n) ‖y − Xβ‖² + λ₁ ‖β‖₁ + 0.5 λ₂ ‖β‖²@.
 --
--- Coordinate descent: β_j ← S(ρ_j, λ₁) / ((1/n) ||X_j||² + λ₂)
+-- Coordinate descent update:
+-- @β_j ← S(ρ_j, λ₁) / ((1/n) ‖X_j‖² + λ₂)@.
 fitElasticNet :: Double -> Double -> LA.Matrix Double -> LA.Vector Double
               -> Int -> Double -> RegFit
 fitElasticNet lambda1 lambda2 x y maxIter tol =
@@ -208,9 +219,11 @@ mkRegFit beta yHat r y pen iters =
 -- Standardization
 -- ---------------------------------------------------------------------------
 
--- | 各列を mean=0, sd=1 に標準化。
--- 戻り値: (標準化済 X, 列平均, 列 sd)。元データに戻すには
--- @X_std = (X - μ) / σ@、係数を元スケールに戻すには 'unstandardizeBeta' を使う。
+-- | Standardize each column to mean 0 and standard deviation 1.
+--
+-- Returns @(X_std, column means, column sds)@. The transformation is
+-- @X_std = (X − μ) / σ@; use 'unstandardizeBeta' to map coefficients
+-- back to the original scale.
 standardize :: LA.Matrix Double
             -> (LA.Matrix Double, V.Vector Double, V.Vector Double)
 standardize x =
@@ -234,8 +247,9 @@ standardize x =
       xStd  = LA.fromColumns cols'
   in (xStd, means, sds)
 
--- | 標準化空間で fit した β を元スケールに戻す。
--- β_orig_j = β_std_j / σ_j、切片はモデル外で別途調整。
+-- | Map coefficients fitted in standardized space back to the original
+-- scale: @β_orig_j = β_std_j / σ_j@. The intercept must be adjusted
+-- separately, outside this helper.
 unstandardizeBeta :: V.Vector Double -> LA.Vector Double -> LA.Vector Double
 unstandardizeBeta sds betaStd =
   let p = LA.size betaStd
@@ -247,7 +261,7 @@ unstandardizeBeta sds betaStd =
 -- 多出力対応 (主 API)
 -- ---------------------------------------------------------------------------
 
--- | 多出力正則化回帰のフィット結果。
+-- | Multi-output regularized-regression fit result.
 -- Y は n × q、係数 B は p × q、予測 Ŷ = X B。
 -- 'rfmFits' は列ごとの単出力 'RegFit' (R²、|β|>0 の数、反復回数を提供)。
 data RegFitMulti = RegFitMulti
@@ -259,7 +273,7 @@ data RegFitMulti = RegFitMulti
   , rfmPenalty  :: Penalty
   } deriving (Show)
 
--- | 多出力正則化回帰: Y は n × q。
+-- | Multi-output regularized regression. @Y@ has shape @n × q@.
 --
 -- - OLS / Ridge: 行列形式 1 回の線形求解で全 q 列を一括処理 (高速)。
 -- - Lasso / Elastic Net: 列ごと座標降下 (列間に依存なし、独立並列可)。
@@ -271,16 +285,17 @@ fitRegularizedMulti pen x y = case pen of
   L1 lambda    -> fitColumnwise (fitLasso lambda) pen x y
   ElasticNet l1 l2 -> fitColumnwise (fitElasticNet l1 l2) pen x y
 
+-- | Multi-output prediction.
 predictRegularizedMulti :: RegFitMulti -> LA.Matrix Double -> LA.Matrix Double
 predictRegularizedMulti mf xNew = xNew LA.<> rfmBeta mf
 
--- | RegFitMulti の j 列目を 'RegFit' として取り出す。
+-- | Extract column @j@ of a 'RegFitMulti' as a 'RegFit'.
 regFitFromMulti :: Int -> RegFitMulti -> RegFit
 regFitFromMulti j mf
   | j < length (rfmFits mf) = rfmFits mf !! j
   | otherwise = error ("regFitFromMulti: column " ++ show j ++ " out of range")
 
--- | 行列形式の OLS: B = X \\ Y (LAPACK 1 回)。
+-- | Matrix-form OLS: @B = X \\ Y@ in a single LAPACK call.
 fitOLSMulti :: LA.Matrix Double -> LA.Matrix Double -> RegFitMulti
 fitOLSMulti x y =
   let beta = x LA.<\> y
