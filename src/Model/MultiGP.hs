@@ -15,10 +15,15 @@ module Model.MultiGP
   , mgpStd
   , fitMultiGP
   , predictMultiGP
+    -- * Multi-input (primary API; X is @n × p@)
+  , MultiGPResultMV (..)
+  , fitMultiGPMV
   ) where
 
+import qualified Numeric.LinearAlgebra as LA
 import Model.GP (Kernel (..), GPModel (..), GPParams, GPResult (..),
-                 fitGP, optimizeGP, initParamsFromData)
+                 fitGP, optimizeGP, initParamsFromData,
+                 GPResultMV (..), fitGPMV, optimizeGPMV)
 
 -- | Multi-output GP model with a per-output set of hyperparameters.
 -- All outputs share the same kernel /type/ for simplicity; their
@@ -83,4 +88,46 @@ predictMultiGP mgp trainX trainYs testX =
        , mgpLower  = map gpLower  results
        , mgpUpper  = map gpUpper  results
        , mgpModels = models
+       }
+
+-- ---------------------------------------------------------------------------
+-- Multi-input (multivariate X) API
+-- ---------------------------------------------------------------------------
+
+-- | Multi-input multi-output GP fit result. Per-output mean / band
+-- vectors (length @m@), with the optimized 'GPModel' that produced them.
+data MultiGPResultMV = MultiGPResultMV
+  { mgpmvMean   :: [LA.Vector Double]
+  , mgpmvLower  :: [LA.Vector Double]
+  , mgpmvUpper  :: [LA.Vector Double]
+  , mgpmvModels :: [GPModel]
+  } deriving (Show)
+
+-- | Fit a multi-output GP with multivariate input. Each output column
+-- is optimized independently via 'optimizeGPMV' and predicted at
+-- @testX@. Sharing the same kernel kind across outputs.
+fitMultiGPMV
+  :: Kernel
+  -> LA.Matrix Double          -- ^ Training @X@ (@n × p@).
+  -> [LA.Vector Double]        -- ^ Per-output training values (length @q@).
+  -> LA.Matrix Double          -- ^ Test inputs (@m × p@).
+  -> MultiGPResultMV
+fitMultiGPMV kern trainX trainYs testX =
+  let perOutput :: LA.Vector Double -> (GPModel, GPResultMV)
+      perOutput trainY =
+        let xL   = concat (LA.toLists trainX)
+            yL   = LA.toList trainY
+            p0   = initParamsFromData xL yL
+            pOpt = optimizeGPMV kern trainX trainY p0
+            mdl  = GPModel kern pOpt
+            res  = fitGPMV mdl trainX trainY testX
+        in (mdl, res)
+      pairs   = map perOutput trainYs
+      models  = map fst pairs
+      results = map snd pairs
+  in MultiGPResultMV
+       { mgpmvMean   = map gpmvMean   results
+       , mgpmvLower  = map gpmvLower  results
+       , mgpmvUpper  = map gpmvUpper  results
+       , mgpmvModels = models
        }

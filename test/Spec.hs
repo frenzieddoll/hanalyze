@@ -27,6 +27,7 @@ import qualified Stat.AdaptiveGrid as AG
 import qualified Stat.KernelDist   as KD
 import qualified Model.Kernel      as Kn
 import qualified Model.GP          as GP
+import qualified Model.GPRobust    as GPR
 import qualified Viz.ReportBuilder as RB
 import qualified Data.ByteString   as BS
 import System.IO.Temp (withSystemTempFile)
@@ -160,6 +161,23 @@ main = hspec $ do
           st  = LA.sumElements ((y - LA.konst mY nN) ** 2)
           r2  = 1 - ss / st
       (r2 > 0.95) `shouldBe` True
+
+    it "Model.GPRobust MV: 1D input matches legacy fitGPRobust" $ do
+      let xL  = [fromIntegral i / 5 | i <- [0 .. 14 :: Int]]
+          yL  = map sin xL
+          tL  = [0.5, 1.5, 2.5]
+          ker = GP.RBF
+          ps  = GP.GPParams 1.0 1.0 0.05 1.0
+          lik = GPR.RGaussian 0.1
+          legFit = GPR.fitGPRobust ker ps lik xL yL
+          legacy = GPR.predictGPRobust legFit tL
+          legM   = LA.fromList (map fst legacy)
+          xMV    = LA.fromLists (map (:[]) xL) :: LA.Matrix Double
+          yMV    = LA.fromList yL
+          tMV    = LA.fromLists (map (:[]) tL) :: LA.Matrix Double
+          mvFit  = GPR.fitGPRobustMV ker ps lik xMV yMV
+          (mvM, _) = GPR.predictGPRobustMV mvFit tMV
+      LA.norm_Inf (mvM - legM) < 1e-6 `shouldBe` True
 
     it "MV gramMatrix on a single-column input agrees with kernelFromSqDist" $ do
       let xs1 = LA.fromLists [[fromIntegral i / 5] | i <- [0 .. 19 :: Int]]

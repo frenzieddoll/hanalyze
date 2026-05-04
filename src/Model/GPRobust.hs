@@ -32,6 +32,13 @@ module Model.GPRobust
   , RobustGPFitMulti (..)
   , fitGPRobustMulti
   , predictGPRobustMulti
+    -- * Multi-input (primary API; X is @n × p@, Y is @n × q@)
+  , RobustGPFitMV (..)
+  , fitGPRobustMV
+  , predictGPRobustMV
+  , RobustGPFitMVMulti (..)
+  , fitGPRobustMVMulti
+  , predictGPRobustMVMulti
   ) where
 
 import qualified Numeric.LinearAlgebra as LA
@@ -40,6 +47,7 @@ import Model.GP
   , GPParams (..)
   , kernelFn
   , buildKernelMatrix
+  , buildKernelMatrixMV
   )
 
 -- ---------------------------------------------------------------------------
@@ -212,3 +220,132 @@ predictGPRobustMulti mf testX =
       varsCols  = map (map snd) preds
       meansMat  = LA.fromColumns [ LA.fromList col | col <- meansCols ]
   in (meansMat, varsCols)
+
+-- ---------------------------------------------------------------------------
+-- Multi-input (multivariate X) API
+-- ---------------------------------------------------------------------------
+
+-- | Robust GP fit with multivariate input. Mirrors 'RobustGPFit' but
+-- stores @X@ as an @n × p@ matrix and @y@ as a 'LA.Vector'.
+data RobustGPFitMV = RobustGPFitMV
+  { rgpmvKernel  :: Kernel
+  , rgpmvParams  :: GPParams
+  , rgpmvLik     :: RobustLikelihood
+  , rgpmvTrainX  :: LA.Matrix Double      -- ^ @n × p@.
+  , rgpmvTrainY  :: LA.Vector Double      -- ^ length @n@.
+  , rgpmvAlpha   :: LA.Vector Double
+  , rgpmvKyInv   :: LA.Matrix Double
+  , rgpmvWeights :: LA.Vector Double
+  , rgpmvIters   :: Int
+  } deriving (Show)
+
+-- | Compute the MAP of a multi-input robust GP via the same IRLS scheme
+-- as 'fitGPRobust'. @X@ is @n × p@; @y@ has length @n@.
+fitGPRobustMV
+  :: Kernel
+  -> GPParams
+  -> RobustLikelihood
+  -> LA.Matrix Double          -- ^ Training @X@ (@n × p@).
+  -> LA.Vector Double          -- ^ Training @y@ (length @n@).
+  -> RobustGPFitMV
+fitGPRobustMV ker params lik trainX yV =
+  let n         = LA.rows trainX
+      kMatrix   = buildKernelMatrixMV ker params trainX trainX
+      sigEff2   = likelihoodScale2 lik
+      step (f, w, _iter) =
+        let r          = LA.toList (yV - f)
+            wNew'      = [ max 1e-8 (likelihoodWeight lik ri) | ri <- r ]
+            wNewVec    = LA.fromList wNew'
+            wInvDiag   = LA.diag (LA.fromList [ sigEff2 / wi | wi <- wNew' ])
+            ky         = kMatrix `LA.add` wInvDiag
+            kyInv      = LA.inv ky
+            alpha      = kyInv LA.#> yV
+            fNew       = kMatrix LA.#> alpha
+            delta      = LA.maxElement (LA.cmap abs (fNew - f))
+        in (fNew, wNewVec, delta)
+
+      maxIters = 50
+      tol      = 1e-6 :: Double
+
+      loop f w iter
+        | iter >= maxIters = (f, w, iter)
+        | otherwise =
+            let (fNew, wNew, delta) = step (f, w, iter)
+            in if delta < tol
+                 then (fNew, wNew, iter + 1)
+                 else loop fNew wNew (iter + 1)
+
+      f0 = LA.fromList (replicate n 0.0)
+      w0 = LA.fromList (replicate n 1.0)
+      (_fOpt, wOpt, iters) = loop f0 w0 0
+
+      wInvDiag' = LA.diag (LA.cmap (\wi -> sigEff2 / max 1e-8 wi) wOpt)
+      ky'       = kMatrix `LA.add` wInvDiag'
+      kyInv'    = LA.inv ky'
+      alpha'    = kyInv' LA.#> yV
+  in RobustGPFitMV
+       { rgpmvKernel  = ker
+       , rgpmvParams  = params
+       , rgpmvLik     = lik
+       , rgpmvTrainX  = trainX
+       , rgpmvTrainY  = yV
+       , rgpmvAlpha   = alpha'
+       , rgpmvKyInv   = kyInv'
+       , rgpmvWeights = wOpt
+       , rgpmvIters   = iters
+       }
+
+-- | Predictive mean and variance at multi-input test points (@m × p@).
+predictGPRobustMV
+  :: RobustGPFitMV -> LA.Matrix Double
+  -> (LA.Vector Double, LA.Vector Double)
+predictGPRobustMV fit testX =
+  let ker     = rgpmvKernel fit
+      params  = rgpmvParams fit
+      trainX  = rgpmvTrainX fit
+      kStar   = buildKernelMatrixMV ker params testX trainX  -- m × n
+      means   = kStar LA.#> rgpmvAlpha fit
+      kyInv   = rgpmvKyInv fit
+      sf      = gpSignalVar params
+      diagKss = LA.konst sf (LA.rows testX)
+      ws      = kStar LA.<> kyInv                            -- m × n
+      vars    = LA.cmap (max 0)
+                  (diagKss - LA.fromList
+                    (zipWith LA.dot (LA.toRows kStar) (LA.toRows ws)))
+  in (means, vars)
+
+-- | Multi-input multi-output robust GP. Per-column IRLS (weights are
+-- output-specific), but the kernel matrix @K@ is shared.
+data RobustGPFitMVMulti = RobustGPFitMVMulti
+  { rgmvKernel :: Kernel
+  , rgmvParams :: GPParams
+  , rgmvLik    :: RobustLikelihood
+  , rgmvTrainX :: LA.Matrix Double
+  , rgmvFits   :: [RobustGPFitMV]
+  } deriving (Show)
+
+-- | Fit a multi-input multi-output robust GP. @Y@ has shape @n × q@.
+fitGPRobustMVMulti
+  :: Kernel
+  -> GPParams
+  -> RobustLikelihood
+  -> LA.Matrix Double          -- ^ Training @X@ (@n × p@).
+  -> LA.Matrix Double          -- ^ Training @Y@ (@n × q@).
+  -> RobustGPFitMVMulti
+fitGPRobustMVMulti ker params lik trainX yMat =
+  let q     = LA.cols yMat
+      cols  = [ LA.flatten (yMat LA.¿ [j]) | j <- [0 .. q - 1] ]
+      fits  = [ fitGPRobustMV ker params lik trainX y | y <- cols ]
+  in RobustGPFitMVMulti ker params lik trainX fits
+
+-- | Multi-input multi-output robust GP prediction. Returns the @m × q@
+-- mean matrix and a per-column variance vector.
+predictGPRobustMVMulti
+  :: RobustGPFitMVMulti -> LA.Matrix Double
+  -> (LA.Matrix Double, [LA.Vector Double])
+predictGPRobustMVMulti mf testX =
+  let preds   = [ predictGPRobustMV f testX | f <- rgmvFits mf ]
+      meanCs  = map fst preds
+      varCs   = map snd preds
+      meanMat = LA.fromColumns meanCs
+  in (meanMat, varCs)
