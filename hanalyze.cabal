@@ -168,7 +168,7 @@ executable hanalyze
     , containers >= 0.6  && < 0.8
     , filepath   >= 1.4  && < 1.6
     , hvega      >= 0.12 && < 0.13
-    , dataframe
+    , dataframe  >= 0.3  && < 2
     , time       >= 1.11 && < 1.13
 
 executable glmm-demo
@@ -182,7 +182,7 @@ executable glmm-demo
     , vector   >= 0.12 && < 0.14
     , hmatrix  >= 0.20 && < 0.22
     , text     >= 1.2  && < 2.2
-    , dataframe
+    , dataframe  >= 0.3  && < 2
 
 executable hbm-example
   import:           warnings
@@ -349,7 +349,7 @@ executable analysis-compare-demo
     , hmatrix    >= 0.20 && < 0.22
     , mwc-random >= 0.15 && < 0.16
     , containers >= 0.6  && < 0.8
-    , dataframe
+    , dataframe  >= 0.3  && < 2
 
 executable new-sections-demo
   import:           warnings
@@ -905,7 +905,7 @@ executable hbm-random-slope
     , containers >= 0.6  && < 0.8
     , mwc-random >= 0.15 && < 0.16
     , vector     >= 0.12 && < 0.14
-    , dataframe
+    , dataframe  >= 0.3  && < 2
 
 executable simpson-paradox
   import:           warnings
@@ -920,7 +920,7 @@ executable simpson-paradox
     , mwc-random >= 0.15 && < 0.16
     , vector     >= 0.12 && < 0.14
     , hmatrix    >= 0.20 && < 0.22
-    , dataframe
+    , dataframe  >= 0.3  && < 2
 
 executable hbm-regression
   import:           warnings
@@ -934,7 +934,7 @@ executable hbm-regression
     , containers >= 0.6  && < 0.8
     , mwc-random >= 0.15 && < 0.16
     , vector     >= 0.12 && < 0.14
-    , dataframe
+    , dataframe  >= 0.3  && < 2
 
 test-suite hanalyze-test
   import:           warnings
