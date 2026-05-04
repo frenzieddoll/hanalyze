@@ -295,6 +295,28 @@ correct overall posterior. Closing the remaining gap to skopt would
 require multi-start GP-HP optimization and a more flexible kernel
 (Matérn 5/2 vs RBF), which is out of scope for this phase.
 
+## After G2 (GLM L-BFGS exploration) — finding
+
+`Model.GLM` gains a 'GLMSolver' selector ('IRLS' / 'LBFGS') and
+'runLBFGS_GLM', plus a public 'fitGLMWith'. The L-BFGS path uses the
+canonical-link analytic gradient @∇(-ℓ) = Xᵀ(μ - y)@ and reuses
+'Optim.LBFGS.runLBFGSWith'.
+
+**Result**: in our @n ≤ 10 000@, @p ≤ 20@ regime L-BFGS is /not/ faster
+than the K6/G1 IRLS-with-Cholesky path. Swapping the default produced
+a slight regression (GLM_poisson_n10k: 15.5 ms → 27.6 ms), so the
+default stayed at 'IRLS'.
+
+Root cause: 'Optim.LBFGS' is implemented end-to-end on @[Double]@
+lists (search direction, two-loop recursion, line search, etc.). Each
+L-BFGS step pays Haskell list-traversal overhead that wipes out the
+@O(np)@ vs @O(np²)@ asymptotic advantage at @p = 10–20@. sklearn wins
+only because its inner loop is Cython.
+
+The 'LBFGS' solver remains available for callers who hit the
+@p > 50@, @n ≫ p²@ regime (the asymptotic crossover) or once
+'Optim.LBFGS' itself is moved to 'Storable' 'Vector'.
+
 ## High-leverage improvement queue
 
 In rough order of expected wall-time impact across the suite:

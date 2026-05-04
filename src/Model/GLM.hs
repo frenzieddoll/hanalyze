@@ -12,9 +12,13 @@ module Model.GLM
   , LinkFn (..)
   , parseLink
   , canonicalLink
+  , GLMSolver (..)
   , fitGLM
   , fitGLMFull
+  , fitGLMWith
   , fitGLMWithSmooth
+  , runIRLS
+  , runLBFGS_GLM
     -- * Multi-output (per-column IRLS; Family/Link shared)
   , GLMFitMulti (..)
   , fitGLMMulti
@@ -29,6 +33,9 @@ import Data.Text (Text)
 import qualified Data.Vector as V
 import qualified Numeric.LinearAlgebra as LA
 import qualified Stat.Cholesky        as Chol
+import qualified Optim.LBFGS          as LBFGS
+import qualified Optim.Common         as OC
+import           System.IO.Unsafe     (unsafePerformIO)
 import Statistics.Distribution (quantile)
 import Statistics.Distribution.Normal (normalDistr)
 import Statistics.Distribution.StudentT (studentT)
@@ -156,6 +163,120 @@ irlsStep (_, gInv, gDeriv) varFn clamp family x y beta =
       bRhs  = LA.asColumn (wxT LA.#> zs)        -- p × 1
   in LA.flatten (Chol.cholSolveJitter gMat bRhs)
 
+-- ---------------------------------------------------------------------------
+-- Solver selection
+-- ---------------------------------------------------------------------------
+
+-- | GLM solver back-end.
+--
+--   * 'IRLS' — Iteratively Re-weighted Least Squares. Each iteration
+--     builds and solves the SPD normal equations @XᵀWX β = XᵀWz@ via
+--     'Stat.Cholesky.cholSolveJitter'. Quadratic convergence (= a full
+--     Newton step every iteration); each iteration is @O(np²)@.
+--   * 'LBFGS' — direct L-BFGS minimization of the negative
+--     log-likelihood with the analytic gradient @Xᵀ(μ − y)@ (canonical
+--     link). Per-iteration cost is @O(np)@. This is what 'sklearn'
+--     uses, and is the better choice in @n ≫ p²@ regimes once the
+--     'Optim.LBFGS' inner loop is moved off Haskell-list operations.
+--
+-- Default solver: 'IRLS'. In the current bench regime (@n ≤ 10000@,
+-- @p ≤ 20@), IRLS-with-Cholesky beats the pure-Haskell-list L-BFGS
+-- because @O(np²)@ on small @p@ is dominated by hmatrix's BLAS calls
+-- whereas the L-BFGS path pays per-step Haskell overhead. Switch to
+-- 'LBFGS' for problems with @p > 50@ or when 'Optim.LBFGS' itself is
+-- vectorized.
+data GLMSolver
+  = IRLS
+  | LBFGS
+  deriving (Eq, Show)
+
+defaultGLMSolver :: GLMSolver
+defaultGLMSolver = IRLS
+
+-- ---------------------------------------------------------------------------
+-- L-BFGS direct GLM
+-- ---------------------------------------------------------------------------
+
+-- | Negative log-likelihood @-ℓ(β)@ for a canonical-link GLM.
+glmNegLogLik :: Family -> LA.Matrix Double -> LA.Vector Double
+             -> LA.Vector Double -> Double
+glmNegLogLik family x y beta = negate (glmLogLik family y mu)
+  where
+    eta = x LA.#> beta
+    mu  = case family of
+            Gaussian -> eta
+            Binomial -> LA.cmap (\e -> 1 / (1 + exp (-e))) eta
+            Poisson  -> LA.cmap (\e -> exp (min 500 e))   eta
+
+-- | Gradient of @-ℓ(β)@ for a canonical-link GLM:
+--
+-- @∇(-ℓ) = Xᵀ (μ - y)@
+--
+-- This identity holds for /every/ exponential-family GLM with the
+-- canonical link, which is why L-BFGS is so attractive here — no
+-- per-family branching is needed inside the gradient.
+glmGrad :: Family -> LA.Matrix Double -> LA.Vector Double
+        -> LA.Vector Double -> LA.Vector Double
+glmGrad family x y beta =
+  let eta = x LA.#> beta
+      mu  = case family of
+              Gaussian -> eta
+              Binomial -> LA.cmap (\e -> 1 / (1 + exp (-e))) eta
+              Poisson  -> LA.cmap (\e -> exp (min 500 e))   eta
+  in LA.tr x LA.#> (mu - y)
+
+-- | Fit a canonical-link GLM by minimizing the negative log-likelihood
+-- with L-BFGS. This is the path that 'sklearn.linear_model.\*' uses
+-- internally for logistic and Poisson regression and is markedly
+-- faster than IRLS when @n ≫ p@ because each L-BFGS iteration costs
+-- only @O(np)@ versus IRLS's @O(np²)@ for the @XᵀWX@ build.
+--
+-- Returns the same @(FitResult, fisherInv)@ pair as 'runIRLS'; the
+-- Fisher information is computed once at the converged β via the same
+-- Cholesky path used by IRLS, so downstream uses (CIs, WAIC, …) are
+-- identical.
+runLBFGS_GLM :: Family -> LA.Matrix Double -> LA.Vector Double
+             -> (FitResult, LA.Matrix Double)
+runLBFGS_GLM family x y =
+  -- Only canonical-link GLMs are supported here (the simple gradient
+  -- formula above relies on the canonical link). For non-canonical
+  -- links (e.g. probit, sqrt link) the caller should use 'runIRLS'.
+  let p     = LA.cols x
+      beta0 = initBeta family (canonicalLink family) y p
+      f bs = glmNegLogLik family x y (LA.fromList bs)
+      g bs = LA.toList (glmGrad family x y (LA.fromList bs))
+      cfg  = LBFGS.defaultLBFGSConfig
+               { LBFGS.lbStop = OC.defaultStopCriteria
+                                  { OC.stMaxIter = 200
+                                  , OC.stTolFun  = 1e-10
+                                  , OC.stTolX    = 1e-10 } }
+      result = unsafePerformIO $
+                 LBFGS.runLBFGSWith cfg f g (LA.toList beta0)
+      betaF  = LA.fromList (OC.orBest result)
+      mu     = safeMu family $ case family of
+                 Gaussian -> x LA.#> betaF
+                 Binomial -> LA.cmap (\e -> 1 / (1 + exp (-e))) (x LA.#> betaF)
+                 Poisson  -> LA.cmap (\e -> exp (min 500 e))   (x LA.#> betaF)
+      resid  = y - mu
+      r2     = pseudoR2 family y mu
+      fitR   = FitResult (LA.asColumn betaF)
+                         (LA.asColumn mu)
+                         (LA.asColumn resid)
+                         (LA.fromList [r2])
+      -- Fisher information at convergence (same path as IRLS).
+      muL    = LA.toList mu
+      ws     = LA.fromList [ max 1e-10 (1.0 / (gDeriv m ^ (2::Int)
+                                              * varOf family m))
+                           | m <- muL ]
+      wxT    = LA.tr x * LA.asRow ws
+      gMat   = wxT LA.<> x
+      fisher = Chol.cholSolveJitter gMat (LA.ident p)
+  in (fitR, fisher)
+  where
+    (_, _, gDeriv) = linkFnOf (canonicalLink family)
+
+-- ---------------------------------------------------------------------------
+
 -- | Run IRLS to fit a single-output GLM. Returns both the fit result
 -- and the inverse Fisher information @(XᵀWX)⁻¹@ used for standard
 -- errors and credible/predictive intervals.
@@ -218,15 +339,37 @@ runIRLS family linkFn x y = (mkResult betaFinal, fisherInv betaFinal)
 -- ---------------------------------------------------------------------------
 
 -- | Fit a GLM with the canonical link, returning just the 'FitResult'.
+-- Uses 'defaultGLMSolver' (currently 'IRLS').
 fitGLM :: Family -> LA.Matrix Double -> LA.Vector Double -> FitResult
-fitGLM family x y = fst (runIRLS family (canonicalLink family) x y)
+fitGLM family x y =
+  fst (fitGLMWith defaultGLMSolver family (canonicalLink family) x y)
 
 -- | Like 'fitGLM' but also returns the inverse Fisher information
 -- (Laplace-approximate posterior covariance). Used by the WAIC / LOO-CV
 -- posterior-sampling helpers.
+--
+-- Routes through 'fitGLMWith' with 'defaultGLMSolver'. When the
+-- supplied 'LinkFn' is /not/ the canonical link of the family, the
+-- 'LBFGS' solver is unsupported and the function silently falls back
+-- to 'IRLS' so existing call sites that pass non-canonical links keep
+-- working.
 fitGLMFull :: Family -> LinkFn -> LA.Matrix Double -> LA.Vector Double
            -> (FitResult, LA.Matrix Double)
-fitGLMFull = runIRLS
+fitGLMFull family linkFn x y
+  | linkFn == canonicalLink family = fitGLMWith defaultGLMSolver family linkFn x y
+  | otherwise                      = runIRLS family linkFn x y
+
+-- | Pick the solver explicitly. The 'LBFGS' path is only valid for the
+-- canonical link of the family; non-canonical links transparently fall
+-- back to 'IRLS'.
+fitGLMWith
+  :: GLMSolver -> Family -> LinkFn
+  -> LA.Matrix Double -> LA.Vector Double
+  -> (FitResult, LA.Matrix Double)
+fitGLMWith IRLS  family linkFn x y = runIRLS family linkFn x y
+fitGLMWith LBFGS family linkFn x y
+  | linkFn == canonicalLink family = runLBFGS_GLM family x y
+  | otherwise                      = runIRLS family linkFn x y
 
 -- | Fit GLM with specified distribution and link function.
 -- Accepts multiple x columns with per-column polynomial degrees.
