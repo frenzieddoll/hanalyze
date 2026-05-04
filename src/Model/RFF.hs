@@ -83,19 +83,20 @@ import qualified Optim.Common as OCM
 -- 型
 -- ---------------------------------------------------------------------------
 
--- | 対応カーネル。
+-- | Supported kernels for RFF approximation.
 data RFFKernel = RFFRBF | RFFMatern52
   deriving (Show, Eq)
 
--- | RFF の特徴生成に必要な情報。
+-- | All the information needed to evaluate an RFF feature map.
 data RFFFeatures = RFFFeatures
   { rffKernel      :: RFFKernel
-  , rffOmegas      :: V.Vector Double   -- ^ D 個のランダム周波数
-  , rffBs          :: V.Vector Double   -- ^ D 個の位相 b_j ∈ [0, 2π)
-  , rffSigmaF      :: Double            -- ^ 信号 sd σ_f
-  , rffLengthScale :: Double            -- ^ 長さスケール ℓ
+  , rffOmegas      :: V.Vector Double   -- ^ Random frequencies @ω_j@ (length @D@).
+  , rffBs          :: V.Vector Double   -- ^ Random phases @b_j ∈ [0, 2π)@.
+  , rffSigmaF      :: Double            -- ^ Signal standard deviation @σ_f@.
+  , rffLengthScale :: Double            -- ^ Length scale @ℓ@.
   } deriving (Show)
 
+-- | Number of features @D@.
 rffDim :: RFFFeatures -> Int
 rffDim = V.length . rffOmegas
 
@@ -103,10 +104,11 @@ rffDim = V.length . rffOmegas
 -- 周波数サンプリング
 -- ---------------------------------------------------------------------------
 
--- | RBF カーネル用の RFF。ω_j ~ N(0, 1/ℓ²)、b_j ~ U(0, 2π)。
-sampleRFFRBF :: Int      -- ^ 特徴次元 D
-             -> Double   -- ^ 長さスケール ℓ
-             -> Double   -- ^ 信号 sd σ_f
+-- | Sample RFF features for the RBF kernel: @ω_j ~ N(0, 1/ℓ²)@,
+-- @b_j ~ U(0, 2π)@.
+sampleRFFRBF :: Int      -- ^ Feature dimension @D@.
+             -> Double   -- ^ Length scale @ℓ@.
+             -> Double   -- ^ Signal SD @σ_f@.
              -> GenIO -> IO RFFFeatures
 sampleRFFRBF d ell sf gen = do
   ws <- V.replicateM d (MWCD.normal 0 (1/ell) gen)
@@ -119,8 +121,10 @@ sampleRFFRBF d ell sf gen = do
     , rffLengthScale = ell
     }
 
--- | Matérn 5/2 用の RFF。ω = z/√u where z ~ N(0, 1/ℓ²), u ~ Gamma(ν, ν), ν=5/2。
--- これは df=5 の StudentT 分布をスケーリングしたもの (spectral density に一致)。
+-- | Sample RFF features for the Matérn 5/2 kernel:
+-- @ω = z/√u@ where @z ~ N(0, 1/ℓ²)@ and @u ~ Gamma(ν, ν)@ with @ν = 5/2@.
+-- This is a scaled @df = 5@ Student-t distribution, matching the
+-- spectral density.
 sampleRFFMatern52 :: Int -> Double -> Double -> GenIO -> IO RFFFeatures
 sampleRFFMatern52 d ell sf gen = do
   let nu = 2.5 :: Double
@@ -143,8 +147,8 @@ sampleRFFMatern52 d ell sf gen = do
 -- 特徴写像
 -- ---------------------------------------------------------------------------
 
--- | 特徴行列 Φ ∈ ℝ^(n×D)。
--- φ(x) = σ_f √(2/D) [cos(ω_j x + b_j)]_{j=1..D}
+-- | Feature matrix @Φ ∈ ℝ^{n×D}@.
+-- @φ(x) = σ_f √(2/D) [cos(ω_j x + b_j)]_{j=1..D}@.
 rffFeatures :: RFFFeatures -> [Double] -> LA.Matrix Double
 rffFeatures rff xs =
   let d  = rffDim rff
@@ -158,7 +162,7 @@ rffFeatures rff xs =
         , j <- [0 .. d - 1] ]
   in LA.reshape d (LA.fromList cells)
 
--- | RFF が近似するカーネル行列 K[i,j] ≈ k(x_i, x_j) = φ(x_i)·φ(x_j)。
+-- | Kernel matrix approximated by RFF: @K[i,j] ≈ k(x_i, x_j) = φ(x_i)·φ(x_j)@.
 rffApproxKernel :: RFFFeatures -> [Double] -> LA.Matrix Double
 rffApproxKernel rff xs =
   let phi = rffFeatures rff xs
@@ -168,13 +172,15 @@ rffApproxKernel rff xs =
 -- RFF Ridge 回帰
 -- ---------------------------------------------------------------------------
 
+-- | Single-output RFF ridge fit.
 data RFFRidgeFit = RFFRidgeFit
   { rffrFeatures :: RFFFeatures
-  , rffrWeights  :: LA.Vector Double   -- ^ D 次元重み
-  , rffrLambda   :: Double
+  , rffrWeights  :: LA.Vector Double   -- ^ Weight vector (length @D@).
+  , rffrLambda   :: Double             -- ^ Ridge penalty @λ@.
   } deriving (Show)
 
--- | RFF Ridge (単出力)。多出力 'rffRidgeMulti' に y を 1 列行列化して委譲。
+-- | Single-output RFF ridge regression. Delegates to 'rffRidgeMulti' by
+-- promoting @y@ to a one-column matrix.
 rffRidge :: RFFFeatures -> [Double] -> [Double] -> Double -> RFFRidgeFit
 rffRidge rff xs ys lam =
   let yMat = LA.asColumn (LA.fromList ys)
@@ -182,20 +188,22 @@ rffRidge rff xs ys lam =
       w    = LA.flatten (rffrmWeights mf LA.¿ [0])
   in RFFRidgeFit rff w lam
 
+-- | Predict at new inputs from a 'RFFRidgeFit'.
 predictRFFRidge :: RFFRidgeFit -> [Double] -> [Double]
 predictRFFRidge fit xNew =
   let phi  = rffFeatures (rffrFeatures fit) xNew
       yhat = phi LA.#> rffrWeights fit
   in LA.toList yhat
 
--- | 多出力 RFF Ridge (1D 入力)。Y は n × q、重み W は D × q。
+-- | Multi-output RFF ridge fit (1D inputs). @Y@ is @n × q@, weights @W@
+-- are @D × q@.
 data RFFRidgeFitMulti = RFFRidgeFitMulti
   { rffrmFeatures :: RFFFeatures
-  , rffrmWeights  :: LA.Matrix Double   -- ^ D × q
-  , rffrmLambda   :: Double
+  , rffrmWeights  :: LA.Matrix Double   -- ^ Weight matrix (@D × q@).
+  , rffrmLambda   :: Double             -- ^ Ridge penalty @λ@.
   } deriving (Show)
 
--- | 多出力 RFF Ridge: W = (ΦᵀΦ + λI)⁻¹ Φᵀ Y。
+-- | Multi-output RFF ridge regression: @W = (ΦᵀΦ + λI)⁻¹ Φᵀ Y@.
 rffRidgeMulti :: RFFFeatures -> [Double] -> LA.Matrix Double -> Double
               -> RFFRidgeFitMulti
 rffRidgeMulti rff xs ys lam =
@@ -207,6 +215,7 @@ rffRidgeMulti rff xs ys lam =
       w     = regK LA.<\> rhs
   in RFFRidgeFitMulti rff w lam
 
+-- | Multi-output prediction at new inputs from a 'RFFRidgeFitMulti'.
 predictRFFRidgeMulti :: RFFRidgeFitMulti -> [Double] -> LA.Matrix Double
 predictRFFRidgeMulti fit xNew =
   let phi = rffFeatures (rffrmFeatures fit) xNew
@@ -216,17 +225,22 @@ predictRFFRidgeMulti fit xNew =
 -- RFF GP (ベイズ線形回帰 with prior w ~ N(0, I))
 -- ---------------------------------------------------------------------------
 
--- | 事後 N(μ, Σ) を保持。
--- prior w ~ N(0, I) (RFF の振幅は σ_f に乗っているため Σ_p = I が一致する)
--- 尤度: y = φᵀ w + ε, ε ~ N(0, σ_n²)
--- 事後: Σ⁻¹ = ΦᵀΦ / σ_n² + I, μ = Σ Φᵀ y / σ_n²
+-- | Bayesian linear regression on RFF features (a Gaussian-process
+-- approximation).
+--
+-- Prior: @w ~ N(0, I)@ (the @σ_f@ amplitude is already in the features).
+--
+-- Likelihood: @y = φᵀ w + ε@, @ε ~ N(0, σ_n²)@.
+--
+-- Posterior: @Σ⁻¹ = ΦᵀΦ / σ_n² + I@, @μ = Σ Φᵀ y / σ_n²@.
 data RFFGPFit = RFFGPFit
   { rffgpFeatures :: RFFFeatures
-  , rffgpSigma    :: LA.Matrix Double   -- ^ 事後共分散 Σ (D × D)
-  , rffgpMean     :: LA.Vector Double   -- ^ 事後平均 μ (D)
-  , rffgpSigmaN   :: Double             -- ^ 観測ノイズ sd σ_n
+  , rffgpSigma    :: LA.Matrix Double   -- ^ Posterior covariance @Σ@ (@D × D@).
+  , rffgpMean     :: LA.Vector Double   -- ^ Posterior mean @μ@ (length @D@).
+  , rffgpSigmaN   :: Double             -- ^ Observation noise SD @σ_n@.
   } deriving (Show)
 
+-- | Fit an RFF-based Bayesian linear-regression GP.
 rffGP :: RFFFeatures -> [Double] -> [Double] -> Double -> RFFGPFit
 rffGP rff xs ys sigmaN =
   let phi    = rffFeatures rff xs
@@ -244,8 +258,10 @@ rffGP rff xs ys sigmaN =
        , rffgpSigmaN   = sigmaN
        }
 
--- | 予測点ごとに (mean, variance of f) を返す (観測ノイズ σ_n² は加えない)。
--- mean = φ(x*)ᵀ μ, var = φ(x*)ᵀ Σ φ(x*)
+-- | Per-test-point @(mean, variance of f)@. The observation-noise term
+-- @σ_n²@ is /not/ added.
+--
+-- @mean = φ(x*)ᵀ μ@, @var = φ(x*)ᵀ Σ φ(x*)@.
 predictRFFGP :: RFFGPFit -> [Double] -> [(Double, Double)]
 predictRFFGP fit xNew =
   let rff   = rffgpFeatures fit
@@ -261,18 +277,20 @@ predictRFFGP fit xNew =
 -- 多変量入力 (p 次元) 対応 (Phase B-RFF)
 -- ---------------------------------------------------------------------------
 
--- | 多変量 RFF の特徴生成情報。'rffmvOmegas' は p×D 行列で、各列が
--- 1 個の周波数ベクトル ω_j ∈ ℝ^p を表す。
+-- | Multivariate RFF feature-generation parameters. 'rffmvOmegas' is a
+-- @p × D@ matrix; each column is one frequency vector @ω_j ∈ ℝ^p@.
 data RFFFeaturesMV = RFFFeaturesMV
   { rffmvKernel      :: RFFKernel
-  , rffmvDim         :: Int                   -- ^ 入力次元 p
-  , rffmvOmegas      :: LA.Matrix Double      -- ^ p × D
-  , rffmvBs          :: V.Vector Double       -- ^ D
-  , rffmvSigmaF      :: Double
-  , rffmvLengthScale :: Double                -- ^ 共通 ℓ (ARD 未対応)
+  , rffmvDim         :: Int                -- ^ Input dimension @p@.
+  , rffmvOmegas      :: LA.Matrix Double   -- ^ Frequencies (@p × D@).
+  , rffmvBs          :: V.Vector Double    -- ^ Phases @b_j@ (length @D@).
+  , rffmvSigmaF      :: Double             -- ^ Signal SD @σ_f@.
+  , rffmvLengthScale :: Double             -- ^ Shared length scale @ℓ@
+                                           --   (no ARD support yet).
   } deriving (Show)
 
--- | RBF カーネル用 RFF (多変量)。各 ω_j[k] ~ N(0, 1/ℓ²) 独立。
+-- | Sample multivariate RFF features for the RBF kernel.
+-- Each component @ω_j[k] ~ N(0, 1/ℓ²)@ independently.
 sampleRFFRBFMV
   :: Int -> Int -> Double -> Double -> GenIO -> IO RFFFeaturesMV
 sampleRFFRBFMV p d ell sf gen = do
@@ -289,7 +307,7 @@ sampleRFFRBFMV p d ell sf gen = do
     , rffmvLengthScale = ell
     }
 
--- | Matérn 5/2 用 RFF (多変量)。
+-- | Sample multivariate RFF features for the Matérn 5/2 kernel.
 sampleRFFMatern52MV
   :: Int -> Int -> Double -> Double -> GenIO -> IO RFFFeaturesMV
 sampleRFFMatern52MV p d ell sf gen = do
@@ -308,8 +326,8 @@ sampleRFFMatern52MV p d ell sf gen = do
     , rffmvLengthScale = ell
     }
 
--- | 入力 X (n×p) → Φ (n×D)。
--- φ_j(x) = σ_f √(2/D) cos(ω_j^T x + b_j)
+-- | Multivariate feature matrix: @X (n × p) → Φ (n × D)@.
+-- @φ_j(x) = σ_f √(2/D) cos(ω_jᵀ x + b_j)@.
 rffFeaturesMV :: RFFFeaturesMV -> LA.Matrix Double -> LA.Matrix Double
 rffFeaturesMV rff x =
   let d   = LA.cols (rffmvOmegas rff)
@@ -323,14 +341,15 @@ rffFeaturesMV rff x =
       withB = LA.fromRows [ r + bs | r <- rows ]
   in LA.scale coef (LA.cmap cos withB)
 
--- | 多変量 RFF Ridge fit。
+-- | Multivariate RFF ridge fit.
 data RFFRidgeFitMV = RFFRidgeFitMV
   { rffrmvFeatures :: RFFFeaturesMV
-  , rffrmvWeights  :: LA.Vector Double   -- ^ D
-  , rffrmvLambda   :: Double
+  , rffrmvWeights  :: LA.Vector Double   -- ^ Weights (length @D@).
+  , rffrmvLambda   :: Double             -- ^ Ridge penalty @λ@.
   } deriving (Show)
 
--- | 多変量 RFF Ridge (単出力)。多出力 'rffRidgeMVMulti' に y を 1 列行列化して委譲。
+-- | Single-output multivariate RFF ridge regression. Delegates to
+-- 'rffRidgeMVMulti' by promoting @y@ to a one-column matrix.
 rffRidgeMV :: RFFFeaturesMV -> LA.Matrix Double -> [Double] -> Double
            -> RFFRidgeFitMV
 rffRidgeMV rff x ys lam =
@@ -339,19 +358,22 @@ rffRidgeMV rff x ys lam =
       w    = LA.flatten (rffrmvmWeights mf LA.¿ [0])
   in RFFRidgeFitMV rff w lam
 
+-- | Predict at new inputs from a 'RFFRidgeFitMV'.
 predictRFFRidgeMV :: RFFRidgeFitMV -> LA.Matrix Double -> [Double]
 predictRFFRidgeMV fit xNew =
   let phi = rffFeaturesMV (rffrmvFeatures fit) xNew
   in LA.toList (phi LA.#> rffrmvWeights fit)
 
--- | 多変量入力 + 多出力 RFF Ridge。X は n×p、Y は n×q、W は D×q。
+-- | Multivariate-input multi-output RFF ridge fit. @X@ is @n × p@,
+-- @Y@ is @n × q@, weights @W@ are @D × q@.
 data RFFRidgeFitMVMO = RFFRidgeFitMVMO
   { rffrmvmFeatures :: RFFFeaturesMV
   , rffrmvmWeights  :: LA.Matrix Double   -- ^ D × q
   , rffrmvmLambda   :: Double
   } deriving (Show)
 
--- | 多変量入力 + 多出力 RFF Ridge: W = (ΦᵀΦ + λI)⁻¹ Φᵀ Y。
+-- | Multivariate-input multi-output RFF ridge regression:
+-- @W = (ΦᵀΦ + λI)⁻¹ Φᵀ Y@.
 rffRidgeMVMulti :: RFFFeaturesMV -> LA.Matrix Double -> LA.Matrix Double
                 -> Double -> RFFRidgeFitMVMO
 rffRidgeMVMulti rff x ys lam =
@@ -363,6 +385,7 @@ rffRidgeMVMulti rff x ys lam =
       w    = regK LA.<\> rhs
   in RFFRidgeFitMVMO rff w lam
 
+-- | Multi-output prediction at new inputs from a 'RFFRidgeFitMVMO'.
 predictRFFRidgeMVMulti :: RFFRidgeFitMVMO -> LA.Matrix Double -> LA.Matrix Double
 predictRFFRidgeMVMulti fit xNew =
   let phi = rffFeaturesMV (rffrmvmFeatures fit) xNew
@@ -372,7 +395,8 @@ predictRFFRidgeMVMulti fit xNew =
 -- 周辺尤度最大化 (RFF GP 流の HP チューニング、Phase 2)
 -- ---------------------------------------------------------------------------
 
--- | 多変量入力 X (n×p), 観測 y に対する RBF カーネルの log-marginal-likelihood。
+-- | Log marginal likelihood under the RBF kernel for multivariate input
+-- @X@ (@n × p@) and observations @y@.
 --
 --   K_ij = σ_f² · exp(-‖x_i - x_j‖² / (2 ℓ²))
 --   y | θ ~ N(0, K + σ_n² I)
@@ -409,7 +433,8 @@ logMarginalLikRBFMV x y ell sf sn =
          in -0.5 * dataFit - 0.5 * logDet
             - fromIntegral n / 2 * log (2 * pi)
 
--- | RBF カーネル行列 (X が n×p)。K[i,j] = σ_f² · exp(-‖x_i - x_j‖² / (2ℓ²))
+-- | RBF kernel matrix for inputs @X@ (@n × p@):
+-- @K[i,j] = σ_f² · exp(−‖x_i − x_j‖² / (2ℓ²))@.
 rbfKernelMat :: LA.Matrix Double -> Double -> Double -> LA.Matrix Double
 rbfKernelMat x ell sf =
   let n     = LA.rows x
@@ -421,7 +446,7 @@ rbfKernelMat x ell sf =
          | j <- [0 .. n-1] ]
        | i <- [0 .. n-1] ]
 
--- | 周辺尤度最大化結果。
+-- | Marginal-likelihood maximization result.
 data MLikResult = MLikResult
   { mlEll      :: !Double
   , mlSigmaF   :: !Double
@@ -430,7 +455,7 @@ data MLikResult = MLikResult
   , mlGridPts  :: !Int      -- ^ 評価したグリッド点数 (debug 用)
   } deriving (Show)
 
--- | (ℓ, σ_f, σ_n) のグリッド探索で marg-lik を最大化。
+-- | Maximize the marginal likelihood by grid search over @(ℓ, σ_f, σ_n)@.
 --
 -- 戦略:
 --
@@ -469,7 +494,7 @@ maximizeMarginalLikRBFMV x y mGrid =
   in MLikResult ell2 sf2 sn2 ml2
        (nL * nSF * nSN * 2)
 
--- | `maximizeMarginalLikRBFMV` の **DE 版** (Phase O9)。
+-- | Differential-Evolution variant of 'maximizeMarginalLikRBFMV'.
 --
 -- coarse stage を Differential Evolution (`Optim.DifferentialEvolution`) で
 -- 行い、fine stage は従来通りグリッド。
@@ -511,7 +536,7 @@ maximizeMarginalLikRBFMV_DE x y nGen gen = do
       totalEvals = OCM.orIters r * DEM.dePopSize cfg + 8 * 6 * 6
   return $ MLikResult ell2 sf2 sn2 ml2 totalEvals
 
--- | 与えられた (ellGrid, sfGrid, snGrid) 全組合せで log-mlik 最良を返す。
+-- | Best @log p@ over the full Cartesian product of @(ellGrid, sfGrid, snGrid)@.
 bestOver
   :: LA.Matrix Double -> LA.Vector Double
   -> [Double] -> [Double] -> [Double]
@@ -524,7 +549,7 @@ bestOver x y ells sfs sns =
                        if la >= lb then a else b) evaluations
   in best
 
--- | log 等間隔な n 点。
+-- | Log-spaced @n@ points between @lo@ and @hi@.
 logSpace :: Double -> Double -> Int -> [Double]
 logSpace lo hi n
   | n <= 1    = [lo]
@@ -535,7 +560,8 @@ logSpace lo hi n
           step = (lHi - lLo) / fromIntegral (n - 1)
       in [ exp (lLo + fromIntegral i * step) | i <- [0 .. n - 1] ]
 
--- | 行ペアの median pairwise distance (median heuristic for RBF ℓ)。
+-- | Median pairwise distance between rows (the standard median heuristic
+-- for an RBF length scale).
 medianPairwiseDist :: LA.Matrix Double -> Double
 medianPairwiseDist x =
   let rows = LA.toRows x
@@ -568,7 +594,7 @@ sampleStd xs
 -- LOOCV 解析解 (Phase 3 — Ridge の closed-form leave-one-out cross-validation)
 -- ---------------------------------------------------------------------------
 
--- | LOOCV 探索結果。
+-- | Result of LOOCV-based hyperparameter search.
 data LOOCVResult = LOOCVResult
   { lcEll      :: !Double
   , lcSigmaF   :: !Double   -- ^ 信号 sd (= std(y) を使う簡易版)
@@ -577,7 +603,8 @@ data LOOCVResult = LOOCVResult
   , lcGridPts  :: !Int
   } deriving (Show)
 
--- | RFF Ridge の LOOCV を Cholesky と「ハット行列の対角」を使って解析的に計算する。
+-- | Closed-form LOOCV for RFF ridge regression using a Cholesky
+-- factorization plus the hat-matrix diagonal.
 --
 --   H = Φ (ΦᵀΦ + λI)⁻¹ Φᵀ
 --   ŷ = H y
@@ -625,7 +652,7 @@ loocvFromPhi phi y lam =
   where
     divList xs ys = zipWith (/) xs ys
 
--- | (ℓ, λ) を log-spaced グリッドで探索し、LOOCV 最小を見つける。
+-- | Search a log-spaced @(ℓ, λ)@ grid for the smallest LOOCV.
 --
 -- ℓ ごとに ω を新規サンプリングするため IO。グリッドサイズ default (8, 20):
 -- ℓ 8 点 × λ 20 点 = 160 fit。各 fit O(n D + D³) で n=545, D=200 程度なら
@@ -668,7 +695,7 @@ gridSearchLOOCVRBFMV p d x y mGrid gen = do
     , lcGridPts = nL * nLam
     }
 
--- | `gridSearchLOOCVRBFMV` の **DE 版** (Phase O9)。
+-- | Differential-Evolution variant of 'gridSearchLOOCVRBFMV'.
 --
 -- (log_ℓ, log_λ) の 2 次元空間を Differential Evolution で探索。
 -- ω は ℓ ごとに新規サンプリング (RFF の特性上避けられない) のでコストは

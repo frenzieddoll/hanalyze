@@ -34,15 +34,21 @@ import qualified Numeric.LinearAlgebra as LA
 -- ---------------------------------------------------------------------------
 
 -- | Fit result for a random-intercept mixed model.
--- LME  (Gaussian): y = Xβ + Zu + ε,  u_j ~ N(0,σ²_u),  ε_i ~ N(0,σ²)
--- GLMM (non-Gaussian): g(E[y|u]) = Xβ + Zu,  u_j ~ N(0,σ²_u)
+--
+--   * LME (Gaussian):     @y = Xβ + Zu + ε@, @u_j ~ N(0, σ²_u)@,
+--     @ε_i ~ N(0, σ²)@.
+--   * GLMM (non-Gaussian): @g(E[y|u]) = Xβ + Zu@, @u_j ~ N(0, σ²_u)@.
 data GLMMResult = GLMMResult
-  { glmmFixed    :: FitResult        -- fixed effects (β, conditional fitted, residuals, R²)
-  , glmmRandVar  :: Double           -- random intercept variance σ²_u
-  , glmmResidVar :: Double           -- residual variance σ² (1.0 for non-Gaussian)
-  , glmmBLUPs    :: V.Vector Double  -- BLUP û_j, indexed parallel to glmmGroups
-  , glmmGroups   :: V.Vector Text    -- sorted unique group labels
-  , glmmICC      :: Double           -- ICC (exact for Gaussian; link-scale approx otherwise)
+  { glmmFixed    :: FitResult        -- ^ Fixed-effect fit (β, conditional
+                                     --   fitted values, residuals, R²).
+  , glmmRandVar  :: Double           -- ^ Random-intercept variance @σ²_u@.
+  , glmmResidVar :: Double           -- ^ Residual variance @σ²@ (1.0 for non-Gaussian families).
+  , glmmBLUPs    :: V.Vector Double  -- ^ Best linear unbiased predictions
+                                     --   @û_j@, aligned with 'glmmGroups'.
+  , glmmGroups   :: V.Vector Text    -- ^ Sorted unique group labels.
+  , glmmICC      :: Double           -- ^ Intraclass correlation (exact
+                                     --   for Gaussian; link-scale
+                                     --   approximation otherwise).
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
@@ -393,15 +399,17 @@ fitGLMMDataFrame family link colDegs groupCol yCol df = do
   return (fitGLMM family link dm y idx labels sizes)
 
 -- ---------------------------------------------------------------------------
--- 多出力 GLMM (列ごとに EM/Laplace、グループ化情報は共有)
+-- Multi-output GLMM (per-column EM/Laplace; grouping shared across columns)
 -- ---------------------------------------------------------------------------
 
+-- | Multi-output GLMM/LME fit result.
 data GLMMResultMulti = GLMMResultMulti
-  { glmmFits   :: [GLMMResult]   -- ^ 列ごと結果
-  , glmmGrpsM  :: V.Vector Text  -- ^ ソート済グループラベル (全列共通)
+  { glmmFits  :: [GLMMResult]    -- ^ Per-column fit results.
+  , glmmGrpsM :: V.Vector Text   -- ^ Sorted group labels (shared across columns).
   } deriving (Show)
 
--- | 多出力 LME (Gaussian)。Y は n × q、列ごとに独立に fitLME。
+-- | Multi-output Gaussian LME. @Y@ has shape @n × q@; 'fitLME' is run
+-- independently on each column.
 fitLMEMulti :: LA.Matrix Double -> LA.Matrix Double
             -> V.Vector Int -> V.Vector Text -> V.Vector Int
             -> GLMMResultMulti
@@ -411,7 +419,8 @@ fitLMEMulti x y idx labels sizes =
       fits  = [fitLME x (yCol j) idx labels sizes | j <- [0 .. q - 1]]
   in GLMMResultMulti fits labels
 
--- | 多出力 GLMM (non-Gaussian)。Y は n × q、列ごとに独立に fitGLMM。
+-- | Multi-output non-Gaussian GLMM. @Y@ has shape @n × q@; 'fitGLMM' is
+-- run independently on each column.
 fitGLMMMulti :: Family -> LinkFn
              -> LA.Matrix Double -> LA.Matrix Double
              -> V.Vector Int -> V.Vector Text -> V.Vector Int
