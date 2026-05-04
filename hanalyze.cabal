@@ -103,6 +103,7 @@ library
     Stat.Interpolate
     Stat.AdaptiveGrid
     Stat.KernelDist
+    Stat.Cholesky
     Optim.Adam
     Optim.GradAscent
     Optim.Numeric
