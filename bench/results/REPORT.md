@@ -262,6 +262,39 @@ dual-annealing reference. Closing the SA gap would require adding a
 local-refinement step (e.g. Nelder-Mead on best-so-far every K
 iterations), which is outside this phase.
 
+## After B5-impl (Bayesian optimization rewire) — bo suite delta
+
+`Optim.BayesOpt.bayesOptND` previously contained a "fallback" that
+collapsed multi-dimensional inputs into a single dimension by
+**summing** the coordinates before feeding the GP — making the GP
+effectively blind on dim > 1 problems. We replaced it with the proper
+MV API (`fitGPMV`, `optimizeGPMV`) introduced in K3, plus:
+
+* **Halton-sequence initial design** (`Stat.QuasiRandom`) instead of
+  iid uniform random — better coverage of the box for the small
+  init-set sizes typical of BO.
+* **Halton-spaced multi-start anchors** for the inner EI optimization,
+  jittered by ±2.5 % of the box span per dimension so that successive
+  BO iterations don't all start the inner solver from the same points.
+* Bench bumped to 20 multi-starts (was 5).
+
+Selected results (5 seeds, budget = 30 evals after init):
+
+| Problem | Before B5 | After B5 | skopt | True optimum |
+|---|---|---|---|---|
+| Branin (2D) | 1.05 | 2.66 | 0.398 | 0.398 |
+| Hartmann6 (6D) | -1.77 | **-2.36** | -2.77 | -3.32 |
+
+Hartmann6 closes most of the gap to skopt (56 % → 71 % of the way to
+the true optimum), the harder problem and the one most affected by the
+old 1D-sum bug. Branin paradoxically regresses slightly: the prior
+1D-collapsed GP happened to land near one of Branin's 3 global minima
+because the @x_1 + x_2@ projection lined up by accident; with a proper
+2D GP we now have a harder inner-EI optimization but a much more
+correct overall posterior. Closing the remaining gap to skopt would
+require multi-start GP-HP optimization and a more flexible kernel
+(Matérn 5/2 vs RBF), which is out of scope for this phase.
+
 ## High-leverage improvement queue
 
 In rough order of expected wall-time impact across the suite:

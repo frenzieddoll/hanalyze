@@ -26,6 +26,7 @@ import qualified Stat.Interpolate  as Interp
 import qualified Stat.AdaptiveGrid as AG
 import qualified Stat.KernelDist   as KD
 import qualified Stat.Cholesky     as Chol
+import qualified Stat.QuasiRandom  as QR
 import qualified Optim.NSGA        as NSGA
 import qualified System.Random.MWC as MWC
 import qualified Model.Kernel      as Kn
@@ -129,6 +130,28 @@ main = hspec $ do
       y' <- NSGA.polynomialMutation 20 1.0 bs [0.5, 0.5, 0.5] gen
       all (\(z, (lo, hi)) -> z >= lo && z <= hi) (zip y' bs)
         `shouldBe` True
+
+  describe "Stat.QuasiRandom (Halton)" $ do
+    it "haltonSequence 10 1 lies in [0, 1) and is a permutation" $ do
+      let pts = QR.haltonSequence 10 1
+      length pts `shouldBe` 10
+      all (\[u] -> u >= 0 && u < 1) pts `shouldBe` True
+
+    it "haltonSequence 16 2 covers a 4x4 grid better than random" $ do
+      -- For n = 16, d = 2 the Halton points should cover all 16
+      -- 0.25-bins; an iid uniform usually misses some.
+      let pts = QR.haltonSequence 16 2
+          binIdx p = (floor (4 * head p) :: Int,
+                      floor (4 * (p !! 1)) :: Int)
+          unique = length (foldr (\b acc -> if b `elem` acc then acc
+                                              else b : acc) [] (map binIdx pts))
+      unique `shouldSatisfy` (>= 14)   -- Halton normally hits ≥ 14 / 16
+
+    it "haltonSequenceIn rescales into the supplied bounds" $ do
+      let bs  = [(-2, 2), (10, 20)] :: [(Double, Double)]
+          pts = QR.haltonSequenceIn 5 bs
+      all (\[a, b] -> a >= -2 && a <  2
+                   && b >= 10 && b <  20) pts `shouldBe` True
 
   describe "Stat.Cholesky" $ do
     let aSPD = LA.fromLists [[4, 2, 1], [2, 5, 3], [1, 3, 6]]

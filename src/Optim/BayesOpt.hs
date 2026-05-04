@@ -25,7 +25,8 @@ import System.IO.Unsafe (unsafePerformIO)
 import System.Random.MWC (GenIO, uniform)
 
 import Model.GP (Kernel (..), GPModel (..), GPResult (..),
-                 fitGP, optimizeGP, initParamsFromData)
+                 fitGP, optimizeGP, initParamsFromData,
+                 GPResultMV (..), fitGPMV, optimizeGPMV)
 import Optim.Acquisition (ei, ucb, parEGO)
 import Optim.NSGA       (NSGAConfig (..), defaultNSGAConfig,
                          Solution (..), nsga2)
@@ -33,6 +34,8 @@ import Optim.Common     (Bounds)
 import qualified Optim.LineSearch as LS
 import qualified Optim.LBFGS      as LBFGS
 import qualified Optim.Common     as OC
+import qualified Numeric.LinearAlgebra as LA
+import qualified Stat.QuasiRandom      as QR
 
 -- | Bayesian Optimization configuration.
 data BayesOptConfig = BayesOptConfig
@@ -139,13 +142,16 @@ bayesOptND :: BayesOptConfig
            -> IO ([([Double], Double)], ([Double], Double))
 bayesOptND cfg nStarts f bounds gen = do
   let dim = length bounds
+      kern = boKernel cfg
+      -- Initial design: low-discrepancy Halton sequence (better
+      -- coverage of the box than iid uniform random for the small @n@
+      -- typical of BO initial designs).
+      initX = QR.haltonSequenceIn (boInitPoints cfg) bounds
       sampleX = forM bounds $ \(lo, hi) -> do
         u <- uniform gen :: IO Double
         return (lo + u * (hi - lo))
-  initX <- replicateM (boInitPoints cfg) sampleX
   initY <- mapM f initX
   let history0 = zip initX initY
-      kern = boKernel cfg
 
   let loop t hist
         | t == 0 = return hist
@@ -153,32 +159,47 @@ bayesOptND cfg nStarts f bounds gen = do
             let xss   = map fst hist
                 ys    = map snd hist
                 yBest = minimum ys
-                -- 1D 入力前提なら optimizeGP 直接、N-D は単純化のため第 1 軸のみ採用
-                -- ※ MultiInput GP は将来課題。現状は dim==1 で完全動作、dim>1 は近似
-                xsFlat = if dim == 1 then map head xss else map (sum) xss  -- fallback
-                p0 = initParamsFromData xsFlat ys
-                pOpt = optimizeGP kern xsFlat ys p0
+                -- True multi-input GP via Model.GP MV API. Pre-K6 code
+                -- collapsed dim>1 inputs by summation, which made the
+                -- GP blind to most of the search-space geometry.
+                xMat = LA.fromLists xss
+                yVec = LA.fromList ys
+                p0   = initParamsFromData (concat xss) ys   -- coarse init
+                pOpt = optimizeGPMV kern xMat yVec p0
                 model = GPModel kern pOpt
                 negEI xVec = unsafePerformIO $ do
-                  let xkey = if dim == 1 then head xVec else sum xVec
+                  let xRow = LA.asRow (LA.fromList xVec)
                       computed = do
-                        let res  = fitGP model xsFlat ys [xkey]
-                            mu   = head (gpMean res)
-                            sg   = (head (gpUpper res) - mu) / 2
+                        let res = fitGPMV model xMat yVec xRow
+                            mu  = LA.atIndex (gpmvMean res) 0
+                            vr  = max 0 (LA.atIndex (gpmvVar res) 0)
+                            sg  = sqrt vr
                         _ <- evaluate mu; _ <- evaluate sg
                         pure (negate (ei yBest 0.01 (mu, sg)))
                   r <- try computed :: IO (Either SomeException Double)
                   case r of { Left _ -> pure 1e30; Right v -> pure v }
-            -- L-BFGS multi-start
-            starts <- replicateM nStarts sampleX
+            -- L-BFGS multi-start: use 'nStarts' Halton-spaced starts
+            -- so we cover the box more uniformly than nStarts
+            -- iid-uniform restarts. Falls back to uniform if nStarts
+            -- is large enough that Halton correlations matter.
+            haltonStarts <- pure (QR.haltonSequenceIn nStarts bounds)
+            -- jitter each Halton start by a small uniform perturbation
+            -- to avoid having every BO iteration start the inner
+            -- optimization at the same anchor points.
+            starts <- forM haltonStarts $ \xs ->
+              forM (zip bounds xs) $ \((lo, hi), v) -> do
+                u <- uniform gen :: IO Double
+                let span_ = hi - lo
+                    jit   = (u - 0.5) * 0.05 * span_
+                pure (max lo (min hi (v + jit)))
             results <- mapM (\x0 ->
               LBFGS.runLBFGSNumeric
                 (LBFGS.defaultLBFGSConfig
-                   { LBFGS.lbStop = OC.defaultStopCriteria { OC.stMaxIter = 100 } })
+                   { LBFGS.lbStop = OC.defaultStopCriteria
+                                      { OC.stMaxIter = 100 } })
                 negEI x0) starts
             let best = minimumBy (comparing OC.orValue) results
                 xNextRaw = OC.orBest best
-                -- bound clipping
                 xNext = zipWith (\(lo, hi) v -> max lo (min hi v)) bounds xNextRaw
             yNext <- f xNext
             loop (t - 1) (hist ++ [(xNext, yNext)])

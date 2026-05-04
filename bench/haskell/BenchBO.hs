@@ -99,7 +99,7 @@ runND :: BO.BayesOptConfig -> ([Double] -> IO Double) -> [(Double, Double)]
 runND cfg f bs = do
   gen <- MWC.createSystemRandom
   (ms, (_hist, (_xstar, ystar))) <- timeitIO 1 (\(_,(_,y)) -> y)
-                                      (\_ -> BO.bayesOptND cfg 5 f bs gen)
+                                      (\_ -> BO.bayesOptND cfg 20 f bs gen)
   return (ms, ystar)
 
 main :: IO ()

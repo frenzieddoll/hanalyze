@@ -104,6 +104,7 @@ library
     Stat.AdaptiveGrid
     Stat.KernelDist
     Stat.Cholesky
+    Stat.QuasiRandom
     Optim.Adam
     Optim.GradAscent
     Optim.Numeric
