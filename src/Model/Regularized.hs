@@ -29,9 +29,13 @@ module Model.Regularized
   , regularizationPath
   ) where
 
-import qualified Data.Vector as V
-import qualified Numeric.LinearAlgebra as LA
-import Data.List (foldl')
+import qualified Data.Vector                  as V
+import qualified Data.Vector.Storable         as VS
+import qualified Data.Vector.Storable.Mutable as VSM
+import qualified Numeric.LinearAlgebra        as LA
+import           Control.Monad                (forM_, when)
+import           Data.List                    (foldl')
+import           System.IO.Unsafe             (unsafePerformIO)
 
 -- ---------------------------------------------------------------------------
 -- ペナルティ型
@@ -162,11 +166,14 @@ fitElasticNet lambda1 lambda2 x y maxIter tol =
 -- that returns @β_j_new@ given the partial-residual correlation @ρ_j@
 -- and the column-norm @cSq_j = ‖X_j‖²/n@.
 --
--- Algorithm — keeps the residual @r = y − X β@ live and updates it
--- after every coordinate change so that @y − Xβ@ is never recomputed
--- from scratch (as the naïve loop did): sweep cost goes from O(np²) to
--- O(np). The β vector is rebuilt once per sweep from cumulative
--- per-coordinate changes, which avoids p length-p reallocations.
+-- Implementation (R2): the inner sweep runs in 'IO' on
+-- 'Data.Vector.Storable.Mutable' buffers. Both @β@ and the residual
+-- @r = y − Xβ@ are updated in place, and the columns of @X@ are looked
+-- up through a boxed 'Data.Vector.Vector' for @O(1)@ indexing (the
+-- previous list-based @cols !! j@ paid @O(p)@ per coordinate). This is
+-- the moral equivalent of sklearn's Cython coordinate-descent inner
+-- loop; the user-visible behaviour is identical to the prior Vector
+-- implementation up to floating-point rounding.
 cdLoop
   :: LA.Matrix Double                  -- X (n × p)
   -> LA.Vector Double                  -- y
@@ -174,45 +181,57 @@ cdLoop
   -> Double                            -- tolerance on |Δβ|₂
   -> (Double -> Double -> Double)      -- (ρ, cSq) → β_j_new
   -> (LA.Vector Double, Int)
-cdLoop x y maxIter tol upd =
+cdLoop x y maxIter tol upd = unsafePerformIO $ do
   let n      = fromIntegral (LA.rows x) :: Double
       p      = LA.cols x
-      cols   = LA.toColumns x                    -- p Vectors of length n
-      colSqN = LA.fromList [ LA.sumElements (c * c) / n | c <- cols ]
-      beta0  = LA.konst 0 p :: LA.Vector Double
-      r0     = y                                  -- since β = 0
+      colsB  = V.fromList (LA.toColumns x)        -- O(1) indexing
+      colSqN = LA.fromList
+                 [ LA.sumElements (c * c) / n | c <- LA.toColumns x ]
 
-      -- One full sweep over j = 0..p-1.
-      -- Threads (β, r) through the per-coordinate update.
-      sweep (beta, r) =
-        foldl' step1 (beta, r) [0 .. p - 1]
-        where
-          step1 (b, rr) j =
-            let xj    = cols !! j
-                cSq   = colSqN `LA.atIndex` j
-                bjOld = b      `LA.atIndex` j
-                rho   = (xj LA.<.> rr) / n + bjOld * cSq
-                bjNew = upd rho cSq
-                d     = bjNew - bjOld
-                bNew  = updateAt b j bjNew
-                rNew  = if d == 0 then rr
-                                  else rr - LA.scale d xj
-            in (bNew, rNew)
+  -- Mutable buffer for β (single-index updates each coordinate step).
+  bMut <- VS.thaw (LA.konst 0 p :: LA.Vector Double)
 
-      go k st@(beta, _)
-        | k >= maxIter = (beta, k)
-        | otherwise =
-            let st'@(beta', _) = sweep st
-                diff           = LA.norm_2 (beta' - beta)
-            in if diff < tol then (beta', k + 1) else go (k + 1) st'
+  -- The residual r is kept as an /immutable/ 'LA.Vector Double' between
+  -- coordinate updates so that @r ← r − d · x_j@ can use BLAS axpy
+  -- (a single optimized call) rather than a per-element Haskell loop.
+  let sweep r = do
+        beforeSnap <- VS.freeze bMut
+        let stepCoord rCur j = do
+              let xj  = colsB V.! j
+                  cSq = colSqN `LA.atIndex` j
+              bjOld <- VSM.unsafeRead bMut j
+              let rho   = (xj LA.<.> rCur) / n + bjOld * cSq
+                  bjNew = upd rho cSq
+                  d     = bjNew - bjOld
+              if d == 0
+                then return rCur
+                else do
+                  VSM.unsafeWrite bMut j bjNew
+                  -- BLAS axpy: r' = r - d * x_j
+                  return (rCur - LA.scale d xj)
+        rEnd <- foldM' stepCoord r [0 .. p - 1]
+        afterSnap <- VS.freeze bMut
+        return (beforeSnap, afterSnap, rEnd)
 
-      (betaFinal, iters) = go 0 (beta0, r0)
-  in (betaFinal, iters)
+  let go k r = do
+        if k >= maxIter
+          then return k
+          else do
+            (before, after, r') <- sweep r
+            let diff = LA.norm_2 (after - before)
+            if diff < tol then return (k + 1) else go (k + 1) r'
 
--- | Single-coordinate update of a 'LA.Vector'. Avoids 'LA.fromList'
--- traversal of the entire vector by using hmatrix's 'LA.accum'.
-updateAt :: LA.Vector Double -> Int -> Double -> LA.Vector Double
-updateAt v i x = LA.accum v (\new _ -> new) [(i, x)]
+  iters     <- go 0 y     -- initial residual = y (since β₀ = 0)
+  betaFinal <- VS.freeze bMut
+  return (betaFinal, iters)
+  where
+    -- Strict foldM that discards no intermediate results (folds an
+    -- accumulator @r@ through @f@).
+    foldM' :: Monad m => (b -> a -> m b) -> b -> [a] -> m b
+    foldM' _ acc []     = return acc
+    foldM' f acc (z:zs) = do
+      acc' <- f acc z
+      acc' `seq` foldM' f acc' zs
 
 -- ---------------------------------------------------------------------------
 -- 共通ヘルパ
