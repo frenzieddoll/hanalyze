@@ -173,6 +173,24 @@ quasi-Newton path; closing it further would require a custom
 Newton-CG / L-BFGS implementation, which is out of scope for the
 accuracy phases that follow.
 
+## After R1 (Lasso / ElasticNet CD overhaul) — regression suite delta
+
+`Model.Regularized` factors the per-iteration coordinate descent into a
+shared 'cdLoop' that **maintains the residual incrementally**
+(@r ← r − Δβ_j · X_j@) instead of recomputing @X β@ at every coordinate
+step, and updates a single coefficient via 'LA.accum' to avoid the
+@O(p)@ vector reallocation that the old @LA.fromList [if k == j ...]@
+incurred.
+
+| Item | Before (B1) | After (R1) | Speedup | vs sklearn |
+|---|---|---|---|---|
+| Lasso_n1000_p5    |  0.26 ms |  0.10 ms | 2.7× | **4× faster** (sklearn 0.38 ms) |
+| Lasso_n10000_p50  | 61.4 ms  |  8.6 ms  | **7.1×** | 3.6× slower (was 26×) |
+| EN_n1000_p5       |  0.21 ms |  0.11 ms | 2.0× | **4× faster** (sklearn 0.45 ms) |
+| EN_n10000_p50     | 56.2 ms  |  8.5 ms  | **6.6×** | 4.3× slower (was 28×) |
+
+R² values stay unchanged to 4 digits (0.7644 / 0.7568 etc.).
+
 ## High-leverage improvement queue
 
 In rough order of expected wall-time impact across the suite:

@@ -127,33 +127,8 @@ fitLasso :: Double                -- ^ Penalty @λ@.
          -> Double                -- ^ Convergence tolerance.
          -> RegFit
 fitLasso lambda x y maxIter tol =
-  let n       = fromIntegral (LA.rows x) :: Double
-      p       = LA.cols x
-      cols    = [LA.flatten (x LA.¿ [j]) | j <- [0 .. p - 1]]
-      colSqN  = [LA.sumElements (c * c) / n | c <- cols]
-      beta0   = LA.fromList (replicate p 0)
-      -- coordinate descent 1 反復: 全 j 更新
-      sweep beta =
-        foldl' updateJ beta [0 .. p - 1]
-        where
-          updateJ b j =
-            let xj      = cols !! j
-                yPred   = x LA.#> b
-                resid   = y - yPred
-                bj      = b `LA.atIndex` j
-                rho     = (LA.sumElements (xj * resid)) / n + bj * (colSqN !! j)
-                bjNew   = softThreshold rho lambda / (colSqN !! j)
-            in LA.fromList
-                 [ if k == j then bjNew else b `LA.atIndex` k
-                 | k <- [0 .. p - 1] ]
-      iterate' k beta
-        | k >= maxIter = (beta, k)
-        | otherwise =
-            let beta' = sweep beta
-                diff  = LA.norm_2 (beta' - beta)
-            in if diff < tol then (beta', k)
-                 else iterate' (k + 1) beta'
-      (betaFinal, iters) = iterate' 0 beta0
+  let (betaFinal, iters) = cdLoop x y maxIter tol
+                             (\rho cSq -> softThreshold rho lambda / cSq)
       yHat = x LA.#> betaFinal
       r    = y - yHat
   in mkRegFit betaFinal yHat r y (L1 lambda) iters
@@ -170,36 +145,74 @@ fitLasso lambda x y maxIter tol =
 fitElasticNet :: Double -> Double -> LA.Matrix Double -> LA.Vector Double
               -> Int -> Double -> RegFit
 fitElasticNet lambda1 lambda2 x y maxIter tol =
-  let n       = fromIntegral (LA.rows x) :: Double
-      p       = LA.cols x
-      cols    = [LA.flatten (x LA.¿ [j]) | j <- [0 .. p - 1]]
-      colSqN  = [LA.sumElements (c * c) / n | c <- cols]
-      beta0   = LA.fromList (replicate p 0)
-      sweep beta =
-        foldl' updateJ beta [0 .. p - 1]
-        where
-          updateJ b j =
-            let xj      = cols !! j
-                yPred   = x LA.#> b
-                resid   = y - yPred
-                bj      = b `LA.atIndex` j
-                rho     = (LA.sumElements (xj * resid)) / n + bj * (colSqN !! j)
-                bjNew   = softThreshold rho lambda1
-                          / ((colSqN !! j) + lambda2)
-            in LA.fromList
-                 [ if k == j then bjNew else b `LA.atIndex` k
-                 | k <- [0 .. p - 1] ]
-      iterate' k beta
-        | k >= maxIter = (beta, k)
-        | otherwise =
-            let beta' = sweep beta
-                diff  = LA.norm_2 (beta' - beta)
-            in if diff < tol then (beta', k)
-                 else iterate' (k + 1) beta'
-      (betaFinal, iters) = iterate' 0 beta0
+  let (betaFinal, iters) = cdLoop x y maxIter tol
+                             (\rho cSq -> softThreshold rho lambda1
+                                          / (cSq + lambda2))
       yHat = x LA.#> betaFinal
       r    = y - yHat
   in mkRegFit betaFinal yHat r y (ElasticNet lambda1 lambda2) iters
+
+-- ---------------------------------------------------------------------------
+-- Shared CD loop with incremental residual maintenance
+-- ---------------------------------------------------------------------------
+
+-- | Coordinate descent loop shared by 'fitLasso' and 'fitElasticNet'.
+--
+-- The caller supplies a /closed-form coordinate update/ @upd ρ_j cSq_j@
+-- that returns @β_j_new@ given the partial-residual correlation @ρ_j@
+-- and the column-norm @cSq_j = ‖X_j‖²/n@.
+--
+-- Algorithm — keeps the residual @r = y − X β@ live and updates it
+-- after every coordinate change so that @y − Xβ@ is never recomputed
+-- from scratch (as the naïve loop did): sweep cost goes from O(np²) to
+-- O(np). The β vector is rebuilt once per sweep from cumulative
+-- per-coordinate changes, which avoids p length-p reallocations.
+cdLoop
+  :: LA.Matrix Double                  -- X (n × p)
+  -> LA.Vector Double                  -- y
+  -> Int                               -- max iterations
+  -> Double                            -- tolerance on |Δβ|₂
+  -> (Double -> Double -> Double)      -- (ρ, cSq) → β_j_new
+  -> (LA.Vector Double, Int)
+cdLoop x y maxIter tol upd =
+  let n      = fromIntegral (LA.rows x) :: Double
+      p      = LA.cols x
+      cols   = LA.toColumns x                    -- p Vectors of length n
+      colSqN = LA.fromList [ LA.sumElements (c * c) / n | c <- cols ]
+      beta0  = LA.konst 0 p :: LA.Vector Double
+      r0     = y                                  -- since β = 0
+
+      -- One full sweep over j = 0..p-1.
+      -- Threads (β, r) through the per-coordinate update.
+      sweep (beta, r) =
+        foldl' step1 (beta, r) [0 .. p - 1]
+        where
+          step1 (b, rr) j =
+            let xj    = cols !! j
+                cSq   = colSqN `LA.atIndex` j
+                bjOld = b      `LA.atIndex` j
+                rho   = (xj LA.<.> rr) / n + bjOld * cSq
+                bjNew = upd rho cSq
+                d     = bjNew - bjOld
+                bNew  = updateAt b j bjNew
+                rNew  = if d == 0 then rr
+                                  else rr - LA.scale d xj
+            in (bNew, rNew)
+
+      go k st@(beta, _)
+        | k >= maxIter = (beta, k)
+        | otherwise =
+            let st'@(beta', _) = sweep st
+                diff           = LA.norm_2 (beta' - beta)
+            in if diff < tol then (beta', k + 1) else go (k + 1) st'
+
+      (betaFinal, iters) = go 0 (beta0, r0)
+  in (betaFinal, iters)
+
+-- | Single-coordinate update of a 'LA.Vector'. Avoids 'LA.fromList'
+-- traversal of the entire vector by using hmatrix's 'LA.accum'.
+updateAt :: LA.Vector Double -> Int -> Double -> LA.Vector Double
+updateAt v i x = LA.accum v (\new _ -> new) [(i, x)]
 
 -- ---------------------------------------------------------------------------
 -- 共通ヘルパ
