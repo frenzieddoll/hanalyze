@@ -1,4 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
+-- | Probability distributions used throughout the library.
+--
+-- Provides 27 named distributions (Normal, Beta, Gamma, StudentT, LKJ,
+-- Truncated, Censored, ...) with @density@ / @logDensity@ / @supportRange@
+-- and a constraint-transform mechanism ('Transform') for unconstrained
+-- HMC/NUTS sampling. Distributions are tagged via the 'Distribution' sum
+-- type so they can be passed as first-class values (used by the
+-- 'Model.HBM' DSL and the variational layer 'Stat.VI').
 module Stat.Distribution
   ( Distribution (..)
   , density

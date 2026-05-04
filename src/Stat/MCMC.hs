@@ -1,4 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
+-- | Pure post-processing utilities for MCMC chains.
+--
+-- Provides autocorrelation, highest-density intervals (HDI), effective
+-- sample size (Geyer's initial monotone sequence estimator), split-R-hat
+-- (Vehtari et al. 2021), kernel density estimation (Silverman bandwidth)
+-- and BFMI. Operates on raw 'Vector' samples or on the 'MCMC.Core.Chain'
+-- type from the sampler layer.
 module Stat.MCMC
   ( autocorr
   , hdi

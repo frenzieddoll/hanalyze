@@ -1,18 +1,26 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
--- | 変分推論 (ADVI — Automatic Differentiation Variational Inference)
+-- | Variational inference (ADVI — Automatic Differentiation Variational
+-- Inference).
 --
--- Kucukelbir et al. (2017) の平均場正規 VI を実装。
--- HMC/NUTS と同じ unconstrained 変換を使い、Adam で ELBO を最大化する。
+-- Implements the mean-field normal VI of Kucukelbir et al. (2017). Uses
+-- the same unconstrained transform as HMC/NUTS and maximizes the ELBO
+-- with Adam.
 --
--- 近似族: q(u; φ) = Π_i Normal(u_i; μ_i, σ_i)
--- ELBO  = E_q[log p(θ,y) + log|J|] + Σ_i H[Normal(μ_i,σ_i)]
---       = E_q[logJointU(u)] + Σ_i ω_i + N/2 × (1 + log 2π)
+-- Approximating family: @q(u; φ) = Π_i Normal(u_i; μ_i, σ_i)@
 --
--- 勾配 (reparameterization trick):
---   u^s = μ + σ ⊙ ε^s,  ε^s ~ N(0,I)
---   ∂ELBO/∂μ_i ≈ (1/S) Σ_s ∂logJointU/∂u_i |_{u^s}
---   ∂ELBO/∂ω_i ≈ (1/S) Σ_s ε_i^s × σ_i × ∂logJointU/∂u_i |_{u^s} + 1
+-- @
+-- ELBO = E_q[log p(θ,y) + log|J|] + Σ_i H[Normal(μ_i, σ_i)]
+--      = E_q[logJointU(u)] + Σ_i ω_i + N/2 × (1 + log 2π)
+-- @
+--
+-- Gradient (reparameterization trick):
+--
+-- @
+-- u^s = μ + σ ⊙ ε^s,  ε^s ~ N(0, I)
+-- ∂ELBO/∂μ_i ≈ (1/S) Σ_s ∂logJointU/∂u_i |_{u^s}
+-- ∂ELBO/∂ω_i ≈ (1/S) Σ_s ε_i^s × σ_i × ∂logJointU/∂u_i |_{u^s} + 1
+-- @
 --
 -- @
 -- let cfg = defaultVIConfig { viIterations = 1000 }

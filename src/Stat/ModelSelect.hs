@@ -1,14 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
--- | MCMC によるモデル比較指標。
+-- | MCMC-based model comparison criteria.
 --
--- WAIC (Widely Applicable Information Criterion) と
--- PSIS-LOO (Pareto Smoothed Importance Sampling LOO-CV) を提供する。
+-- Provides WAIC (Widely Applicable Information Criterion) and PSIS-LOO
+-- (Pareto-Smoothed Importance Sampling LOO-CV), plus a @pm.compare@-style
+-- weighting facility (pseudo-BMA / stacking).
 --
--- 参考文献:
---   Watanabe (2010) WAIC
---   Vehtari, Gelman, Gabry (2017) PSIS-LOO
---   Hosking-Wallis (1987) Pareto moment estimator
+-- References:
+--
+-- * Watanabe (2010) — WAIC.
+-- * Vehtari, Gelman, Gabry (2017) — PSIS-LOO.
+-- * Hosking & Wallis (1987) — generalized Pareto moment estimator.
 --
 -- @
 -- let logLikMat = chainLogLikMatrix model chain  -- [[Double]]

@@ -1,10 +1,13 @@
--- | 1D 補間 (Linear / Natural cubic spline / PCHIP)。
+-- | One-dimensional interpolation (Linear / natural cubic spline / PCHIP).
 --
--- 観測点 [(x_i, y_i)] (x 昇順、distinct) から連続関数 `Double -> Double` を構築。
--- 範囲外 (x < x_0 or x > x_{n-1}) は両端のセグメントを線形外挿。
+-- Builds a continuous @Double -> Double@ function from observed points
+-- @[(x_i, y_i)]@ (sorted ascending, distinct in x). Out-of-range queries
+-- (@x < x_0@ or @x > x_{n-1}@) are handled by linearly extrapolating the
+-- end segments.
 --
--- 用途: 歯抜け wide CSV を long 化したあと、共通 grid に揃える前段補間。
--- (`DataIO.Preprocess.regridLong` から呼ばれる)
+-- Primary use: as the per-id interpolant inside
+-- 'DataIO.Preprocess.regridLong', which resamples jagged long-form data
+-- onto a common grid.
 module Stat.Interpolate
   ( InterpKind (..)
   , interp1d

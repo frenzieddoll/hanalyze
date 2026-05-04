@@ -1,14 +1,15 @@
 {-# LANGUAGE RankNTypes #-}
--- | 自動微分 (AD) を用いた正確な勾配計算と HMC 統合。
+-- | Exact gradient computation via automatic differentiation (AD), with HMC
+-- integration.
 --
--- Numeric.AD (ekmett/ad) による逆モード AD で勾配を計算する。
--- 数値微分 (中心差分) より正確で、パラメータ数が少ない場合 (< 100) は
--- 同程度の速度で動作する。
+-- Uses reverse-mode AD from @Numeric.AD@ (ekmett/ad) to compute gradients.
+-- More accurate than central-difference numerical differentiation, and runs
+-- at comparable speed when the parameter count is small (< 100).
 --
--- == 使い方
+-- == Usage
 --
--- ユーザーは log p(θ, y) を \"Floating 多相関数\" として記述する。
--- 観測値は固定 Double として @realToFrac@ で型変換する:
+-- The user writes @log p(θ, y)@ as a /Floating-polymorphic/ function. Fixed
+-- observation values are lifted via @realToFrac@:
 --
 -- @
 -- import Stat.AD

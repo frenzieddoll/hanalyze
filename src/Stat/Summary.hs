@@ -1,12 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | 事後分布の要約統計量 (Stat.Summary)。
+-- | Posterior-distribution summary statistics.
 --
--- @az.summary@ 相当の SummaryRow / posteriorSummary を提供する。
--- もともと Viz.MCMC で定義していたものを、可視化レイヤーから分離し、
--- 統計層 (Stat.*) に集約した (Phase H6)。
+-- Provides 'SummaryRow' and 'posteriorSummary', mirroring the columns of
+-- ArviZ's @az.summary@ (mean, sd, HDI, ESS, R-hat). Originally lived in
+-- @Viz.MCMC@; moved to the statistics layer to decouple it from the
+-- visualization stack.
 --
--- HTML 描画やコンソール出力は Viz.MCMC.posteriorSummaryHtml /
--- posteriorSummaryFile / printPosteriorSummary に残してある。
+-- HTML rendering and console pretty-printing remain in
+-- @Viz.MCMC.posteriorSummaryHtml@ / @posteriorSummaryFile@ /
+-- @printPosteriorSummary@.
 module Stat.Summary
   ( SummaryRow (..)
   , posteriorSummary

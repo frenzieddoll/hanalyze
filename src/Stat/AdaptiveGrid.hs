@@ -1,15 +1,21 @@
--- | 適応型 1D grid 生成。
+-- | Adaptive 1D grid generation.
 --
--- 多 id データから「変化が激しい z 領域に grid 点を集中させる」共通 grid を作る。
--- アルゴリズム:
+-- Builds a common grid that concentrates grid points in regions where the
+-- function changes rapidly across multiple ids.
 --
--- 1. 各 id の (z, y) を 'Stat.Interpolate' で補間 → 共通の粗 grid (例: 200 点) で評価
--- 2. 各 z 点で全 id の |dy/dz| を取り、その **最大値** (peak) を density(z) とする
--- 3. ε = 0.05 × max(density) を加算してゼロ除算回避
--- 4. 累積積分 F(z) = ∫ (density(z) + ε) dz を構築
--- 5. F の値域を N-1 等分 → 逆写像で z 座標 N 点
+-- Algorithm:
 --
--- N < 'minAdaptiveN' (= 10) のときは uniform grid に fallback。
+-- 1. Interpolate each id's @(z, y)@ via 'Stat.Interpolate' and evaluate on a
+--    common coarse grid (e.g. 200 points).
+-- 2. For each z, compute @|dy/dz|@ across all ids and take the **maximum**
+--    (peak) as @density(z)@.
+-- 3. Add @ε = 0.05 × max(density)@ to avoid division by zero on flat regions.
+-- 4. Build the cumulative integral @F(z) = ∫ (density(z) + ε) dz@.
+-- 5. Divide the range of @F@ into @N-1@ equal parts and invert to obtain
+--    @N@ z-coordinates.
+--
+-- When @N < 'minAdaptiveN'@ (= 10), the request silently falls back to a
+-- uniform grid.
 module Stat.AdaptiveGrid
   ( GridKind (..)
   , GridSpec (..)

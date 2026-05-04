@@ -1,22 +1,24 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | 入力特徴の標準化 (z-score 化) ユーティリティ。
+-- | Input-feature standardization (z-score) utilities.
 --
--- 用途:
+-- Use cases:
 --
--- * RFF / Kernel 系で複数特徴のスケール差が大きいときに、共通長さスケール
---   ℓ で破綻するのを防ぐ。'fitStandardizer' で μ, σ を学習し、
---   'applyStandardizer' で X を z-score 化、モデルが返した予測点に対しては
---   'unapplyStandardizer' で元単位に戻す。
--- * インタラクティブ予測 (JS) で、ユーザーが元単位 (例: energy=80 keV)
---   を slider で入力したものを、JS 側で μ, σ を使って標準化空間に変換し
---   モデルに渡す。そのために 'stMu' / 'stSd' をそのまま JSON 出力できる。
+-- * In RFF / kernel models, a single shared length scale @ℓ@ breaks down
+--   when features differ in magnitude. Fit @(μ, σ)@ with
+--   'fitStandardizer', apply with 'applyStandardizer', and convert
+--   model-returned predictions back to original units with
+--   'unapplyStandardizer'.
+-- * For interactive (JS) predictors where the user enters values in
+--   original units (e.g. @energy=80 keV@) via a slider, expose 'stMu' /
+--   'stSd' so the browser can apply @(v-μ)/σ@ before sending values into
+--   the model. The fields are JSON-friendly.
 --
--- 約束事:
+-- Conventions:
 --
--- * y は標準化しない (回帰の出力スケールを保つ)。
--- * std=0 の定数列は、std=1.0 として扱い (x - μ)/1 = x - μ を返す。
---   実質的には「中央化のみ」になる。
--- * n=1 の列も std=1.0 扱い。
+-- * @y@ is /not/ standardized (the output scale of regression is preserved).
+-- * Constant columns (std = 0) are treated as if std = 1, returning
+--   @(x - μ)/1 = x - μ@ — effectively centering only.
+-- * Single-row columns (n = 1) are likewise treated as std = 1.
 module Stat.Standardize
   ( Standardizer (..)
   , fitStandardizer

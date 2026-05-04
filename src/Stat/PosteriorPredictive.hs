@@ -1,14 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
--- | 事前予測 / 事後予測サンプリング (PyMC の sample_prior_predictive /
--- sample_posterior_predictive 相当)。
+-- | Prior- and posterior-predictive sampling (analogous to PyMC's
+-- @sample_prior_predictive@ / @sample_posterior_predictive@).
 --
 -- @
 -- import Stat.PosteriorPredictive
 --
 -- chain <- nuts model cfg initP gen
 -- ppc   <- posteriorPredictive model chain gen
--- -- ppc :: [Map Text [Double]]   -- 各サンプルごとの観測予測
+-- -- ppc :: [Map Text [Double]]   -- predicted observations per sample
 -- @
 module Stat.PosteriorPredictive
   ( -- * 事後予測サンプリング (chain ベース)

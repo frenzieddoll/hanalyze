@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | レポート / CLI 用の数値表記ヘルパ。
+-- | Number-formatting helpers for reports and CLI output.
 --
--- 「桁が大きい / 極小なら指数表記、それ以外は固定小数点」を 1 関数で扱う:
+-- A single function chooses fixed-point or exponential notation based on
+-- magnitude:
 --
 -- >>> fmtNum 0
 -- "0.00"
@@ -16,8 +17,9 @@
 -- >>> fmtNum 1234.5
 -- "1.23E+03"
 --
--- しきい値: |x| が [0.01, 999] の範囲外なら指数表記、内側なら 2 桁小数。
--- 0 と非有限値 (NaN/Infinity) は専用フォールバック。
+-- Threshold: values with @|x|@ outside @[0.01, 999]@ use exponential
+-- notation; inside the range, two decimal digits. Zero and non-finite
+-- values (@NaN@ / @Infinity@) get dedicated fallbacks.
 module Stat.NumberFormat
   ( fmtNum
   , fmtNumT
