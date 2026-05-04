@@ -15,6 +15,7 @@ module Stat.Cholesky
   , cholSolveJitter
   , cholSolveJitterWith
   , cholFactor
+  , cholSolveWithFactor
   ) where
 
 import qualified Numeric.LinearAlgebra as LA
@@ -74,6 +75,15 @@ cholSolveJitterWith jitters a b
 -- (raised as a Haskell exception) when the matrix is not SPD.
 cholFactor :: LA.Matrix Double -> Maybe (LA.Matrix Double)
 cholFactor = tryChol
+
+-- | Solve @A X = B@ given an /already-computed/ Cholesky factor @R@
+-- (from 'cholFactor', upper-triangular with @A = Rᵀ R@). Cheaper when
+-- the same factor is used for multiple right-hand sides or when the
+-- factor was needed elsewhere (e.g. for the log-determinant during
+-- marginal-likelihood evaluation).
+cholSolveWithFactor :: LA.Matrix Double -> LA.Matrix Double -> LA.Matrix Double
+cholSolveWithFactor r b =
+  LA.triSolve LA.Upper r (LA.triSolve LA.Lower (LA.tr r) b)
 
 tryChol :: LA.Matrix Double -> Maybe (LA.Matrix Double)
 tryChol a =

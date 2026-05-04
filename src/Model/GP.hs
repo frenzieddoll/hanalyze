@@ -195,10 +195,12 @@ logMarginalLikelihood trainX trainY ker params =
                     Nothing -> Nothing
   in case mR of
        Nothing -> -1e30
-       Just (r, kyUsed)  ->
+       Just (r, _kyUsed)  ->
          let logDet  = 2 * sum (map log (LA.toList (LA.takeDiag r)))
+             -- Reuse the already-computed Cholesky factor (avoids a
+             -- second factorization in the inner GP HP loop).
              alpha   = LA.flatten
-                       (Chol.cholSolveJitter kyUsed (LA.asColumn y))
+                       (Chol.cholSolveWithFactor r (LA.asColumn y))
              dataFit = LA.dot y alpha
          in -0.5 * dataFit - 0.5 * logDet - fromIntegral n / 2 * log (2 * pi)
 
@@ -385,10 +387,10 @@ logMarginalLikelihoodMV trainX y ker params =
                     Nothing -> Nothing
   in case mR of
        Nothing -> -1e30
-       Just (r, kyUsed) ->
+       Just (r, _kyUsed) ->
          let logDet  = 2 * sum (map log (LA.toList (LA.takeDiag r)))
              alpha   = LA.flatten
-                       (Chol.cholSolveJitter kyUsed (LA.asColumn y))
+                       (Chol.cholSolveWithFactor r (LA.asColumn y))
              dataFit = LA.dot y alpha
          in -0.5 * dataFit - 0.5 * logDet
             - fromIntegral n / 2 * log (2 * pi)

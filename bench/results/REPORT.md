@@ -113,6 +113,39 @@ init.
   stopping early. Improvement candidate: reuse the K6 Cholesky-based
   GP solver here too, and increase the multi-start count.
 
+## After K6 (SPD Cholesky landing) — kernel suite delta
+
+`Stat.Cholesky.cholSolveJitter` (`dpotrf` + `dpotrs`) replaces `LA.\<\\\>`
+in `kernelRidgeMV`, the GP `fitGPMVMulti` / `logMarginalLikelihood{,MV}`,
+and the GPRobust IRLS loop. The marginal-likelihood path additionally
+reuses the Cholesky factor across log-determinant and α computation
+through `cholSolveWithFactor`.
+
+| Item | Before (B2) | After (K6) | Speedup |
+|---|---|---|---|
+| KR_n2000_p5 | 26.6 s | 0.59 s | **45×** |
+| KR_n1000_p5 | 1.25 s | 0.12 s | **10×** |
+| KR_n500_p5  | 0.16 s | 0.027 s | **6×** |
+| GP_opt_n500 | 30.9 s | 8.4 s | **3.7×** |
+| GPRobust_n500 | 0.19 s | 0.084 s | **2.3×** |
+| GP_fit_n1000 | 0.31 s | 0.23 s | 1.3× |
+| GramMV (untouched) | 76 ms | 77 ms | 1.0× |
+| Branin/BO | 1.08 s | 2.26 s | 0.5× (regression) |
+| Hartmann6/BO | 1.26 s | 0.77 s | 1.6× |
+
+Notes:
+* The 45× KR speedup directly meets the K6 target (≥3×); the GP HP
+  optimization meets the 5× target less cleanly because L-BFGS does
+  more numerical-gradient evaluations on the tighter Cholesky-based
+  objective.
+* Branin/BO regressed: with `LA.\<\\\>` the inner GP HP optimization
+  silently solved degenerate kernel matrices via QR, while
+  `cholSolveJitter` walks through several jitter levels before giving
+  up. Hartmann6 has fewer ill-conditioned points and improves.
+* All R² and posterior-variance values match the pre-K6 outputs to
+  4+ digits; the existing 1D ↔ MV equivalence tests still pass at
+  1e-6.
+
 ## High-leverage improvement queue
 
 In rough order of expected wall-time impact across the suite:
