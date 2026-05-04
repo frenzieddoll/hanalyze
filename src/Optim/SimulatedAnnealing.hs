@@ -61,6 +61,18 @@ data SAConfig = SAConfig
     --   hybrid (analogous to scipy's @dual_annealing@), which is the
     --   only way to reach machine-precision-level minima on
     --   multi-modal problems with the modest 5000-iteration budget.
+  , saPolish     :: !Bool
+    -- ^ When 'True', run a high-precision Nelder-Mead refinement on
+    --   @x_best@ once at SA termination (separate from
+    --   'saLocalEvery'). Uses a small-simplex starting step
+    --   (@0.001 × bound width@) to polish the result to near-machine
+    --   precision on smooth landscapes.
+  , saRestartIfStuck :: !(Maybe Int)
+    -- ^ When @Just k@, perturb @x@ to a fresh random point in
+    --   'saBounds' if @x_best@ has not improved in @k@ iterations.
+    --   Helps SA escape pathological multi-modal landscapes
+    --   (Rastrigin etc.) where vanilla SA — even with periodic NM
+    --   refinement — gets trapped in a single basin.
   } deriving (Show, Eq)
 
 -- | Default configuration: 5000 iterations, @T₀ = 1.0@, geometric
@@ -72,14 +84,22 @@ data SAConfig = SAConfig
 -- short-budget runs (rapid cool-down).
 defaultSAConfig :: [(Double, Double)] -> SAConfig
 defaultSAConfig bs = SAConfig
-  { saStop       = defaultStopCriteria { stMaxIter = 5000 }
-  , saInitTemp   = 1.0
-  , saSchedule   = Geometric 0.995
-  , saStepSigma  = 0.5
-  , saStepDecay  = 0.999
-  , saBounds     = bs
-  , saDir        = Minimize
-  , saLocalEvery = Just 200            -- 5000 / 200 = 25 NM refines
+  { saStop           = defaultStopCriteria { stMaxIter = 5000 }
+  , saInitTemp       = 1.0
+  , saSchedule       = Geometric 0.995
+  , saStepSigma      = 0.5
+  , saStepDecay      = 0.999
+  , saBounds         = bs
+  , saDir            = Minimize
+  , saLocalEvery     = Just 200            -- 5000 / 200 = 25 NM refines
+  , saPolish         = True                -- final high-precision NM
+  , saRestartIfStuck = Nothing             -- off by default; useful for
+                                           -- pathological multi-modal
+                                           -- (Rastrigin etc.) but hurts
+                                           -- problems whose basin needs
+                                           -- continuous refinement
+                                           -- (Levy regressed by 12 orders
+                                           --  of magnitude with restart on)
   }
 
 -- | Apply the cooling schedule to the current temperature.
@@ -107,26 +127,58 @@ runSAWith :: SAConfig
 runSAWith cfg fUser x0 gen = do
   let f    = flipFor (saDir cfg) fUser
       f0   = f x0
-  go 0 x0 f0 x0 f0 (saInitTemp cfg) (saStepSigma cfg) [f0]
+  finalRes <- go 0 0 x0 f0 x0 f0 (saInitTemp cfg) (saStepSigma cfg) [f0]
+  -- Optional final high-precision polish on x_best.
+  if saPolish cfg
+    then do
+      let (xb, fb) = polishNM cfg f (orBest finalRes)
+                       (case saDir cfg of
+                          Minimize -> orValue finalRes
+                          Maximize -> negate (orValue finalRes))
+          vUser = case saDir cfg of
+                    Minimize -> fb
+                    Maximize -> negate fb
+      pure finalRes
+        { orBest  = xb
+        , orValue = vUser
+        }
+    else pure finalRes
   where
     f = flipFor (saDir cfg) fUser
 
-    go iter x fx xBest fBest temp sigma hist
+    -- Loop carries (iter, sinceImprove). 'sinceImprove' is the number
+    -- of iterations since 'fBest' last decreased, used by the
+    -- 'saRestartIfStuck' option.
+    go iter sinceImprove x fx xBest fBest temp sigma hist
       | iter >= stMaxIter (saStop cfg) =
           mkRes (saDir cfg) xBest fBest hist iter False
       | temp < 1e-12 =
           mkRes (saDir cfg) xBest fBest hist iter True
       | otherwise = do
-          xRaw <- forM x $ \xi -> do
-                    eps <- MWCD.normal 0 sigma gen
+          -- Random-restart trigger.
+          let stuck = case saRestartIfStuck cfg of
+                Just k | k > 0 && sinceImprove >= k -> True
+                _                                    -> False
+          (xR, fxR, sinceR, sigmaR) <-
+            if stuck
+              then do
+                xNew <- mapM (\(lo, hi) -> MWC.uniformR (lo, hi) gen)
+                             (saBounds cfg)
+                pure (xNew, f xNew, 0, saStepSigma cfg)
+              else pure (x, fx, sinceImprove, sigma)
+
+          xRaw <- forM xR $ \xi -> do
+                    eps <- MWCD.normal 0 sigmaR gen
                     pure (xi + eps)
           let xCand = clipToBounds (saBounds cfg) xRaw
           let fNew = f xCand
           u <- MWC.uniformR (0, 1 :: Double) gen
-          let dF = fNew - fx
+          let dF = fNew - fxR
               accept = dF < 0 || u < exp (- dF / temp)
-              (xN, fxN)  = if accept then (xCand, fNew) else (x, fx)
+              (xN, fxN)  = if accept then (xCand, fNew) else (xR, fxR)
               (xBN0, fBN0) = if fxN < fBest then (xN, fxN) else (xBest, fBest)
+              improved   = fBN0 < fBest
+              sinceN     = if improved then 0 else sinceR + 1
               -- Local refinement on x_best every k iterations (hybrid SA).
               shouldRefine = case saLocalEvery cfg of
                 Just k | k > 0 && (iter + 1) `mod` k == 0
@@ -137,9 +189,9 @@ runSAWith cfg fUser x0 gen = do
                   then refineNM cfg f xBN0 fBN0
                   else (xBN0, fBN0)
               tempN  = nextTemp (saSchedule cfg) (saInitTemp cfg) iter temp
-              sigmaN = sigma * saStepDecay cfg
+              sigmaN = sigmaR * saStepDecay cfg
               histN  = fBN : hist
-          go (iter + 1) xN fxN xBN fBN tempN sigmaN histN
+          go (iter + 1) sinceN xN fxN xBN fBN tempN sigmaN histN
 
 -- | Apply a Nelder-Mead refinement at the current best point. Returns
 -- the refined @(x, f)@ if it improves on the input, otherwise the
@@ -148,17 +200,35 @@ runSAWith cfg fUser x0 gen = do
 refineNM :: SAConfig -> ([Double] -> Double) -> [Double] -> Double
          -> ([Double], Double)
 refineNM cfg f x fx =
-  let nmCfg = NM.defaultNMConfig
-                { NM.nmStop = defaultStopCriteria
-                                { stMaxIter = 200
-                                , stTolFun  = 1e-10
-                                , stTolX    = 1e-10 }
-                , NM.nmInitStep = 0.01     -- small simplex around x_best
-                }
-      r     = unsafePerformIO (NM.runNelderMead f x)
-      _     = nmCfg          -- placeholder; runNelderMead takes default
+  let r     = unsafePerformIO (NM.runNelderMeadWith
+                (NM.defaultNMConfig
+                   { NM.nmStop = defaultStopCriteria
+                                   { stMaxIter = 200
+                                   , stTolFun  = 1e-10
+                                   , stTolX    = 1e-10 }
+                   , NM.nmInitStep = 0.01
+                   }) f x)
       xRef  = clipToBounds (saBounds cfg) (orBest r)
       fRef  = f xRef
+  in if fRef < fx then (xRef, fRef) else (x, fx)
+
+-- | High-precision polish on @x_best@ at SA termination. Uses a much
+-- smaller initial simplex and tighter tolerances so that smooth
+-- landscapes (Sphere, Levy etc.) reach near-machine precision after
+-- the SA + periodic-NM walk has localised the basin.
+polishNM :: SAConfig -> ([Double] -> Double) -> [Double] -> Double
+         -> ([Double], Double)
+polishNM cfg f x fx =
+  let r    = unsafePerformIO (NM.runNelderMeadWith
+               (NM.defaultNMConfig
+                  { NM.nmStop = defaultStopCriteria
+                                  { stMaxIter = 2000
+                                  , stTolFun  = 1e-15
+                                  , stTolX    = 1e-15 }
+                  , NM.nmInitStep = 0.001
+                  }) f x)
+      xRef = clipToBounds (saBounds cfg) (orBest r)
+      fRef = f xRef
   in if fRef < fx then (xRef, fRef) else (x, fx)
 
 mkRes :: Direction -> [Double] -> Double -> [Double]
