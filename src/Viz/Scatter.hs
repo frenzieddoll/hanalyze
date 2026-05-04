@@ -1,4 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
+-- | Scatter plots and overlays.
+--
+-- Provides plain scatter, scatter-with-fit-line ('scatterWithLM' /
+-- 'scatterWithSmooth'), grouped scatter and predicted-vs-actual
+-- diagnostic plots.
 module Viz.Scatter
   ( scatterPlot
   , scatterPlotFile

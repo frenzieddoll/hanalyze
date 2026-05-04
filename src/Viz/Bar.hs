@@ -1,12 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | 棒グラフ系の可視化モジュール。
+-- | Bar-chart visualizations.
 --
--- 提供する関数:
---   - 'barChart'        — カテゴリ別縦棒グラフ
---   - 'barChartH'       — 水平棒グラフ (ラベルが長い場合に便利)
---   - 'stackedBar'      — 積み上げ棒グラフ
---   - 'groupedBar'      — グループ別棒グラフ
---   - 'barChartFile'    — HTML/PNG/SVG ファイルに書き出し
+--   * 'barChart'      — vertical bar chart by category.
+--   * 'barChartH'     — horizontal bar chart (handy for long labels).
+--   * 'stackedBar'    — stacked bar chart.
+--   * 'groupedBar'    — grouped bar chart.
+--   * 'barChartFile'  — write to HTML / PNG / SVG.
 module Viz.Bar
   ( barChart
   , barChartH

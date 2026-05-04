@@ -1,4 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
+-- | Core visualization helpers shared by every @Viz.*@ module.
+--
+-- Provides 'PlotConfig' / 'defaultConfig' (title, dimensions, output
+-- format), 'writeSpec' for emitting HTML / PNG / SVG (PNG and SVG go
+-- through the @vl-convert@ subprocess; HTML is the always-available
+-- fallback) and the @openInBrowser@ convenience helper.
 module Viz.Core
   ( PlotConfig (..)
   , defaultConfig

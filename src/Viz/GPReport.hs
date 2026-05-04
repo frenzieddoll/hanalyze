@@ -1,8 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | GP 回帰総合 HTML レポート。
+-- | Comprehensive HTML report for GP regression.
 --
--- データ特性・モデル比較・回帰結果・対話的予測・付録を1ファイルにまとめます。
--- スライダーで説明変数値を変えると JS がリアルタイムで予測値と信用区間を更新します。
+-- Bundles data characteristics, model comparison, regression results,
+-- interactive prediction and an appendix into a single file. Sliders for
+-- the predictor variables let JavaScript update predictions and credible
+-- intervals in real time.
 --
 -- @
 -- let fits = [ makeGPFit "RBF"       RBF      optRBF  trainX trainY testX

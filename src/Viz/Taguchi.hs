@@ -1,13 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | タグチメソッド分析の HTML レポート生成。
+-- | HTML report for Taguchi-method analysis.
 --
--- 'Design.Taguchi.analyzeSN' / 'optimalLevels' / 'predictSN' の結果を
--- 1 つの自己完結 HTML にまとめる:
+-- Bundles the results of 'Design.Taguchi.analyzeSN' / 'optimalLevels' /
+-- 'predictSN' into a single self-contained HTML file:
 --
--- - サマリー: 直交表名・SN タイプ・試行数・予測 SN
--- - 試行ごとの SN 比 (バーチャート)
--- - 因子ごとの要因効果 (水準別 SN を縦棒で並べる)
--- - 最良水準テーブル
+--   * Summary: array name, SN type, run count, predicted SN.
+--   * Per-run SN bar chart.
+--   * Per-factor main-effects bars (one bar per level).
+--   * Best-level table.
 module Viz.Taguchi
   ( TaguchiReport (..)
   , renderTaguchiReport

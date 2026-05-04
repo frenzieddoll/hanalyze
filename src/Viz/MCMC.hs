@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | MCMC 診断プロット (Vega-Lite)。
+-- | MCMC diagnostic plots (built on Vega-Lite).
 --
--- 単一チェーン版と多チェーン版を提供します。
--- 事後分布は KDE (Kernel Density Estimation) で描画します。
+-- Provides single-chain and multi-chain variants. Posterior densities
+-- are drawn with kernel density estimation (KDE).
 module Viz.MCMC
   ( -- * 単一チェーン
     tracePlot,       tracePlotFile

@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | GP 回帰結果の可視化。
+-- | Visualization of Gaussian-process regression results.
 --
--- 訓練データ (散布点) + 事後平均 (曲線) + 95% 信用区間 (バンド) を描画します。
+-- Plots training data (scatter), the posterior mean (curve), and a 95 %
+-- credible band.
 module Viz.GP
   ( gpPlot
   , gpPlotFile

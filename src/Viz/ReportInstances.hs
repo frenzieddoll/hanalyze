@@ -1,8 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
--- | 'Viz.ReportBuilder.Reportable' のインスタンスを提供するモジュール。
+-- | 'Viz.ReportBuilder.Reportable' instances for the various fit types.
 --
--- ライブラリ利用者は、フィット結果を直接 'renderReport' に渡せる:
+-- Importing this module (purely for its instances) lets a user pass any
+-- supported fit result directly to 'renderReport':
 --
 -- @
 -- import Model.Regularized

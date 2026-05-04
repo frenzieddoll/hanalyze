@@ -1,11 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Pareto front 可視化 (Phase S5)。
+-- | Pareto-front visualizations.
 --
--- - 'paretoScatter':       2 目的の散布図 (front 強調)
--- - 'paretoPair':          3+ 目的のペア散布行列
--- - 'parallelCoordinates': 多目的並行座標プロット
--- - 'hypervolumeHistory':  HV の収束履歴
--- - 'paretoCompare':       推定 front と真 front の比較 (2 目的)
+--   * 'paretoScatter'       — two-objective scatter (front highlighted).
+--   * 'paretoPair'          — pairs scatter matrix for ≥ 3 objectives.
+--   * 'parallelCoordinates' — multi-objective parallel coordinates.
+--   * 'hypervolumeHistory'  — hypervolume convergence trace.
+--   * 'paretoCompare'       — compare an approximate vs true front
+--     (two objectives).
 module Viz.Pareto
   ( paretoScatter
   , paretoScatterFile

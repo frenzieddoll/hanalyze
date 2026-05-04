@@ -1,15 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | コンポジション型 HTML レポートビルダ。
+-- | Compositional HTML report builder.
 --
--- 既存の 'Viz.AnalysisReport' は LM/GLM/GLMM/GP/HBM 専用で密結合だったため、
--- ridge / kernel / spline / RobustGP / Taguchi など多様なモデル/分析にも
--- 統一 API を提供する。
+-- A unified report API across all model and analysis types: ridge, kernel,
+-- spline, robust GP, Taguchi, regrid, and so on. Replaces the model-
+-- specific 'Viz.AnalysisReport'.
 --
--- 設計原則:
--- - 'ReportSection' は HTML 1 セクションを表す sum type
--- - ユーザー (CLI / library 利用者) は @[ReportSection]@ を構築するだけ
--- - 'renderReport' が並べて 1 つの自己完結 HTML を生成 (Vega-Lite アセット込)
--- - 'Reportable' typeclass で各 fit 型から既定セクション群を生成可能
+-- Design principles:
+--
+--   * 'ReportSection' is a sum type representing one HTML section.
+--   * The caller (CLI or library user) builds a @[ReportSection]@.
+--   * 'renderReport' lays the sections out into a single self-contained
+--     HTML file (Vega-Lite assets bundled).
+--   * The 'Reportable' typeclass generates default section sets from each
+--     fit type.
 --
 -- 利用例:
 --

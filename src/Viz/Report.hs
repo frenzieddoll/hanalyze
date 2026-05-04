@@ -1,8 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | MCMC 結果を1つの HTML ファイルにまとめた統合レポート。
+-- | Integrated HTML report for MCMC results.
 --
--- モデルグラフ (Mermaid.js DAG)・事後要約テーブル・診断プロット・
--- 自己相関・ペアスキャタープロットをナビゲーション付きで1画面に収めます。
+-- Bundles the model graph (Mermaid DAG), posterior summary table,
+-- diagnostic plots, autocorrelation, and pairs scatter plots into a
+-- single navigable page.
 --
 -- @
 -- let report = (defaultReport "My Model" chain names)

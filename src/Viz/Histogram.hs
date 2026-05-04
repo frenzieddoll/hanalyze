@@ -1,4 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
+-- | Histogram plotting.
+--
+-- 'histogramPlot' renders a basic histogram; 'histogramWithDensity'
+-- overlays a fitted theoretical PDF (or PMF for discrete distributions).
+-- 'histogramPlotFile' writes to HTML / PNG / SVG.
 module Viz.Histogram
   ( histogramPlot
   , histogramPlotFile

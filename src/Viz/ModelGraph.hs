@@ -1,8 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | モデル DAG の Mermaid.js 可視化。
+-- | Mermaid.js visualization of model DAGs.
 --
--- 'Model.HBM.buildModelGraph' で多相モデルから自動構築した 'ModelGraph' を
--- HTML に書き出します (Mermaid CDN 経由でブラウザで表示)。
+-- Renders the 'ModelGraph' that 'Model.HBM.buildModelGraph' derives
+-- automatically from a polymorphic model into an HTML file (displayed
+-- in the browser via the Mermaid CDN).
 module Viz.ModelGraph
   ( renderModelGraph
   , buildMermaid
