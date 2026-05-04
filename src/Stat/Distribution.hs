@@ -30,19 +30,21 @@ import qualified Data.Text as T
 -- Types
 -- ---------------------------------------------------------------------------
 
+-- | First-class probability distribution.
 data Distribution
-  = Normal     Double Double   -- μ σ
-  | Binomial   Int    Double   -- n p
-  | Poisson    Double          -- λ
-  | Exponential Double         -- λ (rate)
-  | Gamma      Double Double   -- α (shape) β (rate)
-  | Beta       Double Double   -- α β
+  = Normal     Double Double   -- ^ @Normal μ σ@.
+  | Binomial   Int    Double   -- ^ @Binomial n p@.
+  | Poisson    Double          -- ^ @Poisson λ@.
+  | Exponential Double         -- ^ @Exponential rate@.
+  | Gamma      Double Double   -- ^ @Gamma shape rate@.
+  | Beta       Double Double   -- ^ @Beta α β@.
   deriving (Show, Eq)
 
 -- ---------------------------------------------------------------------------
 -- Density / PMF
 -- ---------------------------------------------------------------------------
 
+-- | Probability density (continuous distributions) or PMF (discrete).
 density :: Distribution -> Double -> Double
 density (Normal mu sig) x
   | sig <= 0  = 0
@@ -82,7 +84,8 @@ density (Beta alpha beta_) x
       x ** (alpha - 1) * (1 - x) ** (beta_ - 1)
       / betaFn alpha beta_
 
--- | ログ密度: Binomial と Poisson はオーバーフロー防止のため log-space で直接計算。
+-- | Log density. For Binomial and Poisson the result is computed
+-- directly in log-space to avoid overflow at large @n@ or @λ@.
 logDensity :: Distribution -> Double -> Double
 logDensity (Binomial n p) x
   | p <= 0 || p >= 1                = -1/0
@@ -113,6 +116,7 @@ logDensity d x =
 -- Properties
 -- ---------------------------------------------------------------------------
 
+-- | True for continuous distributions, False for discrete ones.
 isContinuous :: Distribution -> Bool
 isContinuous (Binomial  _ _) = False
 isContinuous (Poisson   _  ) = False
@@ -130,6 +134,7 @@ supportRange (Gamma alpha beta_)  = let m = alpha / beta_
                                     in (0, m + 4*s)
 supportRange (Beta _ _)           = (0, 1)
 
+-- | Human-readable name with parameter values, e.g. @\"Normal(0.00, 1.00)\"@.
 distributionName :: Distribution -> Text
 distributionName (Normal     mu sig ) = "Normal(" <> fmt mu <> ", " <> fmt sig <> ")"
 distributionName (Binomial   n  p   ) = "Binomial(" <> T.pack (show n) <> ", " <> fmt p <> ")"
@@ -171,16 +176,18 @@ parseDistribution name params = case map toLowerAscii name of
 -- 制約変換
 -- ---------------------------------------------------------------------------
 
--- | パラメータの定義域に対応する変換の種類。
--- HMC/NUTS は unconstrained 空間 (ℝ) でリープフロッグを行い、
--- サンプルを constrained 空間に戻すことで支持域外への逸脱を防ぐ。
+-- | Constraint transform corresponding to a parameter's domain.
+--
+-- HMC and NUTS run leapfrog in the unconstrained space @ℝ@ and map
+-- samples back to the constrained space, preventing excursions outside
+-- the support.
 data Transform
-  = UnconstrainedT   -- ^ (-∞, ∞): 恒等変換 (Normal の平均など)
-  | PositiveT        -- ^ (0, ∞): 対数変換  θ = exp(u)
-  | UnitIntervalT    -- ^ (0, 1): ロジット変換 θ = sigmoid(u)
+  = UnconstrainedT   -- ^ @(-∞, ∞)@: identity transform (e.g. Normal mean).
+  | PositiveT        -- ^ @(0, ∞)@: log transform, @θ = exp(u)@.
+  | UnitIntervalT    -- ^ @(0, 1)@: logit transform, @θ = sigmoid(u)@.
   deriving (Show, Eq)
 
--- | 事前分布の型から変換を自動判定する。
+-- | Pick the appropriate 'Transform' from the parameter's prior.
 distTransform :: Distribution -> Transform
 distTransform (Normal _ _)    = UnconstrainedT
 distTransform (Exponential _) = PositiveT
@@ -189,21 +196,23 @@ distTransform (Beta _ _)      = UnitIntervalT
 distTransform (Binomial _ _)  = UnconstrainedT  -- 離散; HMC/NUTS 非推奨
 distTransform (Poisson _)     = UnconstrainedT  -- 離散; HMC/NUTS 非推奨
 
--- | θ_constrained → u_unconstrained
+-- | Map @θ@ in constrained space to @u@ in unconstrained space.
 toUnconstrained :: Transform -> Double -> Double
 toUnconstrained UnconstrainedT x = x
 toUnconstrained PositiveT      x = log x
 toUnconstrained UnitIntervalT  x = log x - log (1 - x)  -- logit
 
--- | u_unconstrained → θ_constrained
+-- | Map @u@ in unconstrained space back to @θ@ in constrained space.
 fromUnconstrained :: Transform -> Double -> Double
 fromUnconstrained UnconstrainedT u = u
 fromUnconstrained PositiveT      u = exp u
 fromUnconstrained UnitIntervalT  u = 1 / (1 + exp (-u))  -- sigmoid
 
--- | log |dθ/du|: logJoint に加算する Jacobian 補正項。
--- PositiveT:     θ = exp(u)          → log|J| = u
--- UnitIntervalT: θ = sigmoid(u)      → log|J| = log σ(u) + log(1-σ(u))
+-- | Jacobian log-det @log |dθ/du|@ to add to the log-joint when working
+-- in unconstrained space.
+--
+-- * @PositiveT@:     @θ = exp(u)     → log|J| = u@.
+-- * @UnitIntervalT@: @θ = sigmoid(u) → log|J| = log σ(u) + log(1-σ(u))@.
 logJacobianAdj :: Transform -> Double -> Double
 logJacobianAdj UnconstrainedT _ = 0
 logJacobianAdj PositiveT      u = u

@@ -30,17 +30,19 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Text.Printf (printf)
 
--- | デフォルトしきい値の数値整形 (String 版)。
+-- | Default-threshold numeric formatting (String).
 fmtNum :: Double -> String
 fmtNum = fmtNumWith 0.01 999
 
--- | デフォルトしきい値の数値整形 (Text 版)。
+-- | Default-threshold numeric formatting (Text).
 fmtNumT :: Double -> Text
 fmtNumT = T.pack . fmtNum
 
--- | 自由しきい値版。
--- @fmtNumWith lo hi x@ は |x| が @[lo, hi]@ の内側なら "%.2f"、外側なら "%.2E"。
--- 0 / NaN / Infinity は専用表記。
+-- | Custom-threshold formatter.
+--
+-- @fmtNumWith lo hi x@ formats @x@ with @\"%.2f\"@ when @|x|@ is inside
+-- @[lo, hi]@, otherwise @\"%.2E\"@. Zero, @NaN@ and @Infinity@ get
+-- dedicated representations.
 fmtNumWith :: Double -> Double -> Double -> String
 fmtNumWith lo hi x
   | isNaN x         = "NaN"

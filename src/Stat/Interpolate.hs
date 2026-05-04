@@ -18,21 +18,22 @@ import           Data.Ord  (comparing)
 import qualified Data.Vector.Unboxed         as U
 import qualified Data.Vector.Unboxed.Mutable as MU
 
--- | 補間方式。
---
--- - 'Linear'         : 区間ごと線形補間。最頑健、外挿でも発散しない。
--- - 'NaturalSpline'  : 自然 3 次スプライン (端点で 2 階導関数 0)。滑らか、overshoot あり。
--- - 'PCHIP'          : Piecewise Cubic Hermite Interpolating Polynomial。
---                      局所単調性を保つ (Fritsch-Carlson 1980)。spline overshoot 回避。
+-- | Interpolation method.
 data InterpKind
-  = Linear
-  | NaturalSpline
-  | PCHIP
+  = Linear         -- ^ Piecewise linear. Most robust, never diverges on
+                   --   extrapolation.
+  | NaturalSpline  -- ^ Natural cubic spline (zero second derivative at
+                   --   the endpoints). Smooth but may overshoot.
+  | PCHIP          -- ^ Piecewise Cubic Hermite Interpolating Polynomial,
+                   --   monotone-preserving (Fritsch-Carlson 1980); avoids
+                   --   spline overshoot.
   deriving (Show, Eq)
 
--- | 観測点から補間関数を構築。x は内部で sortBy + dedupe される。
+-- | Build an interpolant from observed points. The input is sorted and
+-- de-duplicated internally.
 --
--- 制限: 観測点 < 2 のときは constant 関数 (1 点なら y_0、空なら 0) を返す。
+-- Edge cases: with fewer than two points the result is constant
+-- (@y_0@ for one point, @0@ for none).
 interp1d :: InterpKind -> [(Double, Double)] -> (Double -> Double)
 interp1d _    []         = const 0
 interp1d _    [(_, y)]   = const y

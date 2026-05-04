@@ -54,31 +54,32 @@ import qualified Stat.Distribution as Dist
 -- 結果型
 -- ---------------------------------------------------------------------------
 
--- | WAIC の計算結果。
+-- | WAIC result.
 data WAICResult = WAICResult
-  { waicValue :: Double  -- ^ WAIC = −2(lppd − p_waic)、小さいほど良い
-  , waicLppd  :: Double  -- ^ log pointwise predictive density
-  , waicPwaic :: Double  -- ^ 有効パラメータ数 p_waic
-  , waicSE    :: Double  -- ^ WAIC の推定標準誤差
+  { waicValue :: Double  -- ^ @WAIC = −2(lppd − p_waic)@; smaller is better.
+  , waicLppd  :: Double  -- ^ Log pointwise predictive density.
+  , waicPwaic :: Double  -- ^ Effective number of parameters @p_waic@.
+  , waicSE    :: Double  -- ^ Estimated standard error of @WAIC@.
   } deriving (Show)
 
--- | PSIS-LOO の計算結果。
+-- | PSIS-LOO result.
 data LOOResult = LOOResult
-  { looValue   :: Double    -- ^ −2 × elpd_loo、小さいほど良い
-  , looElpd    :: Double    -- ^ Σᵢ elpd_i (期待 log 予測密度)
-  , looSE      :: Double    -- ^ 推定標準誤差
-  , looKHat    :: [Double]  -- ^ 観測値ごとの Pareto k̂
-                            --   k̂ < 0.5 → 良好, 0.5–0.7 → 許容, > 0.7 → 要注意
-  , looKHatBad :: Int       -- ^ k̂ > 0.7 の観測値数
+  { looValue   :: Double    -- ^ @−2 × elpd_loo@; smaller is better.
+  , looElpd    :: Double    -- ^ @Σᵢ elpd_i@ (expected log predictive density).
+  , looSE      :: Double    -- ^ Standard error of @looValue@.
+  , looKHat    :: [Double]  -- ^ Per-observation Pareto @k̂@; @< 0.5@ good,
+                            --   @0.5–0.7@ acceptable, @> 0.7@ flag.
+  , looKHatBad :: Int       -- ^ Number of observations with @k̂ > 0.7@.
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
 -- WAIC
 -- ---------------------------------------------------------------------------
 
--- | WAIC を対数尤度行列から計算する。
+-- | Compute WAIC from a log-likelihood matrix.
 --
--- logLikMat !! s !! i = log p(y_i | θ^s)  (行 = S サンプル、列 = N 観測値)
+-- @logLikMat !! s !! i = log p(y_i | θ^s)@: rows are @S@ posterior
+-- samples, columns are @N@ observations.
 waic :: [[Double]] -> WAICResult
 waic [] = WAICResult 0 0 0 0
 waic logLikMat =
@@ -107,10 +108,11 @@ waic logLikMat =
 -- LOO-CV (PSIS)
 -- ---------------------------------------------------------------------------
 
--- | PSIS-LOO を対数尤度行列から計算する。
+-- | Compute PSIS-LOO from a log-likelihood matrix.
 --
--- 各観測値について、重要度重みを Pareto 分布で平滑化した後に
--- 截頭 IS による LOO 推定値と Pareto k̂ 診断量を返す。
+-- For each observation, importance weights are smoothed by a Pareto
+-- distribution; this returns the truncated-IS LOO estimate together with
+-- the diagnostic Pareto @k̂@.
 loo :: [[Double]] -> LOOResult
 loo [] = LOOResult 0 0 0 [] 0
 loo logLikMat =
@@ -126,13 +128,14 @@ loo logLikMat =
       nBad    = length (filter (> 0.7) khat_i)
   in LOOResult looVal elpd se khat_i nBad
 
--- | 1 観測値に対する PSIS 推定: (elpd_i, k̂_i)
+-- | PSIS estimate for a single observation: @(elpd_i, k̂_i)@.
 --
--- アルゴリズム:
--- 1. 対数重要度重み log r_i^s = −log p(y_i|θ^s) を計算
--- 2. 上位 M = min(S/5, 3√S) 値から Pareto k̂ を推定
--- 3. 重みを √S で截頭して安定化し、正規化
--- 4. elpd_i = logSumExp(log W_s + log p(y_i|θ^s))
+-- Algorithm:
+--
+--   1. Compute log importance weights @log r_i^s = −log p(y_i|θ^s)@.
+--   2. Fit a Pareto @k̂@ to the top @M = min(S/5, 3√S)@ values.
+--   3. Truncate weights at @log √S@ and renormalize for stability.
+--   4. @elpd_i = logSumExp(log W_s + log p(y_i|θ^s))@.
 psisElpd :: Int -> [Double] -> (Double, Double)
 psisElpd s colLL =
   let -- 対数重要度重み (正規化前): log r_i^s = −log p(y_i|θ^s)
@@ -155,11 +158,15 @@ psisElpd s colLL =
 
   in (elpdi, khat)
 
--- | 上位 M 個の対数重み (昇順) から Pareto 形状パラメータ k̂ を推定する。
+-- | Estimate the Pareto shape @k̂@ from the top-@M@ log-weights
+-- (ascending).
 --
--- Hosking-Wallis (1987) モーメント推定量:
---   excess = exp(r − u) − 1  (u = 下限閾値)
---   k̂ = 0.5 × (1 − μ² / s²)  where μ = mean(excess), s² = Var(excess)
+-- Uses the Hosking-Wallis (1987) moment estimator:
+--
+-- @
+-- excess = exp(r − u) − 1   (u = lower threshold)
+-- k̂      = 0.5 × (1 − μ² / s²)   where  μ = mean excess, s² = Var excess
+-- @
 paretoKhat :: [Double] -> Double
 paretoKhat topM
   | length topM < 5 = 0
@@ -175,16 +182,16 @@ paretoKhat topM
 -- Chain との連携
 -- ---------------------------------------------------------------------------
 
--- | モデルとチェーンから対数尤度行列を生成する。
--- 行 = サンプル (バーンイン後)、列 = 観測値。
+-- | Build a log-likelihood matrix from a model and a chain.
+-- Rows are post-burnin samples, columns are observations.
 chainLogLikMatrix :: ModelP r -> Chain -> [[Double]]
 chainLogLikMatrix model chain = map (perObsLogLiks model) (chainSamples chain)
 
--- | チェーンから WAIC を直接計算する。
+-- | Compute WAIC directly from a model and chain.
 chainWAIC :: ModelP r -> Chain -> WAICResult
 chainWAIC model = waic . chainLogLikMatrix model
 
--- | チェーンから PSIS-LOO を直接計算する。
+-- | Compute PSIS-LOO directly from a model and chain.
 chainLOO :: ModelP r -> Chain -> LOOResult
 chainLOO model = loo . chainLogLikMatrix model
 
@@ -192,17 +199,21 @@ chainLOO model = loo . chainLogLikMatrix model
 -- LM / GLM 事後サンプリング (WAIC/LOO-CV 用)
 -- ---------------------------------------------------------------------------
 
--- | LM の事後分布 (flat prior) から対数尤度行列 (S × N) を生成する。
+-- | Generate an @S × N@ log-likelihood matrix from a flat-prior LM
+-- posterior.
 --
--- サンプリング手順:
---   σ² ~ InvGamma((n−p)/2, RSS/2)  [RSS / χ²_{n-p} として実現]
---   β  ~ MVN(β̂,  σ² (X'X)⁻¹)
---   log p(y_i | β^s, σ^s) = log N(y_i; x_i·β^s, σ^s)
+-- Sampling scheme:
+--
+-- @
+-- σ² ~ InvGamma((n−p)/2, RSS/2)   (drawn as RSS / χ²_{n-p})
+-- β  ~ MVN(β̂,  σ² (X'X)⁻¹)
+-- log p(y_i | β^s, σ^s) = log N(y_i; x_i·β^s, σ^s)
+-- @
 lmPosteriorLogLiks
-  :: LA.Matrix Double  -- ^ 計画行列 X (n×p)
-  -> LA.Vector Double  -- ^ 応答変数 y (n)
-  -> FitResult         -- ^ OLS フィット結果
-  -> Int               -- ^ 事後サンプル数 S
+  :: LA.Matrix Double  -- ^ Design matrix @X@ (@n×p@).
+  -> LA.Vector Double  -- ^ Response @y@ (length @n@).
+  -> FitResult         -- ^ OLS fit result.
+  -> Int               -- ^ Number of posterior samples @S@.
   -> GenIO
   -> IO [[Double]]
 lmPosteriorLogLiks x y fr s gen = do
@@ -224,19 +235,21 @@ lmPosteriorLogLiks x y fr s gen = do
         ys       = LA.toList y
     return [ logNormDensity yi yhi sigma | (yi, yhi) <- zip ys yHat ]
 
--- | GLM の事後分布 (Laplace 近似) から対数尤度行列 (S × N) を生成する。
--- Gaussian ファミリーには lmPosteriorLogLiks を使うこと。
+-- | Generate an @S × N@ log-likelihood matrix from a Laplace-approximate
+-- GLM posterior. For Gaussian-family models prefer 'lmPosteriorLogLiks'.
 --
+-- @
 -- β ~ MVN(β̂,  Fisher⁻¹)
--- log p(y_i | β^s) = ファミリー別対数密度
+-- log p(y_i | β^s) = family-specific log-density
+-- @
 glmPosteriorLogLiks
   :: Family
   -> LinkFn
-  -> LA.Matrix Double  -- ^ 計画行列 X
-  -> LA.Vector Double  -- ^ 応答変数 y
-  -> LA.Matrix Double  -- ^ Fisher 情報行列の逆行列
+  -> LA.Matrix Double  -- ^ Design matrix @X@.
+  -> LA.Vector Double  -- ^ Response @y@.
+  -> LA.Matrix Double  -- ^ Inverse Fisher information.
   -> FitResult
-  -> Int               -- ^ 事後サンプル数 S
+  -> Int               -- ^ Number of posterior samples @S@.
   -> GenIO
   -> IO [[Double]]
 glmPosteriorLogLiks family linkFn x y fisherInv fr s gen = do
@@ -251,24 +264,28 @@ glmPosteriorLogLiks family linkFn x y fisherInv fr s gen = do
         ys       = LA.toList y
     return [ glmLogDensity family linkFn yi ei | (yi, ei) <- zip ys eta ]
 
--- | LME (Gaussian, ランダム切片) の **条件付き WAIC** 用 log-lik 行列。
+-- | Log-likelihood matrix for the **conditional** WAIC of a Gaussian
+-- LME (random intercepts).
 --
--- 厳密な GLMM 周辺事後ではなく、BLUP û を点推定で固定した上で
--- (β, σ²) を marginal LM 風に事後サンプリングする近似:
+-- This is not a fully marginal GLMM posterior. It conditions on a point
+-- estimate of the BLUPs @û@ and posterior-samples @(β, σ²)@ as if from
+-- a residualized LM:
 --
---   * y' := y − Z·û  (BLUP オフセットを差し引いた residual response)
---   * σ² ~ InvGamma((n−p)/2, RSS_cond/2)   [RSS_cond は LME 条件付き残差]
---   * β  ~ MVN(β̂,  σ² (X'X)⁻¹)
---   * log p(y_i | β^s, û_{j(i)}, σ^s) = log N(y_i; X_iβ^s + û_{j(i)}, σ^s)
+--   * @y' := y − Z·û@  (response with BLUP offset removed).
+--   * @σ² ~ InvGamma((n−p)/2, RSS_cond/2)@ where @RSS_cond@ is the LME
+--     conditional residual sum of squares.
+--   * @β ~ MVN(β̂,  σ² (X'X)⁻¹)@.
+--   * @log p(y_i | β^s, û_{j(i)}, σ^s) = log N(y_i; X_iβ^s + û_{j(i)}, σ^s)@.
 --
--- u を固定するため p_WAIC が真の値より小さく出る傾向があるが、同一データセット内で
--- 異なる固定効果構造を比較するには有用 (Gelman, Hwang, Vehtari 2014 §3.3 参照)。
+-- Because @u@ is held fixed, @p_WAIC@ tends to be smaller than the true
+-- value; this is still useful for comparing fixed-effect structures on
+-- the same data (see Gelman, Hwang & Vehtari 2014, §3.3).
 lmePosteriorLogLiks
-  :: LA.Matrix Double  -- ^ 固定効果計画行列 X (n×p)
-  -> LA.Vector Double  -- ^ 応答 y (n)
-  -> [Double]          -- ^ 観測ごとの BLUP オフセット û_{j(i)} (n)
-  -> FitResult         -- ^ LME 固定効果フィット結果
-  -> Int               -- ^ 事後サンプル数 S
+  :: LA.Matrix Double  -- ^ Fixed-effect design matrix @X@ (@n×p@).
+  -> LA.Vector Double  -- ^ Response @y@ (length @n@).
+  -> [Double]          -- ^ Per-observation BLUP offset @û_{j(i)}@ (length @n@).
+  -> FitResult         -- ^ Fixed-effect LME fit result.
+  -> Int               -- ^ Number of posterior samples @S@.
   -> GenIO
   -> IO [[Double]]
 lmePosteriorLogLiks x y offsets fr s gen = do
@@ -336,30 +353,31 @@ sampleVar xs
 -- モデル比較の重み (Pseudo-BMA, ArviZ.compare 相当)
 -- ---------------------------------------------------------------------------
 
--- | 比較対象 1 モデル分の入力 (ラベル + log-lik 行列)
+-- | One candidate model for comparison: label and log-likelihood matrix.
 data CompareEntry = CompareEntry
-  { ceLabel    :: String          -- ^ モデルラベル
-  , ceLogLikMat :: [[Double]]     -- ^ S × N 対数尤度行列
+  { ceLabel    :: String          -- ^ Model label.
+  , ceLogLikMat :: [[Double]]     -- ^ @S × N@ log-likelihood matrix.
   } deriving (Show)
 
--- | 1 モデル分の比較結果
+-- | Per-model comparison result.
 data CompareResult = CompareResult
-  { crLabel  :: String
-  , crWAIC   :: Double           -- WAIC (smaller better)
-  , crLOO    :: Double           -- LOO  (smaller better)
-  , crDeltaWAIC :: Double        -- ΔWAIC vs best
-  , crDeltaLOO  :: Double        -- ΔLOO  vs best
-  , crSE     :: Double           -- WAIC SE
-  , crKHatBad :: Int             -- 観測値で k̂ > 0.7 の数
-  , crWeight :: Double           -- Pseudo-BMA 重み (Σ = 1)
+  { crLabel     :: String          -- ^ Model label.
+  , crWAIC      :: Double          -- ^ WAIC (smaller is better).
+  , crLOO       :: Double          -- ^ LOO  (smaller is better).
+  , crDeltaWAIC :: Double          -- ^ @ΔWAIC@ vs the best model.
+  , crDeltaLOO  :: Double          -- ^ @ΔLOO@  vs the best model.
+  , crSE        :: Double          -- ^ Standard error of @WAIC@.
+  , crKHatBad   :: Int             -- ^ Number of observations with @k̂ > 0.7@.
+  , crWeight    :: Double          -- ^ Pseudo-BMA weight (sums to 1 over models).
   } deriving (Show)
 
--- | 複数モデルを WAIC / LOO で比較し、Pseudo-BMA 重みを計算する。
+-- | Compare several models by WAIC / LOO and compute Pseudo-BMA weights.
 --
--- アルゴリズム:
---   * 各モデルの WAIC, LOO を計算
---   * 最良 (最小) モデルを基準に ΔWAIC, ΔLOO を算出
---   * Pseudo-BMA 重み: w_i = exp(elpd_i) / Σ exp(elpd_j)
+-- Algorithm:
+--
+--   * Compute WAIC and LOO for each model.
+--   * Use the best (minimum) model as baseline for @ΔWAIC@ / @ΔLOO@.
+--   * Pseudo-BMA weight: @w_i = exp(elpd_i) / Σ exp(elpd_j)@.
 --     (実用的には Δ から計算: w_i ∝ exp(-Δelpd_i))
 compareModels :: [CompareEntry] -> [CompareResult]
 compareModels entries =

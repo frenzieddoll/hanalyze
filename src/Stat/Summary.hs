@@ -18,20 +18,21 @@ import Data.Text (Text)
 import MCMC.Core (Chain, chainVals)
 import Stat.MCMC (ess, hdi, rhat)
 
--- | パラメタ 1 行分の事後要約。
+-- | One row of posterior summary statistics for a single parameter.
 data SummaryRow = SummaryRow
-  { srName  :: Text
-  , srMean  :: Double
-  , srSD    :: Double
-  , srHdiLo :: Double  -- ^ 94% HDI 下限
-  , srHdiHi :: Double  -- ^ 94% HDI 上限
-  , srEssV  :: Double
-  , srRhat  :: Maybe Double  -- ^ 単一チェーンなら Nothing
+  { srName  :: Text     -- ^ Parameter name.
+  , srMean  :: Double   -- ^ Posterior mean.
+  , srSD    :: Double   -- ^ Posterior standard deviation.
+  , srHdiLo :: Double   -- ^ Lower bound of the 94% HDI.
+  , srHdiHi :: Double   -- ^ Upper bound of the 94% HDI.
+  , srEssV  :: Double   -- ^ Effective sample size.
+  , srRhat  :: Maybe Double  -- ^ Split-R-hat (only for multi-chain runs).
   } deriving (Show)
 
--- | 事後要約を計算する。チェーン 1 本なら R-hat は Nothing、
--- 2 本以上なら全チェーンを連結した値で mean/sd/HDI/ESS を計算し、
--- R-hat だけ split-R-hat で算出する。
+-- | Compute posterior summaries for the named parameters across one or
+-- more chains. With a single chain @R-hat@ is 'Nothing'; with multiple
+-- chains, mean / SD / HDI / ESS are computed on the pooled samples and
+-- split-R-hat is computed across chains.
 posteriorSummary :: [Text] -> [Chain] -> [SummaryRow]
 posteriorSummary params chains =
   let multi = length chains > 1

@@ -60,38 +60,42 @@ import MCMC.Core (Chain (..), spawnGen)
 import MCMC.HMC (HMCConfig (..), leapfrogWith, kinetic)
 import Stat.Distribution (Transform (..), toUnconstrained, fromUnconstrained)
 
+-- | Named parameter map (parameter name → constrained-space value).
 type Params = Map.Map Text Double
 
--- | Floating 多相の log-joint 関数の型エイリアス。
--- @[a]@ は制約付きパラメータベクトル (constrained space)。
+-- | Type alias for a 'Floating'-polymorphic log-joint function. The
+-- argument @[a]@ is the constrained-space parameter vector.
 type LogJointF = forall a. Floating a => [a] -> a
 
 -- ---------------------------------------------------------------------------
 -- 多相対数密度関数
 -- ---------------------------------------------------------------------------
 
--- | log N(x; μ₀, σ₀) — μ₀, σ₀ は固定 Double ハイパーパラメータ。
+-- | @log N(x; μ₀, σ₀)@ where @μ₀@ and @σ₀@ are fixed @Double@
+-- hyperparameters and @x@ is differentiable.
 logNormalF :: Floating a => Double -> Double -> a -> a
 logNormalF mu0 sig0 x =
   let mu  = realToFrac mu0
       sig = realToFrac sig0
   in negate (0.5 * log (2 * pi)) - log sig - 0.5 * ((x - mu) / sig) ^ (2::Int)
 
--- | log N(y_obs; μ, σ) — y_obs は固定観測値 Double、μ と σ は AD 型。
+-- | @log N(y_obs; μ, σ)@ where @y_obs@ is a fixed observation and @μ@,
+-- @σ@ are differentiable.
 logNormalObsF :: Floating a => Double -> a -> a -> a
 logNormalObsF y_obs mu sig =
   let y = realToFrac y_obs
   in negate (0.5 * log (2 * pi)) - log sig - 0.5 * ((y - mu) / sig) ^ (2::Int)
 
--- | log Exp(x; rate) — rate は固定 Double。
+-- | @log Exp(x; rate)@ with fixed rate.
 logExpF :: Floating a => Double -> a -> a
 logExpF rate0 x =
   let r = realToFrac rate0
   in log r - r * x
 
--- | log Gamma(x; shape, rate) — shape と rate は固定 Double。
--- log p(x) = (α-1)log x − βx + α log β − log Γ(α)
--- log Γ(α) は Stirling 近似 (α を固定定数として計算)。
+-- | @log Gamma(x; shape, rate)@ with fixed shape and rate.
+--
+-- @log p(x) = (α-1) log x − β x + α log β − log Γ(α)@.
+-- @log Γ(α)@ is Stirling's approximation (treated as a fixed constant).
 logGammaF :: Floating a => Double -> Double -> a -> a
 logGammaF shape0 rate0 x =
   let a   = realToFrac shape0
@@ -99,8 +103,8 @@ logGammaF shape0 rate0 x =
       lgA = realToFrac (stirlingLogGamma shape0)
   in (a - 1) * log x - b * x + a * log b - lgA
 
--- | log Beta(x; α, β) — α, β は固定 Double。
--- log p(x) = (α-1)log x + (β-1)log(1-x) − log B(α,β)
+-- | @log Beta(x; α, β)@ with fixed shape parameters.
+-- @log p(x) = (α-1) log x + (β-1) log(1-x) − log B(α,β)@.
 logBetaF :: Floating a => Double -> Double -> a -> a
 logBetaF alpha0 beta0 x =
   let a   = realToFrac alpha0
@@ -109,14 +113,16 @@ logBetaF alpha0 beta0 x =
                         - stirlingLogGamma (alpha0 + beta0))
   in (a - 1) * log x + (b - 1) * log (1 - x) - lbB
 
--- | log Poisson(k | λ) — k は固定観測値 (整数として丸める)、λ は AD 型。
+-- | @log Poisson(k | λ)@ with @k@ a fixed (rounded) observation and @λ@
+-- differentiable.
 logPoissonObsF :: Floating a => Double -> a -> a
 logPoissonObsF y_obs lam =
   let k  = fromIntegral (round y_obs :: Int) :: Double
       lf = realToFrac (logFactorial (round y_obs :: Int))
   in realToFrac k * log lam - lam - lf
 
--- | log Bernoulli(y | p) — y は固定 0/1 観測値、p は AD 型。
+-- | @log Bernoulli(y | p)@ with @y ∈ {0, 1}@ a fixed observation and @p@
+-- differentiable.
 logBernoulliObsF :: Floating a => Double -> a -> a
 logBernoulliObsF y_obs p
   | y_obs > 0.5 = log p
@@ -126,7 +132,7 @@ logBernoulliObsF y_obs p
 -- AD 勾配計算
 -- ---------------------------------------------------------------------------
 
--- | constrained 空間の log-joint の勾配を AD で計算する。
+-- | Compute the gradient of a constrained-space log-joint via AD.
 --
 -- @
 -- gradAD logJoint [1.0, 0.5]  -- [∂/∂θ₁, ∂/∂θ₂]
@@ -134,9 +140,8 @@ logBernoulliObsF y_obs p
 gradAD :: LogJointF -> [Double] -> [Double]
 gradAD f xs = grad f xs
 
--- | unconstrained 空間の log-joint (制約変換 + Jacobian 込み) の AD 勾配。
---
--- 内部で各パラメータに制約変換を適用してから 'gradAD' を呼ぶ。
+-- | AD gradient of the log-joint in unconstrained space (with constraint
+-- transforms and Jacobian correction applied automatically).
 gradADU :: LogJointF -> [Transform] -> [Double] -> [Double]
 gradADU logJointC transforms us =
   grad (logJointUF transforms logJointC) us
@@ -145,13 +150,14 @@ gradADU logJointC transforms us =
 -- 制約変換 (Floating 多相版)
 -- ---------------------------------------------------------------------------
 
--- | unconstrained パラメータ → constrained パラメータ (Floating 多相)。
+-- | Map an unconstrained value to its constrained image
+-- (Floating-polymorphic).
 invTransformF :: Floating a => Transform -> a -> a
 invTransformF UnconstrainedT u = u
 invTransformF PositiveT      u = exp u
 invTransformF UnitIntervalT  u = 1 / (1 + exp (-u))  -- sigmoid
 
--- | log |∂θ/∂u| — Jacobian 対数行列式成分 (Floating 多相)。
+-- | Log-Jacobian @log |∂θ/∂u|@ for one parameter (Floating-polymorphic).
 logJacF :: Floating a => Transform -> a -> a
 logJacF UnconstrainedT _ = 0
 logJacF PositiveT      u = u                     -- log(exp u) = u
@@ -159,7 +165,8 @@ logJacF UnitIntervalT  u =
   let p = 1 / (1 + exp (-u))
   in log p + log (1 - p)                         -- log σ(u)(1−σ(u))
 
--- | unconstrained 空間での log-joint (制約変換 + Jacobian 補正込み)。
+-- | Log-joint in unconstrained space, including constraint transforms
+-- and the Jacobian correction.
 logJointUF :: Floating a => [Transform] -> LogJointF -> [a] -> a
 logJointUF transforms logJointC us =
   let thetas = zipWith invTransformF transforms us
@@ -170,16 +177,18 @@ logJointUF transforms logJointC us =
 -- HMC AD 版サンプラー
 -- ---------------------------------------------------------------------------
 
--- | AD 勾配を使った HMC サンプラー。
+-- | HMC sampler using AD gradients.
 --
--- 既存の 'MCMC.HMC.hmc' と同じアルゴリズムだが、勾配を 'Numeric.AD.grad'
--- で正確に計算する。ユーザーは log-joint を 'LogJointF' 形式で記述する。
+-- Same algorithm as 'MCMC.HMC.hmc', but gradients are computed exactly
+-- with 'Numeric.AD.grad'. The user writes the log-joint in 'LogJointF'
+-- form (i.e. @Floating@-polymorphic).
 hmcAD
-  :: LogJointF    -- ^ log p(θ, y) の Floating 多相関数 (constrained 空間)
-  -> [Transform]  -- ^ 各パラメータの制約種別 (パラメータ名リストと同じ順)
+  :: LogJointF    -- ^ @log p(θ, y)@ as a 'LogJointF' (constrained space).
+  -> [Transform]  -- ^ Per-parameter constraint kind (same order as the
+                  --   parameter-name list).
   -> HMCConfig
-  -> [Text]       -- ^ パラメータ名リスト (初期値 Map のキーと対応)
-  -> Params       -- ^ 初期値 (constrained 空間)
+  -> [Text]       -- ^ Parameter names (matches the initial-value 'Params' keys).
+  -> Params       -- ^ Initial values (constrained space).
   -> GenIO
   -> IO Chain
 hmcAD logJointC transforms cfg names initC gen = do
@@ -239,7 +248,7 @@ hmcAD logJointC transforms cfg names initC gen = do
     when True  action = action
     when False _      = return ()
 
--- | hmcAD を numChains 本並列実行する。
+-- | Run 'hmcAD' on @numChains@ parallel chains.
 hmcADChains
   :: LogJointF
   -> [Transform]

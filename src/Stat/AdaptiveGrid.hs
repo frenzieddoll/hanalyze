@@ -28,22 +28,23 @@ module Stat.AdaptiveGrid
 import qualified Data.Vector.Unboxed as U
 import           Stat.Interpolate    (InterpKind (..), interp1d)
 
--- | grid 種別。
+-- | Grid kind.
 data GridKind
-  = Uniform     -- ^ [zmin, zmax] を等間隔 N 分割
-  | Adaptive    -- ^ |dy/dz| のピークに集中する N 点
+  = Uniform     -- ^ Equally spaced @N@ points on @[zmin, zmax]@.
+  | Adaptive    -- ^ @N@ points concentrated where @|dy/dz|@ peaks.
   deriving (Show, Eq)
 
--- | grid 構築の仕様。
+-- | Specification used to build a grid.
 data GridSpec = GridSpec
-  { gsKind        :: !GridKind   -- ^ Uniform / Adaptive
-  , gsN           :: !Int        -- ^ 出力 grid 点数
-  , gsInterpKind  :: !InterpKind -- ^ density 評価用の各 id 補間方式
-  , gsCoarseN     :: !Int        -- ^ density 評価用の粗 grid サイズ (default 200)
-  , gsEpsRatio    :: !Double     -- ^ density 平坦部の最低密度比 (default 0.05)
+  { gsKind        :: !GridKind   -- ^ Uniform or adaptive.
+  , gsN           :: !Int        -- ^ Number of grid points.
+  , gsInterpKind  :: !InterpKind -- ^ Per-id interpolant used to evaluate the density.
+  , gsCoarseN     :: !Int        -- ^ Size of the coarse density grid (default 200).
+  , gsEpsRatio    :: !Double     -- ^ Floor on density on flat regions (default 0.05).
   } deriving (Show, Eq)
 
--- | 推奨デフォルト (Adaptive / 線形補間 / 粗 grid 200 / ε=0.05*max)。
+-- | Recommended defaults: adaptive grid, linear interpolant, coarse grid
+-- of 200 points, @ε = 0.05 × max(density)@.
 defaultGridSpec :: Int -> GridSpec
 defaultGridSpec n = GridSpec
   { gsKind       = Adaptive
@@ -53,14 +54,16 @@ defaultGridSpec n = GridSpec
   , gsEpsRatio   = 0.05
   }
 
--- | adaptive grid を許容する最小 N。これ未満は uniform に強制 fallback。
+-- | Smallest @N@ for which adaptive grids are honored. Below this, an
+-- adaptive request falls back to uniform.
 minAdaptiveN :: Int
 minAdaptiveN = 10
 
--- | 共通 grid を生成。
+-- | Build a common grid.
 --
--- 入力: id ごとの観測点リスト @[[(z, y)]]@、grid 範囲 (zmin, zmax)、仕様 'GridSpec'。
--- 出力: N 点の grid (昇順、zmin / zmax を必ず含む)。
+-- Inputs: per-id observation lists @[[(z, y)]]@, the @(zmin, zmax)@
+-- range, and a 'GridSpec'. The result is an ascending list of @N@ grid
+-- points whose endpoints are exactly @zmin@ and @zmax@.
 makeGrid :: [[(Double, Double)]] -> (Double, Double) -> GridSpec -> [Double]
 makeGrid _      (zmin, zmax) spec
   | gsN spec < 2 = [zmin, zmax]
@@ -96,7 +99,8 @@ makeGrid perId  (zmin, zmax) spec =
   in -- 端点を保証 + monotone 化 (浮動小数誤差で僅かに非単調になることがある)
      ensureMonotone zmin zmax gridZ
 
--- | [zmin, zmax] を等間隔 N 分割。N < 2 は [zmin, zmax]。
+-- | Equally spaced @N@-point grid on @[zmin, zmax]@. With @N < 2@ the
+-- result is @[zmin, zmax]@.
 uniformGrid :: Int -> Double -> Double -> [Double]
 uniformGrid n zmin zmax
   | n < 2     = [zmin, zmax]

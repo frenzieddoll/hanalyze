@@ -35,16 +35,19 @@ import Model.HBM
 -- 事後予測サンプリング
 -- ---------------------------------------------------------------------------
 
--- | 事後分布から各観測ノードに対する事後予測サンプルを生成する。
+-- | Posterior-predictive samples for every observe node in the model.
 --
--- アルゴリズム:
---   1. チェーンの各サンプル (latent 値) を取り出す
---   2. その latent 値で 'runObserveDists' を呼び、各 observe ノードの
---      条件付き分布を得る
---   3. その分布から元観測数と同じだけ新しい y 値をサンプリング
+-- Algorithm:
 --
--- 戻り値の長さは 'chainSamples' の長さ。各要素は観測ノードごとに
--- 「元データと同じ長さの新しい予測値リスト」を持つ Map。
+--   1. Walk the chain's latent samples.
+--   2. At each sample, evaluate 'runObserveDists' to obtain the
+--      conditional distribution at every observe node.
+--   3. Draw as many fresh @y@ values from that distribution as the
+--      original observation count.
+--
+-- The returned list has the same length as @chainSamples@; each element
+-- is a 'Map' from observe-node name to a fresh predicted-value list of
+-- the original length.
 posteriorPredictive
   :: forall r. ModelP r
   -> Chain
@@ -53,9 +56,11 @@ posteriorPredictive
 posteriorPredictive m chain gen =
   mapM (\ps -> genFromObserves m ps gen) (chainSamples chain)
 
--- | 観測ごとの事後予測サンプル統計 (mean, 95% CI) を計算する。
+-- | Per-observation posterior-predictive summary statistics
+-- (mean and 95 % credible interval).
 --
--- 戻り値: 観測名 → 各観測位置 i に対する (mean, 2.5%, 97.5%) のリスト
+-- Returns: observation name ↦ a list of @(mean, 2.5%, 97.5%)@ triples,
+-- one per original observation index.
 posteriorPredictiveSummary
   :: [Map Text [Double]]                           -- posteriorPredictive の出力
   -> Map Text [(Double, Double, Double)]
@@ -95,27 +100,25 @@ posteriorPredictiveSummary preds =
 -- 事前予測サンプリング (チェーン不要)
 -- ---------------------------------------------------------------------------
 
--- | 事前分布から N 個の予測サンプルを生成する。
--- データを観測する前に「モデルがどんな観測値を予測するか」を確認するのに使う。
+-- | Generate @N@ predictive samples from the prior alone (without any
+-- observed data). Useful for sanity-checking what the model predicts
+-- /before/ conditioning on observations.
 priorPredictive
   :: forall r. ModelP r
-  -> Int        -- ^ サンプル数 N
+  -> Int        -- ^ Number of samples @N@.
   -> GenIO
   -> IO [Map Text [Double]]
 priorPredictive m n gen = replicateM n $ do
   ps <- samplePrior m gen
   genFromObserves m ps gen
 
--- | モデルの全 latent 変数を事前分布から 1 セット引く。
+-- | Draw one sample of every latent variable from its prior.
 --
--- 注: 'priorList' は placeholder=0 で構造を取り出すが、ここでは値を順次
--- サンプリングして Map に貯める。下流の latent (μ, σ → θ ~ Normal(μ,σ))
--- に対しては正しい連鎖サンプリングが必要だが、現状の 'priorList' は
--- 個別の事前のみを返す (μ, σ は固定 prior, θ は依存)。
---
--- 簡易実装: 各 latent を独立に事前から引く。階層モデルでは PyMC の
--- sample_prior_predictive と一致しないが、軽量な事前確認には十分。
--- (将来的には 'extractDeps' で順序付けて値を流し込む実装に拡張可能)
+-- Note: 'priorList' walks the model with placeholder zeros to extract its
+-- structure. This function then samples each latent independently from
+-- its individual prior. For hierarchical models this does not match
+-- PyMC's @sample_prior_predictive@ (which threads downstream dependencies),
+-- but it is enough for quick prior sanity checks.
 samplePrior :: forall r. ModelP r -> GenIO -> IO (Map Text Double)
 samplePrior m gen = do
   let priors = priorList m   -- [(name, Distribution Double)] (placeholder=0 走査)

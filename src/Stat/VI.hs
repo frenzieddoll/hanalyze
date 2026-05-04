@@ -49,17 +49,20 @@ import MCMC.HMC  ( logJointU, paramsToVec, vecToParams
 -- 設定
 -- ---------------------------------------------------------------------------
 
+-- | ADVI configuration.
 data VIConfig = VIConfig
-  { viIterations   :: Int     -- ^ Adam 反復回数
-  , viSamples      :: Int     -- ^ ELBO 勾配の MC サンプル数 (推奨: 5–10)
-  , viLearningRate :: Double  -- ^ Adam 学習率 α
-  , viBeta1        :: Double  -- ^ Adam β₁ (default 0.9)
-  , viBeta2        :: Double  -- ^ Adam β₂ (default 0.999)
-  , viEpsilon      :: Double  -- ^ Adam ε (default 1e-8)
-  , viNumDraws     :: Int     -- ^ 収束後に q から引くサンプル数
-  , viGradStep     :: Double  -- ^ 数値勾配の有限差分刻み幅
+  { viIterations   :: Int     -- ^ Number of Adam iterations.
+  , viSamples      :: Int     -- ^ Monte Carlo samples per ELBO gradient (5–10 typical).
+  , viLearningRate :: Double  -- ^ Adam learning rate @α@.
+  , viBeta1        :: Double  -- ^ Adam @β₁@ (default 0.9).
+  , viBeta2        :: Double  -- ^ Adam @β₂@ (default 0.999).
+  , viEpsilon      :: Double  -- ^ Adam @ε@ (default 1e-8).
+  , viNumDraws     :: Int     -- ^ Number of post-fit draws from @q@.
+  , viGradStep     :: Double  -- ^ Finite-difference step for numeric gradients.
   } deriving (Show)
 
+-- | Sensible defaults for ADVI: 1000 iterations, 5 MC samples, Adam at
+-- @α = 0.1@.
 defaultVIConfig :: VIConfig
 defaultVIConfig = VIConfig
   { viIterations   = 1000
@@ -76,23 +79,25 @@ defaultVIConfig = VIConfig
 -- 結果
 -- ---------------------------------------------------------------------------
 
+-- | ADVI result.
 data VIResult = VIResult
-  { viPostMeans   :: Params    -- ^ 事後平均 (constrained space, サンプル平均)
-  , viPostSDs     :: Params    -- ^ 事後 SD  (constrained space, サンプル標準偏差)
-  , viMuU         :: [Double]  -- ^ 変分平均 μ (unconstrained space)
-  , viSigmaU      :: [Double]  -- ^ 変分 SD  σ (unconstrained space)
-  , viElboHistory :: [Double]  -- ^ ELBO の時系列 (収束確認用)
-  , viDraws       :: [Params]  -- ^ 事後サンプル (constrained, viNumDraws 本)
+  { viPostMeans   :: Params    -- ^ Posterior means (constrained space, sample mean).
+  , viPostSDs     :: Params    -- ^ Posterior SDs   (constrained space).
+  , viMuU         :: [Double]  -- ^ Variational mean @μ@ (unconstrained).
+  , viSigmaU      :: [Double]  -- ^ Variational SD   @σ@ (unconstrained).
+  , viElboHistory :: [Double]  -- ^ ELBO trajectory (for convergence inspection).
+  , viDraws       :: [Params]  -- ^ Posterior draws in the constrained space (length 'viNumDraws').
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
 -- ADVI
 -- ---------------------------------------------------------------------------
 
--- | 平均場正規 ADVI を実行する。
+-- | Run mean-field normal ADVI.
 --
--- 内部では unconstrained 空間で最適化し、サンプルを constrained 空間に戻す。
--- 制約付きパラメータ (Exponential→PositiveT など) は自動変換される。
+-- Optimization happens in unconstrained space; samples are mapped back
+-- to the constrained space on the way out. Constrained parameters
+-- (e.g. @Exponential → PositiveT@) are transformed automatically.
 advi :: ModelP r -> VIConfig -> Params -> GenIO -> IO VIResult
 advi model cfg initP gen = do
   let names      = sampleNames model

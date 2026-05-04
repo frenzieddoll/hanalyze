@@ -69,12 +69,14 @@ ess xs
     pairSums (a : b : rest) = (a + b) : pairSums rest
     pairSums _              = []
 
--- | Split-R-hat 収束診断 (Vehtari et al. 2021)。
--- 各チェーンを前後半に分割して 2M 本のサブチェーンを作り、
--- チェーン間分散 B とチェーン内分散 W から R-hat を計算する。
--- R-hat < 1.01 で収束とみなすのが一般的。
--- 引数: チェーンごとのサンプルリスト（同一パラメータ）。
--- チェーン数 < 2 またはサンプル < 4 の場合は Nothing。
+-- | Split-R-hat convergence diagnostic (Vehtari et al. 2021).
+--
+-- Splits each chain in half to obtain @2M@ sub-chains, then computes
+-- R-hat from the between-chain variance @B@ and within-chain variance
+-- @W@. The conventional convergence threshold is @R-hat < 1.01@.
+-- The argument is the per-chain sample list for a single parameter.
+-- Returns 'Nothing' when there are fewer than 2 chains or fewer than 4
+-- samples per chain.
 rhat :: [[Double]] -> Maybe Double
 rhat chains
   | m < 2 || n < 4 = Nothing
@@ -99,9 +101,10 @@ rhat chains
     w       = mean_ chainVars
     varPlus = fromIntegral (n - 1) / fromIntegral n * w + b / fromIntegral n
 
--- | Kernel Density Estimation (ガウスカーネル、Silverman バンド幅)。
--- nPoints 点の (x, 密度) ペアを返す。サンプル数 < 2 の場合は空リスト。
--- 評価範囲: [min - 3σ, max + 3σ]
+-- | Kernel density estimation (Gaussian kernel, Silverman bandwidth).
+--
+-- Returns @nPoints@ pairs of @(x, density)@. With fewer than two samples
+-- the returned list is empty. The grid spans @[min - 3σ, max + 3σ]@.
 kde :: Int -> [Double] -> [(Double, Double)]
 kde nPoints xs
   | length xs < 2 = []
@@ -121,14 +124,17 @@ kde nPoints xs
     density x = sum [kernel ((x - xi) / h) | xi <- xs]
                 / (fromIntegral n * h)
 
--- | Bayesian Fraction of Missing Information (Betancourt 2016)。
+-- | Bayesian Fraction of Missing Information (Betancourt 2016).
 --
+-- @
 -- BFMI = E[(E_n − E_{n−1})²] / Var(E)
+-- @
 --
--- HMC/NUTS のエネルギー列 (各反復の Hamiltonian) から計算する。
--- 値が 0.3 未満なら、運動量再サンプリングが事後分布の裾を十分に探索できて
--- いないサインで、reparameterization を検討すべき (典型例: Neal's funnel)。
--- 0.3 以上が望ましく、PyMC ではしばしば 0.5 を目安にする。
+-- Computed from the energy sequence (Hamiltonian per iteration) of an
+-- HMC/NUTS run. Values below 0.3 indicate that momentum resampling is
+-- not exploring the posterior tails (consider reparameterization — the
+-- canonical example is Neal's funnel). Values above 0.3 are healthy;
+-- PyMC commonly uses 0.5 as a reference threshold.
 bfmi :: [Double] -> Maybe Double
 bfmi es
   | length es < 4 = Nothing

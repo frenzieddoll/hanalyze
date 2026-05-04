@@ -34,13 +34,14 @@ import qualified Numeric.LinearAlgebra as LA
 -- 型
 -- ---------------------------------------------------------------------------
 
--- | 各特徴の (μ, σ)。length は特徴数 p。
+-- | Per-feature mean and standard deviation. The list length is the
+-- feature count @p@.
 data Standardizer = Standardizer
-  { stMu :: ![Double]
-  , stSd :: ![Double]
+  { stMu :: ![Double]   -- ^ Per-feature mean @μ@.
+  , stSd :: ![Double]   -- ^ Per-feature standard deviation @σ@.
   } deriving (Eq, Show)
 
--- | 「何もしない」標準化 (μ=0, σ=1)。p 次元。
+-- | The identity standardizer (@μ = 0, σ = 1@) of dimension @p@.
 identityStandardizer :: Int -> Standardizer
 identityStandardizer p = Standardizer (replicate p 0) (replicate p 1)
 
@@ -48,9 +49,11 @@ identityStandardizer p = Standardizer (replicate p 0) (replicate p 1)
 -- 学習 (fit)
 -- ---------------------------------------------------------------------------
 
--- | n × p の行列から各列の (mean, std) を学習。
--- * std は不偏分散の平方根 (n-1 で正規化)。
--- * std が極小 (< 1e-12) の列は std=1.0 に置換 (定数列対策)。
+-- | Learn the per-column @(mean, std)@ from an @n × p@ matrix.
+--
+-- * @std@ is the unbiased estimate (@n-1@ denominator).
+-- * Columns whose @std@ is below @1e-12@ are coerced to @std = 1@ to
+--   avoid divide-by-zero on constant features.
 fitStandardizer :: LA.Matrix Double -> Standardizer
 fitStandardizer x =
   let cols = LA.toColumns x
@@ -76,7 +79,7 @@ fitStandardizer x =
 -- 適用 / 復元
 -- ---------------------------------------------------------------------------
 
--- | (x - μ) / σ を全行に適用。
+-- | Apply @(x - μ) / σ@ to every row.
 applyStandardizer :: Standardizer -> LA.Matrix Double -> LA.Matrix Double
 applyStandardizer s x =
   let cols  = LA.toColumns x
@@ -85,7 +88,7 @@ applyStandardizer s x =
   where
     transformCol c m sd = LA.cmap (\v -> (v - m) / sd) c
 
--- | x · σ + μ を全行に適用 (標準化空間 → 元単位)。
+-- | Apply @x · σ + μ@ to every row (standardized space → original units).
 unapplyStandardizer :: Standardizer -> LA.Matrix Double -> LA.Matrix Double
 unapplyStandardizer s x =
   let cols  = LA.toColumns x
@@ -94,7 +97,8 @@ unapplyStandardizer s x =
   where
     untransformCol c m sd = LA.cmap (\v -> v * sd + m) c
 
--- | 1 列・1 セルの標準化 (JS 側 / スライダ用)。インデックスが範囲外なら値そのまま。
+-- | Single-cell standardization for one column (used by the JS slider
+-- predictor). Returns the value unchanged when the index is out of range.
 applyStandardizerCol :: Standardizer -> Int -> Double -> Double
 applyStandardizerCol s k v
   | k < 0 || k >= length (stMu s) = v
