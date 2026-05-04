@@ -41,6 +41,13 @@ module Model.GP
     -- * Data for interactive prediction
   , GPPredData (..)
   , gpPredData
+    -- * Multi-input (primary API; X is @n × p@, Y is @n × q@)
+  , GPResultMV (..)
+  , buildKernelMatrixMV
+  , logMarginalLikelihoodMV
+  , fitGPMV
+  , fitGPMVMulti
+  , optimizeGPMV
   ) where
 
 import Data.Text (Text)
@@ -49,6 +56,7 @@ import qualified Optim.GradAscent
 import qualified Optim.Numeric
 import qualified Optim.LBFGS as LBFGS
 import qualified Optim.Common as OC
+import qualified Stat.KernelDist as KD
 import Control.Exception (SomeException, try, evaluate)
 import System.IO.Unsafe (unsafePerformIO)
 
@@ -297,3 +305,163 @@ gpPredData model trainX trainY =
       kyInv  = LA.inv ky
       alpha  = LA.toList (kyInv LA.#> LA.fromList trainY)
   in GPPredData trainX alpha (map LA.toList (LA.toRows kyInv))
+
+-- ---------------------------------------------------------------------------
+-- Multi-input (multivariate X) API
+--
+-- The kernel of every supported family ('RBF', 'Matern52', 'Periodic') is a
+-- function of the Euclidean distance @r = ‖x − x'‖@, so the multi-input
+-- version reduces to building the @n × n@ pairwise distance matrix once
+-- (via 'Stat.KernelDist.pairwiseSqDist') and applying the kernel function
+-- element-wise via 'LA.cmap'.
+--
+-- A single shared length scale @ℓ@ is used across every input dimension.
+-- For axis-specific length scales, scale columns of @X@ by @1 / ℓ_d@
+-- before calling these functions.
+-- ---------------------------------------------------------------------------
+
+-- | Multi-input GP posterior result. Mirrors 'GPResult' but stores the
+-- @m × p@ test-point matrix instead of a 1D list.
+data GPResultMV = GPResultMV
+  { gpmvTestX :: LA.Matrix Double  -- ^ Test points (@m × p@).
+  , gpmvMean  :: LA.Vector Double  -- ^ Posterior mean (length @m@).
+  , gpmvVar   :: LA.Vector Double  -- ^ Posterior variance (length @m@).
+  , gpmvLower :: LA.Vector Double  -- ^ @mean − 2σ@.
+  , gpmvUpper :: LA.Vector Double  -- ^ @mean + 2σ@.
+  } deriving (Show)
+
+-- | Apply the kernel function to an @m × n@ matrix of squared distances.
+-- This is the per-element work that follows BLAS distance computation.
+applyKernel :: Kernel -> GPParams -> LA.Matrix Double -> LA.Matrix Double
+applyKernel RBF p d2 =
+  let l2 = gpLengthScale p ** 2
+      sf = gpSignalVar p
+  in LA.cmap (\s -> sf * exp (- s / (2 * l2))) d2
+applyKernel Matern52 p d2 =
+  let l  = gpLengthScale p
+      sf = gpSignalVar p
+  in LA.cmap (\s -> let r = sqrt (max 0 s)
+                        u = sqrt 5 * r / l
+                    in sf * (1 + u + u * u / 3) * exp (- u)) d2
+applyKernel Periodic p d2 =
+  let l  = gpLengthScale p
+      sf = gpSignalVar p
+      pr = gpPeriod p
+  in LA.cmap (\s -> let r = sqrt (max 0 s)
+                        ss = sin (pi * r / pr)
+                    in sf * exp (- 2 * ss * ss / (l * l))) d2
+
+-- | Build the kernel matrix @K(X, X')@ of shape @|X| × |X'|@ from
+-- multi-input matrices. @X@ is @n × p@; @X'@ is @m × p@.
+buildKernelMatrixMV
+  :: Kernel -> GPParams -> LA.Matrix Double -> LA.Matrix Double
+  -> LA.Matrix Double
+buildKernelMatrixMV ker p x x' =
+  applyKernel ker p (KD.pairwiseSqDistXY x x')
+
+-- | Multi-input @K + σ_n² I@.
+noiseKernelMV :: Kernel -> GPParams -> LA.Matrix Double -> LA.Matrix Double
+noiseKernelMV ker p x =
+  let n      = LA.rows x
+      k      = applyKernel ker p (KD.pairwiseSqDist x)
+      jitter = max (gpNoiseVar p) 1e-6
+  in k `LA.add` LA.scale jitter (LA.ident n)
+
+-- | Multi-input log marginal likelihood.
+logMarginalLikelihoodMV
+  :: LA.Matrix Double  -- ^ Training @X@ (@n × p@).
+  -> LA.Vector Double  -- ^ Training @y@ (length @n@).
+  -> Kernel -> GPParams -> Double
+logMarginalLikelihoodMV trainX y ker params =
+  let n   = LA.rows trainX
+      ky  = noiseKernelMV ker params trainX
+      tryChol c =
+        let result = unsafePerformIO $
+                       try (evaluate (LA.chol (LA.sym c)))
+                       :: Either SomeException (LA.Matrix Double)
+        in case result of
+             Right r -> Just r
+             Left _  -> Nothing
+      mR = case tryChol ky of
+             Just r  -> Just r
+             Nothing -> tryChol (ky `LA.add` LA.scale 1e-4 (LA.ident n))
+  in case mR of
+       Nothing -> -1e30
+       Just r  ->
+         let logDet  = 2 * sum (map log (LA.toList (LA.takeDiag r)))
+             alpha   = ky LA.<\> y
+             dataFit = LA.dot y alpha
+         in -0.5 * dataFit - 0.5 * logDet
+            - fromIntegral n / 2 * log (2 * pi)
+
+-- | Multi-input single-output GP posterior prediction.
+fitGPMV
+  :: GPModel
+  -> LA.Matrix Double    -- ^ Training @X@ (@n × p@).
+  -> LA.Vector Double    -- ^ Training @y@ (length @n@).
+  -> LA.Matrix Double    -- ^ Test @X_*@ (@m × p@).
+  -> GPResultMV
+fitGPMV model trainX y testX =
+  let yMat               = LA.asColumn y
+      (meanMat, varVec)  = fitGPMVMulti model trainX yMat testX
+      mu                 = LA.flatten (meanMat LA.¿ [0])
+      stdVec             = LA.cmap sqrt varVec
+  in GPResultMV
+       { gpmvTestX = testX
+       , gpmvMean  = mu
+       , gpmvVar   = varVec
+       , gpmvLower = mu - LA.scale 2 stdVec
+       , gpmvUpper = mu + LA.scale 2 stdVec
+       }
+
+-- | Multi-input multi-output GP posterior prediction. @Y@ has shape
+-- @n × q@ (one column per output task). The variance does not depend on
+-- @y@, so a single length-@m@ vector is shared by every output.
+fitGPMVMulti
+  :: GPModel
+  -> LA.Matrix Double    -- ^ Training @X@ (@n × p@).
+  -> LA.Matrix Double    -- ^ Training @Y@ (@n × q@).
+  -> LA.Matrix Double    -- ^ Test @X_*@ (@m × p@).
+  -> (LA.Matrix Double, LA.Vector Double)
+fitGPMVMulti model trainX trainY testX =
+  let ker    = gpKernel model
+      params = gpParams model
+      ky     = noiseKernelMV ker params trainX
+      kyInv  = LA.inv ky
+      alpha  = kyInv LA.<> trainY                          -- n × q
+      kStar  = buildKernelMatrixMV ker params testX trainX -- m × n
+      meanMt = kStar LA.<> alpha                           -- m × q
+      w      = kStar LA.<> kyInv                           -- m × n
+      sf     = gpSignalVar params
+      diagKss = LA.konst sf (LA.rows testX)                -- k(x*, x*) = σ_f²
+      varVec  = LA.cmap (max 0)
+                 (diagKss - LA.fromList
+                   (zipWith LA.dot
+                     (LA.toRows kStar) (LA.toRows w)))
+  in (meanMt, varVec)
+
+-- | Multi-input GP hyperparameter optimization. Mirrors 'optimizeGP' but
+-- accepts a multi-input training matrix.
+optimizeGPMV
+  :: Kernel -> LA.Matrix Double -> LA.Vector Double -> GPParams -> GPParams
+optimizeGPMV ker trainX y p0 =
+  let u0   = [log (gpLengthScale p0), log (gpSignalVar p0), log (gpNoiseVar p0)]
+      cfg  = LBFGS.defaultLBFGSConfig
+               { LBFGS.lbDir   = OC.Maximize
+               , LBFGS.lbStop  = OC.defaultStopCriteria
+                                   { OC.stMaxIter = 200, OC.stTolFun = 1e-8 }
+               }
+      result = unsafePerformIO $ LBFGS.runLBFGSNumeric cfg obj u0
+      uOpt   = OC.orBest result
+  in p0
+       { gpLengthScale = exp (uOpt !! 0)
+       , gpSignalVar   = exp (uOpt !! 1)
+       , gpNoiseVar    = exp (uOpt !! 2)
+       }
+  where
+    toParams u = p0
+      { gpLengthScale = exp (u !! 0)
+      , gpSignalVar   = exp (u !! 1)
+      , gpNoiseVar    = exp (u !! 2)
+      }
+    obj u = logMarginalLikelihoodMV trainX y ker (toParams u)

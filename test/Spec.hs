@@ -26,6 +26,7 @@ import qualified Stat.Interpolate  as Interp
 import qualified Stat.AdaptiveGrid as AG
 import qualified Stat.KernelDist   as KD
 import qualified Model.Kernel      as Kn
+import qualified Model.GP          as GP
 import qualified Viz.ReportBuilder as RB
 import qualified Data.ByteString   as BS
 import System.IO.Temp (withSystemTempFile)
@@ -123,6 +124,42 @@ main = hspec $ do
                     | j <- [0 .. 2] ]
                   | i <- [0 .. 2] ]
       LA.norm_Inf (gMV - ref) < 1e-12 `shouldBe` True
+
+    it "Model.GP MV: 1D input matches legacy 1D fitGP within 1e-6" $ do
+      let xL  = [fromIntegral i / 5 | i <- [0 .. 19 :: Int]]
+          yL  = map sin xL
+          tL  = [0.5, 1.5, 2.5]
+          mdl = GP.GPModel GP.RBF (GP.GPParams 1.0 1.0 0.05 1.0)
+          legacy = GP.fitGP mdl xL yL tL
+          xMV = LA.fromLists (map (:[]) xL) :: LA.Matrix Double
+          yMV = LA.fromList yL
+          tMV = LA.fromLists (map (:[]) tL) :: LA.Matrix Double
+          mv  = GP.fitGPMV mdl xMV yMV tMV
+          dMu = LA.norm_Inf
+                  (GP.gpmvMean mv - LA.fromList (GP.gpMean legacy))
+          dVr = LA.norm_Inf
+                  (GP.gpmvVar  mv - LA.fromList (GP.gpVar  legacy))
+      (dMu < 1e-6) `shouldBe` True
+      (dVr < 1e-6) `shouldBe` True
+
+    it "Model.GP MV: 2D RBF reaches R² > 0.95 with optimized HP" $ do
+      let nN  = 50
+          gx  = [(fromIntegral i / 10, fromIntegral (nN - i) / 10)
+                | i <- [0 .. nN - 1 :: Int]]
+          ftn (x1, x2) = sin x1 + 0.5 * cos x2
+          xMV = LA.fromLists [ [a, b] | (a, b) <- gx ] :: LA.Matrix Double
+          yMV = LA.fromList [ ftn p | p <- gx ]
+          p0  = GP.GPParams 1.0 1.0 0.01 1.0
+          po  = GP.optimizeGPMV GP.RBF xMV yMV p0
+          mdl = GP.GPModel GP.RBF po
+          res = GP.fitGPMV mdl xMV yMV xMV
+          mu  = GP.gpmvMean res
+          y   = yMV
+          ss  = LA.sumElements ((y - mu) ** 2)
+          mY  = LA.sumElements y / fromIntegral nN
+          st  = LA.sumElements ((y - LA.konst mY nN) ** 2)
+          r2  = 1 - ss / st
+      (r2 > 0.95) `shouldBe` True
 
     it "MV gramMatrix on a single-column input agrees with kernelFromSqDist" $ do
       let xs1 = LA.fromLists [[fromIntegral i / 5] | i <- [0 .. 19 :: Int]]
