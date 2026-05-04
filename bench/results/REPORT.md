@@ -477,6 +477,39 @@ Everything else (the original 5-item improvement queue) has either
 landed or been demonstrated to need the kind of FFI/C-extension that
 breaks the project's "all algorithms in Haskell" constraint.
 
+## After NF1 + NF3 + NF4 — NSGA-II 100 gen で pymoo 並み達成
+
+`Optim.NSGA` 内の 3 つの fix を入れて、**同世代 (100 gen) で pymoo の
+HV/IGD を超える**ところまで到達:
+
+* **NF1**: SBX 数式を boundary-aware 版 (Deb 1995 Algorithm 1, pymoo
+  互換) に書換。境界に近い親の情報が子に伝わらず ZDT 系で収束が遅れて
+  いた問題を解消。**単独で 100 gen 達成の主因**。
+* **NF3**: tournament を random-permutation 化。各個体が正確に 2 回
+  tournament に出走する設計で、iid uniform tournament の selection
+  pressure variance を排除。
+* **NF4**: 重複除去 (L∞ 1e-12) + 最大 10 mating retry。pymoo の
+  DefaultDuplicateElimination 相当。
+
+NF5 (per-dim c1↔c2 swap) は試行したが ZDT2 で逆効果 → revert。
+NF2 (dom-based tournament) は NF1+NF3 で目標達成のため未実装。
+
+100 gen × 100 popSize の最終結果:
+
+| Problem | HV hanalyze | HV pymoo | IGD hanalyze | IGD pymoo |
+|---|---|---|---|---|
+| ZDT1   | **0.870** | 0.839 | **0.0046** | 0.022 |
+| ZDT2   | 0.46-0.54 (median 0.535) | 0.484 | 0.005-0.07 | 0.034 |
+| ZDT3   | **1.328** | 1.291 | **0.0055** | 0.014 |
+| DTLZ2  | **2.739** | 2.722 | **0.070** | 0.079 |
+
+ZDT2 のみ run-to-run variance あり (凹 Pareto front の特性)。500 gen
+では HV 0.538 (常勝) で stabilize。pymoo は seed=1 固定なので
+deterministic に見えるが別 seed では同様の variance があると推定。
+
+**実装ポリシ**: pure Haskell + immutable Vector のみ、新ルール準拠。
+Mutable Vector は使用していない。
+
 ## High-leverage improvement queue
 
 In rough order of expected wall-time impact across the suite:

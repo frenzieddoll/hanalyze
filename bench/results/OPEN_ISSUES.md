@@ -8,29 +8,23 @@
 
 ---
 
-## 1. NSGA-II — 同世代 (100 gen) で pymoo に到達できない ★最優先
+## 1. NSGA-II — 同世代 (100 gen) で pymoo に到達 ✅ 解決済 (NF1+NF3+NF4)
 
-| 観点 | 値 |
-|---|---|
-| ZDT1 HV @ 100 gen | hanalyze 0 / pymoo 0.84 |
-| ZDT2 HV @ 100 gen | hanalyze 0 / pymoo 0.48 |
-| ZDT3 HV @ 100 gen | hanalyze 0.24 / pymoo 1.29 |
-| DTLZ2_3 HV @ 100 gen | hanalyze 2.69 / pymoo 2.72 |
-| 500 gen での状況 | hanalyze は HV/IGD で pymoo を 3/4 問題で凌駕 |
-| 困難度 | M (実装内部の subtle 差を pymoo source 級に詰める必要) |
+**結果**: NSGA_INVESTIGATION.md の調査で SBX boundary correction の
+欠落を主因と特定。pymoo source (Deb 1995 Algorithm 1) に合わせて
+書き直し + tournament の random permutation 化 + 重複除去で
 
-**症状**: アルゴリズム params (popSize=100, ηc=15, ηm=20, prob_var=0.5,
-mutation prob=1/d) は pymoo と完全一致しているのに、ZDT 問題で 100
-gen での収束速度が 5× 程度劣る。500 gen では追いつき・追い越す。
+| Problem | HV @ 100 gen | pymoo HV |
+|---|---|---|
+| ZDT1   | 0.870 | 0.839 (✓) |
+| ZDT2   | 0.46-0.54 (variance) | 0.484 (≈) |
+| ZDT3   | 1.328 | 1.291 (✓) |
+| DTLZ2  | 2.739 | 2.722 (✓) |
 
-**仮説 (要検証)**:
-- `nonDominatedSort` の出力順や rank 計算の細部が異なる
-- `crowdingDistance` の正規化や端点処理
-- `selectTopN` での front 跨ぎ選別の挙動
-- Tournament が 4-way だったり、selection pressure が違う
+ZDT2 のみ凹 Pareto front 特性で run-to-run variance あり (median は
+pymoo を上回る)。500 gen では全問題で安定して凌駕。
 
-**対応方針**: pymoo source / Deb 2002 論文を読み、1 世代分の
-trace を hanalyze ↔ pymoo で diff して原因特定 → 修正 (実装は調査後)。
+詳細は `NSGA_INVESTIGATION.md` を参照。
 
 ---
 
