@@ -1,13 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | 要因計画 (factorial designs)。
+-- | Factorial designs.
 --
--- - 'fullFactorial':      k 因子それぞれが levels[i] 水準を持つ全組合せ
--- - 'twoLevelFactorial':  2^k 計画 (各因子 ±1)
--- - 'threeLevelFactorial': 3^k 計画 (各因子 -1, 0, +1)
--- - 'fractionalFactorial': 2^(k-p) 部分要因計画 (defining relation 指定)
--- - 'mixedFactorial':     混合水準計画 (e.g. 2² × 3¹)
+--   * 'fullFactorial'        — full factorial with @k@ factors each at
+--     @levels[i]@ levels.
+--   * 'twoLevelFactorial'    — @2^k@ design (each factor at @±1@).
+--   * 'threeLevelFactorial'  — @3^k@ design (each factor at @-1, 0, +1@).
+--   * 'fractionalFactorial'  — @2^(k-p)@ fractional design (specified
+--     defining relation).
+--   * 'mixedFactorial'       — mixed-level design (e.g. @2² × 3¹@).
 --
--- 設計行列を `[[Double]]` で返し、別途 `Design.Quality` で直交性等を評価。
+-- All designs are returned as @[[Double]]@. Use 'Design.Quality' to
+-- evaluate orthogonality and other criteria.
 module Design.Factorial
   ( fullFactorial
   , twoLevelFactorial

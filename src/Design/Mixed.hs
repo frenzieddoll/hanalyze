@@ -1,8 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | 混合水準計画 (Mixed-level designs)。
+-- | Mixed-level designs.
 --
--- 各因子が異なる水準数を持つ計画。`Design.Factorial.mixedFactorial` の
--- 拡張で、各因子に明示的な水準値リストを渡せる版。
+-- Designs in which factors have different numbers of levels. An extension
+-- of @Design.Factorial.mixedFactorial@ that accepts an explicit list of
+-- level values per factor.
 module Design.Mixed
   ( mixedLevelDesign
   , crossDesign

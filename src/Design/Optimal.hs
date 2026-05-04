@@ -1,13 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | 最適計画 (Optimal designs): D-optimal、A-optimal。
+-- | Optimal designs: D-optimal and A-optimal.
 --
--- 候補集合 (candidate set) から指定試行数 n の部分集合を選び、
--- 情報行列 XᵀX に基づく基準を最大化/最小化する。
+-- Selects a subset of @n@ runs from a candidate set, maximizing /
+-- minimizing a criterion based on the information matrix @XᵀX@.
 --
--- - **D-optimal**: max det(XᵀX)  → パラメタ全体の同時推定精度
--- - **A-optimal**: min trace((XᵀX)⁻¹) → 平均推定分散最小
+--   * **D-optimal** — @max det(XᵀX)@ → joint estimation precision of
+--     all parameters.
+--   * **A-optimal** — @min trace((XᵀX)⁻¹)@ → minimum average estimation
+--     variance.
 --
--- アルゴリズム: Fedorov 交換法 (順次交換)。初期は候補からランダム選択し、
+-- Algorithm: the Fedorov exchange method (sequential exchanges). Starts
+-- from a random selection of candidates and
 -- 改善する交換が見つからなくなるまで繰り返す。
 module Design.Optimal
   ( OptCriterion (..)

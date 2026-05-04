@@ -1,11 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | 検出力解析 (Power analysis): サンプルサイズ決定、検出力計算。
+-- | Power analysis: sample-size determination and power computation.
 --
--- 主要関数:
--- - 'powerTTest':         t 検定の検出力 (二群)
--- - 'sampleSizeTTest':    指定検出力に必要な n
--- - 'powerOneWayAnova':   F 検定 (一元配置 ANOVA) の検出力
--- - 'powerProportion':    比率検定 (二群) の検出力
+-- Main functions:
+--
+--   * 'powerTTest'        — power of a two-sample t-test.
+--   * 'sampleSizeTTest'   — @n@ required to attain a given power.
+--   * 'powerOneWayAnova'  — power of an F-test (one-way ANOVA).
+--   * 'powerProportion'   — power of a two-sample proportion test.
 module Design.Power
   ( -- * t 検定
     powerTTest

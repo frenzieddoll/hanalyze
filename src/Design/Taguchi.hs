@@ -1,13 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | タグチメソッド (Taguchi method) — 直交表 ('Design.Orthogonal') を
--- ロバスト設計に拡張する解析層。
+-- | The Taguchi method — an analytical layer that extends orthogonal
+-- arrays ('Design.Orthogonal') for robust design.
 --
--- 主要要素:
+-- Main building blocks:
 --
--- 1. **SN 比 (Signal-to-Noise ratio)** — 観測のばらつきを定量化:
---    - SmallerBetter:    望小特性 (e.g. 不良率)         η = -10 log₁₀(Σ y²/n)
---    - LargerBetter:     望大特性 (e.g. 強度)            η = -10 log₁₀(Σ (1/y²)/n)
---    - NominalBest:      望目特性 (mean/variance)        η = 10 log₁₀(μ²/σ²)
+-- 1. **Signal-to-Noise ratio (SN)** — quantifies variability:
+--
+--    * @SmallerBetter@   — smaller-the-better (e.g. defect rate),
+--      @η = -10 log₁₀(Σ y²/n)@.
+--    * @LargerBetter@    — larger-the-better (e.g. strength),
+--      @η = -10 log₁₀(Σ (1/y²)/n)@.
+--    * @NominalBest@     — nominal-the-best (mean/variance),
+--      @η = 10 log₁₀(μ²/σ²)@.
 --    - NominalBestTarget m: 目標値 m への二乗平均偏差    η = -10 log₁₀(Σ (y-m)²/n)
 --
 -- 2. **内側/外側配置 (Inner/Outer Arrays)** — 制御因子 (内側) と

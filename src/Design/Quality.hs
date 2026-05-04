@@ -1,12 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | 設計の質を評価する指標。
+-- | Quality criteria for evaluating designs.
 --
--- - 'isOrthogonal':       設計行列の列が直交か (XᵀX が対角)
--- - 'orthogonalityScore': 直交度の数値指標 (0..1)
--- - 'conditionNumber':    XᵀX の条件数 (大きいと多重共線性)
--- - 'dEfficiency':        D-効率 (det(XᵀX/n)^(1/p))
--- - 'aEfficiency':        A-効率 (trace((XᵀX/n)⁻¹) の逆)
--- - 'vifList':            各列の VIF (Variance Inflation Factor)
+--   * 'isOrthogonal'       — are the design columns orthogonal? (i.e.
+--     @XᵀX@ diagonal).
+--   * 'orthogonalityScore' — numeric orthogonality score in @[0, 1]@.
+--   * 'conditionNumber'    — condition number of @XᵀX@ (large values
+--     indicate multicollinearity).
+--   * 'dEfficiency'        — D-efficiency @det(XᵀX/n)^(1/p)@.
+--   * 'aEfficiency'        — A-efficiency: reciprocal of
+--     @trace((XᵀX/n)⁻¹)@.
+--   * 'vifList'            — per-column Variance Inflation Factor.
 module Design.Quality
   ( isOrthogonal
   , orthogonalityScore

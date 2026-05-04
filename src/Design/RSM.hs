@@ -1,11 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | 応答曲面法 (Response Surface Methodology, RSM)。
+-- | Response Surface Methodology (RSM).
 --
--- - 'centralComposite': 中心複合計画 (CCD) — 2^k 要因 + 軸点 + 中心点
--- - 'boxBehnken':       Box-Behnken 計画 — k 因子の三水準で軸無しデザイン
--- - 'quadraticDesign':  二次モデル用の計画行列 (定数 + 主効果 + 二乗項 + 交互作用)
--- - 'fitQuadratic':     二次回帰モデルを最小二乗で fit
--- - 'optimumPoint':     fit から極値 (Δ最大/最小) を解析的に求める
+--   * 'centralComposite' — central composite design (CCD): @2^k@ factorial
+--     + axial points + center points.
+--   * 'boxBehnken'       — Box-Behnken design: @k@ three-level factors
+--     without axial points.
+--   * 'quadraticDesign'  — design matrix for the quadratic model
+--     (intercept + main + squared + interaction terms).
+--   * 'fitQuadratic'     — fit the quadratic regression by least squares.
+--   * 'optimumPoint'     — analytically solve for the extremum (max / min)
+--     from the fit.
 module Design.RSM
   ( CCDType (..)
   , centralComposite

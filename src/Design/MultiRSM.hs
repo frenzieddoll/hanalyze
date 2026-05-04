@@ -1,8 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | 多目的 Response Surface Methodology (Phase U1)。
+-- | Multi-response Response Surface Methodology.
 --
--- 各応答 y_j に対して二次モデルを fit し、極値解析を q 個並列に行う。
--- 多目的最適化の出発点として、各応答の単独最適点を提示する。
+-- Fits a quadratic model to each response @y_j@ and performs the extremum
+-- analysis @q@ times in parallel. As a starting point for multi-objective
+-- optimization, this presents the individual optimum of each response.
 module Design.MultiRSM
   ( MultiQuadFit (..)
   , fitMultiQuadratic

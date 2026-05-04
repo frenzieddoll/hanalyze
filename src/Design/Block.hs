@@ -1,10 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | ブロック計画 (block designs): ラテン方格、乱塊法。
+-- | Block designs: Latin squares and randomized complete block designs.
 --
--- - 'latinSquare':         n × n のラテン方格 (n 因子の効率的配置)
--- - 'graecoLatinSquare':   2 つの直交ラテン方格の組
--- - 'randomizedBlock':     乱塊法 (b ブロック × t 処理)
--- - 'shuffleSeq':          擬似乱数で配列をシャッフル (再現性のため seed 指定)
+--   * 'latinSquare'        — @n × n@ Latin square (efficient arrangement
+--     of @n@ treatments).
+--   * 'graecoLatinSquare'  — pair of orthogonal Latin squares.
+--   * 'randomizedBlock'    — randomized block design (@b@ blocks × @t@
+--     treatments).
+--   * 'shuffleSeq'         — pseudo-random sequence shuffler (seed-driven
+--     for reproducibility).
 module Design.Block
   ( latinSquare
   , graecoLatinSquare

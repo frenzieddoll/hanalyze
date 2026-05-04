@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | ANOVA / ANCOVA テーブル。
+-- | ANOVA / ANCOVA tables.
 --
--- 一元配置/二元配置の分散分析を計算し、F 値・p 値・効果量 η² を出力する。
+-- Computes one-way and two-way analysis of variance, reporting F values,
+-- p values, and the @η²@ effect size.
 module Design.Anova
   ( AnovaRow (..)
   , AnovaTable (..)
