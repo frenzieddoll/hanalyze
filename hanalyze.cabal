@@ -72,6 +72,7 @@ library
     Stat.PosteriorPredictive
     Stat.Summary
     Stat.Interpolate
+    Stat.AdaptiveGrid
     Optim.Adam
     Optim.GradAscent
     Optim.Numeric
