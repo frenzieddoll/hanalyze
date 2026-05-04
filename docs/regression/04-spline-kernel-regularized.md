@@ -241,6 +241,84 @@ graph TD
 
 ---
 
+## Multivariate input (Phase K1-K5)
+
+`Model.Kernel` and `Model.GP` (and `GPRobust` / `MultiGP`) accept the
+explanatory variables as a matrix **`X :: LA.Matrix Double` (`n × p`)**
+through their MV (multivariate) APIs. The policy is "multi-input is
+primary, 1D is the specialization": the 1D wrappers can be expressed
+as the MV path with `X = n × 1`.
+
+### BLAS-backed distance matrix
+
+`Stat.KernelDist.pairwiseSqDist :: Matrix → Matrix` builds
+
+\[ D_{ij} = \|x_i\|^2 + \|x_j\|^2 - 2 x_i^\top x_j \]
+
+using only `outer` and `<>` (= GEMM) from hmatrix. No list traversal,
+no Haskell-level `O(n²)` loop.
+
+```mermaid
+flowchart LR
+  X["X (n×p)"] --> S["rowSqNorms (n)"]
+  X --> XT["X · Xᵀ (BLAS GEMM)"]
+  S --> R2["outer s 1 → ‖x_i‖²"]
+  S --> C2["outer 1 s → ‖x_j‖²"]
+  R2 --> D["D = R² + C² − 2 X·Xᵀ"]
+  C2 --> D
+  XT --> D
+  D --> K["K = κ(D / h²)  (LA.cmap)"]
+```
+
+### Model.Kernel MV API
+
+| Function | Signature | Role |
+|---|---|---|
+| `gramMatrixMV` | `Kernel → h → X(n×p) → K(n×n)` | Radial kernel Gram matrix |
+| `gramMatrixMVXY` | `Kernel → h → X*(m×p) → X(n×p) → K*(m×n)` | Cross Gram for prediction |
+| `kernelRidgeMV` | `Kernel → h → λ → X(n×p) → Y(n×q) → KernelRidgeFitMV` | Multi-input multi-output KR (`α = (K + λI)⁻¹ Y`) |
+| `predictKernelRidgeMV` | `KernelRidgeFitMV → X*(m×p) → Ŷ(m×q)` | Prediction |
+| `nwRegressionMV` | `Kernel → h → X(n×p) → Y(n×q) → X*(m×p) → Ŷ(m×q)` | Multi-input multi-output NW |
+
+Every supported kernel is radial (Gaussian / Epanechnikov / Triangular
+/ Uniform / TriCube). `kernelFromSqDist k s` (with `s = ‖Δ‖² / h²`) is
+applied element-wise via `LA.cmap`. For per-axis bandwidths, scale
+columns of `X` by `1 / h_d` before calling `gramMatrixMV`.
+
+### Model.GP MV API
+
+| Function | Role |
+|---|---|
+| `buildKernelMatrixMV :: Kernel → GPParams → X → X' → K` | RBF / Matern52 / Periodic on multi-input (Periodic uses the L2 distance). |
+| `logMarginalLikelihoodMV` | Cholesky-based `log p(y | X, θ)`. |
+| `fitGPMV` / `fitGPMVMulti` | Single / multi-output posterior mean + variance (`Ky⁻¹` shared). |
+| `optimizeGPMV` | L-BFGS over `(log ℓ, log σ_f², log σ_n²)` against the marginal likelihood. |
+
+### CLI
+
+```bash
+# Multi-input KR
+hanalyze kernel data.csv "x1 x2 x3" y --method kr --bandwidth 0.5 --lambda 1e-4
+
+# Multi-input NW
+hanalyze kernel data.csv "x1 x2 x3" y --method nw --bandwidth 0.5
+
+# Existing RFF (multi-input, multi-output, interactive HTML)
+hanalyze kernel data.csv "x1 x2" y --method rff --features 256 --report fit.html
+```
+
+The `kr` / `nw` multi-input runners only print `R²` and `RMSE` to stdout
+(no plot; high dimensional). Use `--method rff` if you need a chart.
+
+### 1D equivalence
+
+`fitGP` (1D list input) and `fitGPMV` (with `X = asColumn (fromList xs)`)
+agree on `mean` / `var` to within **1e-6** (verified by hspec). The same
+applies to `kernelRidge` ↔ `kernelRidgeMV` (`X` as an `n × 1` matrix),
+so existing 1D code paths are not disturbed.
+
+---
+
 ## Related links
 
 - Theory: [docs/regression/theory-regression-extensions.md](theory-regression-extensions.md)

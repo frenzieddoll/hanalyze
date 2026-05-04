@@ -241,6 +241,72 @@ graph TD
 
 ---
 
+## 多次元入力 (Phase K1-K5)
+
+`Model.Kernel` と `Model.GP` (および `GPRobust` / `MultiGP`) は **`X :: LA.Matrix Double` (`n × p`)** を直接受け取る MV (Multi-Variate) API を持つ。「多次元 = 主、1 次元 = 特殊化」という方針で、1D 版は MV を `n × 1` 行列に昇格して呼ぶラッパとしても利用可能。
+
+### 距離行列を BLAS で組む
+
+`Stat.KernelDist.pairwiseSqDist :: Matrix → Matrix` は
+
+\[ D_{ij} = \|x_i\|^2 + \|x_j\|^2 - 2 x_i^\top x_j \]
+
+を hmatrix の `outer` (ベクトル × ベクトル) と `<>` (= GEMM) だけで構成する。リスト経由が無く、`O(n²)` の Haskell ループも消える。
+
+```mermaid
+flowchart LR
+  X["X (n×p)"] --> S["rowSqNorms (n)"]
+  X --> XT["X · Xᵀ (BLAS GEMM)"]
+  S --> R2["outer s 1 → ‖x_i‖²"]
+  S --> C2["outer 1 s → ‖x_j‖²"]
+  R2 --> D["D = R² + C² − 2 X·Xᵀ"]
+  C2 --> D
+  XT --> D
+  D --> K["K = κ(D / h²)  (LA.cmap)"]
+```
+
+### Model.Kernel MV API
+
+| 関数 | シグネチャ | 役割 |
+|---|---|---|
+| `gramMatrixMV` | `Kernel → h → X(n×p) → K(n×n)` | radial カーネルの Gram 行列 |
+| `gramMatrixMVXY` | `Kernel → h → X*(m×p) → X(n×p) → K*(m×n)` | 予測時の cross Gram |
+| `kernelRidgeMV` | `Kernel → h → λ → X(n×p) → Y(n×q) → KernelRidgeFitMV` | 多入力多出力 KR (`α = (K + λI)⁻¹ Y`) |
+| `predictKernelRidgeMV` | `KernelRidgeFitMV → X*(m×p) → Ŷ(m×q)` | 予測 |
+| `nwRegressionMV` | `Kernel → h → X(n×p) → Y(n×q) → X*(m×p) → Ŷ(m×q)` | 多入力多出力 NW |
+
+カーネルは半径対称 (Gaussian / Epanechnikov / Triangular / Uniform / TriCube) で、`kernelFromSqDist k s` (= `s = ‖Δ‖² / h²`) を `LA.cmap` で要素ごとに適用する。1 入力次元あたり別の bandwidth を取りたい場合は `X` の各列をあらかじめ `1/h_d` でスケールしてから `gramMatrixMV` に渡す。
+
+### Model.GP MV API
+
+| 関数 | 役割 |
+|---|---|
+| `buildKernelMatrixMV :: Kernel → GPParams → X → X' → K` | RBF / Matern52 / Periodic を多次元入力で評価 (Periodic は L2 距離を使った半径対称化) |
+| `logMarginalLikelihoodMV` | `log p(y|X,θ)` を Cholesky で安定計算 |
+| `fitGPMV` / `fitGPMVMulti` | 単出力 / 多出力の事後 mean + var (`Ky⁻¹` を共有) |
+| `optimizeGPMV` | L-BFGS で `(log ℓ, log σ_f², log σ_n²)` を周辺尤度最大化 |
+
+### CLI
+
+```bash
+# 多次元 KR
+hanalyze kernel data.csv "x1 x2 x3" y --method kr --bandwidth 0.5 --lambda 1e-4
+
+# 多次元 NW
+hanalyze kernel data.csv "x1 x2 x3" y --method nw --bandwidth 0.5
+
+# 既存の RFF (多次元 + 多出力 + 対話 HTML)
+hanalyze kernel data.csv "x1 x2" y --method rff --features 256 --report fit.html
+```
+
+`kr` / `nw` の多次元版は現状 `R²` と `RMSE` を stdout に出すだけで、可視化は出力しない (高次元なので)。可視化が必要なら `--method rff` を使う。
+
+### 1D 等価性
+
+`fitGP` (1D, リスト入力) と `fitGPMV` (`X = asColumn (fromList xs)`) の `mean` / `var` は **1e-6 以内** で一致するよう hspec テストで担保している。同様に `kernelRidge` ↔ `kernelRidgeMV` (`X = n × 1` 行列) も内部で一致するため、既存 1D ユースケースは破壊されない。
+
+---
+
 ## 関連リンク
 
 - 理論: [docs/regression/theory-regression-extensions.ja.md](theory-regression-extensions.ja.md)

@@ -2580,9 +2580,76 @@ doKernel file xColStr yColStr opts lopts = do
           Left err -> hPutStrLn stderr err
           Right (df, xVecs, yVec) ->
             runKernelMV df xCols yCol xVecs yVec opts
+      "kr"  -> do
+        result <- loadXY lopts file xCols yCol
+        case result of
+          Left err -> hPutStrLn stderr err
+          Right (_, xVecs, yVec) ->
+            runKernelMVKR xCols yCol xVecs yVec opts
+      "nw"  -> do
+        result <- loadXY lopts file xCols yCol
+        case result of
+          Left err -> hPutStrLn stderr err
+          Right (_, xVecs, yVec) ->
+            runKernelMVNW xCols yCol xVecs yVec opts
       m -> hPutStrLn stderr $
         "kernel --method " ++ T.unpack m
-          ++ " は単一 x 列のみ。多変量入力は --method rff を使ってください。"
+          ++ " (unknown method)"
+
+-- | Multi-input Kernel Ridge (Phase K5) — fit and report training metrics.
+-- 多次元 X (n×p) を取り、Model.Kernel.kernelRidgeMV で fit。
+-- 予測図は生成しない (多次元のため)、R² と RMSE をログ出力。
+runKernelMVKR
+  :: [T.Text] -> T.Text -> [V.Vector Double] -> V.Vector Double
+  -> KernelOpts -> IO ()
+runKernelMVKR xCols _yCol xVecs yVec opts = do
+  let n     = V.length yVec
+      p     = length xCols
+      xMat  = LA.fromColumns (map (LA.fromList . V.toList) xVecs)
+      yMat  = LA.asColumn (LA.fromList (V.toList yVec))
+      ker   = koKernel opts
+      h     = case koBandwidth opts of
+                Just b  -> b
+                Nothing -> 1.0
+      lam   = koLambda opts
+      fit   = Kern.kernelRidgeMV ker h lam xMat yMat
+      yhat  = Kern.fittedKernelRidgeMV fit
+      ss    = LA.sumElements ((yMat - yhat) ** 2)
+      muY   = LA.sumElements yMat / fromIntegral n
+      stTot = LA.sumElements ((yMat - LA.konst muY (n, 1)) ** 2)
+      r2    = 1 - ss / stTot
+      rmse  = sqrt (ss / fromIntegral n)
+  printf "Loaded %d rows × %d features (%s); method=kr (multivariate)\n"
+         n p (T.unpack (T.intercalate "," xCols))
+  printf "  bandwidth h = %.4g, lambda = %.4g, kernel = %s\n"
+         h lam (show ker)
+  printf "  R² (train) = %.4f\n" r2
+  printf "  RMSE (train) = %.4f\n" rmse
+
+-- | Multi-input Nadaraya-Watson (Phase K5) — fit and report training metrics.
+runKernelMVNW
+  :: [T.Text] -> T.Text -> [V.Vector Double] -> V.Vector Double
+  -> KernelOpts -> IO ()
+runKernelMVNW xCols _yCol xVecs yVec opts = do
+  let n     = V.length yVec
+      p     = length xCols
+      xMat  = LA.fromColumns (map (LA.fromList . V.toList) xVecs)
+      yMat  = LA.asColumn (LA.fromList (V.toList yVec))
+      ker   = koKernel opts
+      h     = case koBandwidth opts of
+                Just b  -> b
+                Nothing -> 1.0
+      yhat  = Kern.nwRegressionMV ker h xMat yMat xMat
+      ss    = LA.sumElements ((yMat - yhat) ** 2)
+      muY   = LA.sumElements yMat / fromIntegral n
+      stTot = LA.sumElements ((yMat - LA.konst muY (n, 1)) ** 2)
+      r2    = 1 - ss / stTot
+      rmse  = sqrt (ss / fromIntegral n)
+  printf "Loaded %d rows × %d features (%s); method=nw (multivariate)\n"
+         n p (T.unpack (T.intercalate "," xCols))
+  printf "  bandwidth h = %.4g, kernel = %s\n" h (show ker)
+  printf "  R² (train) = %.4f\n" r2
+  printf "  RMSE (train) = %.4f\n" rmse
 
 -- | 多変量 RFF Ridge を走らせる (Phase B-RFF)。
 -- '--group' / '--xaxis' が指定されていれば、グループ別観測点 + 予測曲線の
