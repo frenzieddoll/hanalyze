@@ -437,19 +437,63 @@ sbxCrossover etaC bounds p1 p2 gen = do
   let (c1, c2) = unzip pairs
   return (c1, c2)
 
+-- | One-dimensional SBX update — **boundary-aware** form (Deb 1995
+-- Algorithm 1, matching pymoo / DEAP / jMetal).
+--
+-- The key difference vs the simplified variant we used previously is
+-- that the spread parameter @β@ depends on **how close the parent is
+-- to its bound**: a parent right at the lower bound @xl@ is paired with
+-- @β ≈ 1@ (= no spread), so the produced child stays near @xl@. The
+-- old @β = (2u)^{1/(η+1)}@ was completely bound-agnostic, which means
+-- a parent at @x = 0@ paired with one at @x = 0.5@ would produce a
+-- child near @0.25@ — the optimum-tracking behaviour ZDT problems
+-- demand was lost.
+--
+-- Algorithm:
+--
+-- @
+-- y1 = min(a, b);  y2 = max(a, b);  Δ = y2 - y1
+--
+-- For child c1 (anchored to the lower side):
+--   β   = 1 + 2(y1 - xl) / Δ
+--   α   = 2 - β^{-(η+1)}
+--   β_q = (u·α)^{1/(η+1)}                    if u ≤ 1/α
+--       = (1 / (2 - u·α))^{1/(η+1)}          otherwise
+--   c1  = 0.5 [(y1 + y2) - β_q · Δ]
+--
+-- For child c2 (anchored to the upper side):
+--   β   = 1 + 2(xu - y2) / Δ
+--   α, β_q as above
+--   c2  = 0.5 [(y1 + y2) + β_q · Δ]
+-- @
 sbxOneVar :: Double -> GenIO -> (Double, Double) -> (Double, Double)
           -> IO (Double, Double)
 sbxOneVar etaC gen (lo, hi) (a, b) = do
-  flip_ <- uniform gen :: IO Double  -- 各次元 50% で交叉 (pymoo と同方式)
-  if flip_ >= 0.5 || abs (a - b) < 1e-12
+  flip_ <- uniform gen :: IO Double          -- per-dim 50% gating
+  if flip_ >= 0.5 || abs (a - b) < 1e-14 || hi <= lo
     then return (a, b)
     else do
       u <- uniform gen :: IO Double
-      let beta
-            | u < 0.5    = (2 * u) ** (1 / (etaC + 1))
-            | otherwise  = (1 / (2 * (1 - u))) ** (1 / (etaC + 1))
-          c1 = 0.5 * ((1 + beta) * a + (1 - beta) * b)
-          c2 = 0.5 * ((1 - beta) * a + (1 + beta) * b)
+      let (y1, y2) = if a < b then (a, b) else (b, a)
+          delta   = y2 - y1
+          mPow    = 1 / (etaC + 1)
+
+          -- Boundary-aware β_q for one side. 'beta' is the
+          -- distance-to-bound term; 'alpha = 2 - β^{-(η+1)}' is the
+          -- adapted threshold that pymoo's @calc_betaq@ uses.
+          calcBetaQ beta =
+            let alpha = 2 - beta ** (- (etaC + 1))
+                inv   = 1 / alpha
+            in if u <= inv
+                 then (u * alpha) ** mPow
+                 else (1 / (2 - u * alpha)) ** mPow
+
+          beta1 = 1 + 2 * (y1 - lo) / delta
+          beta2 = 1 + 2 * (hi - y2) / delta
+          bq1   = calcBetaQ beta1
+          bq2   = calcBetaQ beta2
+          c1    = 0.5 * ((y1 + y2) - bq1 * delta)
+          c2    = 0.5 * ((y1 + y2) + bq2 * delta)
           clip x = min hi (max lo x)
       return (clip c1, clip c2)
 

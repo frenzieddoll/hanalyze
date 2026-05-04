@@ -108,7 +108,7 @@ runOne p = do
   gen <- MWC.createSystemRandom
   let cfg = NSGA.defaultNSGAConfig
               { NSGA.nsgaPopSize     = 100
-              , NSGA.nsgaGenerations = 500
+              , NSGA.nsgaGenerations = 100   -- pymoo と同条件 (NF1 で実現)
               }
   (ms, sols) <- timeitIO 1
                   (\xs -> sum [head (NSGA.solObjectives s) | s <- xs])
