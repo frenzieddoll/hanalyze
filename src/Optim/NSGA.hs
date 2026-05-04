@@ -474,13 +474,26 @@ mutateOneVar :: Double -> Double -> GenIO -> (Double, Double) -> Double
              -> IO Double
 mutateOneVar etaM pMut gen (lo, hi) x = do
   r <- uniform gen :: IO Double
-  if r >= pMut
+  if r >= pMut || hi <= lo
     then return x
     else do
       u <- uniform gen :: IO Double
-      let dq
-            | u < 0.5    = (2 * u) ** (1 / (etaM + 1)) - 1
-            | otherwise  = 1 - (2 * (1 - u)) ** (1 / (etaM + 1))
+      -- Deb & Goyal 1996 polynomial mutation with **boundary correction**.
+      -- The simplified variant @(2u)^(1/(η+1)) - 1@ ignores the distance
+      -- to the bounds and produces over-aggressive jumps when @u@ is
+      -- near 0 or 1 (= effectively snaps to the boundary). The corrected
+      -- form below scales the perturbation by how close @x@ already is
+      -- to each bound, which is what pymoo / DEAP / jMetal use.
+      let delta1 = (x - lo) / (hi - lo)        -- normalized distance to lo
+          delta2 = (hi - x) / (hi - lo)        -- normalized distance to hi
+          mp     = 1 / (etaM + 1)
+          dq
+            | u <= 0.5  =
+                let val = 2 * u + (1 - 2 * u) * (1 - delta1) ** (etaM + 1)
+                in val ** mp - 1
+            | otherwise =
+                let val = 2 * (1 - u) + (2 * u - 1) * (1 - delta2) ** (etaM + 1)
+                in 1 - val ** mp
           y = x + dq * (hi - lo)
       return (min hi (max lo y))
 

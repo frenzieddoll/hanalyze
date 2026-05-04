@@ -26,6 +26,8 @@ import qualified Stat.Interpolate  as Interp
 import qualified Stat.AdaptiveGrid as AG
 import qualified Stat.KernelDist   as KD
 import qualified Stat.Cholesky     as Chol
+import qualified Optim.NSGA        as NSGA
+import qualified System.Random.MWC as MWC
 import qualified Model.Kernel      as Kn
 import qualified Model.GP          as GP
 import qualified Model.GPRobust    as GPR
@@ -86,6 +88,47 @@ main = hspec $ do
                    | i <- [0 .. LA.rows xs - 1]
                    , j <- [0 .. LA.rows ys - 1] ]
       LA.norm_Inf (dXY - ref') < 1e-9 `shouldBe` True
+
+  describe "Optim.NSGA building blocks" $ do
+    let mkSol obj = NSGA.Solution
+                      { NSGA.solDecision   = obj   -- decision unused here
+                      , NSGA.solObjectives = obj
+                      , NSGA.solViolation  = 0
+                      }
+        s00 = mkSol [0.0, 0.0]   -- dominated by no one
+        s11 = mkSol [1.0, 1.0]   -- dominated by s00
+        s05 = mkSol [0.5, 0.5]
+        sa  = mkSol [0.0, 1.0]   -- non-comparable with sb
+        sb  = mkSol [1.0, 0.0]
+
+    it "dominates: zero-violation pair uses paretoDominates" $ do
+      NSGA.dominates s00 s11 `shouldBe` True
+      NSGA.dominates s11 s00 `shouldBe` False
+      NSGA.dominates sa  sb  `shouldBe` False
+      NSGA.dominates sb  sa  `shouldBe` False
+
+    it "nonDominatedSort: 3-point chain returns 3 fronts" $ do
+      -- s00 ≻ s05 ≻ s11
+      let fronts = NSGA.nonDominatedSort [s11, s05, s00]
+      length fronts `shouldBe` 3
+      length (head fronts) `shouldBe` 1   -- F_1 = {s00}
+
+    it "crowdingDistance: 2-point front keeps both (≤2 → ∞)" $
+      length (NSGA.crowdingDistance [sa, sb]) `shouldBe` 2
+
+    it "crowdingDistance: 3-point front returns all 3 (∞ endpoints + 1 mid)" $ do
+      let f3     = [mkSol [0.0, 1.0], mkSol [0.5, 0.5], mkSol [1.0, 0.0]]
+          sorted = NSGA.crowdingDistance f3
+      length sorted `shouldBe` 3
+
+    it "polynomialMutation: respects bounds and pMut=0 keeps x" $ do
+      gen <- MWC.createSystemRandom
+      let bs = [(0, 1), (0, 1), (0, 1)] :: [(Double, Double)]
+      x' <- NSGA.polynomialMutation 20 0 bs [0.5, 0.5, 0.5] gen
+      x' `shouldBe` [0.5, 0.5, 0.5]
+      y' <- NSGA.polynomialMutation 20 1.0 bs [0.5, 0.5, 0.5] gen
+      all (\(z, (lo, hi)) -> z >= lo && z <= hi) (zip y' bs)
+        `shouldBe` True
 
   describe "Stat.Cholesky" $ do
     let aSPD = LA.fromLists [[4, 2, 1], [2, 5, 3], [1, 3, 6]]
