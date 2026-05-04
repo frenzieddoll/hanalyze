@@ -15,7 +15,7 @@ module Optim.Acquisition
   ( ei
   , ucb
   , pi_
-    -- * 多目的
+    -- * Multi-objective
   , parEGO
   , ehvi2D
   ) where

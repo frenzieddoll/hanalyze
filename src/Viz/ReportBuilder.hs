@@ -30,10 +30,10 @@ module Viz.ReportBuilder
   ( -- * 設定
     ReportConfig (..)
   , defaultReportConfig
-    -- * セクション
+    -- * Sections
   , ReportSection (..)
   , SmoothCurve (..)
-    -- * セクションビルダ (smart constructors)
+    -- * Section builders (smart constructors)
   , secDataOverview
   , secModelOverview
   , secModelOverviewLink
@@ -51,46 +51,46 @@ module Viz.ReportBuilder
   , secCollapsible
   , secCard
   , secStatRow
-    -- * Markdown ファイル読込 (appendix 用)
+    -- * Markdown-file ingestion (for appendices)
   , secAppendixFromMd
   , renderSimpleMarkdown
-    -- * MCMC / 事後分布関連 (Phase F)
+    -- * MCMC and posterior diagnostics
   , secMCMCDiagnostics
   , secMCMCDiagnosticsMulti
   , secMCMCAutocorr
   , secMCMCPair
   , secPosteriorSummary
-    -- * モデル比較・診断セクション (Cycle 1)
+    -- * Model-comparison and diagnostic sections
   , secComparisonTable
   , secForestPlot
   , secFeatureImportance
   , secPPC
-    -- * 追加可視化セクション (Cycle 9)
+    -- * Additional visualization sections
   , secCalibration
   , sec3DScatter
   , secHeatmap
-    -- * 補間 / regrid レポート (Phase G4)
+    -- * Interpolation / regrid report
   , InterpReport (..)
   , defaultInterpReport
   , secInterpolation
-    -- * 対話的予測 (LM/GLM 用)
+    -- * Interactive prediction (LM / GLM)
   , secInteractiveLM
   , secInteractiveMulti
   , InteractiveModel (..)
-    -- * 対話的予測 (多変量 RFF Ridge)
+    -- * Interactive prediction (multivariate RFF ridge)
   , secInteractiveRFFMV
   , InteractiveRFFMV (..)
-    -- * 対話的予測 (多出力: 1 入力 → q 出力カーブ)
+    -- * Interactive prediction (multi-output: 1 input → q output curves)
   , secInteractiveMultiOut
   , InteractiveMultiOut (..)
   , InteractivePredictor (..)
   , mkInteractiveMOLinear
   , mkInteractiveMOKernelRBF
-    -- * レンダリング
+    -- * Rendering
   , renderReport
     -- * Reportable typeclass
   , Reportable (..)
-    -- * 専用 Vega-Lite ヘルパ
+    -- * Specialized Vega-Lite helpers
   , regPathSpec
   , forestPlotSpec
   , ppcSpec

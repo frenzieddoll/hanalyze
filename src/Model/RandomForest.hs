@@ -23,7 +23,7 @@ module Model.RandomForest
   , defaultRFConfig
   , buildTree
   , predictTree
-    -- * フォレスト
+    -- * Forest
   , RandomForest (..)
   , fitRF
   , predictRF

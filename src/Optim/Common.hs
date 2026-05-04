@@ -20,7 +20,7 @@ module Optim.Common
   , defaultStopCriteria
   , Direction (..)
   , flipFor
-    -- * Box constraints (探索範囲)
+    -- * Box constraints (search range)
   , Bounds
   , clipToBounds
   , projectToBounds

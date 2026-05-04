@@ -26,12 +26,12 @@ module Design.Taguchi
   , snTypeName
   , snRatio
   , snRatioRows
-    -- * 要因効果と最適水準
+    -- * Factor effects and optimal levels
   , FactorEffect (..)
   , analyzeSN
   , optimalLevels
   , predictSN
-    -- * 内側/外側配置
+    -- * Inner/outer arrays
   , InnerOuterDesign (..)
   , makeInnerOuter
   , renderInnerOuterCSV

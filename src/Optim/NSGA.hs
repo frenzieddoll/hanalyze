@@ -22,16 +22,16 @@ module Optim.NSGA
   , Solution (..)
   , NSGAConfig (..)
   , defaultNSGAConfig
-    -- * 高レベル API
+    -- * High-level API
   , nsga2
   , nsga2WithConstraints
   , evaluateSolution
-    -- * 構成要素
+    -- * Building blocks
   , dominates
   , paretoDominates
   , nonDominatedSort
   , crowdingDistance
-    -- * 遺伝的演算子 (Phase S3)
+    -- * Genetic operators
   , sbxCrossover
   , polynomialMutation
   , randomInBounds

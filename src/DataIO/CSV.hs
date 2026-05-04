@@ -12,7 +12,7 @@ module DataIO.CSV
   , loadTSV
   , loadSSV
   , loadAuto
-    -- * Safe loaders (Phase A2 — Either + LogReport を返す)
+    -- * Safe loaders (return Either + LogReport)
   , loadCsvSafe
   , loadTsvSafe
   , loadSsvSafe

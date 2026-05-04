@@ -20,12 +20,12 @@ module Model.Regularized
   , predictRegularized
   , standardize
   , unstandardizeBeta
-    -- * 多出力 (主 API)
+    -- * Multi-output (primary API)
   , RegFitMulti (..)
   , fitRegularizedMulti
   , predictRegularizedMulti
   , regFitFromMulti
-    -- * 正則化パス
+    -- * Regularization path
   , regularizationPath
   ) where
 

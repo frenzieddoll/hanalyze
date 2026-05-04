@@ -11,7 +11,7 @@ module Model.GLMM
   , fitGLMM
   , fitLMEDataFrame
   , fitGLMMDataFrame
-    -- * 多出力 (列ごと EM/Laplace、Family/Link は共有)
+    -- * Multi-output (per-column EM/Laplace; Family/Link shared)
   , GLMMResultMulti (..)
   , fitLMEMulti
   , fitGLMMMulti

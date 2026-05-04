@@ -19,14 +19,14 @@ module DataIO.Preprocess
     Value (..)
   , DataRow
   , isVMissing
-    -- * NA 検出
+    -- * NA detection
   , isNAString
   , defaultNAStrings
-    -- * 列の選択 / 削除 / リネーム
+    -- * Column select / drop / rename
   , selectColumns
   , dropColumns
   , renameColumn
-    -- * 欠損値の処理
+    -- * Missing-value handling
   , countMissing
   , dropMissingRows
   , imputeConstant
@@ -34,17 +34,17 @@ module DataIO.Preprocess
   , imputeMedian
   , parseNumericColumn
   , readMaybeDoubleColumn
-    -- * 行フィルタ
+    -- * Row filters
   , rowsOf
   , filterRows
   , filterRowsByNumeric
-    -- * 派生列
+    -- * Derived columns
   , mapNumeric
   , deriveNumeric
   , deriveText
   , replaceColumn
   , addColumn
-    -- * groupBy / aggregate
+    -- * groupBy and aggregate
   , groupByAggregate
   , groupByMean
   , groupBySum
@@ -52,9 +52,9 @@ module DataIO.Preprocess
   , groupByMax
   , groupByMedian
   , groupByCount
-    -- * Wide ↔ Long 変形 (Phase B/C — melt)
+    -- * Wide ↔ long transformation (melt)
   , meltLonger
-    -- * Long-form regrid (歯抜けデータの共通 grid 揃え, Phase G3)
+    -- * Long-form regrid (resample jagged data onto a common grid)
   , ZBoundsMode (..)
   , RegridOpts (..)
   , defaultRegridOpts

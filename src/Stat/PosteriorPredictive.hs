@@ -14,9 +14,9 @@ module Stat.PosteriorPredictive
   ( -- * 事後予測サンプリング (chain ベース)
     posteriorPredictive
   , posteriorPredictiveSummary
-    -- * 事前予測サンプリング (chain 不要)
+    -- * Prior predictive sampling (chain not required)
   , priorPredictive
-    -- * 事前サンプリング (latent も)
+    -- * Prior sampling (including latents)
   , samplePrior
   ) where
 

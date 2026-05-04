@@ -28,7 +28,7 @@ module Model.GPRobust
     RobustGPFit (..)
   , fitGPRobust
   , predictGPRobust
-    -- * 多出力 (主 API)
+    -- * Multi-output (primary API)
   , RobustGPFitMulti (..)
   , fitGPRobustMulti
   , predictGPRobustMulti

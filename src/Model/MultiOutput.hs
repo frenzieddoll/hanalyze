@@ -14,7 +14,7 @@ module Model.MultiOutput
     asMultiY
   , fromMultiY
   , asMultiYV
-    -- * 多出力評価指標
+    -- * Multi-output evaluation metrics
   , rmseMulti
   , r2Multi
   , mseMulti

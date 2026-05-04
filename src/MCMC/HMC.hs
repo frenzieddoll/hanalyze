@@ -22,12 +22,12 @@ module MCMC.HMC
   ( -- * Configuration
     HMCConfig (..)
   , defaultHMCConfig
-    -- * 制約変換ユーティリティ
+    -- * Constraint-transform helpers
   , toUnconstrainedParams
   , fromUnconstrainedParams
   , logJointU
   , leapfrogWith
-    -- * 基本ユーティリティ
+    -- * Basic utilities
   , kinetic
   , paramsToVec
   , vecToParams

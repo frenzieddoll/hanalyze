@@ -6,13 +6,13 @@
 module MCMC.Core
   ( -- * チェーン型
     Chain (..)
-    -- * 事後統計量
+    -- * Posterior statistics
   , acceptanceRate
   , posteriorMean
   , posteriorSD
   , posteriorQuantile
   , chainVals
-    -- * ユーティリティ
+    -- * Utilities
   , spawnGen
   ) where
 

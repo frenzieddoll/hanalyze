@@ -15,7 +15,7 @@ module Stat.Distribution
   , supportRange
   , distributionName
   , parseDistribution
-    -- * 制約変換 (HMC/NUTS の unconstrained サンプリング用)
+    -- * Constraint transforms (for HMC/NUTS unconstrained sampling)
   , Transform (..)
   , distTransform
   , toUnconstrained

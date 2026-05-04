@@ -29,23 +29,23 @@ module Model.RFF
   ( RFFKernel (..)
   , RFFFeatures (..)
   , rffDim
-    -- * 特徴生成
+    -- * Feature generation
   , sampleRFFRBF
   , sampleRFFMatern52
   , rffFeatures
   , rffApproxKernel
-    -- * RFF Ridge 回帰 (主 API: 多 y)
+    -- * RFF ridge regression (primary API: multi-output)
   , RFFRidgeFit (..)
   , rffRidge
   , predictRFFRidge
   , RFFRidgeFitMulti (..)
   , rffRidgeMulti
   , predictRFFRidgeMulti
-    -- * RFF GP (事後 mean + variance)
+    -- * RFF GP (posterior mean + variance)
   , RFFGPFit (..)
   , rffGP
   , predictRFFGP
-    -- * 多変量入力 (p 次元) 対応 (Phase B-RFF)
+    -- * Multivariate input (@p@ dimensions)
   , RFFFeaturesMV (..)
   , sampleRFFRBFMV
   , sampleRFFMatern52MV
@@ -56,12 +56,12 @@ module Model.RFF
   , RFFRidgeFitMVMO (..)
   , rffRidgeMVMulti
   , predictRFFRidgeMVMulti
-    -- * 周辺尤度最大化 (Phase 2: ℓ, σ_f, σ_n の自動チューニング)
+    -- * Marginal-likelihood maximization (auto-tune ℓ, σ_f, σ_n)
   , logMarginalLikRBFMV
   , maximizeMarginalLikRBFMV
   , maximizeMarginalLikRBFMV_DE
   , MLikResult (..)
-    -- * LOOCV 解析解 (Phase 3: HP 自動チューニング高速版)
+    -- * LOOCV closed form (faster HP auto-tuning)
   , loocvRFFRidgeMV
   , gridSearchLOOCVRBFMV
   , gridSearchLOOCVRBFMV_DE

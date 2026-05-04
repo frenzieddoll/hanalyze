@@ -17,7 +17,7 @@ module Design.Orthogonal
   , LevelValue (..)
   , FactorSpec (..)
   , AssignedDesign (..)
-    -- * 標準表
+    -- * Standard arrays
   , l4
   , l8
   , l9
@@ -27,11 +27,11 @@ module Design.Orthogonal
   , standardArrays
   , lookupOA
   , listArrays
-    -- * 2 水準系の生成
+    -- * 2-level array generation
   , mkL2k
-    -- * 因子割当
+    -- * Factor assignment
   , assignFactors
-    -- * 出力
+    -- * Rendering
   , renderRawCSV
   , renderRawTSV
   , renderRawPretty

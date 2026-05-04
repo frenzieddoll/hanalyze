@@ -11,12 +11,12 @@ module Design.Power
   ( -- * t 検定
     powerTTest
   , sampleSizeTTest
-    -- * F 検定 (ANOVA)
+    -- * F-test (ANOVA)
   , powerOneWayAnova
   , sampleSizeOneWayAnova
-    -- * 比率検定
+    -- * Proportion test
   , powerProportion
-    -- * 効果量の指標
+    -- * Effect-size measures
   , cohensD
   , cohensF
   ) where

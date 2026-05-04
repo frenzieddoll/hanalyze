@@ -26,13 +26,13 @@ module Stat.ModelSelect
   , LOOResult (..)
   , loo
   , chainLOO
-    -- * ユーティリティ
+    -- * Utilities
   , chainLogLikMatrix
-    -- * LM / GLM 事後サンプリング (WAIC/LOO-CV 用)
+    -- * LM / GLM posterior sampling (for WAIC / LOO-CV)
   , lmPosteriorLogLiks
   , glmPosteriorLogLiks
   , lmePosteriorLogLiks
-    -- * モデル比較の重み (PyMC `pm.compare` 相当)
+    -- * Model-comparison weights (PyMC @pm.compare@ analogue)
   , CompareEntry (..)
   , CompareResult (..)
   , compareModels

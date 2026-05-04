@@ -21,19 +21,19 @@ module DataIO.Log
   , LogEntry (..)
   , LogReport
   , Loaded
-    -- * 構築
+    -- * Construction
   , mkInfo
   , mkWarn
   , mkErr
   , addEntry
   , logReport
   , noLog
-    -- * 集約
+    -- * Aggregation
   , entries
   , hasErrors
   , hasWarnings
   , severityCount
-    -- * 出力
+    -- * Output
   , printLogReport
   , prettyEntry
   ) where

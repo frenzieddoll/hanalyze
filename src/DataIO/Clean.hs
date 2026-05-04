@@ -31,16 +31,16 @@
 module DataIO.Clean
   ( -- * 型
     ColumnRule (..)
-    -- * 個別ルール
+    -- * Single-rule operators
   , applyRule
   , stripUnitsCol
   , parseCurrencyCol
   , parseDecimalEUCol
   , trimTextCol
   , coerceNumericCol
-    -- * パイプライン
+    -- * Pipeline
   , cleanPipeline
-    -- * DataFrame レベル操作
+    -- * DataFrame-level operations
   , dedupeColumns
   , fillBlankNames
   ) where

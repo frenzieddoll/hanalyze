@@ -12,14 +12,14 @@ module MCMC.Gibbs
   , normalNormal
   , betaBinomial
   , gammaPoisson
-    -- * サンプラー
+    -- * Samplers
   , GibbsConfig (..)
   , defaultGibbsConfig
   , gibbs
   , gibbsChains
-    -- * HBM DSL 統合: 共役自動検出
+    -- * HBM-DSL integration: conjugacy auto-detection
   , gibbsFromModel
-    -- * ハイブリッド Gibbs+MH サンプラー
+    -- * Hybrid Gibbs+MH sampler
   , gibbsMH
   , gibbsMHChains
   ) where

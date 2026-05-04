@@ -23,22 +23,22 @@ module Model.GP
   ( -- * カーネル型
     Kernel (..)
   , kernelName
-    -- * ハイパーパラメータ
+    -- * Hyperparameters
   , GPParams (..)
   , defaultGPParams
   , initParamsFromData
-    -- * モデルと結果
+    -- * Model and result
   , GPModel (..)
   , GPResult (..)
-    -- * カーネル計算
+    -- * Kernel computation
   , kernelFn
   , buildKernelMatrix
-    -- * 推論
+    -- * Inference
   , logMarginalLikelihood
   , fitGP
   , fitGPMulti
   , optimizeGP
-    -- * 対話的予測用データ
+    -- * Data for interactive prediction
   , GPPredData (..)
   , gpPredData
   ) where

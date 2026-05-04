@@ -19,7 +19,7 @@ module Model.Kernel
   , predictKernelRidge
   , gridSearchBandwidth
   , autoBandwidthBrent
-    -- * 多出力 (主 API)
+    -- * Multi-output (primary API)
   , KernelRidgeFitMulti (..)
   , kernelRidgeMulti
   , predictKernelRidgeMulti

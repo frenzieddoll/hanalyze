@@ -11,20 +11,20 @@ module Viz.MCMC
   , autocorrPlot,    autocorrPlotFile
   , pairScatter,     pairScatterFile
   , mcmcDiagnostics, mcmcDiagnosticsFile
-    -- * 多チェーン (PyMC スタイル)
+    -- * Multi-chain panels (PyMC style)
   , multiTracePlot,        multiTracePlotFile
   , mcmcDiagnosticsMulti,  mcmcDiagnosticsMultiFile
-    -- * Forest plot (パラメータ間の事後比較)
+    -- * Forest plot (cross-parameter posterior comparison)
   , forestPlot, forestPlotFile
-    -- * Energy plot (NUTS の BFMI 診断)
+    -- * Energy plot (NUTS BFMI diagnostic)
   , energyPlot, energyPlotFile
-    -- * Rank plot (多チェーン収束診断)
+    -- * Rank plot (multi-chain convergence diagnostic)
   , rankPlot, rankPlotFile
-    -- * Posterior predictive check (PyMC `pp_check` 相当)
+    -- * Posterior predictive check (PyMC @pp_check@ analogue)
   , ppcPlot, ppcPlotFile
-    -- * Divergence overlay (NUTS divergent transitions の可視化)
+    -- * Divergence overlay (visualize NUTS divergent transitions)
   , pairScatterDiv, pairScatterDivFile
-    -- * Posterior summary table (`az.summary` 相当)
+    -- * Posterior summary table (@az.summary@ analogue)
   , SummaryRow (..)
   , posteriorSummary
   , posteriorSummaryHtml

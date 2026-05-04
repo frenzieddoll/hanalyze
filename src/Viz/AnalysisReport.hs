@@ -18,26 +18,26 @@ module Viz.AnalysisReport {-# DEPRECATED "Viz.AnalysisReport is deprecated; use 
   ( -- * 設定
     AnalysisReportConfig (..)
   , defaultAnalysisConfig
-    -- * スムーズフィットデータ
+    -- * Smooth-fit data
   , SmoothData (..)
-    -- * フィット要約
+    -- * Fit summary
   , FitSummary (..)
   , mkFitSummary
   , GLMMSummary (..)
   , mkGLMMSummary
-    -- * GP フィット要約
+    -- * GP fit summary
   , GPKernelFit (..)
   , GPFitSummary (..)
-    -- * HBM (ベイズ回帰) フィット要約
+    -- * HBM (Bayesian) fit summary
   , HBMRegSummary (..)
-    -- * モデルフィット (統一型)
+    -- * Model fit (unified type)
   , ModelFit (..)
-    -- * 名前付きプロット
+    -- * Named plot
   , NamedPlot (..)
-    -- * レポート生成
+    -- * Report generation
   , writeAnalysisReport
   , writeAnalysisReportPlots
-    -- * 複数モデル比較レポート
+    -- * Multi-model comparison report
   , CompareEntry (..)
   , writeComparisonReport
   ) where

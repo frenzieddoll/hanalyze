@@ -39,10 +39,10 @@ module Stat.AD
   , logBetaF
   , logPoissonObsF
   , logBernoulliObsF
-    -- * AD 勾配計算
+    -- * AD-gradient computation
   , gradAD
   , gradADU
-    -- * HMC AD 版
+    -- * HMC (AD variant)
   , hmcAD
   , hmcADChains
   ) where

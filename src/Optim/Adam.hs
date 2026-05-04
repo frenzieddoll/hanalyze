@@ -20,9 +20,9 @@ module Optim.Adam
   ( -- * 設定
     AdamConfig (..)
   , defaultAdamConfig
-    -- * 1 ステップ更新 (低レベル)
+    -- * Single-step update (low-level)
   , adamStep
-    -- * 高レベルループ
+    -- * High-level loop
   , runAdam
   , runAdamMaximize
   , runAdamMinimize

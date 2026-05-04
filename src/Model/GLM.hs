@@ -15,7 +15,7 @@ module Model.GLM
   , fitGLM
   , fitGLMFull
   , fitGLMWithSmooth
-    -- * 多出力 (列ごと IRLS、Family/Link は共有)
+    -- * Multi-output (per-column IRLS; Family/Link shared)
   , GLMFitMulti (..)
   , fitGLMMulti
   ) where

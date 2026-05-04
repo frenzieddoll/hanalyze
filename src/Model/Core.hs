@@ -14,15 +14,15 @@ module Model.Core
   ( FitResult (..)
   , Model (..)
   , Band (..)
-    -- * Vec / Scalar 便利アクセサ (q = 1 用)
+    -- * Vec / Scalar accessors (for @q = 1@)
   , coefficientsV
   , fittedV
   , residualsV
   , rSquared1
-    -- * リスト変換
+    -- * List conversion
   , fittedList
   , coeffList
-    -- * 列単位アクセス
+    -- * Per-column access
   , coefficientsCol
   , fittedCol
   , residualsCol

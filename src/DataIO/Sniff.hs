@@ -18,10 +18,10 @@ module DataIO.Sniff
   ( -- * 型
     Sniff (..)
   , defaultSniff
-    -- * 推論
+    -- * Inference
   , sniffBytes
   , sniffFile
-    -- * 個別判定 (内部公開、テスト用)
+    -- * Per-check helpers (exposed for tests)
   , detectDelimiter
   , detectHasHeader
   , detectSkip
