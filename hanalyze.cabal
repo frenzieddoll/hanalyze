@@ -1,11 +1,40 @@
 cabal-version: 3.0
 name:          hanalyze
 version:       0.1.0.0
-synopsis:      Interactive data analysis and visualization in Haskell
-license:       MIT
-author:        toshiaki
+synopsis:      A general-purpose statistical analysis, optimization and visualization toolkit
+description:
+    @hanalyze@ is a self-contained Haskell toolkit for classical regression
+    (LM, GLM, GLMM, splines, kernels, GP, RFF), Bayesian modeling
+    (HBM DSL with MH, HMC, NUTS, Gibbs, ADVI), design of experiments
+    (full/fractional factorial, RSM, D-optimal, orthogonal arrays, Taguchi),
+    optimization (Nelder-Mead, L-BFGS, DE, CMA-ES, NSGA-II, Bayesian
+    optimization, augmented Lagrangian), and Vega-Lite-based visualization
+    with HTML / PNG / SVG output.
+    .
+    All algorithms are implemented natively in Haskell — no R / Stan / Python
+    bridges. Data interchange uses the @dataframe@ package as a first-class
+    citizen.
+    .
+    A unified @hanalyze@ command-line interface exposes the most common
+    workflows (@regress@, @info@, @hist@, @doe@, @taguchi@, @ridge@,
+    @kernel@, @spline@, @multireg@, @clean@, @melt@, @regrid@, ...).
+homepage:      https://github.com/frenzieddoll/hanalyze
+bug-reports:   https://github.com/frenzieddoll/hanalyze/issues
+license:       BSD-3-Clause
+license-file:  LICENSE
+author:        Toshiaki Honda
 maintainer:    frenzieddoll@gmail.com
+copyright:     2026 Toshiaki Honda
+category:      Math, Statistics, Numeric, Machine Learning
 build-type:    Simple
+tested-with:   GHC == 9.6.7
+extra-doc-files:
+    README.md
+    CHANGELOG.md
+
+source-repository head
+  type:     git
+  location: https://github.com/frenzieddoll/hanalyze.git
 
 common warnings
   ghc-options: -Wall -Wcompat -Widentities -Wredundant-constraints
