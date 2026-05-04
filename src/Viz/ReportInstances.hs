@@ -280,19 +280,21 @@ instance Reportable RobustGPFit where
 -- LM / GLM (axis-1 C, Phase 1)
 -- ---------------------------------------------------------------------------
 
--- | LM レポート用ラッパ。
+-- | Wrapper to drive a 'Reportable' instance for a linear-model fit.
 --
--- 単変数 LM の `Reportable` instance に必要な情報を集約。
--- `lmrSmooth = Just sf` を渡すと信頼帯付き滑らか曲線を散布図に重ね描く。
+-- Bundles the information needed by the single-predictor LM 'Reportable'
+-- instance. Passing @lmrSmooth = Just sf@ overlays a smooth curve with
+-- its confidence band on the scatter plot.
 --
--- 多変数 (xCols が 2 つ以上) の場合は scatter+smooth は省略され、
--- `secInteractiveMulti` が主軸 dropdown + 副軸 slider で予測点を表示する。
+-- For multi-predictor LMs (two or more @xCols@), the scatter+smooth
+-- view is omitted; 'secInteractiveMulti' provides a primary-axis
+-- dropdown plus secondary-axis sliders for prediction.
 data LMReport = LMReport
   { lmrFit    :: FitResult
   , lmrSmooth :: Maybe SmoothFit
   } deriving Show
 
--- | GLM レポート用ラッパ。
+-- | Wrapper to drive a 'Reportable' instance for a GLM fit.
 data GLMReport = GLMReport
   { glmrFit    :: FitResult
   , glmrFamily :: Family
@@ -300,12 +302,14 @@ data GLMReport = GLMReport
   , glmrSmooth :: Maybe SmoothFit
   } deriving Show
 
+-- | Display name of a 'LinkFn'.
 linkLabel :: LinkFn -> Text
 linkLabel Identity = "identity"
 linkLabel Log      = "log"
 linkLabel Logit    = "logit"
 linkLabel Sqrt     = "sqrt"
 
+-- | Display name of a 'Family'.
 familyLabel :: Family -> Text
 familyLabel Gaussian = "Gaussian"
 familyLabel Binomial = "Binomial"
@@ -609,14 +613,15 @@ instance Reportable GAMFit where
 -- Random Forest (axis-1 B)
 -- ---------------------------------------------------------------------------
 
--- | Random Forest レポート用ラッパ。
+-- | Wrapper to drive a 'Reportable' instance for a random-forest fit.
 --
--- `RandomForest` 自体は yHat を保持しないため、ユーザーが学習データに対する
--- 予測値と R² を別途計算して渡す。
+-- 'RandomForest' itself does not store fitted values, so the user must
+-- supply training-set predictions (and the corresponding observed
+-- values, for R²).
 data RFReport = RFReport
   { rfrModel :: RandomForest
-  , rfrYHat  :: V.Vector Double   -- ^ 学習データに対する予測値
-  , rfrYObs  :: V.Vector Double   -- ^ 学習データの観測値 (R² 計算用)
+  , rfrYHat  :: V.Vector Double   -- ^ Training-set predictions.
+  , rfrYObs  :: V.Vector Double   -- ^ Training-set observations (for R²).
   } deriving Show
 
 instance Reportable RFReport where

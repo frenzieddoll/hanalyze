@@ -40,16 +40,21 @@ import Viz.Core         (defaultConfig)
 -- Report data type
 -- ---------------------------------------------------------------------------
 
+-- | Inputs to the integrated MCMC HTML report.
 data MCMCReport = MCMCReport
-  { reportTitle    :: Text
-  , reportGraph    :: Maybe ModelGraph
-  , reportChain    :: Chain        -- ^ 代表チェーン (autocorr / pair に使用)
-  , reportChains   :: [Chain]      -- ^ 並列チェーン全体 (空なら単一チェーンモード)
-  , reportParams   :: [Text]
-  , reportPairs    :: [(Text, Text)]
-  , reportMaxLag   :: Int
+  { reportTitle    :: Text                -- ^ Page title.
+  , reportGraph    :: Maybe ModelGraph    -- ^ Optional model DAG.
+  , reportChain    :: Chain               -- ^ Representative chain
+                                          --   (used for autocorrelation
+                                          --   and pair scatter).
+  , reportChains   :: [Chain]             -- ^ All parallel chains
+                                          --   (empty enables single-chain mode).
+  , reportParams   :: [Text]              -- ^ Parameters to display.
+  , reportPairs    :: [(Text, Text)]      -- ^ Optional pair-scatter combinations.
+  , reportMaxLag   :: Int                 -- ^ Maximum autocorrelation lag.
   }
 
+-- | Build a default 'MCMCReport' from a title, chain and parameter list.
 defaultReport :: Text -> Chain -> [Text] -> MCMCReport
 defaultReport title_ chain params = MCMCReport
   { reportTitle  = title_
@@ -65,6 +70,7 @@ defaultReport title_ chain params = MCMCReport
 -- Top-level renderer
 -- ---------------------------------------------------------------------------
 
+-- | Write the full integrated MCMC report to an HTML file.
 renderReport :: FilePath -> MCMCReport -> IO ()
 renderReport path rpt =
   TIO.writeFile path (buildHtml rpt)

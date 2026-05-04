@@ -129,11 +129,13 @@ import qualified Viz.MCMC as VM
 -- 設定
 -- ---------------------------------------------------------------------------
 
+-- | Top-level report configuration.
 data ReportConfig = ReportConfig
-  { rcTitle    :: Text   -- ^ レポート見出し (上部 + <title>)
-  , rcSubtitle :: Text   -- ^ サブタイトル (空文字なら非表示)
+  { rcTitle    :: Text   -- ^ Report heading (used as both heading and HTML @\<title\>@).
+  , rcSubtitle :: Text   -- ^ Subtitle (hidden when empty).
   } deriving (Show)
 
+-- | Build a 'ReportConfig' from just a title (no subtitle).
 defaultReportConfig :: Text -> ReportConfig
 defaultReportConfig t = ReportConfig t ""
 
@@ -141,93 +143,101 @@ defaultReportConfig t = ReportConfig t ""
 -- セクション型
 -- ---------------------------------------------------------------------------
 
--- | 滑らか曲線データ (信頼帯付き)。
+-- | A smooth curve with an optional confidence band.
 data SmoothCurve = SmoothCurve
   { scXs    :: [Double]
   , scYs    :: [Double]
-  , scLower :: [Double]   -- ^ 空リストならバンドなし
+  , scLower :: [Double]   -- ^ Empty when no band is desired.
   , scUpper :: [Double]
   } deriving (Show, Eq)
 
--- | 多変量対話的予測のモデル情報。
+-- | Interactive multivariate RFF-ridge prediction model.
 --
--- LM/GLM の線形予測子を JS で評価するための情報を保持:
---   y = invLink(β₀ + β₁ x_1 + β₂ x_2 + ... + β_p x_p)
+-- Carries everything the browser's JavaScript needs to update the
+-- prediction curve when the user moves a slider:
 --
--- 信頼帯は副軸を slider 値に固定したときの平均応答 CI (現状は 95% 等幅近似)。
--- | 多変量 RFF Ridge の対話的予測モデル (Phase B-RFF)。
---
--- ブラウザ JS 側で以下を計算して曲線を更新する:
---
--- * @x_full[k] = (k == mainAxisIdx) ? z : sliderValues[k]@ for each z in mainGrid
--- * @arg_j = b_j + Σ_k ω_jk · x_full[k]@
--- * @ŷ(z) = Σ_j w_j · σ_f √(2/D) · cos(arg_j)@
+-- * For each @z@ in @mainGrid@:
+--     @x_full[k] = (k == mainAxisIdx) ? z : sliderValues[k]@.
+-- * @arg_j = b_j + Σ_k ω_jk · x_full[k]@.
+-- * @ŷ(z) = Σ_j w_j · σ_f √(2/D) · cos(arg_j)@.
 data InteractiveRFFMV = InteractiveRFFMV
-  { irfXCols       :: [Text]              -- ^ 全説明変数名 (length = p)
-  , irfYCol        :: Text
-  , irfXObs        :: [[Double]]          -- ^ p × n の観測 x (列ごと)
-  , irfYObs        :: [Double]
-  , irfGroups      :: [Text]              -- ^ n 個の group ラベル (色分け用)
-  , irfMainAxis    :: Text                -- ^ 横軸として変化させる列名 (例 "z")
-  , irfMainGrid    :: [Double]            -- ^ 横軸グリッド (例 z 線形空間 100 点)
-  , irfSliders     :: [(Text, Double, Double, Double)]
-                                          -- ^ 副軸スライダ [(name, min, mid, max)]
-                                          --   横軸列以外の全列に対応
-  , irfOmegasRowMaj :: [Double]           -- ^ p × D 行列を row-major に
-  , irfBs          :: [Double]            -- ^ D
-  , irfSigmaF      :: Double
-  , irfDim         :: Int                 -- ^ D
-  , irfP           :: Int                 -- ^ p
-  , irfWeights     :: [Double]            -- ^ D
-  , irfStdMu       :: Maybe [Double]      -- ^ 標準化 ON 時の μ (length p)。
-                                          --   JS 側で raw → 標準化変換に使用
-  , irfStdSd       :: Maybe [Double]      -- ^ 同 σ
+  { irfXCols        :: [Text]            -- ^ All predictor names (length @p@).
+  , irfYCol         :: Text              -- ^ Response column name.
+  , irfXObs         :: [[Double]]        -- ^ Observed @x@ as @p × n@ (column-major).
+  , irfYObs         :: [Double]          -- ^ Observed @y@ (length @n@).
+  , irfGroups       :: [Text]            -- ^ Per-observation group labels for color coding (length @n@).
+  , irfMainAxis     :: Text              -- ^ Name of the column varied along the x axis (e.g. @\"z\"@).
+  , irfMainGrid     :: [Double]          -- ^ x-axis grid (e.g. 100 evenly-spaced @z@ values).
+  , irfSliders      :: [(Text, Double, Double, Double)]
+                                         -- ^ Slider definitions
+                                         --   @[(name, min, mid, max)]@,
+                                         --   one per non-main-axis column.
+  , irfOmegasRowMaj :: [Double]          -- ^ @p × D@ frequency matrix in row-major order.
+  , irfBs           :: [Double]          -- ^ Phases (length @D@).
+  , irfSigmaF       :: Double            -- ^ Signal SD @σ_f@.
+  , irfDim          :: Int               -- ^ Feature dimension @D@.
+  , irfP            :: Int               -- ^ Input dimension @p@.
+  , irfWeights      :: [Double]          -- ^ Ridge weights (length @D@).
+  , irfStdMu        :: Maybe [Double]    -- ^ Standardization @μ@ (length @p@). Used by
+                                         --   JS to convert raw inputs to standardized space.
+  , irfStdSd        :: Maybe [Double]    -- ^ Standardization @σ@ (length @p@).
   } deriving (Show)
 
--- | 多出力対話的予測のモデル情報 (1 入力 x → q 出力 y(z_1..z_q))。
+-- | Interactive predictor with one input @x@ and @q@ outputs
+-- @y(z_1..z_q)@.
 --
--- 散布図の横軸は z (出力グリッド)、縦軸は y。スライダ 1 本で入力 x を
--- 動かすと、q 個の出力すべてを再計算して曲線として描画する。
+-- The plot's x-axis is the output grid @z@; the y-axis is @y@. Moving
+-- the input @x@ slider re-evaluates all @q@ outputs and updates the
+-- curve.
 data InteractiveMultiOut = InteractiveMultiOut
-  { imoXCol     :: Text                          -- ^ 入力変数名 (例 "dose")
-  , imoYCol     :: Text                          -- ^ 出力名 (例 "potential V")
-  , imoOutAxis  :: Text                          -- ^ 出力軸ラベル (例 "z [nm]")
-  , imoOutGrid  :: [Double]                      -- ^ 出力グリッド (長さ q)
-  , imoXObs     :: [Double]                      -- ^ 観測 x (長さ n)
-  , imoYObs     :: [[Double]]                    -- ^ 観測 Y (n × q、行 = sample)
-  , imoXSlider  :: (Double, Double, Double)      -- ^ (min, mid, max) スライダ範囲
-  , imoPred     :: InteractivePredictor          -- ^ predictor 種別
+  { imoXCol     :: Text                       -- ^ Input column name (e.g. @\"dose\"@).
+  , imoYCol     :: Text                       -- ^ Output name (e.g. @\"potential V\"@).
+  , imoOutAxis  :: Text                       -- ^ Output-axis label (e.g. @\"z [nm]\"@).
+  , imoOutGrid  :: [Double]                   -- ^ Output grid (length @q@).
+  , imoXObs     :: [Double]                   -- ^ Observed inputs (length @n@).
+  , imoYObs     :: [[Double]]                 -- ^ Observed @Y@ (@n × q@, row = sample).
+  , imoXSlider  :: (Double, Double, Double)   -- ^ Slider range @(min, mid, max)@.
+  , imoPred     :: InteractivePredictor       -- ^ Underlying predictor.
   } deriving (Show)
 
--- | 多出力 predictor 種別。将来 RFF / GP 等を追加する余地あり。
+-- | Interactive multi-output predictor. Extensible for future RFF / GP
+-- variants.
 data InteractivePredictor
-  = -- | 線形: ŷ_j(x) = β0_j + β1_j · x
+  = -- | Linear: @ŷ_j(x) = β0_j + β1_j · x@.
     PredLinearMO
-      { plmoIntercepts :: [Double]   -- ^ 長さ q
-      , plmoSlopes     :: [Double]   -- ^ 長さ q
+      { plmoIntercepts :: [Double]   -- ^ Per-output intercept (length @q@).
+      , plmoSlopes     :: [Double]   -- ^ Per-output slope (length @q@).
       }
-    -- | 1D RBF Kernel Ridge: ŷ_j(x) = Σ_i exp(-(x-x_i)²/(2h²)) · α_{ij}
+    -- | 1D RBF kernel ridge:
+    --   @ŷ_j(x) = Σ_i exp(-(x - x_i)²/(2h²)) · α_{ij}@.
   | PredKernelRBF1
-      { pkrXTrain :: [Double]        -- ^ 長さ n
-      , pkrAlpha  :: [[Double]]      -- ^ n × q (行 = sample)
-      , pkrH      :: Double          -- ^ bandwidth
+      { pkrXTrain :: [Double]        -- ^ Training inputs (length @n@).
+      , pkrAlpha  :: [[Double]]      -- ^ Per-output kernel coefficients
+                                     --   (@n × q@, row = sample).
+      , pkrH      :: Double          -- ^ Kernel bandwidth.
       }
   deriving (Show)
 
+-- | Interactive single-input multivariate-LM/GLM model.
 data InteractiveModel = InteractiveModel
-  { imXCols     :: [Text]                  -- ^ 説明変数名 (length = p)
-  , imYCol      :: Text                    -- ^ 応答名
-  , imXValues   :: [[Double]]              -- ^ 各列の観測値 (n samples × p)
-  , imYValues   :: [Double]                -- ^ 観測 y
-  , imIntercept :: Double                  -- ^ β₀
-  , imBetas     :: [Double]                -- ^ [β₁, ..., β_p]
-  , imLink      :: Text                    -- ^ "identity" | "log" | "logit" | "sqrt"
+  { imXCols     :: [Text]              -- ^ Predictor names (length @p@).
+  , imYCol      :: Text                -- ^ Response name.
+  , imXValues   :: [[Double]]          -- ^ Observed predictors (@n × p@).
+  , imYValues   :: [Double]            -- ^ Observed response.
+  , imIntercept :: Double              -- ^ Intercept @β₀@.
+  , imBetas     :: [Double]            -- ^ Slopes @[β₁, …, β_p]@.
+  , imLink      :: Text                -- ^ Link name: @\"identity\"@,
+                                       --   @\"log\"@, @\"logit\"@,
+                                       --   @\"sqrt\"@.
   , imSlider    :: [(Double, Double, Double)]
-                                           -- ^ 各列の (min, mid, max) スライダー範囲
-  , imCISigma   :: Maybe Double            -- ^ 残差 σ_hat (CI 計算用; Nothing なら CI なし)
+                                       -- ^ Per-column slider range
+                                       --   @(min, mid, max)@.
+  , imCISigma   :: Maybe Double        -- ^ Residual @σ̂@ (for the CI;
+                                       --   'Nothing' disables the CI).
   } deriving (Show)
 
--- | レポート 1 セクション。
+-- | A single report section. The renderer walks a @[ReportSection]@ and
+-- emits the corresponding HTML block for each variant.
 data ReportSection
   = -- | データ概要: 列ごとの型/N/min/max/mean/SD + ヒストグラム
     SecDataOverview DXD.DataFrame [Text] Text
@@ -276,71 +286,87 @@ data ReportSection
 -- ビルダ
 -- ---------------------------------------------------------------------------
 
+-- | Data-overview section (per-column type, summary stats, histogram).
 secDataOverview :: DXD.DataFrame -> [Text] -> Text -> ReportSection
 secDataOverview = SecDataOverview
 
--- | モデル概要 (追加 box なし)。LM 等。
+-- | Model overview without any extra info boxes (e.g. plain LM).
 secModelOverview :: Text -> Text -> Maybe Text -> ReportSection
 secModelOverview ty fm mer = SecModelOverview ty fm [] mer
 
--- | モデル概要 + リンク関数。GLM / GLMM 等で使用。
-secModelOverviewLink :: Text       -- ^ モデル種別
-                     -> Text       -- ^ 数式 (HTML 可)
-                     -> Text       -- ^ リンク関数 (例: "log" / "logit" / "identity")
-                     -> Maybe Text -- ^ Mermaid DAG
+-- | Model overview with a link function (used by GLM, GLMM, etc.).
+secModelOverviewLink :: Text       -- ^ Model kind.
+                     -> Text       -- ^ Formula (HTML allowed).
+                     -> Text       -- ^ Link function (e.g. @\"log\"@,
+                                   --   @\"logit\"@, @\"identity\"@).
+                     -> Maybe Text -- ^ Optional Mermaid DAG.
                      -> ReportSection
 secModelOverviewLink ty fm link mer =
-  SecModelOverview ty fm [("リンク関数", link)] mer
+  SecModelOverview ty fm [("Link function", link)] mer
 
--- | モデル概要 + 任意の追加 info-box (label, value)。
---   HBM のサンプラー種類や GP のカーネル種類を表示する場合などに使用。
-secModelOverviewExtras :: Text             -- ^ モデル種別
-                       -> Text             -- ^ 数式 (HTML 可)
-                       -> [(Text, Text)]   -- ^ 追加 info-box (label, value) の列
-                       -> Maybe Text       -- ^ Mermaid DAG
+-- | Model overview with arbitrary additional info-box rows
+-- (e.g. HBM sampler kind, GP kernel choice).
+secModelOverviewExtras :: Text             -- ^ Model kind.
+                       -> Text             -- ^ Formula (HTML allowed).
+                       -> [(Text, Text)]   -- ^ Extra @(label, value)@
+                                           --   info-box entries.
+                       -> Maybe Text       -- ^ Optional Mermaid DAG.
                        -> ReportSection
 secModelOverviewExtras = SecModelOverview
 
+-- | Free-form key-value table section.
 secKeyValue :: Text -> [(Text, Text)] -> ReportSection
 secKeyValue = SecKeyValue
 
+-- | Coefficients table with an optional trailing @(label, value)@ row
+-- (e.g. for R²).
 secCoefficients :: [(Text, Double)] -> Maybe (Text, Double) -> ReportSection
 secCoefficients = SecCoefficients
 
+-- | Fit-vs-data scatter plot with an optional smooth curve overlay.
 secFitScatter :: Text -> Text -> [Double] -> [Double]
               -> Maybe SmoothCurve -> ReportSection
 secFitScatter = SecFitScatter
 
+-- | Residual diagnostic plot (residuals vs fitted).
 secResiduals :: [Double] -> [Double] -> ReportSection
 secResiduals = SecResiduals
 
+-- | Bar-chart section.
 secBarChart :: Text -> [(Text, Double)] -> ReportSection
 secBarChart = SecBarChart
 
+-- | Embed a raw 'VegaLite' spec as a section.
 secVega :: Text -> VegaLite -> ReportSection
 secVega = SecVega
 
+-- | Embed a Mermaid-source diagram (rendered client-side).
 secMermaid :: Text -> ReportSection
 secMermaid = SecMermaid
 
+-- | HTML table section: @secTable title headers rows@.
 secTable :: Text -> [Text] -> [[Text]] -> ReportSection
 secTable = SecTable
 
+-- | Markdown section: rendered with a small built-in markdown subset.
 secMarkdown :: Text -> Text -> ReportSection
 secMarkdown = SecMarkdown
 
+-- | Raw-HTML section. Trusted: emitted verbatim into the page.
 secHtml :: Text -> Text -> ReportSection
 secHtml = SecHtml
 
--- | 折りたたみ可能グループ。
+-- | Collapsible group. The 'Bool' controls the initial expanded state.
 secCollapsible :: Text -> Bool -> [ReportSection] -> ReportSection
 secCollapsible = SecCollapsible
 
--- | 淡い背景の囲みカード。回帰結果セクション内で関連図表をグループ化するのに使う。
+-- | Light-shaded card group. Useful for clustering related plots inside
+-- a regression-result section.
 secCard :: Text -> [ReportSection] -> ReportSection
 secCard = SecCard
 
--- | フラットな統計行 (section box なし)。Card と Card の間で軽く統計を並べる用途。
+-- | Flat key-value statistics row (no surrounding section box). Useful
+-- to lay summary numbers between Cards.
 secStatRow :: [(Text, Text)] -> ReportSection
 secStatRow = SecStatRow
 
@@ -348,7 +374,8 @@ secStatRow = SecStatRow
 -- Markdown appendix
 -- ---------------------------------------------------------------------------
 
--- | 指定の md ファイルを読み込み、簡易 markdown パーサで HTML 化して
+-- | Read the given markdown file, render it through the built-in
+-- markdown subset
 -- appendix セクションとして返す。
 --
 -- サポートする markdown 機能:
