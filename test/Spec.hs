@@ -22,6 +22,7 @@ import qualified DataIO.Clean      as Clean
 import qualified DataIO.Convert    as Conv2
 import qualified Stat.Standardize  as Std
 import qualified Stat.NumberFormat as NF
+import qualified Stat.Interpolate  as Interp
 import qualified Data.ByteString   as BS
 import System.IO.Temp (withSystemTempFile)
 import System.IO     (hPutStr, hClose)
@@ -414,6 +415,32 @@ main = hspec $ do
       let x' = Std.applyStandardizer s2 constMat
           c0 = LA.toColumns x' !! 0
       abs (LA.sumElements c0) `shouldSatisfy` (< 1e-9)
+
+  describe "Stat.Interpolate" $ do
+    let pts = [(0,0), (1,1), (2,4), (3,9), (4,16)]   -- y = x^2
+    it "Linear: 観測点で原値を厳密に再現" $ do
+      let f = Interp.interp1d Interp.Linear pts
+      mapM_ (\(x, y) -> abs (f x - y) `shouldSatisfy` (< 1e-12)) pts
+
+    it "NaturalSpline: 観測点で原値を厳密に再現、中間点で線形より精度高い" $ do
+      let fl = Interp.interp1d Interp.Linear pts
+          fs = Interp.interp1d Interp.NaturalSpline pts
+          true x = x * x
+          xMid = 1.5
+          errL = abs (fl xMid - true xMid)
+          errS = abs (fs xMid - true xMid)
+      mapM_ (\(x, y) -> abs (fs x - y) `shouldSatisfy` (< 1e-9)) pts
+      errS `shouldSatisfy` (< errL)
+
+    it "PCHIP: 単調データ ([0,1,2,4,8,16]) で出力も単調" $ do
+      let mp = [(0,0), (1,1), (2,2), (3,4), (4,8), (5,16)]
+          fp = Interp.interp1d Interp.PCHIP mp
+          ys = map fp [0, 0.1 .. 5]
+      and (zipWith (<=) ys (tail ys)) `shouldBe` True
+
+    it "PCHIP: 観測点で原値を厳密に再現" $ do
+      let fp = Interp.interp1d Interp.PCHIP pts
+      mapM_ (\(x, y) -> abs (fp x - y) `shouldSatisfy` (< 1e-9)) pts
 
   describe "Model.RFF (multivariate, Phase B-RFF)" $ do
     it "logMarginalLikRBFMV: 既知 ℓ で最大化される (合成データで)" $ do
