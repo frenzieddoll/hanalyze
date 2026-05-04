@@ -1,0 +1,37 @@
+# Benchmark comparison environment for hanalyze.
+# Install via:
+#   python3 -m venv bench/venv
+#   bench/venv/bin/pip install -r bench/requirements.txt
+
+# --- foundation ---
+numpy
+scipy
+pandas
+matplotlib
+pyperf
+tabulate
+
+# --- regression / ML ---
+scikit-learn
+statsmodels
+pygam
+
+# --- kernel / GP ---
+# GPy: dropped (pins scipy<1.13 with no Python 3.14 wheels — would force a
+# from-source scipy build that fails on Arch py3.14). sklearn's
+# GaussianProcessRegressor remains the primary GP comparison.
+
+# --- single-objective optimization ---
+cma
+pyswarms
+
+# --- Bayesian optimization ---
+scikit-optimize
+
+# --- multi-objective optimization ---
+pymoo
+
+# --- variational inference (PyMC-free, JAX backend) ---
+jax
+jaxlib
+numpyro

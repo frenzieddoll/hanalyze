@@ -13,3 +13,11 @@
 
 # データ生成器は git 管理外 (確認用、CSV だけ commit する)
 /demo/io/PotentialGen.hs
+
+bench/venv/
+!bench/requirements.txt
+!bench/**/*.csv
+!bench/**/*.txt
+!bench/**/*.html
+!bench/**/*.png
+!bench/**/*.svg
