@@ -1,18 +1,19 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | ロバスト GP (重い裾の観測尤度に対応)。
+-- | Robust GP (heavy-tailed observation likelihoods).
 --
--- Gaussian 観測の閉形式 GP では外れ値に弱い。本モジュールでは観測尤度を
--- StudentT / Cauchy に置き換え、IRLS (Iterative Reweighted Least Squares)
--- 風の反復で MAP 推定を行う。
+-- A closed-form Gaussian-likelihood GP is sensitive to outliers. This
+-- module replaces the observation likelihood with Student-t or Cauchy and
+-- iterates an IRLS-style scheme (a stable variant of variational EM /
+-- Laplace) to obtain a MAP estimate.
 --
--- アルゴリズム (Variational EM の安定版 / Laplace 近似の実用変種):
+-- Algorithm:
 --
--- 1. f ← 0 (GP 事前平均)
--- 2. 収束まで反復:
---    a. 残差 r = y − f
---    b. 重み w_i を観測尤度から計算:
---       - StudentT(ν, σ):  w_i = (ν + 1) / (ν + (r_i/σ)²)
---       - Cauchy(γ):       w_i = 2 / (1 + (r_i/γ)²)
+--   1. @f ← 0@ (GP prior mean).
+--   2. Iterate until convergence:
+--      a. Residual @r = y − f@.
+--      b. Compute the per-observation weight:
+--         * Student-t @(ν, σ)@:  @w_i = (ν + 1) / (ν + (r_i/σ)²)@.
+--         * Cauchy @(γ)@:       @w_i = 2 / (1 + (r_i/γ)²)@.
 --    c. 各点の有効ノイズ分散 σ²/w_i (heteroscedastic)
 --    d. f ← K (K + σ² W⁻¹)⁻¹ y
 -- 3. 予測点 x* で:

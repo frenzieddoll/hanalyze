@@ -1,13 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | 全回帰モデルが共有する結果型と Model クラス。
+-- | Result type and 'Model' class shared by every regression model.
 --
--- **Phase R0 案 C**: 多出力対応のため `FitResult` の主フィールドを
--- `Matrix Double` (n × q) または `Vector Double` (q 次元) に一般化した。
--- 単一出力 (q=1) の場合は便利アクセサ ('coefficientsV', 'fittedV',
--- 'residualsV', 'rSquared1') で従来通り `Vector` / `Double` として扱える。
+-- For multi-output support, the principal fields of 'FitResult' are
+-- generalized to @Matrix Double@ (@n × q@) or @Vector Double@ (@q@-vector).
+-- Single-output (@q = 1@) models can keep using the convenience accessors
+-- ('coefficientsV', 'fittedV', 'residualsV', 'rSquared1'), which return
+-- @Vector@ / @Double@ as before.
 --
--- 単一出力モデルから多出力モデルへの移行は、`fitLM` (Matrix×Matrix) を
--- 直接使い、結果を `MultiFitResult` 風に解釈するだけで済む。
+-- Migrating a single-output model to multi-output is just a matter of
+-- calling 'fitLM' with @Matrix × Matrix@ and interpreting the result like
+-- a 'MultiFitResult'.
 module Model.Core
   ( FitResult (..)
   , Model (..)

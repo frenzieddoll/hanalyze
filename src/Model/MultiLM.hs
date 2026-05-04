@@ -1,13 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Multivariate Linear Regression (多出力線形回帰)。
+-- | Multivariate (multi-output) linear regression.
 --
--- @Y = XB + E@、Y は n × q (q 出力)、X は n × p、B は p × q、E は n × q。
+-- @Y = XB + E@ with @Y@ of shape @n × q@ (@q@ outputs), @X@ of shape
+-- @n × p@, @B@ of shape @p × q@ and @E@ of shape @n × q@.
 --
--- 各 j 列について OLS を独立に解く (= column-wise OLS)。
--- 残差の **共分散行列 Σ** も推定し、後続の多目的予測区間計算等に使う。
+-- Solves each column independently by OLS (column-wise OLS) and
+-- additionally estimates the residual covariance matrix @Σ@, which is
+-- used for joint multi-output predictive intervals.
 --
--- API は `Model.LM` と統一されており、`fitLM` をそのまま呼ぶことも可能だが、
--- このモジュールは多出力時の追加情報 (Σ、相関行列) を提供する。
+-- The API matches 'Model.LM', so 'fitLM' can be called directly; this
+-- module merely exposes the additional multi-output information
+-- (@Σ@, correlation matrix).
 module Model.MultiLM
   ( MultiFit (..)
   , fitMultiLM

@@ -1,12 +1,14 @@
--- | 多出力回帰の共通基盤。
+-- | Common foundation for multi-output regression.
 --
--- 設計方針:
+-- Design policy:
 --
--- - 各モデルの **主 API** は応答 Y を @LA.Matrix Double@ (n × q) で受け取り、
---   結果も Matrix で返す (q=1 を特殊化)。
--- - 単出力 API (@V.Vector Double@) は @asMultiY@/@fromMultiY@ で
---   1 列 Matrix に昇格させ、Multi 版を再利用する薄いラッパ。
--- - q ごとの評価指標 (R² etc.) もここに集約。
+--   * Each model's /primary/ API takes the response @Y@ as
+--     @LA.Matrix Double@ (@n × q@) and returns a matrix; the @q = 1@ case
+--     is a specialization.
+--   * The single-output API (@V.Vector Double@) is a thin wrapper that
+--     promotes the response to a one-column matrix via 'asMultiY' /
+--     'fromMultiY' and reuses the multi-output implementation.
+--   * Per-output evaluation metrics (R² etc.) are collected here.
 module Model.MultiOutput
   ( -- * 単出力 ↔ 多出力 変換
     asMultiY

@@ -4,13 +4,21 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ImpredicativeTypes #-}
--- | 多相版 HBM DSL。
+-- | Polymorphic Hierarchical Bayesian Model (HBM) DSL.
 --
--- 現行 'Model.HBM' は @Sample Text Distribution (Double -> next)@ という形で
--- 継続の値型が @Double@ に固定されている。これは AD ('Numeric.AD') にも
--- 依存追跡型 ('Track') にも対応できないという根本的な制約をもたらす。
+-- A free-monad embedded language for probabilistic programs. The
+-- continuation type is left polymorphic so that a single model term can
+-- be reinterpreted as:
 --
--- 'Model.HBM' では継続を多相化:
+--   * a structural inspector (parameter / observation graph),
+--   * a log-joint density,
+--   * an automatically-differentiated log-joint
+--     (via @Numeric.AD.Mode.Forward@),
+--   * a dependency tracker (the 'Track' interpretation, used by
+--     @Viz.ModelGraph@ to build a Mermaid DAG).
+--
+-- See @docs/bayesian/02-probabilistic-model.md@ for an extended
+-- introduction.
 --
 -- @
 -- data ModelF a next

@@ -1,17 +1,21 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | 回帰用 Random Forest (CART + bagging + ランダム特徴サブセット)。
+-- | Random forest for regression (CART + bagging + random feature subset).
 --
--- ツリー構築:
--- 1. 各ノードで mtry 個の特徴をランダムに選ぶ (mtry < d で復元なし)
--- 2. 各特徴について最良 split (variance reduction が最大) を試す
--- 3. ノードを分割 → 再帰
--- 4. 葉条件: depth >= maxDepth, ノード内サンプル数 < minSamples、
---    または分散がほぼ 0
+-- Tree construction:
 --
--- フォレスト:
--- - n_trees 本のツリーを bootstrap サンプルから構築
--- - 予測は各ツリーの平均
--- - feature importance: 各特徴で行われた分割の variance reduction の合計
+--   1. At each node, sample @mtry@ features at random (without
+--      replacement, @mtry < d@).
+--   2. For each feature, try the best split (maximum variance reduction).
+--   3. Split the node and recurse.
+--   4. Leaf conditions: @depth ≥ maxDepth@, fewer than @minSamples@ in
+--      the node, or near-zero variance.
+--
+-- Forest:
+--
+--   * Build @n_trees@ trees on bootstrap samples.
+--   * Predict with the mean across trees.
+--   * Feature importance: per-feature sum of variance reductions across
+--     all splits that used the feature.
 module Model.RandomForest
   ( -- * 単一決定木
     Tree (..)

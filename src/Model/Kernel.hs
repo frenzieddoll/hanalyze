@@ -1,12 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | カーネル回帰 (Nadaraya-Watson) と Kernel Ridge regression。
+-- | Kernel regression — Nadaraya-Watson and kernel ridge regression.
 --
--- - 'Kernel': RBF / Matérn / 三角 / Epanechnikov などのカーネル関数
--- - 'nwRegression': Nadaraya-Watson (重み付き移動平均)
--- - 'kernelRidge': Kernel Ridge regression: ŷ(x*) = k(x*)ᵀ (K + λI)⁻¹ y
+--   * 'Kernel'        — RBF / Matérn / triangular / Epanechnikov kernel
+--     functions.
+--   * 'nwRegression'  — Nadaraya-Watson (kernel-weighted moving average).
+--   * 'kernelRidge'   — kernel ridge regression
+--     @ŷ(x*) = k(x*)ᵀ (K + λI)⁻¹ y@.
 --
--- どちらも非パラメトリックで滑らかな非線形回帰。
--- 既存の `Model.GP` (Gaussian Process) とは異なり、不確実性は出さない。
+-- Both are non-parametric smooth nonlinear regressors. Unlike 'Model.GP',
+-- they do not produce uncertainty estimates.
 module Model.Kernel
   ( Kernel (..)
   , kernelEval

@@ -1,15 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | 正則化回帰 (Ridge / Lasso / Elastic Net) を 1 つのモジュールに統合。
+-- | Regularized regression (Ridge / Lasso / Elastic Net) in one module.
 --
--- ペナルティを sum-type 'Penalty' で表現し、'fitRegularized' で
--- 4 種類のモデルすべてに対応する:
+-- The penalty is encoded as the sum type 'Penalty', and 'fitRegularized'
+-- handles all four models:
 --
--- > NoPen                          -- 通常の OLS
+-- > NoPen                          -- ordinary OLS
 -- > L2 lambda                      -- Ridge regression
 -- > L1 lambda                      -- Lasso regression
 -- > ElasticNet lambda1 lambda2     -- Elastic Net (L1 + L2)
 --
--- Ridge は閉形式、Lasso と Elastic Net は coordinate descent。
+-- Ridge has a closed form; Lasso and Elastic Net use coordinate descent.
 --
 -- 注意: Lasso / Elastic Net は X の列スケールに敏感。事前に
 -- standardize (各列を平均 0、分散 1 に) しておくのが一般的。

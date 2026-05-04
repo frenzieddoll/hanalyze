@@ -1,18 +1,25 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Random Fourier Features (RFF) によるカーネル近似 (1D)。
+-- | Random Fourier Features (RFF) — kernel approximation.
 --
--- Bochner の定理により、定常カーネル k(x, x') = ∫ p(ω) e^{iω(x-x')} dω は
--- 確率密度 p(ω) からサンプリングした周波数 ω_j と一様分布の位相 b_j で:
+-- By Bochner's theorem, a stationary kernel
+-- @k(x, x') = ∫ p(ω) e^{iω(x-x')} dω@ admits an explicit feature map
+-- defined via @D@ frequencies @ω_j@ sampled from @p(ω)@ and uniform
+-- phases @b_j@:
 --
---   φ(x) = σ_f √(2/D) [cos(ω_j x + b_j)]_{j=1..D}
+-- @
+-- φ(x) = σ_f √(2/D) [cos(ω_j x + b_j)]_{j=1..D}
+-- @
 --
--- なる明示的な特徴写像で k(x, x') ≈ φ(x)·φ(x') と近似できる (Rahimi-Recht 2007)。
+-- so that @k(x, x') ≈ φ(x)·φ(x')@ (Rahimi & Recht 2007).
 --
--- これを使うと:
--- - O(n³) のカーネル計算 → O(n D + D³) で線形スケール
--- - Ridge 回帰 / GP 事後をすべて D 次元線形空間で計算
+-- Benefits:
 --
--- このモジュールは 1 次元入力のみ対応 (拡張は容易):
+--   * @O(n³)@ kernel computation reduces to @O(n D + D³)@ — linear in @n@.
+--   * Ridge regression and GP posterior become @D@-dimensional linear
+--     algebra.
+--
+-- This module supports both univariate and multivariate inputs (the
+-- @MV@-suffixed APIs).
 -- - 'sampleRFFRBF':      RBF カーネル (ω ~ N(0, 1/ℓ²))
 -- - 'sampleRFFMatern52': Matérn 5/2 (ω ~ scaled t with df = 5)
 -- - 'rffFeatures':  特徴行列 Φ を構築 (n × D)

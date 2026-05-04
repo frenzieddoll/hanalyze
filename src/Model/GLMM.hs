@@ -1,3 +1,10 @@
+-- | Linear and generalized linear mixed-effects models.
+--
+-- 'fitLME' fits a Gaussian linear mixed-effects model via exact EM.
+-- 'fitGLMM' fits a non-Gaussian GLMM via Laplace approximation. Both
+-- support per-group random intercepts and slopes. The multi-output
+-- variants ('fitLMEMulti', 'fitGLMMMulti') run the algorithm independently
+-- per response column.
 module Model.GLMM
   ( GLMMResult (..)
   , fitLME

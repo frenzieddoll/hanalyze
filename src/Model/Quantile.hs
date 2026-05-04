@@ -1,18 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | 分位点回帰 (Quantile Regression)。
+-- | Quantile regression.
 --
--- 通常 OLS は **平均** を fit するが、分位点回帰は **τ-分位点** を fit する
--- (τ ∈ (0, 1))。τ=0.5 で中央値回帰 (median regression、外れ値に強い)、
--- τ=0.1 / 0.9 で下側/上側分位点を推定 → 予測区間の構築や heteroscedastic
--- データ分析に有用。
+-- Whereas OLS fits the conditional /mean/, quantile regression fits the
+-- conditional @τ@-quantile (with @τ ∈ (0, 1)@). @τ = 0.5@ gives outlier-
+-- robust median regression; @τ = 0.1 / 0.9@ estimate lower / upper
+-- quantiles, useful for predictive intervals and heteroscedastic data.
 --
--- 損失関数 (pinball / check loss):
+-- Loss function (pinball / check loss):
 --
--- > ρ_τ(u) = u (τ - 𝟙[u < 0])  =  τ u   if u ≥ 0
--- >                               (τ-1) u if u < 0
+-- > ρ_τ(u) = u (τ - 𝟙[u < 0])  =  τ u       if u ≥ 0
+-- >                               (τ-1) u   if u < 0
 --
--- アルゴリズム: Hunter & Lange (2000) の Majorization-Minimization。
--- |u| を二次関数で逐次近似 → 重み付き最小二乗を反復:
+-- Algorithm: Hunter & Lange (2000) Majorization-Minimization. Locally
+-- approximate @|u|@ by a quadratic and iterate weighted least squares:
 --
 -- 1. β₀ = OLS 解で初期化
 -- 2. 反復 k:

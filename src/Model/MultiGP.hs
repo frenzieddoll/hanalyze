@@ -1,13 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | 多出力 Gaussian Process (Phase T6)。
+-- | Multi-output Gaussian processes.
 --
--- 最小実装として、各出力に独立に GP を fit する **Independent GPs** を提供。
--- これは Coregionalization model の ICM (Intrinsic Coregionalization Model)
--- で B = I の特殊形に等しい。
+-- A minimal implementation: **independent GPs**, fitting one GP per output.
+-- This is the special case of the Intrinsic Coregionalization Model (ICM)
+-- in which @B = I@.
 --
--- より高度な multi-task GP (出力間の相関を学習) は将来 Phase V (Bayesian
--- Optimization) で必要になれば拡張する。現状の独立 GP でも Bayesian MOO
--- では十分機能する (各 acquisition 関数が独立に評価できる)。
+-- More elaborate multi-task GPs (with learned cross-output correlations)
+-- can be added in the future when needed. Independent GPs are sufficient
+-- for Bayesian multi-objective optimization, where each acquisition
+-- function is evaluated independently.
 module Model.MultiGP
   ( MultiGPModel (..)
   , MultiGPResult (..)

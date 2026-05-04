@@ -1,12 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | 多変量回帰の特殊形: Reduced Rank Regression / PLS / CCA。
+-- | Specialized multivariate regression: Reduced-Rank Regression, PLS,
+-- and CCA.
 --
--- これらは複数応答 (Y is n × q) と複数説明変数 (X is n × p) の関係を
--- 低ランクで表現する。
+-- These all express the relationship between a multi-response @Y@
+-- (@n × q@) and multi-predictor @X@ (@n × p@) via a low-rank structure.
 --
--- - 'reducedRankRegression': B = U_r V_rᵀ (rank r、低ランク制約)
--- - 'pls':                   X と Y の共分散最大の方向を逐次抽出
--- - 'cca':                   X と Y の相関最大の対 (canonical pairs)
+--   * 'reducedRankRegression' — @B = U_r V_rᵀ@ (rank-@r@ constraint).
+--   * 'pls'                   — extracts directions of maximum
+--     @X@-@Y@ covariance one at a time.
+--   * 'cca'                   — canonical pairs maximizing @X@-@Y@
+--     correlation.
 module Model.Multivariate
   ( -- * Reduced Rank Regression
     RRRFit (..)

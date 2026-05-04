@@ -1,3 +1,9 @@
+-- | Ordinary linear regression by least squares.
+--
+-- Solves @β = (XᵀX)⁻¹ Xᵀ y@ via hmatrix's @\\\\@ (LAPACK). Provides
+-- confidence and prediction bands using
+-- @t × √(s² xᵢᵀ(XᵀX)⁻¹xᵢ)@ and convenient adapters from a
+-- 'DataFrame' for use from the CLI and report builder.
 module Model.LM
   ( LinearModel (..)
   , CIBand (..)

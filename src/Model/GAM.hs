@@ -1,14 +1,19 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Generalized Additive Model (GAM)。
+-- | Generalized Additive Model (GAM).
 --
--- y = β₀ + Σ_j s_j(x_j) + ε  with s_j(x_j) = B_j(x_j) γ_j (B-spline 基底)
+-- @y = β₀ + Σ_j s_j(x_j) + ε@ where each smooth term @s_j(x_j) = B_j(x_j) γ_j@
+-- uses a B-spline basis.
 --
--- 設計:
--- - 各説明変数 x_j について B-spline 基底 B_j (n × m_j) を構築
--- - 統合計画行列 X = [1 | B_1 | B_2 | ... | B_p]  (列数 = 1 + Σ m_j)
--- - Ridge 正則化付き OLS: β = (XᵀX + λ I)⁻¹ Xᵀ y
---   (各 spline 基底に同じ λ を適用、smoothness のための安定化)
--- - 予測: per-feature 寄与 s_j(x_j) を分解して取得可能 → 各因子の効果を可視化
+-- Design:
+--
+--   * For each predictor @x_j@, build a B-spline basis @B_j@ (@n × m_j@).
+--   * Stack into a single design matrix
+--     @X = [1 | B_1 | B_2 | ... | B_p]@ (@1 + Σ m_j@ columns).
+--   * Ridge-regularized OLS:
+--     @β = (XᵀX + λ I)⁻¹ Xᵀ y@. The same @λ@ stabilizes every spline
+--     basis (smoothness regularization).
+--   * Prediction: the per-feature contribution @s_j(x_j)@ can be extracted
+--     individually for visualization of each factor's effect.
 --
 -- 注: 識別性のため、各 spline 基底は中央化 (列平均を引く) する。
 -- これで β₀ は y の平均、s_j は変動成分のみを表す。

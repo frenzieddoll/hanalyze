@@ -1,8 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Gaussian Process 回帰 (GP Regression)
+-- | Gaussian-process regression.
 --
--- カーネル関数を選択し、訓練データに当てはめて任意のテスト点で事後予測を行います。
--- ハイパーパラメータは対数周辺尤度 (log marginal likelihood) の最大化で自動最適化されます。
+-- Pick a kernel, fit it to training data and obtain the posterior
+-- predictive at arbitrary test points. Hyperparameters can be tuned
+-- automatically by maximizing the log marginal likelihood.
 --
 -- @
 -- import Model.GP

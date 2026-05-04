@@ -1,4 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
+-- | Generalized Linear Models fit by Iteratively Reweighted Least Squares.
+--
+-- Provides Gaussian, Binomial and Poisson families with identity, log,
+-- logit and sqrt link functions. 'runIRLS' returns both a 'FitResult' and
+-- the inverse Fisher information @(XᵀWX)⁻¹@ used for standard errors and
+-- predictive intervals. The multi-output variant 'fitGLMMulti' shares the
+-- family / link across response columns and runs IRLS column-wise.
 module Model.GLM
   ( Family (..)
   , parseFamily

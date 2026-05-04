@@ -1,14 +1,19 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | B-spline / Natural cubic spline 回帰。
+-- | B-spline and natural cubic-spline regression.
 --
--- スプライン基底関数で計画行列 B を構築し、通常の OLS を解いて係数 β を得る:
+-- Builds a design matrix @B@ from spline basis functions and solves
+-- ordinary least squares for the coefficients @β@:
 --
---   y_i = Σ_j β_j B_j(x_i) + ε_i
+-- @
+-- y_i = Σ_j β_j B_j(x_i) + ε_i
+-- @
 --
--- - 'bsplineBasis': Cox-de Boor 再帰で次数 k の B-spline 基底
--- - 'naturalSplineBasis': 自然立方スプライン (境界外で線形)
--- - 'fitSpline': 基底行列 + LM で fit
--- - 'predictSpline': 新しい x に対して予測
+--   * 'bsplineBasis'       — degree-@k@ B-spline basis via the Cox-de Boor
+--     recursion.
+--   * 'naturalSplineBasis' — natural cubic spline (linear outside the
+--     boundary).
+--   * 'fitSpline'          — fit using the basis matrix + LM.
+--   * 'predictSpline'      — predict at new @x@ values.
 module Model.Spline
   ( SplineKind (..)
   , SplineFit (..)
