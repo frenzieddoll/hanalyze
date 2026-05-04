@@ -403,6 +403,80 @@ Wall time: SA runs went from 4-15 ms to 100-2000 ms because each NM
 refinement costs ~200 evaluations. This is a price-for-accuracy
 trade-off; users who want vanilla SA can pass `saLocalEvery = Nothing`.
 
+## After L1 / R2 / S3 — final status (2026-05-04)
+
+Three more incremental rounds shipped:
+
+* **L1ab** (`Optim.LBFGS`) — inner loop migrated to @LA.Vector Double@
+  with BLAS @+@ / @-@ / @scale@ / @dot@. Public list-based API kept
+  (cost-free at the boundary). New 'runLBFGSWithV' avoids the
+  list↔Vector round-trip on every gradient call (used by
+  'Model.GLM.runLBFGS_GLM' etc.). On the bench's @n ≤ 10 000@,
+  @p ≤ 20@ regime IRLS-with-Cholesky still beats the L-BFGS path, so
+  'defaultGLMSolver' stays at 'IRLS'; the asymptotic crossover lives at
+  larger @p@.
+* **R2** (`Model.Regularized.cdLoop`) — coordinate descent now runs in
+  'IO' on a 'Storable' 'Mutable' β buffer with @Data.Vector.Vector@
+  @O(1)@ column lookup; the residual stays immutable to use BLAS axpy.
+  Modest speedup on @n = 10 000@ (8.3 ms → 7.6 ms on EN); correctness
+  preserved.
+* **S3** (`Optim.SimulatedAnnealing`) — adds 'saPolish' (final
+  high-precision Nelder-Mead with @nmInitStep = 0.001@ + @tol = 1e-15@)
+  and 'saRestartIfStuck'. Polish on by default reaches **machine
+  precision** on Rosenbrock_2D (3e-13 → 3e-16) and Rosenbrock_10D
+  (5.9e-13 → 1.4e-15). Restart is off by default — it helps Rastrigin
+  in theory but regresses Levy ~12 orders of magnitude in our bench, so
+  users opt in for pathological multi-modal problems.
+
+Plus an algorithmic tweak in NSGA-II: 'binaryTournament' now
+random-tie-breaks on EQ (matches pymoo / DEAP). Modest improvement on
+ZDT3 / DTLZ2 at the same generation count.
+
+### Latest bench summary
+
+(Numbers after K6 → G1 → R1 → N1 → S1 → B5 → G2 → N2 → B6 → S2 → L1ab
+→ R2 → S3, with @OPENBLAS_NUM_THREADS=1@.)
+
+* **Regression** — accuracy identical to 4+ digits across 15 cases.
+  hanalyze leads on LM_n100k (1.0×), LME (6-30×), Ridge_n1k (15×),
+  Lasso/EN_n1k (4×), LM_n1k (7×). sklearn leads on GLM (5-8×),
+  Lasso/EN_n10k (4×).
+* **Kernel/GP** — accuracy identical; sklearn 4-12× faster across the
+  board (Cython distance kernels + a vectorized inner loop we cannot
+  easily match in pure-Haskell + hmatrix).
+* **NSGA-II** (500 generations) — hanalyze beats pymoo on HV for
+  ZDT1 / ZDT2 (1.02-1.09×), ties on ZDT3 / DTLZ2 within ~5 %.
+  pymoo runs ~30× faster per generation.
+* **Bayesian optimization** — hanalyze beats skopt on Hartmann6
+  (-2.83 vs -2.77); skopt much better on Branin (the C∞ smooth case
+  RBF would handle but the default Matérn 5/2 cannot).
+* **Single-objective optimization** — hanalyze leads on speed by
+  10-160× across the matrix; on accuracy hanalyze wins on
+  NM/LBFGS/SA-with-polish (Rosenbrock 2D, Rosenbrock 10D, Sphere LBFGS,
+  Ackley NM, Levy NM/PSO), ties on the multimodal stress tests
+  (Rastrigin), and trails on DE/CMAES on Sphere/Levy/Ackley by a few
+  digits.
+
+### Known structural gaps
+
+These items will not close further without giving up the
+"pure-Haskell + hmatrix only" baseline:
+
+1. **Kernel/GP gram-matrix construction** — sklearn's @rbf_kernel@ is
+   Cython with an SIMD inner loop. Closing the 6-12× gap requires
+   either a C-FFI distance kernel or the new @hmatrix-cgemm@ API.
+2. **NSGA-II per-generation cost** — pymoo's vectorized
+   @nonDominatedSort@ on a numpy array is ~30× faster than our
+   list-based implementation. Bringing it onto a flat 2D matrix is a
+   substantial refactor.
+3. **GLM L-BFGS** — sklearn's path is Cython L-BFGS-B; pure-Haskell
+   L-BFGS pays per-step overhead even with the L1 Vector inner loop.
+   Useful at @p > 50@; small-@p@ regime stays IRLS-with-Cholesky.
+
+Everything else (the original 5-item improvement queue) has either
+landed or been demonstrated to need the kind of FFI/C-extension that
+breaks the project's "all algorithms in Haskell" constraint.
+
 ## High-leverage improvement queue
 
 In rough order of expected wall-time impact across the suite:

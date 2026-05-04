@@ -1,5 +1,5 @@
 system,suite,name,time_ms,acc_main,acc_aux,extra
-haskell,mo,ZDT1/NSGA-II,2384.047463,0.000000,100.000000,Pareto written to bench/results/haskell/mo_pareto_ZDT1.csv
-haskell,mo,ZDT2/NSGA-II,2803.472363,0.000000,29.000000,Pareto written to bench/results/haskell/mo_pareto_ZDT2.csv
-haskell,mo,ZDT3/NSGA-II,3144.003978,0.000000,100.000000,Pareto written to bench/results/haskell/mo_pareto_ZDT3.csv
-haskell,mo,DTLZ2_3/NSGA-II,7020.589983,0.000000,100.000000,Pareto written to bench/results/haskell/mo_pareto_DTLZ2_3.csv
+haskell,mo,ZDT1/NSGA-II,15759.897607,0.000000,100.000000,Pareto written to bench/results/haskell/mo_pareto_ZDT1.csv
+haskell,mo,ZDT2/NSGA-II,16037.092384,0.000000,100.000000,Pareto written to bench/results/haskell/mo_pareto_ZDT2.csv
+haskell,mo,ZDT3/NSGA-II,17966.034110,0.000000,100.000000,Pareto written to bench/results/haskell/mo_pareto_ZDT3.csv
+haskell,mo,DTLZ2_3/NSGA-II,34402.228481,0.000000,100.000000,Pareto written to bench/results/haskell/mo_pareto_DTLZ2_3.csv
