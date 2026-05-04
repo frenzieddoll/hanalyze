@@ -1,15 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
--- | Slice sampler (Neal 2003) — 採択率調整不要のユニバリエート手法。
+-- | Slice sampler (Neal 2003) — a univariate method with no acceptance-rate
+-- tuning.
 --
--- 各反復で:
+-- Each iteration:
 --
---   1. 現在の log p(θ) から log_y = log p(θ) − Exp(1) をドロー
---   2. 軸ごとに stepping-out で水平スライス [L, R] を構築
---   3. shrinkage で L, R から uniform に θ_i' を選び、log p > log_y で受容
+--   1. Draw @log_y = log p(θ) − Exp(1)@ from the current log-density.
+--   2. Build a horizontal slice @[L, R]@ along each axis via stepping-out.
+--   3. Shrink: draw @θ_i'@ uniformly from @[L, R]@ and accept when
+--      @log p > log_y@.
 --
--- 全ての coordinate を順に更新する Gibbs 様の sweep を 1 反復とする。
--- HMC/NUTS 同様に勾配は不要だが、各 sweep で多数の log-density 評価が要る。
+-- One iteration is a Gibbs-style sweep over every coordinate. Like
+-- HMC/NUTS no gradient is required, but each sweep involves many
+-- log-density evaluations.
 module MCMC.Slice
   ( SliceConfig (..)
   , defaultSliceConfig

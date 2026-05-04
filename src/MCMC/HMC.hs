@@ -1,10 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
--- | Hamiltonian Monte Carlo (HMC) サンプラー。
+-- | Hamiltonian Monte Carlo (HMC) sampler.
 --
--- 'Model.HBM' の多相モデル ('ModelP') に対して 'Numeric.AD.Mode.Forward' で
--- 正確な勾配を計算します。制約付きパラメータ (PositiveT, UnitIntervalT) は
--- 事前分布から自動検出します。
+-- Computes exact gradients of polymorphic 'Model.HBM' models ('ModelP') via
+-- 'Numeric.AD.Mode.Forward'. Constrained parameters (@PositiveT@,
+-- @UnitIntervalT@) are detected automatically from the prior distribution.
 --
 -- @
 -- import Model.HBM

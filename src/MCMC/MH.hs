@@ -1,9 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
--- | Random Walk Metropolis-Hastings サンプラー。
+-- | Random-Walk Metropolis-Hastings sampler.
 --
--- ステップサイズ ('mcmcStepSizes') を調整して受容率が 20〜50% になるようにしてください。
--- 'MCMC.Core.Chain' と 'Viz.Report.renderReport' を組み合わせると診断プロットを生成できます。
+-- Tune the per-parameter step sizes ('mcmcStepSizes') so the acceptance rate
+-- lands in the 20-50% range. Pair 'MCMC.Core.Chain' with
+-- 'Viz.Report.renderReport' to produce diagnostic plots.
 module MCMC.MH
   ( MCMCConfig (..)
   , defaultMCMCConfig

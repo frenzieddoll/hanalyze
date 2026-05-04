@@ -1,6 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | MCMC 共通型と事後統計量。
--- サンプラーに依存しないため、MCMC を単独ライブラリとして使う際の基盤となります。
+-- | Common MCMC types and posterior statistics.
+--
+-- Sampler-agnostic: this is the foundation when @MCMC.*@ is used as a
+-- standalone sampling library.
 module MCMC.Core
   ( -- * チェーン型
     Chain (..)

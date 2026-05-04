@@ -1,11 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
--- | No-U-Turn Sampler (NUTS)。
+-- | No-U-Turn Sampler (NUTS).
 --
--- Hoffman & Gelman (2014) Algorithm 3 + Nesterov dual averaging を実装。
--- 勾配は 'Numeric.AD.Mode.Forward' による正確な値を使用。
+-- Implements Hoffman & Gelman (2014) Algorithm 3, with Nesterov dual
+-- averaging for step-size adaptation (Stan's strategy). Gradients are
+-- exact, computed via 'Numeric.AD.Mode.Forward'.
 --
--- 制約付きパラメータ (PositiveT, UnitIntervalT) は事前分布から自動検出。
+-- Constrained parameters (@PositiveT@, @UnitIntervalT@) are detected
+-- automatically from the prior distribution.
 --
 -- @
 -- import Model.HBM

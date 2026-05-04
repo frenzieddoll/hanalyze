@@ -1,10 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
--- | Gibbs サンプラー — 共役事前分布の解析的完全条件付きサンプリング。
+-- | Gibbs sampler — analytic full-conditional sampling for conjugate priors.
 --
--- 各 GibbsUpdate は 1 パラメータを完全条件付き分布から直接サンプリングするため、
--- Metropolis 棄却ステップが不要でサンプルはすべて採択される。
--- 非共役パラメータが混在する場合は MH と組み合わせる ('gibbsMH')。
+-- Each 'GibbsUpdate' draws a single parameter directly from its full
+-- conditional distribution, so no Metropolis rejection step is needed and
+-- every sample is accepted. When non-conjugate parameters are mixed in,
+-- combine with Metropolis-Hastings ('gibbsMH').
 module MCMC.Gibbs
   ( -- * 共役アップデートブロック
     GibbsUpdate
