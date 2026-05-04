@@ -28,6 +28,7 @@ import Model.LM (multiPolyDesignMatrix, linspace, SmoothFit (..))
 import Data.Text (Text)
 import qualified Data.Vector as V
 import qualified Numeric.LinearAlgebra as LA
+import qualified Stat.Cholesky        as Chol
 import Statistics.Distribution (quantile)
 import Statistics.Distribution.Normal (normalDistr)
 import Statistics.Distribution.StudentT (studentT)
@@ -104,6 +105,27 @@ maxIter = 100
 tol :: Double
 tol = 1e-8
 
+-- | Per-observation log-likelihood for the canonical-link GLMs we
+-- support. Used for the IRLS log-likelihood-based early termination
+-- (see 'runIRLS').
+--
+--   * Gaussian: @-½ (y − μ)²@ (constant terms dropped, harmless for the
+--     ratio-based stopping rule).
+--   * Binomial: @y log μ + (1 − y) log (1 − μ)@.
+--   * Poisson : @y log μ − μ@ (Stirling term dropped).
+glmLogLik :: Family -> LA.Vector Double -> LA.Vector Double -> Double
+glmLogLik family y mu =
+  let yL = LA.toList y
+      mL = LA.toList mu
+      f Gaussian yi mi = -0.5 * (yi - mi) ** 2
+      f Binomial yi mi =
+        let m' = max 1e-12 (min (1 - 1e-12) mi)
+        in yi * log m' + (1 - yi) * log (1 - m')
+      f Poisson  yi mi =
+        let m' = max 1e-12 mi
+        in yi * log m' - m'
+  in sum (zipWith (f family) yL mL)
+
 initBeta :: Family -> LinkFn -> LA.Vector Double -> Int -> LA.Vector Double
 initBeta family linkFn y p =
   let (g, _, _) = linkFnOf linkFn
@@ -126,8 +148,13 @@ irlsStep (_, gInv, gDeriv) varFn clamp family x y beta =
       yL    = LA.toList y
       ws    = LA.fromList [ max 1e-10 (1.0 / (gDeriv m ^ (2::Int) * varFn m)) | m <- muL ]
       zs    = LA.fromList [ ei + (yi - mi) * gDeriv mi | (ei,yi,mi) <- zip3 etaL yL muL ]
-      sqrtW = LA.diag (LA.cmap sqrt ws)
-  in LA.flatten ((sqrtW LA.<> x) LA.<\> LA.asColumn (sqrtW LA.#> zs))
+      -- Normal-equations form: solve (Xᵀ W X) β = Xᵀ W z via SPD Cholesky.
+      -- Faster than solving (√W X) β = (√W z) with the general LSQ
+      -- (dgels) when n ≫ p, which is the common GLM regime.
+      wxT   = LA.tr x * LA.asRow ws            -- p × n with column scaling
+      gMat  = wxT LA.<> x                       -- p × p (SPD)
+      bRhs  = LA.asColumn (wxT LA.#> zs)        -- p × 1
+  in LA.flatten (Chol.cholSolveJitter gMat bRhs)
 
 -- | Run IRLS to fit a single-output GLM. Returns both the fit result
 -- and the inverse Fisher information @(XᵀWX)⁻¹@ used for standard
@@ -136,18 +163,33 @@ runIRLS :: Family -> LinkFn -> LA.Matrix Double -> LA.Vector Double
         -> (FitResult, LA.Matrix Double)
 runIRLS family linkFn x y = (mkResult betaFinal, fisherInv betaFinal)
   where
-    link  = linkFnOf linkFn
+    link@(_, gInv, _) = linkFnOf linkFn
     step  = irlsStep link (varOf family) safeMu family x y
     beta0 = initBeta family linkFn y (LA.cols x)
 
-    betaFinal = converge maxIter beta0
+    -- 'converge' tracks both β and the previous log-likelihood. We stop
+    -- when |Δβ|₂ < tol (the original criterion) **or** when the relative
+    -- log-likelihood change drops below 'tol'. The latter typically
+    -- triggers several iterations earlier than the β-norm criterion on
+    -- ill-scaled problems and is the standard sklearn / statsmodels rule.
+    llOf beta =
+      let mu = safeMu family (LA.cmap gInv (x LA.#> beta))
+      in glmLogLik family y mu
 
-    converge 0 beta = beta
-    converge n beta =
+    betaFinal = converge maxIter beta0 (llOf beta0)
+
+    converge 0 beta _   = beta
+    converge n beta llP =
       let betaNew = step beta
-      in if LA.norm_2 (betaNew - beta) < tol || any notFinite (LA.toList betaNew)
-         then betaNew
-         else converge (n - 1) betaNew
+      in if any notFinite (LA.toList betaNew)
+         then beta                       -- divergence; keep last good β
+         else
+           let llN  = llOf betaNew
+               dLL  = abs (llN - llP) / max (abs llP) 1
+               dB   = LA.norm_2 (betaNew - beta)
+           in if dB < tol || dLL < tol
+                then betaNew
+                else converge (n - 1) betaNew llN
 
     notFinite b = isNaN b || isInfinite b
 
@@ -166,8 +208,10 @@ runIRLS family linkFn x y = (mkResult betaFinal, fisherInv betaFinal)
           mu   = safeMu family (LA.cmap gInv (x LA.#> beta))
           muL  = LA.toList mu
           ws   = LA.fromList [ max 1e-10 (1.0 / (gDeriv m ^ (2::Int) * varOf family m)) | m <- muL ]
-          wMat = LA.diag ws
-      in LA.inv (LA.tr x LA.<> wMat LA.<> x)
+          wxT  = LA.tr x * LA.asRow ws    -- p × n
+          gMat = wxT LA.<> x               -- p × p (SPD)
+          p    = LA.cols x
+      in Chol.cholSolveJitter gMat (LA.ident p)
 
 -- ---------------------------------------------------------------------------
 -- Public API

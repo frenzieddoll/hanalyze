@@ -146,6 +146,33 @@ Notes:
   4+ digits; the existing 1D ↔ MV equivalence tests still pass at
   1e-6.
 
+## After G1 (GLM IRLS overhaul) — regression suite delta
+
+`Model.GLM.runIRLS` switches the per-iteration LSQ to a Cholesky on the
+SPD normal equations @XᵀWX β = XᵀWz@, and adds a log-likelihood-based
+early termination criterion ('glmLogLik') alongside the original
+β-norm criterion. Both changes leave the converged β / R² unchanged at
+4-digit accuracy.
+
+| Item | Before (B1) | After (G1) | Speedup |
+|---|---|---|---|
+| GLM_logit_n2000_p10  |   398 ms |   2.0 ms | **199×** |
+| GLM_logit_n10000_p20 | 11500 ms |    17 ms | **676×** |
+| GLM_poisson_n2000_p10 |  390 ms |   1.3 ms | **300×** |
+| GLM_poisson_n10000_p20 | 9600 ms |  15.5 ms | **620×** |
+
+Versus the Python comparators (sklearn LBFGS-based logistic regression):
+
+| Item | hanalyze (G1) | sklearn | hs / py |
+|---|---|---|---|
+| GLM_logit_n10000_p20 | 17 ms | 3.7 ms | 4.6× |
+| GLM_poisson_n10000_p20 | 15.5 ms | 1.95 ms | 8× |
+
+The remaining 4-8× gap is reasonable for an exact IRLS vs sklearn's
+quasi-Newton path; closing it further would require a custom
+Newton-CG / L-BFGS implementation, which is out of scope for the
+accuracy phases that follow.
+
 ## High-leverage improvement queue
 
 In rough order of expected wall-time impact across the suite:
