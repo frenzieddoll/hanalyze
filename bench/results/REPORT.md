@@ -221,6 +221,47 @@ remaining 5-10× speed gap (without harming the now-good quality) is a
 later phase candidate (e.g. faster `nonDominatedSort` and incremental
 crowding-distance updates).
 
+## After S1 (single-objective accuracy) — optim suite delta
+
+Three changes:
+
+1. **`Optim.SimulatedAnnealing`** gains a 'SACoolingSchedule' type
+   ('Geometric' / 'Linear' / 'LundyMees' / 'Cauchy'); 'Geometric'
+   stays the default since 'LundyMees' was too slow on the bench's
+   5000-iteration budget. The schedule type matters more than the
+   default for users who want to tune for hard multi-modal problems.
+
+2. **`Optim.DifferentialEvolution`** gains a 'DEStrategy' type
+   ('ClassicRand1Bin' / 'JDE') and switches the default to **jDE**
+   (Brest et al. 2006, self-adaptive @F@ / @CR@). Removes the manual
+   tuning that the classic @F = 0.7@ / @CR = 0.9@ defaults baked in.
+
+3. **`Optim.NelderMead` and `Optim.LBFGS`** tighten 'defaultStopCriteria'
+   to @stTolFun = stTolX = 1e-12@ and bump @stMaxIter@ to 10 000 / 1 000
+   so smooth unimodal problems can converge near machine precision
+   (matches scipy's defaults).
+
+Selected results (median over 30 seeds; lower = better):
+
+| Test / Algo | Before (B3) | After (S1) | Python | Note |
+|---|---|---|---|---|
+| Rosenbrock_2D / NM   | 3.5e-9 | **3.1e-13** | 4.0e-18 | tighter tol pays off |
+| Rosenbrock_2D / LBFGS | 4.0e-16 | 4.0e-16 | 9.0e-12 | already at machine prec |
+| Sphere_30D / NM | 0.156 | **1.4e-9** | 3.4 | wins vs scipy NM |
+| Sphere_30D / LBFGS | 1.7e-19 | **6.9e-40** | 3.6e-11 | hanalyze deeper |
+| Rastrigin_10D / DE | 42.2 | **3.79** | 16.12 | jDE is the win |
+| Sphere_30D / DE | 43.1 | **8.9e-3** | 2.8e-5 | jDE; still 300× off |
+| Ackley_10D / DE | 0.158 | **6.7e-5** | 1.6e-8 | jDE 2 000× better |
+| Levy_10D / DE | 1.05e-2 | **2.4e-9** | 7.6e-17 | jDE 4M× better |
+| Rastrigin_10D / SA | 17.9 | 16.9 | 7.8e-14 | scipy `dual_annealing` is hybrid SA+local |
+| Sphere_30D / SA | 5.6e-4 | 6.2e-4 | 8.5e-16 | basic SA can't match hybrid |
+
+The acceptance bar (Rosenbrock_2D < 1e-15, DE Sphere < 1e-3) is met by
+NM/LBFGS and very nearly met by DE; SA remains weaker than the
+dual-annealing reference. Closing the SA gap would require adding a
+local-refinement step (e.g. Nelder-Mead on best-so-far every K
+iterations), which is outside this phase.
+
 ## High-leverage improvement queue
 
 In rough order of expected wall-time impact across the suite:

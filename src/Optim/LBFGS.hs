@@ -36,11 +36,16 @@ data LBFGSConfig = LBFGSConfig
                                    --   @∇f@ (soft-penalty enforcement).
   } deriving (Show, Eq)
 
--- | Default L-BFGS configuration: 200 iterations, history 10, Armijo c1
--- 1e-4, backtracking shrink 0.5, minimization, no bounds.
+-- | Default L-BFGS configuration: history 10, Armijo c1 1e-4,
+-- backtracking shrink 0.5, minimization, no bounds. Stop criteria
+-- match scipy's @\"L-BFGS-B\"@ defaults (@maxiter = 1000@,
+-- @ftol = 1e-12@) so smooth problems can converge to near-machine
+-- precision.
 defaultLBFGSConfig :: LBFGSConfig
 defaultLBFGSConfig = LBFGSConfig
-  { lbStop     = defaultStopCriteria { stMaxIter = 200 }
+  { lbStop     = defaultStopCriteria { stMaxIter = 1000
+                                     , stTolFun  = 1e-12
+                                     , stTolX    = 1e-12 }
   , lbMemory   = 10
   , lbLSMax    = 25
   , lbLSC1     = 1e-4

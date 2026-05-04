@@ -1350,7 +1350,7 @@ main = hspec $ do
           cfg = (SA.defaultSAConfig bs)
                   { SA.saStop = OC.defaultStopCriteria { OC.stMaxIter = 5000 }
                   , SA.saInitTemp = 2.0
-                  , SA.saAlpha = 0.997 }
+                  , SA.saSchedule = SA.Geometric 0.997 }
           sphere xs = sum [x*x | x <- xs]
       r <- SA.runSAWith cfg sphere [2, -1.5, 1, 0.5, -0.7] gen
       OC.orValue r `shouldSatisfy` (< 0.5)

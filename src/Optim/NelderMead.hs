@@ -44,10 +44,15 @@ data NMConfig = NMConfig
   } deriving (Show, Eq)
 
 -- | Default configuration: standard parameters, minimization, no bounds,
--- step 0.5, default 'StopCriteria'.
+-- step 0.5. The stop criteria are tightened beyond
+-- 'defaultStopCriteria' so the simplex can settle to near-machine
+-- precision on smooth unimodal problems (matches the @scipy.optimize@
+-- @\"Nelder-Mead\"@ defaults: @xatol = fatol = 1e-10@, @maxiter = 10000@).
 defaultNMConfig :: NMConfig
 defaultNMConfig = NMConfig
-  { nmStop     = defaultStopCriteria
+  { nmStop     = defaultStopCriteria { stMaxIter = 10000
+                                     , stTolFun  = 1e-12
+                                     , stTolX    = 1e-12 }
   , nmInitStep = 0.5
   , nmRho      = 1.0
   , nmChi      = 2.0
