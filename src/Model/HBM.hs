@@ -49,7 +49,7 @@
 -- deps   = extractDeps myModel                                      -- 依存関係
 -- @
 module Model.HBM
-  ( -- * 多相分布
+  ( -- * Polymorphic distributions
     Distribution (..)
   , distName
   , logDensity
@@ -58,7 +58,7 @@ module Model.HBM
   , distCDF
   , logCDF
   , logSF
-    -- * 多相モデル
+    -- * Polymorphic model DSL
   , Model
   , ModelP
   , sample
@@ -78,15 +78,15 @@ module Model.HBM
   , multinomialLogDensity
   , lkjCorrCholesky
   , ar1Latent
-    -- * 構造検査
+    -- * Structural inspection
   , Node (..)
   , NodeKind (..)
   , collectNodes
   , sampleNames
   , extractDeps
-    -- * 型エイリアス
+    -- * Type aliases
   , Params
-    -- * インタープリタ
+    -- * Interpreters
   , logJoint
   , logPrior
   , logLikelihood
@@ -94,18 +94,18 @@ module Model.HBM
   , runObserveDists
   , priorList
   , describeModel
-    -- * モデルグラフ (可視化用)
+    -- * Model graph (visualization)
   , ModelGraph (..)
   , buildModelGraph
-    -- * AD 勾配
+    -- * AD gradient
   , gradAD
   , gradADU
-    -- * 制約変換 (HMC 用)
+    -- * Constraint transforms (for HMC)
   , getTransforms
   , logJointUnconstrained
   , invTransformF
   , logJacF
-    -- * 依存追跡型
+    -- * Dependency-tracking interpretation
   , Track (..)
   , trackVar
   , trackConst
@@ -152,8 +152,10 @@ liftF fa = Free (fmap Pure fa)
 -- 多相分布
 -- ---------------------------------------------------------------------------
 
--- | 値の型 @a@ に多相な確率分布。
--- @a@ には @Double@、@Reverse s Double@ (AD)、@Track@ (依存追跡) などが入る。
+-- | A probability distribution polymorphic in its value type @a@.
+--
+-- @a@ ranges over @Double@ (sampling and density), @Reverse s Double@
+-- (AD-based gradient), @Track@ (dependency tracking) and so on.
 data Distribution a
   = Normal      a a       -- ^ Normal(μ, σ)
   | Exponential a         -- ^ Exp(rate)
@@ -170,60 +172,73 @@ data Distribution a
   | Bernoulli   a         -- ^ Bernoulli(p) — observed: 0 or 1
   | Categorical [a]       -- ^ Categorical(probs) — observed: 0..K-1
   | Mixture [a] [Distribution a]
-    -- ^ Mixture(weights, components) — log p(x) = logsumexp(log w_k + log p_k(x))
-    -- 重みは正の値で渡し、内部で自動正規化される。
+    -- ^ @Mixture(weights, components)@ —
+    --   @log p(x) = logSumExp(log w_k + log p_k(x))@.
+    --   Weights need only be positive; they are auto-normalized.
   | Truncated (Distribution a) (Maybe a) (Maybe a)
-    -- ^ Truncated(d, lo, hi): d の台を [lo, hi] に切り詰める。
-    --   範囲外の観測は負の無限大。 Nothing は -∞ / +∞ の意味。
-    --   元分布は CDF を持つもの (Normal/Exponential/LogNormal/Uniform) のみ対応。
+    -- ^ @Truncated(d, lo, hi)@: restrict the support of @d@ to
+    --   @[lo, hi]@. Out-of-range observations get @-∞@.
+    --   'Nothing' bounds mean @-∞ / +∞@. Only base distributions with a
+    --   CDF (Normal / Exponential / LogNormal / Uniform) are supported.
   | Censored  (Distribution a) (Maybe a) (Maybe a)
-    -- ^ Censored(d, lo, hi): y ≤ lo / y ≥ hi で打ち切り。
-    --   観測 y_i がしきい値ちょうどなら左/右打ち切りとして CDF/SF を使う。
-    --   Tobit 風モデルなどで使用。元分布は CDF を持つものに限る。
+    -- ^ @Censored(d, lo, hi)@: censor @y ≤ lo@ on the left and
+    --   @y ≥ hi@ on the right. When @y_i@ equals a threshold the CDF/SF
+    --   is used. Useful for Tobit-style models. Only CDF-supporting
+    --   base distributions.
   | MvNormal [a] [[a]]
-    -- ^ MvNormal(μ, Σ): 多変量正規分布 (観測専用)。
-    --   μ は長さ k の平均ベクトル、Σ は k×k の共分散行列 (対称正定値)。
-    --   'observeMV' で k 次元観測ベクトル列を渡す。Cholesky 分解で評価。
-    --   注: @sample@ 経由で latent として使うのは非対応 (logDensity = 0)。
+    -- ^ @MvNormal(μ, Σ)@: multivariate normal (observation-only).
+    --   @μ@ is a length-@k@ mean vector, @Σ@ is the @k×k@
+    --   symmetric-positive-definite covariance. Pass @k@-vector
+    --   observations through 'observeMV'. Density is computed via
+    --   Cholesky. /Not supported/ as a latent ('sample' returns 0
+    --   density).
   | NegativeBinomial a a
-    -- ^ NegativeBinomial(μ, α) parameterization (PyMC 互換)。
-    --   mean = μ,  var = μ + μ²/α  (α → ∞ で Poisson に収束)。
-    --   過分散カウントデータの観測尤度に使う。観測値は非負整数。
+    -- ^ @NegativeBinomial(μ, α)@ (PyMC parameterization).
+    --   @mean = μ@, @var = μ + μ²/α@ (Poisson in the limit
+    --   @α → ∞@). Likelihood for over-dispersed count data;
+    --   observations are non-negative integers.
   | Multinomial Int [a]
-    -- ^ Multinomial(n, [p_0,…,p_{K-1}]) (観測専用)。
-    --   試行数 n と確率ベクトル p を持つ。観測は K 次元のカウントベクトル
-    --   (合計 n)。'observeMV' で観測列をベクトルとして渡す。
+    -- ^ @Multinomial(n, [p_0, …, p_{K-1}])@ (observation-only).
+    --   @n@ is the trial count and @p@ the probability vector.
+    --   Observations are @K@-dimensional count vectors summing to @n@,
+    --   passed via 'observeMV'.
   | ZeroInflatedPoisson a a
-    -- ^ ZeroInflatedPoisson(ψ, λ): ゼロ過剰ポアソン。
-    --   ψ ∈ [0,1] は「構造的ゼロ」(余分なゼロが出る確率)。
-    --   P(0)   = ψ + (1-ψ) e^{-λ}
-    --   P(k>0) = (1-ψ) λ^k e^{-λ} / k!
+    -- ^ @ZeroInflatedPoisson(ψ, λ)@: zero-inflated Poisson.
+    --   @ψ ∈ [0, 1]@ is the structural-zero probability.
+    --   @P(0) = ψ + (1-ψ) e^{-λ}@,
+    --   @P(k>0) = (1-ψ) λ^k e^{-λ} / k!@.
   | ZeroInflatedBinomial Int a a
-    -- ^ ZeroInflatedBinomial(n, ψ, p): ゼロ過剰二項。
-    --   P(0)   = ψ + (1-ψ) (1-p)^n
-    --   P(k>0) = (1-ψ) C(n,k) p^k (1-p)^{n-k}
+    -- ^ @ZeroInflatedBinomial(n, ψ, p)@: zero-inflated binomial.
+    --   @P(0) = ψ + (1-ψ) (1-p)^n@,
+    --   @P(k>0) = (1-ψ) C(n,k) p^k (1-p)^{n-k}@.
   | InverseGamma a a
-    -- ^ InverseGamma(α, β): 逆ガンマ。support: x > 0。
-    --   X ~ InverseGamma(α, β) ⇔ 1/X ~ Gamma(α, β) (rate=β)。
-    --   分散の共役事前として頻用 (mean = β/(α-1), α>1 で有限)。
+    -- ^ @InverseGamma(α, β)@. Support @x > 0@. If
+    --   @X ~ InverseGamma(α, β)@ then @1/X ~ Gamma(α, β)@ (rate
+    --   parameterization). Common conjugate prior on variance
+    --   (@mean = β/(α−1)@, finite when @α > 1@).
   | Weibull a a
-    -- ^ Weibull(k shape, λ scale): 生存解析の典型分布。support: x > 0。
-    --   pdf: (k/λ) (x/λ)^(k-1) exp(-(x/λ)^k)
-    --   k = 1 で Exponential(rate=1/λ) と等価。
+    -- ^ @Weibull(k shape, λ scale)@: a standard survival distribution.
+    --   Support @x > 0@. @pdf = (k/λ) (x/λ)^{k-1} exp(-(x/λ)^k)@.
+    --   With @k = 1@ this is @Exponential(rate = 1/λ)@.
   | Pareto a a
-    -- ^ Pareto(α shape, x_m scale): 重い裾の冪分布。support: x ≥ x_m > 0。
-    --   pdf: α x_m^α / x^(α+1)
-    --   α > 1 で平均 = α x_m / (α-1)。
+    -- ^ @Pareto(α shape, x_m scale)@: heavy-tailed power law.
+    --   Support @x ≥ x_m > 0@. @pdf = α x_m^α / x^{α+1}@.
+    --   Mean @= α x_m / (α-1)@ when @α > 1@.
   | BetaBinomial Int a a
-    -- ^ BetaBinomial(n, α, β): Beta-Binomial 過分散二項。観測専用。
-    --   P(k) = C(n,k) B(k+α, n-k+β) / B(α, β)
-    --   α=β=1 で Uniform on {0,…,n}、α/β を大きくすると Binomial に近づく。
+    -- ^ @BetaBinomial(n, α, β)@ overdispersed binomial
+    --   (observation-only).
+    --   @P(k) = C(n, k) B(k+α, n-k+β) / B(α, β)@. With @α = β = 1@
+    --   this is uniform on @{0, …, n}@; large @α/β@ tends to a
+    --   binomial.
   | VonMises a a
-    -- ^ VonMises(μ location, κ concentration): 角度 (-π, π] 上の分布。
-    --   pdf: exp(κ cos(x − μ)) / (2π I_0(κ))
-    --   κ → 0 で uniform、κ → ∞ で Normal(μ, 1/√κ) に近づく。
+    -- ^ @VonMises(μ location, κ concentration)@: distribution on the
+    --   circle @(-π, π]@.
+    --   @pdf = exp(κ cos(x − μ)) / (2π I_0(κ))@.
+    --   @κ → 0@ approaches uniform; @κ → ∞@ approaches
+    --   @Normal(μ, 1/√κ)@.
   deriving (Show, Functor)
 
+-- | Display name of a distribution constructor (e.g. @\"Normal\"@).
 distName :: Distribution a -> Text
 distName Normal{}      = "Normal"
 distName Exponential{} = "Exponential"
@@ -253,7 +268,7 @@ distName Pareto{}               = "Pareto"
 distName BetaBinomial{}         = "BetaBinomial"
 distName VonMises{}             = "VonMises"
 
--- | サンプル値 (型 @a@) に対する事前分布の対数密度。
+-- | Log prior density at a sample value of type @a@.
 logDensity :: (Floating a, Ord a) => Distribution a -> a -> a
 logDensity (Normal mu sig) x
   | sig <= 0  = negInf
@@ -396,8 +411,9 @@ logDensity (NegativeBinomial mu alpha) x
        + alpha * log p
        + x * log (1 - p)
 
--- | 観測値 (Double 定数) に対する尤度の対数密度。
--- 観測は @[Double]@ で渡されるので、@Floating a@ 制約のみで計算可能。
+-- | Log likelihood density at an observation (a fixed @Double@).
+-- Observations are passed as @[Double]@, so this uses only the
+-- @Floating a@ constraint.
 logDensityObs :: forall a. (Floating a, Ord a) => Distribution a -> Double -> a
 logDensityObs (Normal mu sig) y
   | sig <= 0  = negInf
@@ -597,8 +613,10 @@ logDensityObs (NegativeBinomial mu alpha) y
        + alpha * log p
        + kA * log (1 - p)
 
--- | 観測リストに対する尤度の総和。通常分布は 1 観測 = 1 スカラーで sum。
--- MvNormal は k 次元なので flatten された @[Double]@ を chunk して評価する。
+-- | Sum of log likelihoods over a list of observations. For ordinary
+-- distributions one observation contributes one scalar log-density.
+-- For 'MvNormal' (which expects @k@-vectors), the flattened @[Double]@
+-- is chunked into length-@k@ groups before evaluation.
 obsLogSum :: forall a. (Floating a, Ord a) => Distribution a -> [Double] -> a
 obsLogSum (MvNormal mu cov) ys =
   let k       = length mu
@@ -611,7 +629,8 @@ obsLogSum (Multinomial n probs) ys =
   in sum [ multinomialLogDensity n probs yv | yv <- chunks ]
 obsLogSum d ys = sum [ logDensityObs d y | y <- ys ]
 
--- | 多項観測 1 件 (K 次元カウントベクトル) に対する対数密度。
+-- | Log probability of a single multinomial observation (a @K@-vector
+-- of counts).
 --   log P(k_1, …, k_K) = log n!/Π k_i! + Σ k_i log p_i
 multinomialLogDensity :: forall a. (Floating a, Ord a)
                       => Int -> [a] -> [Double] -> a
@@ -627,7 +646,7 @@ multinomialLogDensity n probs counts
           dotPart = sum (zipWith (\c p -> realToFrac c * log p) counts probs)
       in logFactN - logFactSum + dotPart
 
--- | 観測 1 件 (k 次元ベクトル) に対する MvNormal 対数密度。
+-- | Log density of an 'MvNormal' at a single @k@-vector observation.
 --   log p(y) = -k/2 log(2π) - 0.5 log|Σ| - 0.5 (y-μ)ᵀ Σ⁻¹ (y-μ)
 --   Σ⁻¹ と log|Σ| は Cholesky 分解 Σ = L Lᵀ から計算。
 mvNormalLogDensity :: forall a. (Floating a, Ord a) => [a] -> [[a]] -> [a] -> a
@@ -736,7 +755,8 @@ erfA x =
 phiCdfA :: (Floating a, Ord a) => a -> a
 phiCdfA x = 0.5 * (1 + erfA (x / sqrt 2))
 
--- | 'Distribution' の CDF F(x) = P(Y ≤ x)。CDF を持たない分布では 'Nothing'。
+-- | CDF @F(x) = P(Y ≤ x)@ of a 'Distribution'. Returns 'Nothing' for
+-- distributions that do not have a closed-form CDF in this library.
 distCDF :: (Floating a, Ord a) => Distribution a -> a -> Maybe a
 distCDF (Normal mu sig) x
   | sig <= 0  = Nothing
@@ -784,7 +804,8 @@ distCDF (StudentT df mu sig) x
       in Just (if z >= 0 then 1 - 0.5 * ix else 0.5 * ix)
 distCDF _ _ = Nothing  -- 他の分布 (離散・Mixture・Truncated 内の Truncated 等) は未対応
 
--- | log F(x) (CDF の対数) — 端では値が 0 や 1 に近づくため log(F) で計算。
+-- | @log F(x)@. Computed as @log(F)@ directly to avoid loss of
+-- precision near the tails where @F@ approaches 0 or 1.
 logCDF :: (Floating a, Ord a) => Distribution a -> a -> a
 logCDF d x = case distCDF d x of
   Nothing -> negInf
@@ -792,7 +813,7 @@ logCDF d x = case distCDF d x of
          | c >= 1    -> 0
          | otherwise -> log c
 
--- | log(1 - F(x)) — 右側生存関数の対数。
+-- | Log of the right-tail survival function @log(1 − F(x))@.
 logSF :: (Floating a, Ord a) => Distribution a -> a -> a
 logSF d x = case distCDF d x of
   Nothing -> negInf
@@ -932,7 +953,7 @@ logCDFInterval d mLo mHi = case (mLo, mHi) of
 -- 分布からのサンプリング (事前/事後予測用)
 -- ---------------------------------------------------------------------------
 
--- | 'Distribution Double' から 1 サンプル生成する。
+-- | Draw a single sample from a 'Distribution Double'.
 -- 事前予測サンプリング、事後予測サンプリング、観測値の生成に使う。
 --
 -- mwc-random が直接提供しない分布はここで実装する (Cauchy, HalfCauchy, etc.)。
@@ -1106,7 +1127,7 @@ data ModelF a next
 
 type Model a = Free (ModelF a)
 
--- | 多相モデルの型エイリアス。
+-- | Type alias for the polymorphic model DSL.
 -- @ModelP r = forall a. (Floating a, Ord a) => Model a r@
 type ModelP r = forall a. (Floating a, Ord a) => Model a r
 
@@ -1116,12 +1137,13 @@ sample n d = liftF (Sample n d id)
 observe :: Text -> Distribution a -> [Double] -> Model a ()
 observe n d ys = liftF (Observe n d ys ())
 
--- | 多変量観測 (MvNormal 用)。各観測は長さ k のベクトルを並べたリスト @[[Double]]@。
+-- | Multivariate observation (for 'MvNormal'). Each observation is a
+-- length-@k@ vector; pass them as a list @[[Double]]@.
 -- 内部的には @concat@ で flatten され、評価時に Distribution の次元 k で chunk される。
 observeMV :: Text -> Distribution a -> [[Double]] -> Model a ()
 observeMV n d obss = liftF (Observe n d (concat obss) ())
 
--- | 多出力観測のヘルパ。q 個の (Distribution, 観測ベクトル) 組について
+-- | Multi-output observation helper. Takes @q@ pairs of
 -- @observe (prefix <> \"_\" <> j) dist_j ys_j@ を順に発行する。
 --
 -- 多出力回帰の尤度を 1 行で書きたいときに使う:
@@ -1135,7 +1157,8 @@ observeColumns prefix pairs =
            observe (prefix <> "_" <> T.pack (show (j :: Int))) d ys)
         (zip [0..] pairs)
 
--- | 任意の log-prob 項をモデルに加える (PyMC `pm.Potential` 相当)。
+-- | Add an arbitrary log-probability term to the model (analogous to
+-- PyMC's @pm.Potential@).
 --
 -- 通常のサンプリング/観測では表せない log-density 寄与を入れるのに使う。
 -- 典型用途:
@@ -1174,7 +1197,8 @@ deterministic nm v = liftF (Deterministic nm v id)
 dataNamed :: Text -> [Double] -> Model a [Double]
 dataNamed n ys = liftF (Data n ys id)
 
--- | モデル中の名前付きデータを差し替える。マッチしない場合はそのまま。
+-- | Replace a named data block in the model. If no match exists the
+-- model is returned unchanged.
 -- 同じ名前が複数回出現する場合は全箇所で差し替わる。
 --
 -- 型シグネチャは @Model a r@ なので、ユーザーが @ModelP r@ から呼ぶ場合
@@ -1197,7 +1221,8 @@ withData n new m = mPoly
           Potential nm v nx    -> Potential nm v (go nx)
           Deterministic nm v k -> Deterministic nm v (\v' -> go (k v')))
 
--- | 多変量正規分布の latent ベクトル (PyMC `pm.MvNormal` の latent 用法)。
+-- | Latent multivariate-normal vector (analogous to PyMC's
+-- @pm.MvNormal@ used as a latent).
 --
 -- 非中心化パラメタ化 + Cholesky 分解で実装:
 --
@@ -1338,7 +1363,8 @@ nonCenteredNormal name loc scale = do
   raw <- sample (name <> "_raw") (Normal 0 1)
   deterministic name (loc + scale * raw)
 
--- | Dirichlet 分布 (PyMC `pm.Dirichlet` 相当) を stick-breaking で展開した
+-- | Dirichlet distribution (analogous to PyMC's @pm.Dirichlet@), expanded
+-- via stick-breaking
 -- latent ベクトル。
 --
 -- 引数:
@@ -1392,7 +1418,7 @@ data Node = Node
   , nodeDeps :: Set Text     -- 直接の親 (依存変数)
   } deriving (Show)
 
--- | placeholder 値 0 でモデルを走査し、ノード情報を集める。
+-- | Walk the model with placeholder zeros and collect 'Node' metadata.
 -- 依存関係 ('nodeDeps') は 'extractDeps' を使うこと (placeholder 走査では取れない)。
 collectNodes :: forall r. ModelP r -> [Node]
 collectNodes m = go m []
@@ -1414,7 +1440,8 @@ sampleNames m = [nodeName n | n <- collectNodes m, nodeKind n == LatentN]
 -- 評価インタープリタ
 -- ---------------------------------------------------------------------------
 
--- | log p(θ, y) を計算する多相インタープリタ。
+-- | Polymorphic interpreter that computes the log-joint
+-- @log p(θ, y)@.
 -- 引数 @a@ を @Double@ にすると数値評価、@Reverse s Double@ にすると AD 評価が可能。
 logJoint :: (Floating a, Ord a) => Model a r -> Map Text a -> a
 logJoint model params = go model 0
@@ -1463,7 +1490,8 @@ logLikelihood model params = go model 0
     go (Free (Deterministic _ v k)) acc = go (k v) acc
     go (Free (Data _ ys k)) acc = go (k ys) acc
 
--- | 各 Observe ノードの「現在のパラメータ値で評価した分布」と観測値を取得する。
+-- | For each observe node, return its distribution evaluated at the
+-- current parameter values together with the observed data.
 -- Gibbs サンプラーが共役構造を検出する際に、潜在変数の現在値に対する
 -- 観測分布のパラメータを得るために使う (Double 特殊化版)。
 --
@@ -1484,7 +1512,8 @@ runObserveDists (Free (Deterministic _ v k)) ps =
 runObserveDists (Free (Data _ ys k)) ps =
   runObserveDists (k ys) ps
 
--- | 各 Sample ノードの (名前, 事前分布) を Double 特殊化で取得する。
+-- | For each sample node, return @(name, prior distribution)@ in the
+-- @Double@-specialized form.
 -- Gibbs サンプラーの共役検出で「この潜在変数の事前は Gamma か Beta か」を
 -- 判定するために使う。継続値はプレースホルダ 0 を流す。
 priorList :: Model Double r -> [(Text, Distribution Double)]
@@ -1502,7 +1531,7 @@ priorList (Free (Data _ ys k)) = priorList (k ys)
 -- | パラメータ名 → 値 のマップ (constrained 空間)。
 type Params = Map Text Double
 
--- | 観測値ごとの対数尤度 (WAIC / LOO 用)。
+-- | Per-observation log-likelihood (used by WAIC / LOO-CV).
 -- 各 Observe ノードのすべての観測値の logDensity を平坦リストで返す。
 perObsLogLiks :: forall r. ModelP r -> Params -> [Double]
 perObsLogLiks m params = go m []
@@ -1526,7 +1555,8 @@ perObsLogLiks m params = go m []
     go (Free (Deterministic _ v k)) acc = go (k v) acc
     go (Free (Data _ ys k)) acc = go (k ys) acc
 
--- | モデルの 'Deterministic' ノードを評価し、派生量の Map を返す。
+-- | Evaluate every 'Deterministic' node and return the resulting
+-- derived-quantity 'Map'.
 --
 -- @params@ は latent 変数 (sample) の値を表す Map。Deterministic は
 -- それらから導出される量で、ここでは Double 特殊化で評価する。
@@ -1543,7 +1573,7 @@ runDeterministics m params = go m Map.empty
       go (k v) (Map.insert n v acc)
     go (Free (Data _ ys k)) acc = go (k ys) acc
 
--- | 各 posterior サンプルに対して 'runDeterministics' を計算し、
+-- | Evaluate 'runDeterministics' on every posterior sample and
 -- 結果を 'chainSamples' の Map にマージした新しい Chain を返す。
 -- これにより 'chainVals' / 'posteriorSummary' などのヘルパで派生量を
 -- そのまま参照できる。
@@ -1552,7 +1582,7 @@ augmentChainWithDeterministic m ch =
   let aug ps = Map.union (runDeterministics m ps) ps
   in ch { chainSamples = map aug (chainSamples ch) }
 
--- | モデル構造の人間向け要約 (推論は実行しない)。
+-- | Human-readable summary of the model structure (no inference is run).
 describeModel :: ModelP r -> Text
 describeModel m = T.unlines (header : map fmtNode (collectNodes m))
   where
@@ -1562,7 +1592,8 @@ describeModel m = T.unlines (header : map fmtNode (collectNodes m))
       ObservedN k -> "  [observed] " <> nodeName n <> " ~ " <> nodeDist n
                   <> "  (n=" <> T.pack (show k) <> ")"
 
--- | DAG 用のモデルグラフ。エッジは 'extractDeps' で自動抽出される。
+-- | DAG representation of the model. Edges are derived automatically by
+-- 'extractDeps'.
 data ModelGraph = ModelGraph
   { mgNodes :: [Node]
   , mgEdges :: [(Text, Text)]   -- (parent, child)
