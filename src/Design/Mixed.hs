@@ -11,15 +11,16 @@ module Design.Mixed
 
 import Design.Factorial (fullFactorial)
 
--- | 各因子に異なる水準値リストを与える混合水準計画。
+-- | Mixed-level design where the user supplies an explicit list of
+-- level values per factor.
 --
--- 例: 因子 A は (10, 20, 30)、因子 B は (-1, +1)
---   @mixedLevelDesign [[10, 20, 30], [-1, 1]]@
+-- Example: factor A on @(10, 20, 30)@ and factor B on @(-1, +1)@:
+-- @mixedLevelDesign [[10, 20, 30], [-1, 1]]@.
 mixedLevelDesign :: [[Double]] -> [[Double]]
 mixedLevelDesign = fullFactorial
 
--- | 2 つの計画行列の直積 (cross design)。
+-- | Cross product of two design matrices (cross design).
 --
--- 例: 全要因設計 A と B を横に結合した複合設計を作る。
+-- Useful e.g. for combining two full factorial designs side-by-side.
 crossDesign :: [[Double]] -> [[Double]] -> [[Double]]
 crossDesign d1 d2 = [r1 ++ r2 | r1 <- d1, r2 <- d2]

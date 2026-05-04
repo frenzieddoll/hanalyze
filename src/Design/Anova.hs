@@ -19,22 +19,22 @@ import Text.Printf (printf)
 import qualified Statistics.Distribution as SD
 import qualified Statistics.Distribution.FDistribution as FD
 
--- | ANOVA テーブルの 1 行。
+-- | One row of an ANOVA table.
 data AnovaRow = AnovaRow
-  { arSource :: Text
-  , arDF     :: Int      -- 自由度
-  , arSS     :: Double   -- 平方和 (Sum of Squares)
-  , arMS     :: Double   -- 平均平方 (Mean Square = SS/DF)
-  , arF      :: Maybe Double  -- F 値 (Total / Error 行は Nothing)
-  , arPVal   :: Maybe Double  -- p 値
-  , arEtaSq  :: Maybe Double  -- η² = SS_factor / SS_total
+  { arSource :: Text             -- ^ Source label.
+  , arDF     :: Int              -- ^ Degrees of freedom.
+  , arSS     :: Double           -- ^ Sum of squares.
+  , arMS     :: Double           -- ^ Mean square (@SS / DF@).
+  , arF      :: Maybe Double     -- ^ F statistic ('Nothing' for total / error rows).
+  , arPVal   :: Maybe Double     -- ^ p-value.
+  , arEtaSq  :: Maybe Double     -- ^ Effect size @η² = SS_factor / SS_total@.
   } deriving (Show)
 
+-- | A complete ANOVA table.
 newtype AnovaTable = AnovaTable [AnovaRow] deriving (Show)
 
--- | 一元配置 ANOVA。
---
--- 引数: グループラベル (各データ点の所属) と値。
+-- | One-way ANOVA. The arguments are the group label per data point and
+-- the corresponding values.
 oneWayAnova :: [Text] -> [Double] -> AnovaTable
 oneWayAnova labels values =
   let n         = length values
@@ -70,13 +70,14 @@ oneWayAnova labels values =
                  Nothing Nothing Nothing
       ]
 
--- | 二元配置 ANOVA (交互作用なし、各セル 1 観測または等数の場合)。
+-- | Two-way ANOVA (no interaction term).
 --
--- 引数: 因子 A ラベル、因子 B ラベル、値。各セル (a, b) で 1 観測を仮定。
--- 平衡データ (= すべてのセルに同じ観測数) を仮定。
-twoWayAnova :: [Text]   -- factor A
-            -> [Text]   -- factor B
-            -> [Double]
+-- Each cell @(a, b)@ is assumed to hold exactly one observation, and
+-- the data is assumed balanced (all cells have the same observation
+-- count).
+twoWayAnova :: [Text]   -- ^ Factor A label per observation.
+            -> [Text]   -- ^ Factor B label per observation.
+            -> [Double] -- ^ Values.
             -> AnovaTable
 twoWayAnova as bs values =
   let n    = length values
@@ -119,7 +120,7 @@ twoWayAnova as bs values =
                  Nothing Nothing Nothing
       ]
 
--- | テーブルをコンソールに整形出力。
+-- | Pretty-print the table to stdout.
 printAnovaTable :: AnovaTable -> IO ()
 printAnovaTable (AnovaTable rows) = do
   printf "%-12s %4s %12s %12s %10s %10s %8s\n"

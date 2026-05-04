@@ -49,26 +49,28 @@ import Text.Printf (printf)
 -- 型
 -- ---------------------------------------------------------------------------
 
--- | 直交表。試行数 × 列数 の 1-based 水準コード表で表現。
+-- | An orthogonal array. Stored as a @runs × cols@ table of 1-based
+-- level codes.
 data OA = OA
-  { oaName    :: Text       -- ^ \"L9(3^4)\" 等
-  , oaRuns    :: Int        -- ^ 試行数
-  , oaFactors :: Int        -- ^ 最大因子数 (= 列数)
-  , oaLevels  :: [Int]      -- ^ 各列の水準数 (length = oaFactors)
-  , oaTable   :: [[Int]]    -- ^ runs × cols, 1-based 水準コード
+  { oaName    :: Text     -- ^ Display name, e.g. @\"L9(3^4)\"@.
+  , oaRuns    :: Int      -- ^ Number of runs.
+  , oaFactors :: Int      -- ^ Maximum number of factors (= columns).
+  , oaLevels  :: [Int]    -- ^ Level count per column (length 'oaFactors').
+  , oaTable   :: [[Int]]  -- ^ Body of the table (@runs × cols@) of
+                          --   1-based level codes.
   } deriving (Show, Eq)
 
--- | 因子の水準値 (テキストまたは数値)。
+-- | A factor level value (text or numeric).
 data LevelValue = LText Text | LNumeric Double
   deriving (Show, Eq)
 
--- | ユーザーが指定する因子 (名前と水準値リスト)。
+-- | User-supplied factor: a name plus a list of level values.
 data FactorSpec = FactorSpec
   { fsName   :: Text
   , fsLevels :: [LevelValue]
   } deriving (Show, Eq)
 
--- | 因子割当後の試行表。
+-- | A run table after factor assignment.
 data AssignedDesign = AssignedDesign
   { adArray   :: OA
   , adFactors :: [FactorSpec]
@@ -79,7 +81,7 @@ data AssignedDesign = AssignedDesign
 -- 標準表 (手動定義)
 -- ---------------------------------------------------------------------------
 
--- | L4(2³) — 4 試行、最大 3 因子 × 2 水準。
+-- | L4(2³) — 4 runs, up to 3 two-level factors.
 l4 :: OA
 l4 = OA "L4(2^3)" 4 3 (replicate 3 2)
   [ [1,1,1]
@@ -88,7 +90,7 @@ l4 = OA "L4(2^3)" 4 3 (replicate 3 2)
   , [2,2,1]
   ]
 
--- | L9(3⁴) — 9 試行、最大 4 因子 × 3 水準。
+-- | L9(3⁴) — 9 runs, up to 4 three-level factors.
 l9 :: OA
 l9 = OA "L9(3^4)" 9 4 (replicate 4 3)
   [ [1,1,1,1]
@@ -102,8 +104,8 @@ l9 = OA "L9(3^4)" 9 4 (replicate 4 3)
   , [3,3,2,1]
   ]
 
--- | L12(2¹¹) — 12 試行、最大 11 因子 × 2 水準 (Plackett-Burman)。
--- 主効果のみを想定 (交互作用は全列に分散される)。
+-- | L12(2¹¹) — 12 runs, up to 11 two-level factors (Plackett-Burman).
+-- Main effects only (interactions are distributed across all columns).
 l12 :: OA
 l12 = OA "L12(2^11)" 12 11 (replicate 11 2)
   [ [1,1,1,1,1,1,1,1,1,1,1]
@@ -120,8 +122,11 @@ l12 = OA "L12(2^11)" 12 11 (replicate 11 2)
   , [2,2,1,1,2,1,2,1,2,2,1]
   ]
 
--- | L18(2¹×3⁷) — 18 試行、最大 8 因子 (1 因子は 2 水準、残り 7 因子は 3 水準)。
--- タグチ流で最も推奨される表の一つ。主効果と (列 1)x(列 2) の交互作用を測定可能。
+-- | L18(2¹×3⁷) — 18 runs, up to 8 factors (column 1 has 2 levels, the
+-- remaining 7 columns each have 3 levels).
+--
+-- One of the most recommended Taguchi-style arrays; can measure main
+-- effects plus the column-1 × column-2 interaction.
 l18 :: OA
 l18 = OA "L18(2^1*3^7)" 18 8 (2 : replicate 7 3)
   [ [1,1,1,1,1,1,1,1]
@@ -148,7 +153,8 @@ l18 = OA "L18(2^1*3^7)" 18 8 (2 : replicate 7 3)
 -- 2 水準系の生成
 -- ---------------------------------------------------------------------------
 
--- | L₍₂^k₎(2^(2^k − 1)) を生成。Taguchi 標準の列順 (col j の値は
+-- | Build @L_{2^k}(2^{2^k − 1})@ in Taguchi's standard column ordering
+-- (column @j@'s value is
 -- popCount(j ∧ revBits k r) のパリティ)。
 mkL2k :: Int -> OA
 mkL2k k =
@@ -169,11 +175,11 @@ mkL2k k =
                     | i <- [0 .. k - 1] ]
     levelAt r j = 1 + (popCount (j .&. revBits r) `mod` 2)
 
--- | L8(2⁷) — 8 試行、最大 7 因子 × 2 水準 (生成式)。
+-- | L8(2⁷) — 8 runs, up to 7 two-level factors (generated).
 l8 :: OA
 l8 = mkL2k 3
 
--- | L16(2¹⁵) — 16 試行、最大 15 因子 × 2 水準 (生成式)。
+-- | L16(2¹⁵) — 16 runs, up to 15 two-level factors (generated).
 l16 :: OA
 l16 = mkL2k 4
 
@@ -181,9 +187,11 @@ l16 = mkL2k 4
 -- ルックアップ
 -- ---------------------------------------------------------------------------
 
+-- | The standard arrays bundled with the library.
 standardArrays :: [OA]
 standardArrays = [l4, l8, l9, l12, l16, l18]
 
+-- | Look up a standard array by short name (e.g. @\"L9\"@).
 lookupOA :: Text -> Maybe OA
 lookupOA name0 = case T.toUpper name0 of
   "L4"  -> Just l4
@@ -194,7 +202,7 @@ lookupOA name0 = case T.toUpper name0 of
   "L18" -> Just l18
   _     -> Nothing
 
--- | 利用可能な直交表の一覧 (CLI \"doe list\" 用)。
+-- | List of available orthogonal arrays (used by CLI @doe list@).
 listArrays :: [(Text, Text)]
 listArrays = [ (oaName a, descr a) | a <- standardArrays ]
   where
@@ -206,7 +214,8 @@ listArrays = [ (oaName a, descr a) | a <- standardArrays ]
 -- 因子割当
 -- ---------------------------------------------------------------------------
 
--- | 因子と水準値を直交表に割り当て、ユーザー指定の値で展開した試行表を返す。
+-- | Assign user-supplied factor names and level values to the columns of
+-- an orthogonal array, returning the expanded run table.
 --
 -- - 因子数が表の列数を超えるとエラー
 -- - 各因子の水準数が割当先列の水準数と一致しないとエラー
@@ -240,13 +249,15 @@ assignFactors oa specs
 -- 出力
 -- ---------------------------------------------------------------------------
 
--- | 直交表をそのまま CSV 化 (列名は F1, F2, ...)。
+-- | Render an orthogonal array as raw CSV (columns are @F1, F2, …@).
 renderRawCSV :: OA -> Text
 renderRawCSV oa = renderRawWith "," oa
 
+-- | Render an orthogonal array as raw TSV.
 renderRawTSV :: OA -> Text
 renderRawTSV oa = renderRawWith "\t" oa
 
+-- | Render an orthogonal array as a delimiter-separated table.
 renderRawWith :: Text -> OA -> Text
 renderRawWith sep oa =
   let header = T.intercalate sep
@@ -256,7 +267,7 @@ renderRawWith sep oa =
                  | row <- oaTable oa ]
   in header <> "\n" <> body <> "\n"
 
--- | 名前付き表を pretty-print (列幅揃え)。
+-- | Pretty-print a named orthogonal array with aligned columns.
 renderRawPretty :: OA -> Text
 renderRawPretty oa =
   let names    = "Run" : [ "F" <> T.pack (show j) | j <- [1 .. oaFactors oa] ]
@@ -271,14 +282,15 @@ renderRawPretty oa =
                    | (r, row) <- zip [1::Int ..] (oaTable oa) ]
   in T.pack (T.unpack (oaName oa)) <> "\n" <> header <> "\n" <> body
 
--- | 因子割当済み試行表を CSV 化。
+-- | Render a factor-assigned run table as CSV.
 renderCSV :: AssignedDesign -> Text
 renderCSV = renderWith ","
 
--- | 因子割当済み試行表を TSV 化。
+-- | Render a factor-assigned run table as TSV.
 renderTSV :: AssignedDesign -> Text
 renderTSV = renderWith "\t"
 
+-- | Render a factor-assigned run table with a custom field separator.
 renderWith :: Text -> AssignedDesign -> Text
 renderWith sep ad =
   let header = T.intercalate sep ("Run" : map fsName (adFactors ad))
@@ -293,7 +305,7 @@ fmtLevel (LNumeric d)
   | d == fromIntegral (round d :: Integer) = T.pack (show (round d :: Integer))
   | otherwise                              = T.pack (printf "%g" d)
 
--- | 因子割当済み試行表を pretty-print。
+-- | Pretty-print a factor-assigned run table.
 renderPretty :: AssignedDesign -> Text
 renderPretty ad =
   let names      = "Run" : map fsName (adFactors ad)

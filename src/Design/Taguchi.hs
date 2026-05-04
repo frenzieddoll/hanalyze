@@ -52,19 +52,23 @@ import Design.Orthogonal
 -- SN 比
 -- ---------------------------------------------------------------------------
 
--- | SN 比の計算規則。タグチが想定する 4 つのケース。
+-- | Signal-to-noise ratio rule. Taguchi's four canonical cases.
 data SNType
   = SmallerBetter
-    -- ^ 望小: y → 0 が良い (不良率、誤差、騒音)。η = -10 log₁₀(Σ y²/n)
+    -- ^ Smaller-the-better: @y → 0@ is desired (defect rates, errors,
+    --   noise). @η = -10 log₁₀(Σ y²/n)@.
   | LargerBetter
-    -- ^ 望大: y → ∞ が良い (強度、寿命、効率)。η = -10 log₁₀(Σ (1/y²)/n)
+    -- ^ Larger-the-better: @y → ∞@ is desired (strength, lifetime,
+    --   efficiency). @η = -10 log₁₀(Σ (1/y²)/n)@.
   | NominalBest
-    -- ^ 望目: 平均が一定 + 分散最小。η = 10 log₁₀(μ²/σ²)
+    -- ^ Nominal-the-best: hold the mean and minimize variance.
+    --   @η = 10 log₁₀(μ²/σ²)@.
   | NominalBestTarget Double
-    -- ^ 望目 (目標値 m 指定): η = -10 log₁₀(Σ(y-m)²/n)
+    -- ^ Nominal-the-best with explicit target @m@:
+    --   @η = -10 log₁₀(Σ(y - m)²/n)@.
   deriving (Show, Eq)
 
--- | 表示用の名前。
+-- | Display name of an 'SNType'.
 snTypeName :: SNType -> Text
 snTypeName SmallerBetter         = "smaller-the-better"
 snTypeName LargerBetter          = "larger-the-better"
@@ -72,7 +76,8 @@ snTypeName NominalBest           = "nominal-the-best"
 snTypeName (NominalBestTarget m) =
   "nominal-the-best (target=" <> T.pack (printf "%g" m) <> ")"
 
--- | 1 試行の繰返し観測値 ys から SN 比 η (dB) を計算。
+-- | Compute the SN ratio @η@ (in dB) from one run's repeated
+-- observations.
 snRatio :: SNType -> [Double] -> Double
 snRatio _    [] = 0
 snRatio sn   ys = case sn of
@@ -97,7 +102,8 @@ snRatio sn   ys = case sn of
     n      = length ys
     epsLog = 1e-30   -- 0 で log を取るのを防ぐ
 
--- | (内側試行 × 外側試行) の観測行列に対し、各行 (内側試行) の SN 比を返す。
+-- | For an @inner-run × outer-run@ observation matrix, return the SN
+-- ratio of each inner run.
 snRatioRows :: SNType -> [[Double]] -> [Double]
 snRatioRows sn = map (snRatio sn)
 
@@ -105,16 +111,18 @@ snRatioRows sn = map (snRatio sn)
 -- 要因効果と最適水準
 -- ---------------------------------------------------------------------------
 
--- | 1 因子の各水準における平均 SN 比。
+-- | Per-level mean SN ratio for a single factor.
 data FactorEffect = FactorEffect
-  { feFactor    :: Text          -- ^ 因子名
-  , feLevels    :: [LevelValue]  -- ^ 水準値 (順番に対応)
-  , feSNByLevel :: [Double]      -- ^ 各水準での平均 SN 比
+  { feFactor    :: Text          -- ^ Factor name.
+  , feLevels    :: [LevelValue]  -- ^ Level values in order.
+  , feSNByLevel :: [Double]      -- ^ Mean SN ratio at each level.
   } deriving (Show, Eq)
 
--- | 内側試行ごとの SN 比から、各因子・各水準の平均 SN 比を計算。
+-- | From the per-inner-run SN ratios, compute the mean SN ratio for
+-- every (factor, level) pair.
 --
--- 各内側試行 i で、因子 j が水準 k のときの SN_i を集めて平均する。
+-- For each inner run @i@, gather the @SN_i@ values where factor @j@
+-- has level @k@ and average them.
 analyzeSN :: AssignedDesign -> [Double] -> [FactorEffect]
 analyzeSN ad sns =
   let factors = adFactors ad
@@ -135,7 +143,8 @@ analyzeSN ad sns =
                       else sum xs / fromIntegral (length xs)
       | k <- [1 .. nLvl] ]
 
--- | 各因子の最良水準 (平均 SN 比が最大の水準) と、そのときの SN 比を返す。
+-- | For each factor, the best level (the one with the largest mean SN)
+-- together with that SN ratio.
 optimalLevels :: [FactorEffect] -> [(Text, LevelValue, Double)]
 optimalLevels effects =
   [ let (ix, snBest) = argmax (feSNByLevel fe)
@@ -148,8 +157,10 @@ optimalLevels effects =
     argmax xs = foldl1 better (zip [0::Int ..] xs)
     better a@(_, va) b@(_, vb) = if vb > va then b else a
 
--- | 最良水準での予測 SN 比 (主効果のみ加法モデル):
--- η_pred = mean(η_all) + Σ_j (η_best_j − mean(η_all))
+-- | Predicted SN ratio at the best-level combination (main-effects-only
+-- additive model):
+--
+-- @η_pred = mean(η_all) + Σ_j (η_best_j − mean(η_all))@.
 predictSN :: [FactorEffect] -> [Double] -> Double
 predictSN effects allSN =
   let muAll = if null allSN then 0
@@ -161,18 +172,21 @@ predictSN effects allSN =
 -- 内側/外側配置
 -- ---------------------------------------------------------------------------
 
--- | 内側 (制御因子) × 外側 (雑音因子) のクロス設計。
+-- | Inner × outer cross design: inner is the control-factor array,
+-- outer the noise-factor array.
 data InnerOuterDesign = InnerOuterDesign
   { ioInner :: AssignedDesign
   , ioOuter :: AssignedDesign
   } deriving (Show, Eq)
 
+-- | Construct an 'InnerOuterDesign'.
 makeInnerOuter :: AssignedDesign -> AssignedDesign -> InnerOuterDesign
 makeInnerOuter = InnerOuterDesign
 
--- | クロス設計を CSV 化。各行 = 内側 1 試行、各列 = 内側因子値 + 外側条件分の
--- 観測列 (空)。ユーザーが y_outer1..y_outerM 列を埋めて測定結果を記録する。
--- 別途 outer の試行表を後置する。
+-- | Render the cross design as CSV. Each row corresponds to one inner
+-- run; columns hold the inner-factor values followed by empty cells
+-- @y_outer1..y_outerM@ for the user to fill in measurements. The outer
+-- run table is appended afterwards.
 renderInnerOuterCSV :: InnerOuterDesign -> Text
 renderInnerOuterCSV io =
   let inner   = ioInner io

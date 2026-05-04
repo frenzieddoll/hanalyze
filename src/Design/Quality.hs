@@ -21,7 +21,8 @@ module Design.Quality
 
 import qualified Numeric.LinearAlgebra as LA
 
--- | 設計行列 X が直交か判定 (XᵀX が対角行列か、許容誤差 ε)。
+-- | True iff the design matrix @X@ is orthogonal (i.e. @XᵀX@ is
+-- diagonal up to tolerance @ε@).
 isOrthogonal :: Double -> [[Double]] -> Bool
 isOrthogonal eps xs =
   let m   = LA.fromLists xs
@@ -34,8 +35,9 @@ isOrthogonal eps xs =
             , i /= j ]
   in offDiagSum < eps
 
--- | 直交度スコア [0, 1]: 0 = 完全直交ではない、1 = 完全直交。
---   off-diag の総和を diag の総和に対して比較。
+-- | Orthogonality score in @[0, 1]@: 0 = far from orthogonal,
+-- 1 = exactly orthogonal. Compares the off-diagonal mass against the
+-- diagonal mass.
 orthogonalityScore :: [[Double]] -> Double
 orthogonalityScore xs =
   let m   = LA.fromLists xs
@@ -51,8 +53,8 @@ orthogonalityScore xs =
   in if diagSum == 0 then 0
        else 1 - offDiagSum / (diagSum + offDiagSum)
 
--- | XᵀX の条件数 (= λ_max / λ_min)。
---   大きい (> 30) と多重共線性の懸念。
+-- | Condition number of @XᵀX@ (@λ_max / λ_min@). Values above 30
+-- typically indicate multicollinearity.
 conditionNumber :: [[Double]] -> Double
 conditionNumber xs =
   let m   = LA.fromLists xs
@@ -63,8 +65,8 @@ conditionNumber xs =
        then 1 / 0   -- ∞
        else maximum sList / minimum sList
 
--- | D-efficiency: det(XᵀX/n)^(1/p) を最大化したい。
---   完全な直交設計では 1 に近づく。
+-- | D-efficiency @det(XᵀX/n)^(1/p)@ — to be maximized. Approaches 1 for
+-- a fully orthogonal design.
 dEfficiency :: [[Double]] -> Double
 dEfficiency xs =
   let m   = LA.fromLists xs
@@ -75,7 +77,8 @@ dEfficiency xs =
   in if detV <= 0 then 0
        else detV ** (1 / p)
 
--- | A-efficiency: trace((XᵀX/n)⁻¹) の逆。小さい trace = 推定の精度が高い。
+-- | A-efficiency: reciprocal of @trace((XᵀX/n)⁻¹)@. A smaller trace
+-- means higher per-coefficient estimation precision.
 aEfficiency :: [[Double]] -> Double
 aEfficiency xs =
   let m   = LA.fromLists xs
@@ -90,9 +93,11 @@ aEfficiency xs =
                        | i <- [0 .. round p - 1] :: [Int]]
          in p / tr
 
--- | 各列の VIF (Variance Inflation Factor)。
---   VIF_j = 1 / (1 - R²_j)、R²_j は列 j を他の列で回帰した決定係数。
---   VIF > 10 は深刻な多重共線性のサイン。
+-- | Per-column Variance Inflation Factor.
+--
+-- @VIF_j = 1 / (1 - R²_j)@, where @R²_j@ is the coefficient of
+-- determination from regressing column @j@ on the others.
+-- @VIF > 10@ is a strong sign of multicollinearity.
 vifList :: [[Double]] -> [Double]
 vifList xs =
   let m   = LA.fromLists xs

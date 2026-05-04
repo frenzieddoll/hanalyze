@@ -28,24 +28,23 @@ import qualified Data.Text as T
 -- 完全要因計画
 -- ---------------------------------------------------------------------------
 
--- | 各因子の水準値 [lvl_1, lvl_2, ...] のリストから、全組合せ
--- (デカルト積) を行列として生成する。
+-- | Full factorial design: take a list of per-factor level vectors
+-- @[lvl_1, lvl_2, …]@ and emit every combination (Cartesian product).
 --
--- 例: @fullFactorial [[1,2,3], [10,20]]@ →
---     @[[1,10],[1,20],[2,10],[2,20],[3,10],[3,20]]@
+-- Example: @fullFactorial [[1,2,3], [10,20]]@ →
+-- @[[1,10],[1,20],[2,10],[2,20],[3,10],[3,20]]@.
 fullFactorial :: [[Double]] -> [[Double]]
 fullFactorial = foldl' addCol [[]]
   where
     addCol acc levels =
       [ row ++ [v] | row <- acc, v <- levels ]
 
--- | 2^k 計画: 各因子は -1, +1 の 2 水準。
---
--- @twoLevelFactorial 3@ → 8 行 × 3 列
+-- | @2^k@ design — each factor takes the levels @-1, +1@.
+-- @twoLevelFactorial 3@ has 8 rows × 3 columns.
 twoLevelFactorial :: Int -> [[Double]]
 twoLevelFactorial k = fullFactorial (replicate k [-1, 1])
 
--- | 3^k 計画: 各因子は -1, 0, +1 の 3 水準。
+-- | @3^k@ design — each factor takes the levels @-1, 0, +1@.
 threeLevelFactorial :: Int -> [[Double]]
 threeLevelFactorial k = fullFactorial (replicate k [-1, 0, 1])
 
@@ -53,19 +52,19 @@ threeLevelFactorial k = fullFactorial (replicate k [-1, 0, 1])
 -- 部分要因計画 (Fractional factorial)
 -- ---------------------------------------------------------------------------
 
--- | 2^(k-p) 部分要因計画。
+-- | @2^(k-p)@ fractional factorial design.
 --
 -- @fractionalFactorial k generators@:
---   * @k@ — 全因子数
---   * @generators@ — 追加因子 (k-p+1, ..., k) の定義関係。
---     各 generator は基本因子 (1..k-p) のインデックス集合 (1-based)
---     で「これらの積」を取る。
 --
--- 例: 2^(4-1) (4 因子、1 個の generator) で D = ABC とする:
---   @fractionalFactorial 4 [[1,2,3]]@
---   → 2^3 = 8 行、4 列 (D 列は A*B*C)
+--   * @k@         — total number of factors.
+--   * @generators@ — defining relations for the added factors
+--     @k-p+1, …, k@. Each generator is a set of base-factor indices
+--     (1-based, in @1..k-p@); the corresponding column is their product.
 --
--- 注: generator は (k-p+1) 個必要 (= 追加因子の数)。
+-- Example: @2^(4-1)@ design (4 factors, one generator) with
+-- @D = ABC@: @fractionalFactorial 4 [[1,2,3]]@ → @2^3 = 8@ rows × 4
+-- columns (the @D@ column is @A·B·C@). The number of generators equals
+-- the number of added factors @p@.
 fractionalFactorial :: Int -> [[Int]] -> [[Double]]
 fractionalFactorial k generators =
   let p     = length generators
@@ -80,10 +79,10 @@ fractionalFactorial k generators =
 -- 混合水準計画
 -- ---------------------------------------------------------------------------
 
--- | 混合水準計画。各因子の水準数が異なる場合に使う。
+-- | Mixed-level design (factors with different numbers of levels).
 --
--- 例: 2² × 3¹ → @mixedFactorial [2, 2, 3]@
---   各因子は等間隔の水準 (-1, +1) または (-1, 0, +1)
+-- Example: @2² × 3¹@ → @mixedFactorial [2, 2, 3]@. Each factor uses
+-- evenly-spaced levels (@-1, +1@ or @-1, 0, +1@).
 mixedFactorial :: [Int] -> [[Double]]
 mixedFactorial levelCounts =
   fullFactorial (map standardLevels levelCounts)
@@ -99,7 +98,7 @@ mixedFactorial levelCounts =
 -- 列名生成
 -- ---------------------------------------------------------------------------
 
--- | 因子名 ["A", "B", "C", ...] を生成する。
+-- | Generate factor labels @[\"A\", \"B\", \"C\", …]@.
 factorialColumnNames :: Int -> [Text]
 factorialColumnNames k
   | k <= 26   = [T.singleton c | c <- take k ['A' ..]]

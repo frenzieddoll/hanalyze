@@ -17,7 +17,7 @@ module Design.Block
 
 import Data.List (foldl')
 
--- | n × n ラテン方格を返す。値は 1..n。
+-- | Build an @n × n@ Latin square. Cell values are @1..n@.
 --
 -- 標準形 (cyclic shift):
 --   row i, col j → ((i + j) mod n) + 1
@@ -28,7 +28,7 @@ latinSquare n
       [ [((i + j) `mod` n) + 1 | j <- [0 .. n - 1]]
       | i <- [0 .. n - 1] ]
 
--- | グレコラテン方格 (二つの直交ラテン方格のペア)。
+-- | Graeco-Latin square (a pair of orthogonal Latin squares).
 -- n が素数のとき構成可能 (n=6 は不可能)。
 -- 戻り値は (n × n) のセルごとに (a, b) のペア (両方とも 1..n)。
 --
@@ -42,19 +42,21 @@ graecoLatinSquare n
         | j <- [0 .. n - 1] ]
       | i <- [0 .. n - 1] ]
 
--- | 乱塊法: b ブロック × t 処理。
+-- | Randomized complete block design: @b@ blocks of @t@ treatments.
 --
--- 各ブロック内で処理 1..t をランダム順に並べる。
--- 結果は @[[Int]]@ で、行 = ブロック、列内 = 適用順、値 = 処理 ID。
-randomizedBlock :: Int             -- b ブロック数
-                -> Int             -- t 処理数
-                -> Int             -- ランダムシード
+-- Within each block, treatments @1..t@ are placed in a randomized order.
+-- The result @[[Int]]@ has one row per block; values inside a row are
+-- the application order of treatment IDs.
+randomizedBlock :: Int             -- ^ Number of blocks @b@.
+                -> Int             -- ^ Number of treatments @t@.
+                -> Int             -- ^ Random seed.
                 -> [[Int]]
 randomizedBlock b t seed =
   [ shuffleSeq (seed + i * 1000) [1 .. t] | i <- [0 .. b - 1] ]
 
--- | 配列を Fisher-Yates 法で擬似乱数シャッフル (再現性のため seed 指定)。
--- 単純な線形合同法 RNG を内部使用 (テスト用、暗号学的強度なし)。
+-- | Fisher-Yates pseudo-random shuffle (seeded for reproducibility).
+-- Uses a simple internal LCG (test-quality only, not cryptographically
+-- strong).
 shuffleSeq :: Int -> [a] -> [a]
 shuffleSeq seed xs =
   let n   = length xs

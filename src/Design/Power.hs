@@ -30,17 +30,17 @@ import qualified Statistics.Distribution.FDistribution as FD
 -- 効果量
 -- ---------------------------------------------------------------------------
 
--- | Cohen's d: 二群の標準化差。
---   d = (μ_1 − μ_2) / σ_pooled
---   解釈: 0.2 = small, 0.5 = medium, 0.8 = large
+-- | Cohen's @d@: standardized two-sample mean difference.
+-- @d = (μ_1 − μ_2) / σ_pooled@.
+-- Interpretation: 0.2 = small, 0.5 = medium, 0.8 = large.
 cohensD :: Double -> Double -> Double -> Double
 cohensD mu1 mu2 sigma = (mu1 - mu2) / sigma
 
--- | Cohen's f: 一元配置 ANOVA の効果量。
---   f = σ_means / σ_within
---   解釈: 0.10 = small, 0.25 = medium, 0.40 = large
-cohensF :: [Double]    -- 群平均
-        -> Double      -- σ_within (= √MSE)
+-- | Cohen's @f@: effect size for one-way ANOVA.
+-- @f = σ_means / σ_within@.
+-- Interpretation: 0.10 = small, 0.25 = medium, 0.40 = large.
+cohensF :: [Double]    -- ^ Per-group means.
+        -> Double      -- ^ Within-group SD (@= √MSE@).
         -> Double
 cohensF means sigma =
   let k    = length means
@@ -52,13 +52,12 @@ cohensF means sigma =
 -- t 検定
 -- ---------------------------------------------------------------------------
 
--- | 二群独立 t 検定の検出力 (両側、等分散仮定)。
---
--- 引数:
---   * @d@      — Cohen's d (効果量)
---   * @n1, n2@ — 各群のサンプルサイズ
---   * @alpha@  — 有意水準 (例 0.05)
-powerTTest :: Double -> Int -> Int -> Double -> Double
+-- | Two-sample two-sided t-test power, equal-variance assumption.
+powerTTest :: Double  -- ^ Cohen's @d@ (effect size).
+           -> Int     -- ^ Sample size of group 1, @n_1@.
+           -> Int     -- ^ Sample size of group 2, @n_2@.
+           -> Double  -- ^ Significance level @α@ (e.g. 0.05).
+           -> Double
 powerTTest d n1 n2 alpha =
   let df  = n1 + n2 - 2
       ncp = d * sqrt (fromIntegral n1 * fromIntegral n2
@@ -71,12 +70,11 @@ powerTTest d n1 n2 alpha =
       pLower = SD.cumulative (NormalD.normalDistr ncp sigma) (-tCrit)
   in pUpper + pLower
 
--- | 指定検出力に必要なサンプルサイズ (各群同数を仮定)。
---
--- 二分探索で最小の n を探す。
-sampleSizeTTest :: Double  -- d
-                -> Double  -- target power
-                -> Double  -- alpha
+-- | Smallest balanced sample size that attains the requested power.
+-- (Both groups assumed equal in size.)
+sampleSizeTTest :: Double  -- ^ Effect size @d@.
+                -> Double  -- ^ Target power.
+                -> Double  -- ^ Significance level @α@.
                 -> Int
 sampleSizeTTest d targetPow alpha = search 2 1000
   where
@@ -91,14 +89,12 @@ sampleSizeTTest d targetPow alpha = search 2 1000
 -- 一元配置 ANOVA の F 検定
 -- ---------------------------------------------------------------------------
 
--- | 一元配置 ANOVA の検出力。
---
--- 引数:
---   * @f@        — Cohen's f (効果量)
---   * @k@        — 群数
---   * @n@        — 群あたりサンプル数 (等数仮定)
---   * @alpha@    — 有意水準
-powerOneWayAnova :: Double -> Int -> Int -> Double -> Double
+-- | One-way ANOVA F-test power.
+powerOneWayAnova :: Double   -- ^ Cohen's @f@ (effect size).
+                 -> Int      -- ^ Number of groups @k@.
+                 -> Int      -- ^ Per-group sample size @n@.
+                 -> Double   -- ^ Significance level @α@.
+                 -> Double
 powerOneWayAnova f k n alpha =
   let dfBetween = k - 1
       dfWithin  = k * (n - 1)
@@ -112,6 +108,7 @@ powerOneWayAnova f k n alpha =
       z         = (fCrit * fromIntegral dfBetween - mean1) / sqrt var1
   in 1 - SD.cumulative (NormalD.normalDistr 0 1) z
 
+-- | Smallest per-group sample size that attains the requested ANOVA power.
 sampleSizeOneWayAnova :: Double -> Int -> Double -> Double -> Int
 sampleSizeOneWayAnova f k targetPow alpha = search 2 1000
   where
@@ -126,9 +123,10 @@ sampleSizeOneWayAnova f k targetPow alpha = search 2 1000
 -- 比率検定 (二群)
 -- ---------------------------------------------------------------------------
 
--- | 二群比率検定 (z-test) の検出力 (両側)。
+-- | Two-sample two-sided proportion z-test power.
 --
--- 引数: 真の比率 p1, p2、各群サンプル n1, n2、α。
+-- Arguments: true proportions @p_1@, @p_2@, group sample sizes @n_1@,
+-- @n_2@, and significance level @α@.
 powerProportion :: Double -> Double -> Int -> Int -> Double -> Double
 powerProportion p1 p2 n1 n2 alpha =
   let n1d = fromIntegral n1; n2d = fromIntegral n2

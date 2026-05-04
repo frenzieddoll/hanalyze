@@ -31,21 +31,23 @@ import Design.Factorial (twoLevelFactorial)
 -- 中心複合計画 (CCD)
 -- ---------------------------------------------------------------------------
 
--- | CCD のタイプ。
+-- | Central composite design (CCD) type.
 data CCDType
-  = CCC Double  -- ^ Circumscribed: 軸距離 α (典型は (2^k)^(1/4) = rotatable)
-  | CCF         -- ^ Face-centered: α = 1 (axial が cube 面上)
-  | CCI Double  -- ^ Inscribed: α=1, factorial を 1/α にスケール
+  = CCC Double  -- ^ Circumscribed: axial distance @α@ (the rotatable
+                --   choice is @(2^k)^{1/4}@).
+  | CCF         -- ^ Face-centered: @α = 1@ (axial points sit on the cube faces).
+  | CCI Double  -- ^ Inscribed: @α = 1@, factorial part scaled by @1/α@.
   deriving (Show, Eq)
 
--- | 中心複合計画。
+-- | Central composite design.
 --
--- 構成:
---   * 2^k factorial part: ±1 の全組合せ (2^k 行)
---   * 2k 軸点: 各因子で (±α, 0, …, 0)
---   * nC 中心点: (0, …, 0) を nC 回
+-- Composition:
 --
--- @centralComposite k ccdType nC@ で k 因子・nC 中心点。
+--   * @2^k@ factorial part: every @±1@ combination (@2^k@ rows).
+--   * @2k@ axial points: @(±α, 0, …, 0)@ for each factor.
+--   * @nC@ center points at @(0, …, 0)@.
+--
+-- @centralComposite k ccdType nC@: @k@ factors and @nC@ centre points.
 centralComposite :: Int -> CCDType -> Int -> [[Double]]
 centralComposite k ccdType nC =
   let factorial = case ccdType of
@@ -64,7 +66,7 @@ centralComposite k ccdType nC =
       center = replicate nC (replicate k 0)
   in factorial ++ axial ++ center
 
--- | 回転可能 CCD: α = (2^k)^(1/4)。
+-- | Rotatable CCD with @α = (2^k)^{1/4}@.
 centralCompositeRotatable :: Int -> Int -> [[Double]]
 centralCompositeRotatable k nC =
   let alpha = (fromIntegral (2 ^ k :: Int) :: Double) ** 0.25
@@ -74,12 +76,12 @@ centralCompositeRotatable k nC =
 -- Box-Behnken 計画
 -- ---------------------------------------------------------------------------
 
--- | Box-Behnken 計画 (k = 3, 4, 5)。
--- 中心点を nC 個追加して返す。
+-- | Box-Behnken design for @k = 3, 4, 5@. Returns @nC@ additional
+-- centre points.
 --
--- k=3: 12 corner points + nC center
--- k=4: 24 corner points + nC center
--- k=5: 40 corner points + nC center
+--   * @k = 3@: 12 corner points + @nC@ centre points.
+--   * @k = 4@: 24 corner points + @nC@ centre points.
+--   * @k = 5@: 40 corner points + @nC@ centre points.
 boxBehnken :: Int -> Int -> [[Double]]
 boxBehnken k nC
   | k == 3 = bb3 ++ centers
@@ -106,14 +108,13 @@ boxBehnken k nC
 -- 二次モデル
 -- ---------------------------------------------------------------------------
 
--- | 二次モデルの計画行列を構築。
+-- | Build the design matrix for a quadratic model.
 --
--- 各行 [x_1, ..., x_k] に対して:
---   [1, x_1, ..., x_k,           -- 定数 + 主効果
---    x_1², ..., x_k²,            -- 二乗項
---    x_1 x_2, x_1 x_3, ..., x_{k-1} x_k]   -- 交互作用 (上三角)
+-- Each row @[x_1, …, x_k]@ expands to
+-- @[1, x_1, …, x_k, x_1², …, x_k², x_1 x_2, x_1 x_3, …, x_{k-1} x_k]@
+-- (intercept, main effects, squared terms, upper-triangle interactions).
 --
--- 列数: 1 + k + k + k(k-1)/2 = 1 + 2k + k(k-1)/2
+-- Number of columns: @1 + 2k + k(k-1)/2@.
 quadraticDesign :: [[Double]] -> LA.Matrix Double
 quadraticDesign rows =
   let k = if null rows then 0 else length (head rows)
@@ -125,7 +126,8 @@ quadraticDesign rows =
         in 1 : mainE ++ sqE ++ interE
   in LA.fromLists (map expand rows)
 
--- | 二次モデルの列名 (例: ["b0", "x1", "x2", "x1²", "x2²", "x1*x2"])。
+-- | Column names for the quadratic-model design (e.g.
+-- @[\"b0\", \"x1\", \"x2\", \"x1^2\", \"x2^2\", \"x1*x2\"]@).
 quadraticTermNames :: Int -> [Text]
 quadraticTermNames k =
   ["b0"]
@@ -134,15 +136,16 @@ quadraticTermNames k =
   ++ [T.pack ("x" ++ show i ++ "*x" ++ show j)
      | i <- [1 .. k], j <- [i + 1 .. k]]
 
--- | 二次モデルのフィット結果。
+-- | Quadratic-model fit result.
 data QuadFit = QuadFit
-  { qfK     :: Int           -- 因子数
-  , qfBeta  :: LA.Vector Double  -- 係数 [b0, β_main, β_sq, β_int]
-  , qfYHat  :: LA.Vector Double
-  , qfR2    :: Double
+  { qfK    :: Int                -- ^ Number of factors @k@.
+  , qfBeta :: LA.Vector Double   -- ^ Coefficient vector
+                                 --   @[b₀, β_main, β_sq, β_int]@.
+  , qfYHat :: LA.Vector Double   -- ^ Fitted values.
+  , qfR2   :: Double              -- ^ R².
   } deriving (Show)
 
--- | 二次モデルを最小二乗で fit。
+-- | Fit a quadratic model by least squares.
 fitQuadratic :: [[Double]] -> [Double] -> QuadFit
 fitQuadratic xs ys =
   let k = if null xs then 0 else length (head xs)
@@ -156,9 +159,10 @@ fitQuadratic xs ys =
       r2   = if ssT == 0 then 0 else 1 - ssR / ssT
   in QuadFit k beta yHat r2
 
--- | 二次モデルの極値 (鞍点 / 極大 / 極小) を解析的に求める。
+-- | Solve analytically for the extremum (saddle / max / min) of the
+-- fitted quadratic model.
 --
--- 二次モデルを ŷ = b₀ + bᵀx + xᵀ B x として、∂ŷ/∂x = 0 から
+-- Writing @ŷ = b₀ + bᵀx + xᵀ B x@, set @∂ŷ/∂x = 0@ to obtain
 -- x* = −½ B⁻¹ b。固有値の符号で性質を判定。
 --
 -- 戻り値: (x*, predicted_y, eigenvalues)

@@ -25,14 +25,17 @@ module Design.Optimal
 import Data.List (foldl')
 import qualified Numeric.LinearAlgebra as LA
 
--- | 最適化基準。
-data OptCriterion = DOpt | AOpt deriving (Show, Eq)
+-- | Optimality criterion.
+data OptCriterion
+  = DOpt   -- ^ D-optimal: maximize @det(XᵀX)@.
+  | AOpt   -- ^ A-optimal: minimize @trace((XᵀX)⁻¹)@.
+  deriving (Show, Eq)
 
 -- ---------------------------------------------------------------------------
 -- 基準値の計算
 -- ---------------------------------------------------------------------------
 
--- | 設計行列 X に対する D 値 (= det(XᵀX))。
+-- | D-criterion value for a design matrix @X@: @det(XᵀX)@.
 dValue :: [[Double]] -> Double
 dValue rows
   | null rows = 0
@@ -41,7 +44,8 @@ dValue rows
     m   = LA.fromLists rows
     xtx = LA.tr m LA.<> m
 
--- | 設計行列 X に対する A 値 (= trace((XᵀX)⁻¹))。逆行列が存在しないなら ∞。
+-- | A-criterion value for a design matrix @X@: @trace((XᵀX)⁻¹)@.
+-- Returns @∞@ when the inverse does not exist.
 aValue :: [[Double]] -> Double
 aValue rows
   | null rows = 1 / 0
@@ -55,7 +59,9 @@ aValue rows
                  p   = LA.cols m
              in sum [ inv `LA.atIndex` (i, i) | i <- [0 .. p - 1] ]
 
--- | 評価値: D-opt は最大化したいので符号反転して最小化問題に統一。
+-- | Criterion value used for optimization. Both criteria are returned
+-- as quantities to /minimize/; D-optimality is encoded as
+-- @-det(XᵀX)@.
 critValue :: OptCriterion -> [[Double]] -> Double
 critValue DOpt rows = -dValue rows  -- 最小化問題に統一
 critValue AOpt rows =  aValue rows
@@ -64,15 +70,14 @@ critValue AOpt rows =  aValue rows
 -- Fedorov 交換アルゴリズム
 -- ---------------------------------------------------------------------------
 
--- | 一般的な最適計画。候補集合から n 行を選ぶ。
---
--- 引数:
---   * @crit@   — 最適化基準
---   * @cands@  — 候補集合 (各行は計画行列の 1 行)
---   * @n@      — 選びたい試行数
---   * @seed@   — 初期選択のシード (再現性)
-optimalDesign :: OptCriterion -> [[Double]] -> Int -> Int
-              -> ([Int], [[Double]])  -- (選ばれた候補 index, 設計行列)
+-- | Generic optimal design: pick @n@ rows from a candidate set.
+optimalDesign :: OptCriterion        -- ^ Optimization criterion.
+              -> [[Double]]          -- ^ Candidate set (each row is a
+                                     --   potential design row).
+              -> Int                 -- ^ Number of runs to select.
+              -> Int                 -- ^ Seed for the initial selection.
+              -> ([Int], [[Double]]) -- ^ Selected candidate indices and
+                                     --   the resulting design matrix.
 optimalDesign crit cands n seed =
   let nC      = length cands
       initIdx = take n (pseudoShuffle seed [0 .. nC - 1])
@@ -98,11 +103,11 @@ optimalDesign crit cands n seed =
       (finalIdx, _) = improve initIdx initC
   in (finalIdx, map (cands !!) finalIdx)
 
--- | D-optimal 設計を構築 (`optimalDesign DOpt`)。
+-- | Build a D-optimal design (specialization of 'optimalDesign').
 dOptimal :: [[Double]] -> Int -> Int -> ([Int], [[Double]])
 dOptimal = optimalDesign DOpt
 
--- | A-optimal 設計を構築。
+-- | Build an A-optimal design.
 aOptimal :: [[Double]] -> Int -> Int -> ([Int], [[Double]])
 aOptimal = optimalDesign AOpt
 
@@ -110,7 +115,8 @@ aOptimal = optimalDesign AOpt
 -- 候補集合の生成
 -- ---------------------------------------------------------------------------
 
--- | k 因子で各因子の水準が等間隔 (numLevels 個、範囲 [-1, 1]) のグリッド。
+-- | Equally-spaced grid of candidates: @k@ factors, @numLevels@ values
+-- per factor on @[-1, 1]@.
 candidateGrid :: Int -> Int -> [[Double]]
 candidateGrid k numLevels =
   let levels = if numLevels == 1 then [0]
@@ -120,10 +126,12 @@ candidateGrid k numLevels =
       go d = [v : row | v <- levels, row <- go (d - 1)]
   in go k
 
--- | 二次モデル用の候補集合を quadraticDesign 形式に展開する。
+-- | Expand a candidate grid into the @quadraticDesign@-style row
+-- representation.
 --
--- @quadraticCandidates k numLevels@ →
---   各候補は [1, x_1, ..., x_k, x_1², ..., x_k², 交互作用...]
+-- @quadraticCandidates k numLevels@ — each candidate is the row
+-- @[1, x_1, …, x_k, x_1², …, x_k²,
+-- pairwise interactions]@.
 quadraticCandidates :: Int -> Int -> [[Double]]
 quadraticCandidates k numLevels =
   let baseGrid = candidateGrid k numLevels
