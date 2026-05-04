@@ -34,6 +34,12 @@ data InterpKind
 --
 -- Edge cases: with fewer than two points the result is constant
 -- (@y_0@ for one point, @0@ for none).
+--
+-- >>> let f = interp1d Linear [(0,0),(1,2),(2,4)]
+-- >>> f 0.5
+-- 1.0
+-- >>> f 1.5
+-- 3.0
 interp1d :: InterpKind -> [(Double, Double)] -> (Double -> Double)
 interp1d _    []         = const 0
 interp1d _    [(_, y)]   = const y

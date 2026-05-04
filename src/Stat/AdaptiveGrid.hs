@@ -101,6 +101,9 @@ makeGrid perId  (zmin, zmax) spec =
 
 -- | Equally spaced @N@-point grid on @[zmin, zmax]@. With @N < 2@ the
 -- result is @[zmin, zmax]@.
+--
+-- >>> uniformGrid 5 0 1
+-- [0.0,0.25,0.5,0.75,1.0]
 uniformGrid :: Int -> Double -> Double -> [Double]
 uniformGrid n zmin zmax
   | n < 2     = [zmin, zmax]

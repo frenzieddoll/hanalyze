@@ -28,6 +28,12 @@ import qualified Numeric.LinearAlgebra as LA
 -- ---------------------------------------------------------------------------
 
 -- | Promote a 1D 'V.Vector' to an @n × 1@ matrix.
+--
+-- >>> import qualified Data.Vector as V
+-- >>> LA.rows (asMultiY (V.fromList [1.0, 2.0, 3.0]))
+-- 3
+-- >>> LA.cols (asMultiY (V.fromList [1.0, 2.0, 3.0]))
+-- 1
 asMultiY :: V.Vector Double -> LA.Matrix Double
 asMultiY = LA.asColumn . LA.fromList . V.toList
 

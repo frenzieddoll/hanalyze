@@ -107,6 +107,11 @@ noLog = mempty
 -- ---------------------------------------------------------------------------
 
 -- | True if the report contains any 'Err' entries.
+--
+-- >>> hasErrors noLog
+-- False
+-- >>> hasErrors (logReport (mkErr "E001" "boom" Nothing))
+-- True
 hasErrors :: LogReport -> Bool
 hasErrors (LogReport xs) = any ((== Err) . lgSev) xs
 

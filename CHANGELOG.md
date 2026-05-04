@@ -7,6 +7,14 @@ and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
 
 ## [Unreleased]
 
+### Documentation
+- Added Haddock `>>>` examples to a curated set of pure helpers
+  (`Stat.Interpolate.interp1d`, `Stat.AdaptiveGrid.uniformGrid`,
+  `Optim.Common.projectToBounds` / `inBounds`, `Model.MultiOutput.asMultiY`,
+  `DataIO.Log.hasErrors`). The doctest runner test-suite is deferred until
+  the cabal/doctest package-db wiring is settled; the examples remain
+  valid as Haddock documentation.
+
 ## [0.1.0.0] - 2026-05-04
 
 Initial Hackage release.

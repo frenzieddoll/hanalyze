@@ -90,6 +90,9 @@ clipToBounds bs xs = zipWith reflect bs xs
       | otherwise = x
 
 -- | Plain clipping: pin out-of-range coordinates to the boundary value.
+--
+-- >>> projectToBounds [(0,1),(0,1)] [-0.5, 1.5]
+-- [0.0,1.0]
 projectToBounds :: Bounds -> [Double] -> [Double]
 projectToBounds bs xs =
   zipWith (\(lo, hi) x -> max lo (min hi x)) bs xs
@@ -119,5 +122,10 @@ boundsPenalty (Just bs) xs =
       | otherwise = 0
 
 -- | True when every coordinate lies inside the bounds.
+--
+-- >>> inBounds [(0,1),(0,1)] [0.5, 0.5]
+-- True
+-- >>> inBounds [(0,1),(0,1)] [0.5, 1.5]
+-- False
 inBounds :: Bounds -> [Double] -> Bool
 inBounds bs xs = all (\((lo, hi), x) -> x >= lo && x <= hi) (zip bs xs)
