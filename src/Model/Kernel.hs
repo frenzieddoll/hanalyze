@@ -44,6 +44,7 @@ import qualified Numeric.LinearAlgebra as LA
 import qualified Optim.LineSearch as LS
 import qualified Optim.Common     as OC
 import qualified Stat.KernelDist  as KD
+import qualified Stat.Cholesky    as Chol
 
 -- ---------------------------------------------------------------------------
 -- カーネル関数
@@ -264,7 +265,9 @@ kernelRidgeMulti kern h lam xs ys =
   let n     = V.length xs
       kMat  = gramMatrix kern h xs
       regK  = kMat + LA.scale lam (LA.ident n)
-      alpha = regK LA.<\> ys              -- n × q
+      -- regK is SPD (K is PSD, λI is PD). Use Cholesky-based solve;
+      -- jitter retry handles ill-conditioned bandwidths.
+      alpha = Chol.cholSolveJitter regK ys
   in KernelRidgeFitMulti kern h lam xs alpha
 
 -- | Predict @Ŷ@ for new inputs from a 'KernelRidgeFitMulti'.
@@ -419,7 +422,8 @@ kernelRidgeMV kern h lam x y =
   let n     = LA.rows x
       kMat  = gramMatrixMV kern h x
       regK  = kMat + LA.scale lam (LA.ident n)
-      alpha = regK LA.<\> y
+      -- SPD: K + λI. Use Cholesky-based solve.
+      alpha = Chol.cholSolveJitter regK y
   in KernelRidgeFitMV kern h lam x alpha
 
 -- | Predict @Ŷ = K_* α@ for new query inputs (@m × p@). Output shape is

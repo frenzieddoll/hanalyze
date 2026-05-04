@@ -42,6 +42,7 @@ module Model.GPRobust
   ) where
 
 import qualified Numeric.LinearAlgebra as LA
+import qualified Stat.Cholesky        as Chol
 import Model.GP
   ( Kernel
   , GPParams (..)
@@ -125,8 +126,9 @@ fitGPRobust ker params lik trainX trainY =
             wNewVec    = LA.fromList wNew'
             wInvDiag   = LA.diag (LA.fromList [ sigEff2 / wi | wi <- wNew' ])
             ky         = kMatrix `LA.add` wInvDiag
-            kyInv      = LA.inv ky
-            alpha      = kyInv LA.#> yV
+            -- α = (K + σ²W⁻¹)⁻¹ y via SPD Cholesky (replaces inv + matvec).
+            alpha      = LA.flatten
+                          (Chol.cholSolveJitter ky (LA.asColumn yV))
             fNew       = kMatrix LA.#> alpha
             delta      = LA.maxElement (LA.cmap abs (fNew - f))
         in (fNew, wNewVec, delta)
@@ -146,11 +148,13 @@ fitGPRobust ker params lik trainX trainY =
       w0     = LA.fromList (replicate n 1.0)
       (_fOpt, wOpt, iters) = loop f0 w0 0
 
-      -- 最終 K_y, α, K_y⁻¹ を再計算 (収束後の重みで)
+      -- 最終 K_y, α, K_y⁻¹ を再計算 (収束後の重みで)。
+      -- kyInv は予測時の分散計算で必要なため陽に保持する。
       wInvDiag' = LA.diag (LA.cmap (\wi -> sigEff2 / max 1e-8 wi) wOpt)
       ky'       = kMatrix `LA.add` wInvDiag'
-      kyInv'    = LA.inv ky'
-      alpha'    = kyInv' LA.#> yV
+      kyInv'    = Chol.cholSolveJitter ky' (LA.ident n)
+      alpha'    = LA.flatten
+                  (Chol.cholSolveJitter ky' (LA.asColumn yV))
   in RobustGPFit
        { rgpKernel  = ker
        , rgpParams  = params
@@ -258,8 +262,9 @@ fitGPRobustMV ker params lik trainX yV =
             wNewVec    = LA.fromList wNew'
             wInvDiag   = LA.diag (LA.fromList [ sigEff2 / wi | wi <- wNew' ])
             ky         = kMatrix `LA.add` wInvDiag
-            kyInv      = LA.inv ky
-            alpha      = kyInv LA.#> yV
+            -- α = (K + σ²W⁻¹)⁻¹ y via SPD Cholesky.
+            alpha      = LA.flatten
+                          (Chol.cholSolveJitter ky (LA.asColumn yV))
             fNew       = kMatrix LA.#> alpha
             delta      = LA.maxElement (LA.cmap abs (fNew - f))
         in (fNew, wNewVec, delta)
@@ -281,8 +286,9 @@ fitGPRobustMV ker params lik trainX yV =
 
       wInvDiag' = LA.diag (LA.cmap (\wi -> sigEff2 / max 1e-8 wi) wOpt)
       ky'       = kMatrix `LA.add` wInvDiag'
-      kyInv'    = LA.inv ky'
-      alpha'    = kyInv' LA.#> yV
+      kyInv'    = Chol.cholSolveJitter ky' (LA.ident n)
+      alpha'    = LA.flatten
+                  (Chol.cholSolveJitter ky' (LA.asColumn yV))
   in RobustGPFitMV
        { rgpmvKernel  = ker
        , rgpmvParams  = params

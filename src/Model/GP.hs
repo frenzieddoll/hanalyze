@@ -57,6 +57,7 @@ import qualified Optim.Numeric
 import qualified Optim.LBFGS as LBFGS
 import qualified Optim.Common as OC
 import qualified Stat.KernelDist as KD
+import qualified Stat.Cholesky   as Chol
 import Control.Exception (SomeException, try, evaluate)
 import System.IO.Unsafe (unsafePerformIO)
 
@@ -184,22 +185,20 @@ logMarginalLikelihood trainX trainY ker params =
   let n      = length trainX
       ky     = noiseKernel ker params trainX
       y      = LA.fromList trainY
-      tryChol c =
-        let result = unsafePerformIO $
-                       try (evaluate (LA.chol (LA.sym c)))
-                       :: Either SomeException (LA.Matrix Double)
-        in case result of
-             Right r -> Just r
-             Left _  -> Nothing
-      mR = case tryChol ky of
-             Just r  -> Just r
-             -- jitter を追加して再試行
-             Nothing -> tryChol (ky `LA.add` LA.scale 1e-4 (LA.ident n))
+      mR = case Chol.cholFactor ky of
+             Just r  -> Just (r, ky)
+             Nothing ->
+               -- jitter を追加して再試行
+               let kyJ = ky `LA.add` LA.scale 1e-4 (LA.ident n)
+               in case Chol.cholFactor kyJ of
+                    Just r  -> Just (r, kyJ)
+                    Nothing -> Nothing
   in case mR of
        Nothing -> -1e30
-       Just r  ->
+       Just (r, kyUsed)  ->
          let logDet  = 2 * sum (map log (LA.toList (LA.takeDiag r)))
-             alpha   = ky LA.<\> y
+             alpha   = LA.flatten
+                       (Chol.cholSolveJitter kyUsed (LA.asColumn y))
              dataFit = LA.dot y alpha
          in -0.5 * dataFit - 0.5 * logDet - fromIntegral n / 2 * log (2 * pi)
 
@@ -234,14 +233,16 @@ fitGPMulti model trainX trainY testX =
   let ker    = gpKernel model
       params = gpParams model
       ky     = noiseKernel ker params trainX
-      kyInv  = LA.inv ky
-      alpha  = kyInv LA.<> trainY                  -- (n × q)
       kStar  = buildKernelMatrix ker params testX trainX  -- (m × n)
-      meanMt = kStar LA.<> alpha                    -- (m × q)
-      w      = kStar LA.<> kyInv                    -- (m × n)
+      -- α = Ky⁻¹ Y via SPD Cholesky (n × q)
+      alpha  = Chol.cholSolveJitter ky trainY
+      meanMt = kStar LA.<> alpha                          -- (m × q)
+      -- v = Ky⁻¹ K_*ᵀ via the same Cholesky factor (n × m).
+      -- Then var_i = k(x*_i, x*_i) − K_*[i,:] · v[:,i].
+      v       = Chol.cholSolveJitter ky (LA.tr kStar)
       diagKss = [kernelFn ker params x x | x <- testX]
-      varList = zipWith3 (\d ks wi -> max 0 (d - LA.dot ks wi))
-                  diagKss (LA.toRows kStar) (LA.toRows w)
+      varList = zipWith3 (\d ks vi -> max 0 (d - LA.dot ks vi))
+                  diagKss (LA.toRows kStar) (LA.toColumns v)
   in (meanMt, varList)
 
 -- ---------------------------------------------------------------------------
@@ -375,21 +376,19 @@ logMarginalLikelihoodMV
 logMarginalLikelihoodMV trainX y ker params =
   let n   = LA.rows trainX
       ky  = noiseKernelMV ker params trainX
-      tryChol c =
-        let result = unsafePerformIO $
-                       try (evaluate (LA.chol (LA.sym c)))
-                       :: Either SomeException (LA.Matrix Double)
-        in case result of
-             Right r -> Just r
-             Left _  -> Nothing
-      mR = case tryChol ky of
-             Just r  -> Just r
-             Nothing -> tryChol (ky `LA.add` LA.scale 1e-4 (LA.ident n))
+      mR = case Chol.cholFactor ky of
+             Just r  -> Just (r, ky)
+             Nothing ->
+               let kyJ = ky `LA.add` LA.scale 1e-4 (LA.ident n)
+               in case Chol.cholFactor kyJ of
+                    Just r  -> Just (r, kyJ)
+                    Nothing -> Nothing
   in case mR of
        Nothing -> -1e30
-       Just r  ->
+       Just (r, kyUsed) ->
          let logDet  = 2 * sum (map log (LA.toList (LA.takeDiag r)))
-             alpha   = ky LA.<\> y
+             alpha   = LA.flatten
+                       (Chol.cholSolveJitter kyUsed (LA.asColumn y))
              dataFit = LA.dot y alpha
          in -0.5 * dataFit - 0.5 * logDet
             - fromIntegral n / 2 * log (2 * pi)
@@ -427,17 +426,21 @@ fitGPMVMulti model trainX trainY testX =
   let ker    = gpKernel model
       params = gpParams model
       ky     = noiseKernelMV ker params trainX
-      kyInv  = LA.inv ky
-      alpha  = kyInv LA.<> trainY                          -- n × q
       kStar  = buildKernelMatrixMV ker params testX trainX -- m × n
-      meanMt = kStar LA.<> alpha                           -- m × q
-      w      = kStar LA.<> kyInv                           -- m × n
+      -- α = Ky⁻¹ Y via SPD Cholesky (reused for v below by passing both
+      -- right-hand sides through the same factorization).
+      rhs    = trainY LA.||| LA.tr kStar           -- n × (q + m)
+      sol    = Chol.cholSolveJitter ky rhs         -- n × (q + m)
+      q      = LA.cols trainY
+      alpha  = sol LA.?? (LA.All, LA.Take q)       -- n × q
+      v      = sol LA.?? (LA.All, LA.Drop q)       -- n × m
+      meanMt = kStar LA.<> alpha                   -- m × q
       sf     = gpSignalVar params
-      diagKss = LA.konst sf (LA.rows testX)                -- k(x*, x*) = σ_f²
+      diagKss = LA.konst sf (LA.rows testX)         -- k(x*, x*) = σ_f²
       varVec  = LA.cmap (max 0)
                  (diagKss - LA.fromList
                    (zipWith LA.dot
-                     (LA.toRows kStar) (LA.toRows w)))
+                     (LA.toRows kStar) (LA.toColumns v)))
   in (meanMt, varVec)
 
 -- | Multi-input GP hyperparameter optimization. Mirrors 'optimizeGP' but
