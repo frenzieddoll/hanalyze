@@ -520,6 +520,9 @@ crowdedCompare (r1, d1) (r2, d2)
 -- | 二項トーナメント選択。
 -- pop からランダムに 2 個体取り、cmp に従って勝者を返す。
 -- cmp x y == LT のとき x が勝者。
+-- EQ (両者同等) の場合は **ランダムに勝敗を決める** (pymoo / DEAP と同方式)。
+-- 以前は常に xi を返していたため early-population indices が選択圧で
+-- 有利になり ZDT 系で per-generation 収束が遅れていた。
 binaryTournament :: [a] -> (a -> a -> Ordering) -> GenIO -> IO a
 binaryTournament pop cmp gen = do
   let n = length pop
@@ -527,6 +530,9 @@ binaryTournament pop cmp gen = do
   j <- uniformR (0, n - 1) gen
   let xi = pop !! i
       xj = pop !! j
-  return $ case cmp xi xj of
-    GT -> xj
-    _  -> xi
+  case cmp xi xj of
+    LT -> return xi
+    GT -> return xj
+    EQ -> do
+      r <- uniform gen :: IO Double
+      return (if r < 0.5 then xi else xj)
