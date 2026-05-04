@@ -27,12 +27,14 @@ import System.IO (hFlush, hClose, hPutStrLn, stderr)
 import System.IO.Temp (withSystemTempFile)
 import System.Process (callCommand, callProcess)
 
+-- | Common plot configuration.
 data PlotConfig = PlotConfig
   { plotTitle  :: Text
   , plotWidth  :: Double
   , plotHeight :: Double
   } deriving (Show)
 
+-- | Default 600 × 400 'PlotConfig' with the given title.
 defaultConfig :: Text -> PlotConfig
 defaultConfig t = PlotConfig
   { plotTitle  = t
@@ -43,14 +45,15 @@ defaultConfig t = PlotConfig
 -- | Output format for generated plots.
 data OutputFormat = HTML | PNG | SVG deriving (Show, Eq)
 
+-- | Parse an 'OutputFormat' name (@\"html\"@ / @\"png\"@ / @\"svg\"@).
 parseFormat :: String -> Either String OutputFormat
 parseFormat "html" = Right HTML
 parseFormat "png"  = Right PNG
 parseFormat "svg"  = Right SVG
 parseFormat s      = Left ("Unknown format '" ++ s ++ "'. Use: html | png | svg")
 
--- | Write a Vega-Lite spec in the requested format.
--- PNG/SVG は vl-convert CLI に JSON を渡して変換する。
+-- | Write a Vega-Lite spec in the requested format. PNG and SVG are
+-- produced by piping the JSON through the @vl-convert@ CLI.
 writeSpec :: OutputFormat -> FilePath -> VegaLite -> IO ()
 writeSpec HTML path spec = toHtmlFile path spec
 writeSpec fmt  path spec = do
@@ -61,8 +64,9 @@ writeSpec fmt  path spec = do
       hPutStrLn stderr $ "Warning: vl-convert failed (" ++ show err ++ "). Writing HTML instead."
       toHtmlFile (replaceExtension path "html") spec
 
--- | vl-convert を使って Vega-Lite spec を PNG/SVG に変換する。
--- spec を一時ファイルに書き出し → vl-convert → 一時ファイル削除。
+-- | Convert a Vega-Lite spec to PNG / SVG via @vl-convert@.
+-- Writes the spec to a temporary JSON file, invokes @vl-convert@, and
+-- removes the temporary file.
 writeViaVlConvert :: OutputFormat -> FilePath -> VegaLite -> IO ()
 writeViaVlConvert fmt outPath spec = do
   let json   = decodeUtf8 . toStrict . encode . fromVL $ spec
@@ -76,6 +80,7 @@ writeViaVlConvert fmt outPath spec = do
     hClose tmpH
     callProcess "vl-convert" [subcmd, "-i", tmpPath, "-o", outPath]
 
+-- | Open a file in the platform's default browser.
 openInBrowser :: FilePath -> IO ()
 openInBrowser path = do
   result <- try (callCommand cmd) :: IO (Either SomeException ())

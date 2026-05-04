@@ -20,6 +20,7 @@ import Model.HBM (ModelGraph (..), Node (..), NodeKind (..))
 -- Public API
 -- ---------------------------------------------------------------------------
 
+-- | Render a model graph to an HTML file (Mermaid is loaded from CDN).
 renderModelGraph :: FilePath -> Text -> ModelGraph -> IO ()
 renderModelGraph path title_ mg = TIO.writeFile path (buildHtml title_ mg)
 
@@ -63,6 +64,7 @@ buildHtml title_ mg = T.unlines
 -- Mermaid diagram
 -- ---------------------------------------------------------------------------
 
+-- | Build the Mermaid @flowchart TD@ source for a 'ModelGraph'.
 buildMermaid :: ModelGraph -> Text
 buildMermaid mg = T.unlines $
   [ "flowchart TD" ] ++

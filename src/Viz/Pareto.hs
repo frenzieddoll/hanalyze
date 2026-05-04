@@ -31,11 +31,12 @@ import Viz.Core   (PlotConfig (..), OutputFormat, writeSpec)
 -- 2 目的の散布図
 -- ---------------------------------------------------------------------------
 
--- | 2 目的問題の Pareto front 散布図。
--- すべての解 (front 含む) を青で散布、front (rank 0) を太い赤で重ねる。
+-- | Pareto-front scatter plot for a two-objective problem.
+-- All solutions (front included) are scattered in blue; the front
+-- (rank-0 individuals) is overlaid in thicker red.
 paretoScatter :: PlotConfig
-              -> [Solution]    -- 全個体 (or 関心の集団)
-              -> [Solution]    -- Pareto front (赤強調)
+              -> [Solution]   -- ^ All individuals (or the population of interest).
+              -> [Solution]   -- ^ Pareto front (highlighted).
               -> VegaLite
 paretoScatter cfg allSol frontSol =
   let asObj2D s = case solObjectives s of
@@ -88,8 +89,9 @@ paretoScatterFile fmt path cfg allSol fSol =
 -- ペア散布行列 (3+ 目的)
 -- ---------------------------------------------------------------------------
 
--- | 3+ 目的: 全ペアの 2D 散布をグリッド表示。
--- 同じ目的同士のセルは省略、上三角だけ。
+-- | For 3+ objectives, lay out all pairwise 2D scatter plots in a
+-- grid. Diagonal cells (same objective vs itself) are omitted; only the
+-- upper triangle is drawn.
 paretoPair :: PlotConfig -> [Text] -> [Solution] -> VegaLite
 paretoPair cfg objLabels front =
   let m       = length objLabels
@@ -126,8 +128,8 @@ paretoPairFile fmt path cfg labels front =
 -- 並行座標プロット
 -- ---------------------------------------------------------------------------
 
--- | 多目的並行座標プロット (parallel coordinates)。
--- 各 line は 1 個体、X 軸が目的、Y 軸が値。
+-- | Multi-objective parallel-coordinates plot. One line per individual:
+-- objectives along the @x@ axis, values on the @y@ axis.
 parallelCoordinates :: PlotConfig -> [Text] -> [Solution] -> VegaLite
 parallelCoordinates cfg labels front =
   let m       = length labels
@@ -169,7 +171,8 @@ parallelCoordinatesFile fmt path cfg labels front =
 -- HV 収束履歴
 -- ---------------------------------------------------------------------------
 
--- | NSGA-II の収束プロット。世代ごとの HV を線グラフ表示。
+-- | Convergence plot for NSGA-II: per-generation hypervolume as a line
+-- chart.
 hypervolumeHistory :: PlotConfig -> [Double] -> VegaLite
 hypervolumeHistory cfg hvs =
   let n   = length hvs
@@ -200,11 +203,11 @@ hypervolumeHistoryFile fmt path cfg hvs =
 -- 推定 vs 真 front の比較 (2D)
 -- ---------------------------------------------------------------------------
 
--- | 推定 Pareto front (赤) と真の Pareto front (灰破線) を重ね描き。
--- 2 目的問題のベンチマーク評価用。
+-- | Overlay an estimated Pareto front (red) on the true Pareto front
+-- (grey dashed). Useful for two-objective benchmark evaluation.
 paretoCompare :: PlotConfig
-              -> [[Double]]    -- 真の front (連続的に並んだ点)
-              -> [Solution]    -- 推定 front
+              -> [[Double]]   -- ^ True front (sequence of points along the curve).
+              -> [Solution]   -- ^ Estimated front.
               -> VegaLite
 paretoCompare cfg trueFront estFront =
   let trueF1 = [head o | o <- trueFront]

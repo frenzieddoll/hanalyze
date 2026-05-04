@@ -30,20 +30,23 @@ import           Viz.Assets        (vegaJS, vegaLiteJS, vegaEmbedJS)
 -- Report data type
 -- ---------------------------------------------------------------------------
 
+-- | Inputs needed to render a Taguchi-method HTML report.
 data TaguchiReport = TaguchiReport
-  { trTitle       :: Text                          -- ^ レポート見出し
-  , trArrayName   :: Text                          -- ^ "L9(3^4)" 等
-  , trSNType      :: TG.SNType
-  , trPerRunSN    :: [Double]                      -- ^ 試行ごとの SN 比
-  , trEffects     :: [TG.FactorEffect]             -- ^ 因子効果
-  , trOptimal     :: [(Text, OA.LevelValue, Double)]  -- ^ 最良水準
-  , trPredicted   :: Double                        -- ^ 予測 SN
+  { trTitle     :: Text                                  -- ^ Report heading.
+  , trArrayName :: Text                                  -- ^ Orthogonal-array
+                                                         --   name (e.g. @\"L9(3^4)\"@).
+  , trSNType    :: TG.SNType                             -- ^ SN-ratio type.
+  , trPerRunSN  :: [Double]                              -- ^ Per-run SN ratios.
+  , trEffects   :: [TG.FactorEffect]                     -- ^ Per-factor effects.
+  , trOptimal   :: [(Text, OA.LevelValue, Double)]       -- ^ Best level per factor.
+  , trPredicted :: Double                                -- ^ Predicted SN ratio.
   }
 
 -- ---------------------------------------------------------------------------
 -- Top-level renderer
 -- ---------------------------------------------------------------------------
 
+-- | Write the rendered HTML report to the given path.
 renderTaguchiReport :: FilePath -> TaguchiReport -> IO ()
 renderTaguchiReport path tr = TIO.writeFile path (buildHtml tr)
 
@@ -170,7 +173,7 @@ embedScript tr =
 vlJson :: VegaLite -> Text
 vlJson = decodeUtf8 . toStrict . encode . fromVL
 
--- | 試行ごとの SN 比バーチャート。
+-- | Per-run SN-ratio bar chart.
 perRunSpec :: TaguchiReport -> VegaLite
 perRunSpec tr =
   let n = length (trPerRunSN tr)
@@ -191,7 +194,7 @@ perRunSpec tr =
        , height 220
        ]
 
--- | 1 因子の水準別 SN 比バーチャート。
+-- | Bar chart of per-level SN ratio for a single factor.
 factorSpec :: TG.FactorEffect -> VegaLite
 factorSpec fe =
   let lvls = map levelToShort (TG.feLevels fe)

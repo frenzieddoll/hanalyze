@@ -49,6 +49,8 @@ import Viz.Core   (PlotConfig (..), OutputFormat, writeSpec)
 -- Trace plot (単一チェーン)
 -- ---------------------------------------------------------------------------
 
+-- | Trace plot for one or more parameters of a single chain. Each
+-- parameter gets its own vertical panel.
 tracePlot :: PlotConfig -> [Text] -> Chain -> VegaLite
 tracePlot cfg names chain = toVegaLite
   [ title (plotTitle cfg) []
@@ -78,7 +80,7 @@ tracePlotFile :: OutputFormat -> FilePath -> PlotConfig -> [Text] -> Chain -> IO
 tracePlotFile fmt path cfg names chain =
   writeSpec fmt path (tracePlot cfg names chain)
 
--- | HDI 帯を重ねたトレースプロット (level 例: 0.94)。
+-- | Trace plot with the HDI band overlaid (e.g. @level = 0.94@).
 -- 上下の HDI 境界を赤い水平ルールで描画し、内側を半透明赤で塗りつぶす。
 -- バーンイン後サンプルから HDI を計算し、視覚的に「事後分布の質量がどこに
 -- 集中しているか」をトレースと一緒に確認できる。
@@ -145,7 +147,7 @@ tracePlotHDIFile fmt path cfg level names chain =
 -- Multi-chain trace plot
 -- ---------------------------------------------------------------------------
 
--- | 複数チェーンのトレースプロット。チェーンごとに色分けして重ねて表示。
+-- | Multi-chain trace plot. Each chain is overlaid with its own color.
 multiTracePlot :: PlotConfig -> [Text] -> [Chain] -> VegaLite
 multiTracePlot cfg names chains = toVegaLite
   [ title (plotTitle cfg) []
@@ -162,6 +164,7 @@ multiTracePlotFile fmt path cfg names chains =
 -- Posterior KDE plot (単一チェーン)
 -- ---------------------------------------------------------------------------
 
+-- | Posterior density plot per parameter (KDE-based).
 posteriorPlot :: PlotConfig -> [Text] -> Chain -> VegaLite
 posteriorPlot cfg names chain = toVegaLite
   [ title (plotTitle cfg) []
@@ -176,6 +179,7 @@ posteriorPlotFile fmt path cfg names chain =
 -- Autocorrelation plot
 -- ---------------------------------------------------------------------------
 
+-- | Per-parameter autocorrelation plot up to a given maximum lag.
 autocorrPlot :: PlotConfig -> Int -> [Text] -> Chain -> VegaLite
 autocorrPlot cfg maxLag names chain = toVegaLite
   [ title (plotTitle cfg) []
@@ -210,6 +214,7 @@ autocorrPlotFile fmt path cfg maxLag names chain =
 -- Pair scatter
 -- ---------------------------------------------------------------------------
 
+-- | Bivariate posterior scatter for two parameters of a chain.
 pairScatter :: PlotConfig -> Text -> Text -> Chain -> VegaLite
 pairScatter cfg xName yName chain = toVegaLite
   [ title (plotTitle cfg) []
@@ -234,6 +239,7 @@ pairScatterFile fmt path cfg xName yName chain =
 -- Combined PyMC-style: [KDE | trace]  (単一チェーン)
 -- ---------------------------------------------------------------------------
 
+-- | PyMC-style combined diagnostics (KDE + trace) for one chain.
 mcmcDiagnostics :: PlotConfig -> [Text] -> Chain -> VegaLite
 mcmcDiagnostics cfg names chain = toVegaLite
   [ title (plotTitle cfg) []
@@ -253,7 +259,7 @@ mcmcDiagnosticsFile fmt path cfg names chain =
 -- Combined PyMC-style: [KDE | multi-trace]  (多チェーン)
 -- ---------------------------------------------------------------------------
 
--- | 複数チェーンの PyMC スタイル診断プロット。
+-- | PyMC-style combined diagnostics for multiple chains.
 -- 左: 全チェーン合算の KDE。右: チェーン別色分けトレース。
 mcmcDiagnosticsMulti :: PlotConfig -> [Text] -> [Chain] -> VegaLite
 mcmcDiagnosticsMulti cfg names chains = toVegaLite
@@ -277,7 +283,7 @@ mcmcDiagnosticsMultiFile fmt path cfg names chains =
 -- 内部: KDE パネル
 -- ---------------------------------------------------------------------------
 
--- | KDE 密度プロット + 94% HDI ルール。
+-- | KDE density plot with a 94 % HDI rule overlay.
 mkKdePanel :: Text -> Double -> Double -> Chain -> VLSpec
 mkKdePanel pname w h chain =
   mkKdePanelFrom pname w h (chainVals pname chain)
@@ -384,7 +390,8 @@ mkMultiTracePanel pname w h chains =
 -- Forest plot (パラメータ事後を 1 つの図に並べて比較)
 -- ---------------------------------------------------------------------------
 
--- | Forest plot: 各パラメータの事後平均と 95% 信用区間を横向きに並べる。
+-- | Forest plot: per-parameter posterior mean with a 95 % credible
+-- interval, stacked horizontally.
 --
 -- ArviZ の `plot_forest` 相当。複数モデル/複数チェーンの比較や、
 -- 階層モデルでグループ別パラメータを並べて見るのに便利。
@@ -470,7 +477,7 @@ forestPlotFile fmt path cfg params chains =
 -- Energy plot (NUTS の BFMI 診断)
 -- ---------------------------------------------------------------------------
 
--- | Energy plot (PyMC スタイル)。
+-- | PyMC-style energy plot for HMC / NUTS chains.
 --
 -- 2 本の KDE を重ね描き:
 --
@@ -544,7 +551,7 @@ energyPlotFile fmt path cfg chain =
 -- SummaryRow / posteriorSummary は Stat.Summary に移管 (Phase H6)。
 -- 後方互換のため Viz.MCMC からも export 経由で参照可能。
 
--- | HTML 1 ページとして出力するスタンドアロンテーブル。
+-- | Standalone HTML table summarizing the posterior.
 posteriorSummaryHtml :: Text -> [SummaryRow] -> Text
 posteriorSummaryHtml title rows =
   let multi      = any (\r -> case srRhat r of Just _ -> True; _ -> False) rows
@@ -596,13 +603,13 @@ posteriorSummaryHtml title rows =
        , "</body></html>"
        ]
 
--- | 事後要約をスタンドアロン HTML としてファイルに書き出す。
+-- | Write the posterior summary to a standalone HTML file.
 posteriorSummaryFile :: FilePath -> Text -> [Text] -> [Chain] -> IO ()
 posteriorSummaryFile path title params chains =
   TIO.writeFile path
     (posteriorSummaryHtml title (posteriorSummary params chains))
 
--- | 事後要約をコンソールに表形式で表示する。
+-- | Print the posterior summary to the console as a table.
 printPosteriorSummary :: [Text] -> [Chain] -> IO ()
 printPosteriorSummary params chains = do
   let rows  = posteriorSummary params chains
@@ -635,7 +642,7 @@ printPosteriorSummary params chains = do
 -- Rank plot (多チェーン収束診断)
 -- ---------------------------------------------------------------------------
 
--- | Rank plot (PyMC `plot_rank` 相当)。Vehtari 2021 で提案された
+-- | Rank plot (analogous to PyMC's @plot_rank@). Proposed by Vehtari et al. (2021)
 -- 多チェーンの収束診断: 全チェーンを混ぜた順位を各チェーン内で
 -- ヒストグラムにすると、収束時はチェーンごとに一様分布に近づく。
 --
@@ -715,7 +722,8 @@ rankPlotFile fmt path cfg nBins names chains =
 -- Posterior predictive check (pp_check 相当)
 -- ---------------------------------------------------------------------------
 
--- | 事後予測チェック: 観測値の KDE と、posteriorPredictive で得られた
+-- | Posterior-predictive check: overlay the KDE of the observations on
+-- the KDEs returned by 'posteriorPredictive'
 -- K 件の予測サンプル KDE をスパゲッティ式に重ね描き、平均予測 KDE を太線で
 -- 重ねる。観測 (青) と予測の中心線 (オレンジ) が一致しなければモデル誤指定。
 --
@@ -803,7 +811,7 @@ ppcPlotFile fmt path cfg observed predDraws nOverlay =
 -- Divergence overlay (NUTS divergent transitions の可視化)
 -- ---------------------------------------------------------------------------
 
--- | 散布図の上に divergent な反復を赤い X 印で重ね描く。
+-- | Pair scatter overlaid with divergent iterations as red X markers.
 --
 -- 引数:
 --   * @xName@, @yName@: ペア散布の軸となる latent パラメタ名

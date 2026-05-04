@@ -23,13 +23,18 @@ import Viz.Core (PlotConfig (..), OutputFormat, writeSpec)
 -- 縦棒グラフ (カテゴリ → 数値)
 -- ---------------------------------------------------------------------------
 
--- | シンプルな縦棒グラフ。
+-- | A simple vertical bar chart.
 --
 -- @
 -- barChart cfg "Month" "Sales"
 --   ["Jan","Feb","Mar"] [120,95,140]
 -- @
-barChart :: PlotConfig -> Text -> Text -> [Text] -> [Double] -> VegaLite
+barChart :: PlotConfig
+         -> Text     -- ^ X-axis label.
+         -> Text     -- ^ Y-axis label.
+         -> [Text]   -- ^ Categories.
+         -> [Double] -- ^ Per-category values.
+         -> VegaLite
 barChart cfg xLabel yLabel cats vals =
   toVegaLite
     [ title (plotTitle cfg) []
@@ -53,12 +58,18 @@ barChart cfg xLabel yLabel cats vals =
 -- 水平棒グラフ
 -- ---------------------------------------------------------------------------
 
--- | 水平棒グラフ。ラベルが長い場合やランキング表示に向いている。
+-- | A horizontal bar chart. Best when labels are long or for ranking
+-- displays.
 --
 -- @
 -- barChartH cfg "Country" "GDP" countries gdps
 -- @
-barChartH :: PlotConfig -> Text -> Text -> [Text] -> [Double] -> VegaLite
+barChartH :: PlotConfig
+          -> Text     -- ^ Y-axis (category) label.
+          -> Text     -- ^ X-axis (value) label.
+          -> [Text]   -- ^ Categories.
+          -> [Double] -- ^ Per-category values.
+          -> VegaLite
 barChartH cfg yLabel xLabel cats vals =
   toVegaLite
     [ title (plotTitle cfg) []
@@ -82,7 +93,7 @@ barChartH cfg yLabel xLabel cats vals =
 -- 積み上げ棒グラフ
 -- ---------------------------------------------------------------------------
 
--- | 積み上げ棒グラフ。各カテゴリにグループ別の内訳を重ねる。
+-- | Stacked bar chart: each category shows its breakdown by group.
 --
 -- @
 -- stackedBar cfg "Quarter" "Revenue" "Product"
@@ -120,7 +131,7 @@ stackedBar cfg xLabel yLabel colorLabel xCats vals colorCats =
 -- グループ別棒グラフ
 -- ---------------------------------------------------------------------------
 
--- | グループ別棒グラフ (並べて比較)。
+-- | Grouped bar chart (side-by-side comparison).
 --
 -- @
 -- groupedBar cfg "Method" "ESS" "Case"
@@ -158,6 +169,6 @@ groupedBar cfg xLabel yLabel groupLabel xCats vals groupCats =
 -- ファイル書き出し
 -- ---------------------------------------------------------------------------
 
--- | 棒グラフを指定フォーマットで書き出す。
+-- | Write a bar-chart spec to disk in the given output format.
 barChartFile :: OutputFormat -> FilePath -> VegaLite -> IO ()
 barChartFile = writeSpec
