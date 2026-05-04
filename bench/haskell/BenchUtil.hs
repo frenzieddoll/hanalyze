@@ -5,9 +5,12 @@ module BenchUtil
   ( BenchRow (..)
   , writeRows
   , timeit
+  , timeitIO
   , readCsvXY
   , readCsvXYG
   ) where
+
+import           Data.IORef                 (newIORef, readIORef, writeIORef)
 
 import qualified Data.ByteString.Lazy.Char8 as BL
 import qualified Data.ByteString            as BS
@@ -18,7 +21,7 @@ import           Data.Time.Clock            (getCurrentTime, diffUTCTime)
 import           Text.Printf                (printf)
 import           System.IO                  (withFile, IOMode (..), hPutStrLn,
                                              hSetBuffering, BufferMode (..))
-import           Control.DeepSeq            (NFData, deepseq)
+import           Control.Exception          (evaluate)
 
 -- | One benchmark observation. The aggregator joins (system, suite, name)
 -- across @bench/results/haskell/*.csv@ and @bench/results/python/*.csv@.
@@ -49,21 +52,42 @@ escapeCsv s
       '"' : concatMap (\c -> if c == '"' then "\"\"" else [c]) s ++ "\""
   | otherwise = s
 
--- | Run @action@ @n@ times, return the median wall-time in milliseconds plus
--- the value from the last invocation. Forces the result via NFData so lazy
--- evaluation does not skew the measurement.
-timeit :: NFData a => Int -> IO a -> IO (Double, a)
-timeit n action = do
-  ts <- mapM (\_ -> do
+-- | Run a fresh recomputation @n@ times, return the median wall-time in
+-- milliseconds plus the value from the last invocation. The caller passes
+-- a per-iteration builder @runIt :: Int -> IO a@ (the index defeats GHC's
+-- common-subexpression elimination so the work is actually re-run each
+-- time) and a probe @force :: a -> Double@ that pulls a scalar out of the
+-- result, forcing the underlying Matrix / Vector computation via
+-- 'evaluate'.
+timeitIO :: Int -> (a -> Double) -> (Int -> IO a) -> IO (Double, a)
+timeitIO n force runIt = do
+  -- IORef は per-iteration の runtime 依存を作る (GHC が CSE しないように)。
+  ref <- newIORef (0 :: Int)
+  ts <- mapM (\i -> do
+                writeIORef ref i
+                _  <- readIORef  ref
                 t0 <- getCurrentTime
-                x  <- action
-                x `deepseq` return ()
+                x  <- runIt i
+                _  <- evaluate (force x)
                 t1 <- getCurrentTime
                 return (1000.0 * realToFrac (diffUTCTime t1 t0))) [1 .. n]
-  x <- action
+  x <- runIt 0
+  _ <- evaluate (force x)
   let sorted = quickSort ts
       med    = sorted !! (length sorted `div` 2)
   return (med, x)
+
+-- | Convenience wrapper: the action does not actually depend on the
+-- iteration index. Provided for backwards compatibility — please use
+-- 'timeitIO' for new code.
+timeit :: Int -> (a -> Double) -> IO a -> IO (Double, a)
+timeit n force action = timeitIO n force (\_ -> action)
+
+quickSort :: Ord a => [a] -> [a]
+quickSort []     = []
+quickSort (p:xs) = quickSort [y | y <- xs, y < p]
+                ++ [p]
+                ++ quickSort [y | y <- xs, y >= p]
   where
     quickSort []     = []
     quickSort (p:xs) = quickSort [y | y <- xs, y < p]
