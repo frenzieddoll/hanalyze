@@ -27,12 +27,15 @@ import MCMC.Core (Chain (..), spawnGen)
 -- Configuration
 -- ---------------------------------------------------------------------------
 
+-- | Random-Walk Metropolis configuration.
 data MCMCConfig = MCMCConfig
-  { mcmcIterations :: Int
-  , mcmcBurnIn     :: Int
-  , mcmcStepSizes  :: Map.Map Text Double
+  { mcmcIterations :: Int                   -- ^ Total iterations (burn-in included).
+  , mcmcBurnIn     :: Int                   -- ^ Burn-in iterations to discard.
+  , mcmcStepSizes  :: Map.Map Text Double   -- ^ Per-parameter proposal step.
   } deriving (Show)
 
+-- | Default configuration: 2000 iterations, 500 burn-in, step size 1.0
+-- for every parameter.
 defaultMCMCConfig :: [Text] -> MCMCConfig
 defaultMCMCConfig names = MCMCConfig
   { mcmcIterations = 2000
@@ -44,8 +47,8 @@ defaultMCMCConfig names = MCMCConfig
 -- Random Walk Metropolis
 -- ---------------------------------------------------------------------------
 
--- | Random Walk Metropolis を実行する。
--- 全潜在変数を同時に提案する joint proposal。
+-- | Run Random-Walk Metropolis. Uses a joint proposal that updates all
+-- latent variables simultaneously.
 metropolis :: ModelP r -> MCMCConfig -> Params -> GenIO -> IO Chain
 metropolis model cfg init_ gen = do
   let names = sampleNames model
@@ -87,8 +90,8 @@ metropolis model cfg init_ gen = do
     , chainDivergences = []
     }
 
--- | Metropolis を numChains 本並列実行する。
--- 各チェーンは独立した乱数列を使う (+RTS -N で CPU 並列)。
+-- | Run 'metropolis' on @numChains@ parallel chains, each with an
+-- independent RNG (use @+RTS -N@ to run on multiple cores).
 metropolisChains :: ModelP r -> MCMCConfig -> Int -> Params -> GenIO -> IO [Chain]
 metropolisChains model cfg numChains initP baseGen = do
   gens <- replicateM numChains (spawnGen baseGen)

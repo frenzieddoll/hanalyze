@@ -44,15 +44,17 @@ import Model.HBM (ModelP, Params, Distribution (..),
 -- 型
 -- ---------------------------------------------------------------------------
 
--- | Gibbs 更新ブロック: 現在のパラメータ一式を受け取り、
--- 担当パラメータの新しい値を完全条件付き分布から 1 つサンプリングして返す。
+-- | A Gibbs update block. Receives the current parameter set and returns
+-- a single fresh @(name, value)@ sampled from the assigned parameter's
+-- full conditional distribution.
 type GibbsUpdate = Params -> GenIO -> IO (Text, Double)
 
 -- ---------------------------------------------------------------------------
 -- 共役アップデート (モデル非依存)
 -- ---------------------------------------------------------------------------
 
--- | Normal 事前 × Normal 尤度 (既知 σ) の共役アップデート。
+-- | Conjugate update for a Normal prior × Normal likelihood with known
+-- @σ@.
 normalNormal
   :: Text -> Double -> Double -> [Double] -> Double -> GibbsUpdate
 normalNormal paramName mu0 sig0 ys sigLik _ps gen = do
@@ -66,7 +68,7 @@ normalNormal paramName mu0 sig0 ys sigLik _ps gen = do
   val <- normal muPost sigPost gen
   return (paramName, val)
 
--- | Beta 事前 × Binomial 尤度の共役アップデート。
+-- | Conjugate update for a Beta prior × Binomial likelihood.
 betaBinomial
   :: Text -> Double -> Double -> Int -> Int -> GibbsUpdate
 betaBinomial paramName alpha0 beta0 n k _ps gen = do
@@ -75,7 +77,8 @@ betaBinomial paramName alpha0 beta0 n k _ps gen = do
                     gen
   return (paramName, val)
 
--- | Gamma 事前 × Poisson 尤度の共役アップデート (rate パラメータ化)。
+-- | Conjugate update for a Gamma prior × Poisson likelihood
+-- (rate parameterization).
 gammaPoisson
   :: Text -> Double -> Double -> [Double] -> GibbsUpdate
 gammaPoisson paramName alpha0 beta0 ys _ps gen = do
@@ -85,7 +88,8 @@ gammaPoisson paramName alpha0 beta0 ys _ps gen = do
   val <- gamma aPost (1 / bPost) gen
   return (paramName, val)
 
--- | Beta(a, b) サンプル (mwc-random に Beta がないため X/(X+Y) 公式で実装)。
+-- | Sample @Beta(a, b)@. Implemented as @X / (X + Y)@ with
+-- @X ~ Gamma(a)@, @Y ~ Gamma(b)@, since @mwc-random@ has no Beta sampler.
 sampleBeta :: Double -> Double -> GenIO -> IO Double
 sampleBeta a b gen = do
   x <- gamma a 1 gen
@@ -96,19 +100,22 @@ sampleBeta a b gen = do
 -- Gibbs サンプラー (汎用ランナー、モデル非依存)
 -- ---------------------------------------------------------------------------
 
+-- | Gibbs configuration.
 data GibbsConfig = GibbsConfig
-  { gibbsIterations :: Int
-  , gibbsBurnIn     :: Int
+  { gibbsIterations :: Int   -- ^ Total iterations (burn-in included).
+  , gibbsBurnIn     :: Int   -- ^ Burn-in iterations to discard.
   } deriving (Show)
 
+-- | Default configuration: 2000 iterations, 500 burn-in.
 defaultGibbsConfig :: GibbsConfig
 defaultGibbsConfig = GibbsConfig
   { gibbsIterations = 2000
   , gibbsBurnIn     = 500
   }
 
--- | updates を 1 イテレーションごとに順番に適用する。
--- Gibbs ステップはすべて採択されるため chainAccepted は全 (updates × iter) になる。
+-- | Apply each update in @updates@ once per iteration, in order. Every
+-- Gibbs step is accepted by construction, so @chainAccepted@ equals
+-- @(length updates) × iterations@.
 gibbs :: [GibbsUpdate] -> GibbsConfig -> Params -> GenIO -> IO Chain
 gibbs updates cfg initP gen = do
   let total = gibbsBurnIn cfg + gibbsIterations cfg
@@ -138,6 +145,7 @@ gibbs updates cfg initP gen = do
     , chainDivergences = []
     }
 
+-- | Run 'gibbs' on @numChains@ parallel chains.
 gibbsChains :: [GibbsUpdate] -> GibbsConfig -> Int -> Params -> GenIO -> IO [Chain]
 gibbsChains updates cfg numChains initP baseGen = do
   gens <- replicateM numChains (spawnGen baseGen)
@@ -193,15 +201,17 @@ detectObsDeps m latNames =
       | v <- latNames
       ]
 
--- | HBM モデルの構造を解析し、共役 GibbsUpdate を自動構築する。
+-- | Inspect an HBM model's structure and synthesise the conjugate
+-- 'GibbsUpdate' steps automatically.
 --
--- 検出できる共役ペア:
+-- Detected conjugate pairs:
 --
---   * @Gamma(α,β)@ + @Poisson(λ)@   → 'gammaPoisson'
---   * @Beta(α,β)@  + @Binomial(n,p)@ → 'betaBinomial'
---   * @Normal(μ₀,σ₀)@ + @Normal(μ,σ)@ → 'normalNormal'
+--   * @Gamma(α,β)@   + @Poisson(λ)@    → 'gammaPoisson'
+--   * @Beta(α,β)@    + @Binomial(n,p)@ → 'betaBinomial'
+--   * @Normal(μ₀,σ₀)@ + @Normal(μ,σ)@  → 'normalNormal'
 --
--- 戻り値: (自動構築した GibbsUpdate リスト, MH が必要な残りパラメータ名)。
+-- Returns @(updates, remaining)@: the synthesised updates and the names
+-- of parameters that still need an MH step.
 gibbsFromModel :: ModelP r -> ([GibbsUpdate], [Text])
 gibbsFromModel m =
   let nodes    = collectNodes m
@@ -278,11 +288,12 @@ hybridStep gibbsUpds mhNames mhSteps model current gen = do
       let accepted = log (u :: Double) < logA
       return (if accepted then proposed else afterGibbs, accepted)
 
--- | 共役パラメータを Gibbs、残りを Random Walk MH で更新するハイブリッド。
+-- | Hybrid sampler: Gibbs-update conjugate parameters and use Random-Walk
+-- Metropolis on the rest.
 gibbsMH
   :: ModelP r
   -> GibbsConfig
-  -> Map Text Double   -- ^ MH ステップサイズ
+  -> Map Text Double   -- ^ MH step size per non-conjugate parameter.
   -> Params
   -> GenIO
   -> IO Chain

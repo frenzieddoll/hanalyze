@@ -32,15 +32,18 @@ import System.Random.MWC.Distributions (exponential)
 import Model.HBM (ModelP, Params, logJoint, sampleNames)
 import MCMC.Core (Chain (..), spawnGen)
 
+-- | Slice-sampler configuration.
 data SliceConfig = SliceConfig
-  { sliceIterations :: Int
-  , sliceBurnIn     :: Int
-  , sliceWidths     :: Map Text Double
-    -- ^ 各 coordinate の初期 stepping-out 幅 w (デフォルト 1.0)
-  , sliceMaxSteps   :: Int
-    -- ^ stepping-out の最大ステップ数 (暴走防止)
+  { sliceIterations :: Int                -- ^ Total iterations (burn-in included).
+  , sliceBurnIn     :: Int                -- ^ Burn-in iterations to discard.
+  , sliceWidths     :: Map Text Double    -- ^ Initial stepping-out width @w@
+                                          --   per coordinate (default 1.0).
+  , sliceMaxSteps   :: Int                -- ^ Maximum number of stepping-out
+                                          --   steps (safety bound).
   } deriving (Show)
 
+-- | Default configuration: 1000 iterations, 200 burn-in, width 1.0 per
+-- parameter, max stepping-out 50.
 defaultSliceConfig :: [Text] -> SliceConfig
 defaultSliceConfig names = SliceConfig
   { sliceIterations = 1000
@@ -49,7 +52,8 @@ defaultSliceConfig names = SliceConfig
   , sliceMaxSteps   = 50
   }
 
--- | Slice sampler を実行する。1 反復で全 coordinate を順に更新する。
+-- | Run the slice sampler. One iteration updates every coordinate in
+-- turn (Gibbs-style sweep).
 slice :: ModelP r -> SliceConfig -> Params -> GenIO -> IO Chain
 slice model cfg init_ gen = do
   let names    = sampleNames model
@@ -126,7 +130,7 @@ slice model cfg init_ gen = do
     , chainDivergences = []
     }
 
--- | Slice を numChains 本並列実行する。
+-- | Run 'slice' on @numChains@ parallel chains.
 sliceChains :: ModelP r -> SliceConfig -> Int -> Params -> GenIO -> IO [Chain]
 sliceChains model cfg numChains initP baseGen = do
   gens <- replicateM numChains (spawnGen baseGen)

@@ -42,15 +42,18 @@ import Stat.Distribution (toUnconstrained, fromUnconstrained)
 -- Configuration
 -- ---------------------------------------------------------------------------
 
+-- | NUTS configuration.
 data NUTSConfig = NUTSConfig
-  { nutsIterations    :: Int
-  , nutsBurnIn        :: Int
-  , nutsStepSize      :: Double
-  , nutsMaxDepth      :: Int
-  , nutsAdaptStepSize :: Bool
-  , nutsTargetAccept  :: Double
+  { nutsIterations    :: Int     -- ^ Total iterations (burn-in included).
+  , nutsBurnIn        :: Int     -- ^ Burn-in iterations to discard.
+  , nutsStepSize      :: Double  -- ^ Initial leapfrog step size @ε@.
+  , nutsMaxDepth      :: Int     -- ^ Maximum tree depth (typically 10).
+  , nutsAdaptStepSize :: Bool    -- ^ Enable Nesterov dual-averaging step-size adaptation.
+  , nutsTargetAccept  :: Double  -- ^ Target acceptance rate (0.8 typical, 0.95 for hard problems).
   } deriving (Show)
 
+-- | Default NUTS configuration: 2000 iterations, 500 burn-in, @ε = 0.1@,
+-- max depth 10, dual averaging enabled, target acceptance 0.8.
 defaultNUTSConfig :: NUTSConfig
 defaultNUTSConfig = NUTSConfig
   { nutsIterations    = 2000
@@ -65,14 +68,16 @@ defaultNUTSConfig = NUTSConfig
 -- Dual averaging
 -- ---------------------------------------------------------------------------
 
+-- | Internal state for Nesterov's dual-averaging step-size adaptation.
 data DualAvgState = DualAvgState
-  { daLogEps     :: Double
-  , daLogEpsBar  :: Double
-  , daH          :: Double
-  , daMu         :: Double
-  , daM          :: Int
+  { daLogEps     :: Double   -- ^ Current @log ε@ used for sampling.
+  , daLogEpsBar  :: Double   -- ^ Running smoothed @log ε̄@ (post-adaptation value).
+  , daH          :: Double   -- ^ Running average of (target − accept-stat).
+  , daMu         :: Double   -- ^ Anchor @μ = log(10 ε₀)@.
+  , daM          :: Int      -- ^ Iteration counter.
   }
 
+-- | Initialize 'DualAvgState' from an initial step size @ε₀@.
 initDualAvg :: Double -> DualAvgState
 initDualAvg eps0 = DualAvgState
   { daLogEps    = log eps0
@@ -82,6 +87,8 @@ initDualAvg eps0 = DualAvgState
   , daM         = 0
   }
 
+-- | Apply one dual-averaging update given the target acceptance @δ@ and
+-- the observed acceptance statistic @α@ for the iteration.
 updateDualAvg :: Double -> Double -> DualAvgState -> DualAvgState
 updateDualAvg delta alpha da =
   let m      = daM da + 1
@@ -183,7 +190,7 @@ buildTree gradFn logPiFn names eps theta r logU dir depth gen
 -- NUTS サンプラー
 -- ---------------------------------------------------------------------------
 
--- | 多相 HBM モデル ('ModelP') に対する NUTS サンプラー。
+-- | NUTS sampler for a polymorphic HBM model ('ModelP').
 -- 軌道長は U-Turn 判定で自動決定。
 nuts :: ModelP r -> NUTSConfig -> Params -> GenIO -> IO Chain
 nuts m cfg initC gen = do
@@ -308,7 +315,7 @@ nuts m cfg initC gen = do
     , chainDivergences = divs
     }
 
--- | NUTS を numChains 本並列実行する。
+-- | Run 'nuts' on @numChains@ parallel chains.
 nutsChains :: ModelP r -> NUTSConfig -> Int -> Params -> GenIO -> IO [Chain]
 nutsChains m cfg numChains initC baseGen = do
   gens <- replicateM numChains (spawnGen baseGen)

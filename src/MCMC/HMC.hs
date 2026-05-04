@@ -54,13 +54,16 @@ import Stat.Distribution (Transform, toUnconstrained, fromUnconstrained)
 -- Configuration
 -- ---------------------------------------------------------------------------
 
+-- | HMC configuration.
 data HMCConfig = HMCConfig
-  { hmcIterations    :: Int
-  , hmcBurnIn        :: Int
-  , hmcStepSize      :: Double
-  , hmcLeapfrogSteps :: Int
+  { hmcIterations    :: Int     -- ^ Total iterations (burn-in included).
+  , hmcBurnIn        :: Int     -- ^ Burn-in iterations to discard.
+  , hmcStepSize      :: Double  -- ^ Leapfrog step size @ε@.
+  , hmcLeapfrogSteps :: Int     -- ^ Number of leapfrog steps per HMC iteration.
   } deriving (Show)
 
+-- | Default HMC configuration: 2000 iterations, 500 burn-in,
+-- @ε = 0.1@, 10 leapfrog steps.
 defaultHMCConfig :: HMCConfig
 defaultHMCConfig = HMCConfig
   { hmcIterations    = 2000
@@ -73,16 +76,21 @@ defaultHMCConfig = HMCConfig
 -- パラメータ変換ユーティリティ
 -- ---------------------------------------------------------------------------
 
+-- | Pack parameters into a flat vector in the given name order.
 paramsToVec :: [Text] -> Params -> [Double]
 paramsToVec names params = map (\n -> Map.findWithDefault 0.0 n params) names
 
+-- | Inverse of 'paramsToVec': pair names with values.
 vecToParams :: [Text] -> [Double] -> Params
 vecToParams names vals = Map.fromList (zip names vals)
 
+-- | Apply 'toUnconstrained' to every named parameter; unmapped names are
+-- left untouched.
 toUnconstrainedParams :: Map Text Transform -> Params -> Params
 toUnconstrainedParams transforms =
   Map.mapWithKey (\k v -> maybe v (`toUnconstrained` v) (Map.lookup k transforms))
 
+-- | Apply 'fromUnconstrained' to every named parameter.
 fromUnconstrainedParams :: Map Text Transform -> Params -> Params
 fromUnconstrainedParams transforms =
   Map.mapWithKey (\k u -> maybe u (`fromUnconstrained` u) (Map.lookup k transforms))
@@ -91,7 +99,8 @@ fromUnconstrainedParams transforms =
 -- unconstrained 空間での log-joint (Jacobian 補正付き)
 -- ---------------------------------------------------------------------------
 
--- | 多相モデルの unconstrained 空間における log-joint (VI / NUTS と共有)。
+-- | Log-joint of a polymorphic model in the unconstrained space (shared
+-- with VI and NUTS).
 logJointU :: ModelP r -> Map Text Transform -> Params -> Double
 logJointU model transforms paramsU =
   let names     = sampleNames model
@@ -103,9 +112,13 @@ logJointU model transforms paramsU =
 -- リープフロッグ積分
 -- ---------------------------------------------------------------------------
 
+-- | Kinetic energy @0.5 ‖r‖²@ for unit-mass momentum @r@.
 kinetic :: [Double] -> Double
 kinetic r = 0.5 * sum (map (^ (2 :: Int)) r)
 
+-- | Leapfrog integrator with a user-supplied gradient function. Takes
+-- the gradient function, parameter names, step size @ε@, number of
+-- steps, initial @θ@ and momentum @r@, and returns the updated pair.
 leapfrogWith
   :: ([Text] -> Params -> [Double])
   -> [Text]
@@ -130,9 +143,11 @@ leapfrogWith gradFn names eps steps theta0 r0 = go steps theta0 r0
 -- HMC サンプラー (AD 勾配版)
 -- ---------------------------------------------------------------------------
 
--- | 多相 HBM モデル ('ModelP') に対する HMC サンプラー。
--- AD 勾配 ('Numeric.AD.Mode.Forward') を使うため数値微分より正確で速い。
--- 制約変換は 'getTransforms' で事前分布から自動検出する。
+-- | HMC sampler for a polymorphic HBM model ('ModelP').
+--
+-- Uses AD gradients ('Numeric.AD.Mode.Forward'), so it is more accurate
+-- and faster than numeric differentiation. Constraint transforms are
+-- detected automatically from the priors via 'getTransforms'.
 hmc :: ModelP r -> HMCConfig -> Params -> GenIO -> IO Chain
 hmc m cfg initC gen = do
   let names      = sampleNames m
@@ -198,7 +213,8 @@ hmc m cfg initC gen = do
     , chainDivergences = []
     }
 
--- | hmc を numChains 本並列実行する (+RTS -N で CPU 並列)。
+-- | Run 'hmc' on @numChains@ parallel chains (use @+RTS -N@ for CPU
+-- parallelism).
 hmcChains :: ModelP r -> HMCConfig -> Int -> Params -> GenIO -> IO [Chain]
 hmcChains m cfg numChains initC baseGen = do
   gens <- replicateM numChains (spawnGen baseGen)

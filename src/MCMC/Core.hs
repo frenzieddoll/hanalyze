@@ -27,37 +27,39 @@ import System.Random.MWC (GenIO, uniform, initialize)
 -- Chain
 -- ---------------------------------------------------------------------------
 
--- | MCMC チェーン。バーンイン後サンプルのみを保持する。
+-- | MCMC chain. Holds post-burn-in samples only.
 data Chain = Chain
-  { chainSamples  :: [Map.Map Text Double]  -- ^ バーンイン後サンプル (描画順)
-  , chainAccepted :: Int                    -- ^ 採択数 (バーンイン含む)
-  , chainTotal    :: Int                    -- ^ 提案総数 (バーンイン含む)
+  { chainSamples  :: [Map.Map Text Double]  -- ^ Post-burn-in samples in draw order.
+  , chainAccepted :: Int                    -- ^ Accepted proposals (burn-in included).
+  , chainTotal    :: Int                    -- ^ Total proposals (burn-in included).
   , chainEnergy   :: [Double]
-    -- ^ 各反復の Hamiltonian エネルギー H = -log p(θ) + 0.5|p|² (バーンイン後)。
-    --   HMC/NUTS のみ意味を持つ; MH/Gibbs などは空リスト。BFMI / energy plot 用。
+    -- ^ Hamiltonian energy @H = −log p(θ) + 0.5|p|²@ per post-burn-in
+    --   iteration. Only meaningful for HMC / NUTS; samplers like MH /
+    --   Gibbs leave it empty. Used by BFMI and the energy plot.
   , chainDivergences :: [Int]
-    -- ^ NUTS で divergent transition が起きた反復の 0-origin index 列
-    --   (バーンイン後)。Stan 同様 |H_proposal - H_initial| > 1000 を判定基準
-    --   とする。多ければ事後分布が病的で、reparameterization が必要。
+    -- ^ Zero-origin iteration indices where NUTS reported a divergent
+    --   transition (post-burn-in). Following Stan, the criterion is
+    --   @|H_proposal − H_initial| > 1000@. Many divergences signal a
+    --   pathological posterior that needs reparameterization.
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
 -- Summary statistics
 -- ---------------------------------------------------------------------------
 
--- | 受容率 (バーンイン込み)。
+-- | Overall acceptance rate (burn-in included).
 acceptanceRate :: Chain -> Double
 acceptanceRate ch =
   fromIntegral (chainAccepted ch) / fromIntegral (chainTotal ch)
 
--- | 指定パラメータの事後平均。存在しない場合は Nothing。
+-- | Posterior mean for a given parameter, or 'Nothing' if absent.
 posteriorMean :: Text -> Chain -> Maybe Double
 posteriorMean name ch =
   let vals = chainVals name ch
   in if null vals then Nothing
      else Just (sum vals / fromIntegral (length vals))
 
--- | 指定パラメータの事後標準偏差。
+-- | Posterior standard deviation for a given parameter.
 posteriorSD :: Text -> Chain -> Maybe Double
 posteriorSD name ch =
   case posteriorMean name ch of
@@ -68,7 +70,7 @@ posteriorSD name ch =
          else Just (sqrt (sum (map (\x -> (x - mu) ^ (2 :: Int)) vals)
                          / fromIntegral (length vals)))
 
--- | 経験分位点 (0 ≤ p ≤ 1)。
+-- | Empirical quantile of a parameter (@0 ≤ p ≤ 1@).
 posteriorQuantile :: Double -> Text -> Chain -> Maybe Double
 posteriorQuantile p name ch =
   let vals = sort (chainVals name ch)
@@ -78,7 +80,8 @@ posteriorQuantile p name ch =
        let idx = min (n - 1) (floor (p * fromIntegral n) :: Int)
        in Just (vals !! idx)
 
--- | チェーンから指定パラメータのサンプル列を取り出す。rhat 等に渡す用途。
+-- | Extract the sample sequence for one parameter from a chain. Useful
+-- when feeding 'Stat.MCMC.rhat' and friends.
 chainVals :: Text -> Chain -> [Double]
 chainVals name ch = [v | Just v <- map (Map.lookup name) (chainSamples ch)]
 
@@ -86,8 +89,8 @@ chainVals name ch = [v | Just v <- map (Map.lookup name) (chainSamples ch)]
 -- Utility
 -- ---------------------------------------------------------------------------
 
--- | 基底 GenIO から独立した子 GenIO を生成する。
--- 並列チェーンで各チェーンに異なるシードを与えるために使う。
+-- | Spawn an independent child 'GenIO' seeded from a parent generator.
+-- Used to give each parallel chain a different seed.
 spawnGen :: GenIO -> IO GenIO
 spawnGen base = do
   seed <- uniform base :: IO Word32
