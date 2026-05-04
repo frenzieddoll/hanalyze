@@ -54,9 +54,12 @@ bench/venv/bin/python bench/aggregate.py > bench/results/summary.md
 
 | Phase | Description | Status |
 |---|---|---|
-| B0 | Infra (criterion + data gen + aggregate) | in progress |
-| B1 | Classical regression (LM/GLM/GLMM/Ridge/Lasso/EN) | pending |
-| B2 | Kernel & GP (KR/NW/RFF/GP/GPRobust) | pending |
-| B3 | Single-objective optimization | pending |
-| B4 | Multi-objective optimization | pending |
-| B5 | Bayesian optimization + final report | pending |
+| B0 | Infra (data gen + BenchUtil + aggregate) | done |
+| B1 | Classical regression (LM/GLM/GLMM/Ridge/Lasso/EN) | done |
+| B2 | Kernel & GP (KR/NW/RFF/GP/GPRobust) | done |
+| B3 | Single-objective optimization | done |
+| B4 | Multi-objective optimization | done |
+| B5 | Bayesian optimization + final report | done |
+
+See [`results/REPORT.md`](results/REPORT.md) for the consolidated
+narrative and `results/summary.md` for the auto-generated table.

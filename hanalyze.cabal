@@ -951,6 +951,24 @@ executable bench-data-gen
     , mwc-random           >= 0.15 && < 0.16
     , vector               >= 0.12 && < 0.14
 
+-- Bayesian optimization bench (B5): Branin / Hartmann6.
+executable bench-bo
+  import:           warnings
+  main-is:          BenchBO.hs
+  other-modules:    BenchUtil
+  hs-source-dirs:   bench/haskell
+  default-language: GHC2021
+  build-depends:
+      base                 >= 4.14 && < 5
+    , bytestring           >= 0.11 && < 0.13
+    , cassava              >= 0.5  && < 0.6
+    , hanalyze
+    , hmatrix              >= 0.20 && < 0.22
+    , mwc-random           >= 0.15 && < 0.16
+    , text                 >= 1.2  && < 2.2
+    , time                 >= 1.9  && < 1.13
+    , vector               >= 0.12 && < 0.14
+
 -- Multi-objective optimization bench (B4): NSGA-II on ZDT/DTLZ.
 executable bench-mo
   import:           warnings
