@@ -1,12 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Bayesian Optimization ループ (Phase V3)。
+-- | Bayesian Optimization loop.
 --
--- 単一目的:
--- 1. 初期点 (LHS or random) を評価
--- 2. GP を fit
--- 3. acquisition 関数を最大化して次の x を選ぶ
--- 4. x を評価して観測列に追加
--- 5. 2-4 を T 回反復
+-- Single-objective procedure:
+--
+--   1. Evaluate initial points (Latin hypercube or random).
+--   2. Fit a Gaussian process to the observations.
+--   3. Maximize an acquisition function to choose the next @x@.
+--   4. Evaluate @x@ and append to the observed sequence.
+--   5. Repeat steps 2-4 for @T@ iterations.
 module Optim.BayesOpt
   ( BayesOptConfig (..)
   , defaultBayesOptConfig

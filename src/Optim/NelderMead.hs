@@ -1,15 +1,16 @@
--- | Nelder-Mead 単体法 (downhill simplex method)。
+-- | Nelder-Mead simplex method (downhill simplex).
 --
--- Nelder & Mead (1965)。微分不要、低次元 (1〜30 程度) で実装が容易、
--- 局所最適化として安定。R の `optim(method="Nelder-Mead")` の標準。
+-- Nelder & Mead (1965). Gradient-free, easy to implement at low dimension
+-- (1-30), and stable for local optimization. The default behind R's
+-- @optim(method="Nelder-Mead")@.
 --
--- アルゴリズム:
--- 各反復で n+1 頂点の単体 (simplex) を保持し、最悪点を反射 / 拡張 / 縮小 /
--- 全体縮小のいずれかで更新する。Wright (1996) のパラメタ ρ=1, χ=2, γ=1/2, σ=1/2
--- (標準). 本実装は Lagarias et al. (1998) の標準形に準拠。
+-- Algorithm: maintain an @n+1@-vertex simplex; each iteration replaces the
+-- worst vertex via reflect / expand / contract / shrink. Standard Wright
+-- (1996) parameters @ρ = 1, χ = 2, γ = 1/2, σ = 1/2@. This implementation
+-- follows the canonical form of Lagarias et al. (1998).
 --
--- 計算量: 1 反復あたり関数評価 1〜2 回 (shrink 時は n 回)。次元 n が大きくなると
--- 収束は遅い (typical n ≤ 10 で実用)。
+-- Cost: 1-2 function evaluations per iteration (@n@ on shrink). Convergence
+-- becomes slow for larger @n@ — practical up to @n ≤ 10@.
 module Optim.NelderMead
   ( NMConfig (..)
   , defaultNMConfig

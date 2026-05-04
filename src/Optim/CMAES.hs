@@ -1,16 +1,19 @@
--- | CMA-ES (Covariance Matrix Adaptation Evolution Strategy) — Hansen 2001。
+-- | CMA-ES (Covariance Matrix Adaptation Evolution Strategy) — Hansen 2001.
 --
--- 非凸連続最適化の事実上のベストアルゴリズム。
--- (μ/μ_w, λ)-rank-μ + rank-1 update を **簡易版** で実装した一段階モデル。
+-- The de-facto state of the art for non-convex continuous optimization.
+-- This module implements a **simplified single-stage** version of the
+-- @(μ/μ_w, λ)@-rank-μ + rank-1 update.
 --
--- 仕様 (簡易版):
--- - 各世代 λ 個のサンプル z_k ~ N(0, I) を引き、x_k = m + σ B z_k で得る
---   (本実装は対角共分散のみ、B = diag(d) — フルランク C は省略)
--- - 上位 μ 個 (重み w) で平均 m を更新: m ← Σ w_i x_i
--- - σ を 1/5 ルール風に乗算更新 (簡易版): σ ← σ · exp((‖p_σ‖ - χ_n)/χ_n / damps)
---   完全版の path-cumulation までは実装せず、Rastrigin 5D 程度で十分機能。
+-- Spec (simplified):
 --
--- フルランク CMA-ES (Hansen 2016 chapter 完全版) を必要とする場合は別実装が必要。
+-- * Each generation samples @λ@ vectors @z_k ~ N(0, I)@ and forms
+--   @x_k = m + σ B z_k@ (diagonal covariance only; @B = diag(d)@, full
+--   rank @C@ is omitted).
+-- * The top @μ@ samples (weights @w@) update the mean @m ← Σ w_i x_i@.
+-- * @σ@ is multiplicatively updated with a 1/5-rule-like rule
+--   (no path cumulation). Sufficient for problems up to Rastrigin 5D.
+--
+-- For the full-rank tutorial CMA-ES (Hansen 2016), see 'Optim.CMAESFull'.
 module Optim.CMAES
   ( CMAESConfig (..)
   , defaultCMAESConfig

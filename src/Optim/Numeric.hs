@@ -1,13 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | 数値勾配 (有限差分)。
+-- | Numeric gradients (finite differences).
 --
--- 自動微分が使えない場面 (例: GP の log marginal likelihood で
--- ログ行列の det が hmatrix だけで計算され AD 化が手間な場合)
--- で利用する。
+-- For situations where automatic differentiation is impractical (e.g. GP
+-- log-marginal likelihood whose @det@ is computed inside hmatrix and would
+-- be cumbersome to AD-ify).
 --
--- - 'numGradCentral' — 中央差分 (誤差 O(h²)、推奨)
--- - 'numGradForward' — 前進差分 (誤差 O(h)、コスト半分)
--- - 'numHessianCentral' — 中央差分による Hessian 近似
+--   * 'numGradCentral' — central differences (error @O(h²)@; recommended).
+--   * 'numGradForward' — forward differences (error @O(h)@; half the cost).
+--   * 'numHessianCentral' — Hessian approximation via central differences.
 module Optim.Numeric
   ( numGradCentral
   , numGradForward

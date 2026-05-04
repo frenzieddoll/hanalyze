@@ -1,13 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Desirability function (Derringer & Suich 1980, Phase U2)。
+-- | Desirability functions (Derringer & Suich 1980).
 --
--- 多目的最適化を 1 つのスカラー目的に集約する古典的手法。
--- 各応答 y_j を [0, 1] 範囲の **desirability** d_j に変換し、
--- 全体の総合 desirability D を幾何平均で計算:
+-- A classical scalarization for multi-objective optimization. Each response
+-- @y_j@ is mapped to a per-response desirability @d_j ∈ [0, 1]@, and the
+-- overall desirability is the geometric mean:
 --
---   D = (Π d_j)^(1/q)
+-- @
+-- D = (Π d_j)^(1/q)
+-- @
 --
--- D を最大化する x が「全応答を程よく満たす」点。
+-- The @x@ that maximizes @D@ is a point that satisfies all responses
+-- reasonably well.
 module Optim.Desirability
   ( DesirabilityType (..)
   , individualDesirability

@@ -1,14 +1,18 @@
--- | Particle Swarm Optimization (PSO)。
+-- | Particle Swarm Optimization (PSO).
 --
--- Kennedy & Eberhart 1995。粒子群が個人最良 (pbest) と全体最良 (gbest) に
--- 引き寄せられながら速度を更新するメタヒューリスティック。
+-- Kennedy & Eberhart (1995). A metaheuristic in which a swarm of particles
+-- updates velocity by being attracted to its personal best (pbest) and the
+-- global best (gbest).
 --
--- 速度・位置の更新:
+-- Velocity / position update:
 --
---   v_{t+1} = w · v_t + c_1 · r_1 · (pbest - x) + c_2 · r_2 · (gbest - x)
---   x_{t+1} = x_t + v_{t+1}
+-- @
+-- v_{t+1} = w · v_t + c_1 · r_1 · (pbest - x) + c_2 · r_2 · (gbest - x)
+-- x_{t+1} = x_t + v_{t+1}
+-- @
 --
--- ここで w (慣性), c_1 (認知係数), c_2 (社会係数), r_1, r_2 ~ U(0,1)。
+-- Here @w@ is inertia, @c_1@ the cognitive coefficient, @c_2@ the social
+-- coefficient, and @r_1, r_2 ~ U(0, 1)@.
 module Optim.ParticleSwarm
   ( PSOConfig (..)
   , defaultPSOConfig

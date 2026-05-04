@@ -1,16 +1,19 @@
--- | 単目的最適化アルゴリズム共通基盤。
+-- | Common foundation for the single-objective optimization algorithms.
 --
--- すべての単目的オプティマイザ (`Optim.NelderMead`, `Optim.LBFGS`,
--- `Optim.LineSearch`, `Optim.DifferentialEvolution`, `Optim.CMAES`) が
--- 共有する型・既定値を提供する。
+-- Provides the shared types and defaults used by every single-objective
+-- optimizer (@Optim.NelderMead@, @Optim.LBFGS@, @Optim.LineSearch@,
+-- @Optim.DifferentialEvolution@, @Optim.CMAES@, @Optim.CMAESFull@,
+-- @Optim.SimulatedAnnealing@, @Optim.ParticleSwarm@), plus the unified
+-- 'Bounds' type for box constraints.
 --
--- 各オプティマイザの実行関数は次の形に揃える:
+-- Each optimizer's runner has the same shape:
 --
 -- @
 -- runX :: XConfig -> ([Double] -> Double) -> [Double] -> IO OptimResult
 -- @
 --
--- (決定的なものも `IO` を返して統一。`pure`-only 版が必要なら別途エクスポート)
+-- (Deterministic algorithms also return @IO@ for uniformity. A pure-only
+-- variant can be exported separately when needed.)
 module Optim.Common
   ( OptimResult (..)
   , StopCriteria (..)

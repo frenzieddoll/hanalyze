@@ -1,13 +1,15 @@
--- | L-BFGS (Limited-memory BFGS) 準ニュートン法。
+-- | L-BFGS (Limited-memory BFGS) quasi-Newton method.
 --
--- Liu & Nocedal (1989). 大規模・滑らかな目的関数の局所最適化に最適。
--- 数百〜数万次元でも実用 (BFGS の O(n²) メモリを O(mn) に削減; m=10 が標準)。
+-- Liu & Nocedal (1989). The standard for local optimization of large,
+-- smooth objectives — practical at hundreds to tens of thousands of
+-- dimensions (memory @O(mn)@ versus BFGS's @O(n²)@; @m = 10@ is typical).
 --
--- 機能:
--- - Two-loop recursion で逆 Hessian × 勾配を計算 (履歴サイズ m)
--- - 線形探索: backtracking + Armijo 条件 (簡易、Wolfe 完全準拠ではない)
--- - 数値勾配のオプション (`runLBFGSNumeric`)
+-- Features:
 --
+--   * Two-loop recursion for inverse-Hessian × gradient (history size @m@).
+--   * Line search: backtracking + Armijo condition (simple; not full Wolfe).
+--   * Numeric-gradient variant ('runLBFGSNumeric').
+
 -- 計算量: 1 反復あたり関数+勾配評価 O(数回) + メモリ O(m·n)。
 module Optim.LBFGS
   ( LBFGSConfig (..)

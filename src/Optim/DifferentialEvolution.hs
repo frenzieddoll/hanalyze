@@ -1,17 +1,21 @@
--- | Differential Evolution (DE/rand/1/bin) — Storn & Price 1997。
+-- | Differential Evolution (DE/rand/1/bin) — Storn & Price 1997.
 --
--- 微分不要・大域・実装シンプルで実用的に堅牢な進化計算アルゴリズム。
--- 連続変数の非凸最適化に最適、典型的に 5-30 次元で良好に動作。
+-- A gradient-free, global, simple-to-implement and empirically robust
+-- evolutionary algorithm. Best suited to continuous non-convex problems,
+-- typically effective in the 5-30 dimensional regime.
 --
--- 仕様: DE/rand/1/bin
--- - 各世代、各個体 i について以下を行う:
---   1. 集団からランダムに 3 個体 a, b, c を選択 (i と異なる)
---   2. mutation: v = a + F * (b - c)        (F: 微分係数、典型 0.5-0.8)
---   3. crossover (binomial): u_j = v_j with prob CR、else x_j  (CR: 0.7-0.9)
---      (少なくとも 1 次元は v から強制で取る)
---   4. selection: f(u) ≤ f(x_i) なら x_i ← u
+-- Algorithm (DE/rand/1/bin) — each generation, for every individual @i@:
 --
--- 計算量: 1 世代あたり関数評価 N (集団サイズ)。並列化容易だが本実装は逐次。
+--   1. Pick three distinct indices @a, b, c@ from the population (all
+--      different from @i@).
+--   2. Mutation: @v = a + F * (b - c)@ with mutation factor @F ∈ [0.5, 0.8]@
+--      typical.
+--   3. Binomial crossover: @u_j = v_j@ with probability @CR ∈ [0.7, 0.9]@,
+--      otherwise @x_j@; at least one dimension is forced from @v@.
+--   4. Selection: replace @x_i ← u@ if @f(u) ≤ f(x_i)@.
+--
+-- Cost: @N@ function evaluations per generation (population size). Easily
+-- parallelizable, but this implementation is sequential.
 module Optim.DifferentialEvolution
   ( DEConfig (..)
   , defaultDEConfig

@@ -1,14 +1,17 @@
--- | フルランク CMA-ES (Hansen 2016 Tutorial 完全版)。
+-- | Full-rank CMA-ES (Hansen 2016 tutorial, complete edition).
 --
--- 既存の `Optim.CMAES` は簡易対角版。本モジュールは:
+-- The companion module @Optim.CMAES@ is a simplified diagonal variant.
+-- This module implements:
 --
--- - フルランク共分散行列 C の rank-1 + rank-μ 更新
--- - 進化パス p_σ, p_c の累積 (path cumulation)
--- - 共分散の固有分解で B, D を取得 (周期的に再計算してコスト削減)
--- - CSA (Cumulative Step-size Adaptation) でステップ幅 σ 更新
--- - h_σ (Heaviside) で巨大ジャンプ時の C 更新を抑制
+-- * Rank-1 + rank-μ updates of the full covariance matrix @C@.
+-- * Evolution-path cumulation for both @p_σ@ and @p_c@.
+-- * Eigendecomposition of @C@ to recover @B, D@ (recomputed periodically
+--   to reduce cost).
+-- * Cumulative Step-size Adaptation (CSA) for the step size @σ@.
+-- * The Heaviside helper @h_σ@ that suppresses @C@ updates after large
+--   jumps.
 --
--- パラメータは Hansen 2016 の標準値を使用。
+-- Hyperparameters use the standard values from Hansen (2016).
 module Optim.CMAESFull
   ( CMAESFConfig (..)
   , defaultCMAESFConfig

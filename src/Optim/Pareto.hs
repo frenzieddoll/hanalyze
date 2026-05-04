@@ -1,15 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Pareto front ユーティリティ (Phase S2 で実装、ここはスケルトン)。
+-- | Pareto-front utilities for evaluating multi-objective results.
 --
--- 多目的最適化の結果評価で使う指標と判定関数:
+--   * 'isNonDominated' — is a given point non-dominated within the front?
+--   * 'paretoFront'    — extract just the non-dominated points from a set.
+--   * 'hypervolume'    — front volume indicator (larger is better).
+--   * 'igd'            — Inverted Generational Distance (distance from the
+--     true front to the approximation).
+--   * 'gd'             — Generational Distance (distance from the
+--     approximation to the true front).
 --
--- - 'isNonDominated':  与えられた点が現 front 内で非優越か
--- - 'paretoFront':     点集合から非優越点だけ抽出
--- - 'hypervolume':     Pareto front の体積指標 (高いほど良い)
--- - 'igd':             Inverted Generational Distance (真の front から見た距離)
--- - 'gd':              Generational Distance (推定 front から真 front への距離)
---
--- すべての目的は **最小化** として扱う (NSGA-II の慣習に合わせる)。
+-- All objectives are treated as **minimized**, matching the NSGA-II
+-- convention.
 module Optim.Pareto
   ( isNonDominated
   , paretoFront

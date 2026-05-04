@@ -1,8 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Adam 一次最適化アルゴリズム (Kingma & Ba 2014)。
+-- | Adam first-order optimizer (Kingma & Ba 2014).
 --
--- ELBO 最大化、ニューラルネット学習、acquisition function の最適化など
--- 一般的な勾配ベース最適化に使う。`Stat.VI` から共通基盤として切り出した。
+-- A general-purpose gradient-based optimizer used for ELBO maximization,
+-- neural-network training, acquisition-function optimization, and similar
+-- tasks. Originally embedded in @Stat.VI@; extracted here as a shared
+-- foundation.
 --
 -- 使い方:
 --

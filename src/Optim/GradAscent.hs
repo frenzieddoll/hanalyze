@@ -1,13 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | シンプルな勾配上昇/下降法。
+-- | Vanilla gradient ascent / descent.
 --
--- `Model.GP.optimizeGP` で使われていた数値勾配ベースの内部実装を
--- 共通基盤として切り出した。学習率は反復ごとに 0.5% ずつ縮小し、
--- 勾配ノルムが閾値以下になれば早期終了する。
+-- The numeric-gradient implementation that used to live in
+-- @Model.GP.optimizeGP@, extracted as a shared foundation. The learning
+-- rate is shrunk by 0.5 % per iteration; iteration stops early when the
+-- gradient norm drops below the configured tolerance.
 --
--- 使い分け:
+-- When to use which:
 --
--- - 'Optim.Adam.runAdam' — モーメント付き、ロバスト、デフォルト推奨
+--   * 'Optim.Adam.runAdam' — momentum-based, robust, recommended default.
 -- - 'Optim.GradAscent.gradientAscent' — シンプル、軽量、デバッグ容易
 -- - 'Optim.GradAscent.gradientDescent' — 上の符号反転版
 module Optim.GradAscent

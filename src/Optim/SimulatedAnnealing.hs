@@ -1,16 +1,19 @@
--- | Simulated Annealing (焼きなまし法)。
+-- | Simulated Annealing.
 --
--- Kirkpatrick, Gelatt, Vecchi 1983。物理的アナロジー (固体冷却) で
--- ランダムウォーク + 確率的受容によって大域最適に近づく。
+-- Kirkpatrick, Gelatt, Vecchi (1983). A physical analogy (cooling solids):
+-- a random walk with probabilistic acceptance approaches a global
+-- optimum.
 --
--- 受容確率 (Metropolis 基準):
+-- Acceptance probability (Metropolis criterion):
 --
---   * 改善 (Δf < 0): 必ず受容
---   * 悪化 (Δf ≥ 0): 確率 exp(-Δf / T) で受容
+--   * Improvement (@Δf < 0@): always accept.
+--   * Deterioration (@Δf ≥ 0@): accept with probability @exp(-Δf / T)@.
 --
--- 温度スケジュール: T_k = T_0 · α^k    (geometric cooling、α ∈ [0.85, 0.99])
+-- Temperature schedule: @T_k = T_0 · α^k@ (geometric cooling, with
+-- @α ∈ [0.85, 0.99]@).
 --
--- 提案分布: 各次元独立に Normal(0, sigma) を加算し、bounds で反射。
+-- Proposal: add @Normal(0, sigma)@ independently per dimension and reflect
+-- against the bounds.
 module Optim.SimulatedAnnealing
   ( SAConfig (..)
   , defaultSAConfig

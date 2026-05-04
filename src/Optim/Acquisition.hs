@@ -1,14 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Bayesian Optimization の Acquisition 関数 (Phase V1)。
+-- | Acquisition functions for Bayesian Optimization.
 --
--- 単一目的:
---   * EI:  Expected Improvement (Mockus 1978)
---   * UCB: Upper Confidence Bound
---   * PI:  Probability of Improvement
+-- Single-objective:
 --
--- 多目的 (Phase V2 へ拡張):
---   * EHVI: Expected Hypervolume Improvement
---   * ParEGO: scalarization (Tchebycheff) + EI
+--   * EI  — Expected Improvement (Mockus 1978).
+--   * UCB — Upper Confidence Bound.
+--   * PI  — Probability of Improvement.
+--
+-- Multi-objective:
+--
+--   * EHVI   — Expected Hypervolume Improvement.
+--   * ParEGO — Tchebycheff scalarization + EI.
 module Optim.Acquisition
   ( ei
   , ucb

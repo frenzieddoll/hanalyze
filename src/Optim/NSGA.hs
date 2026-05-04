@@ -1,24 +1,20 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | NSGA-II (Non-dominated Sorting Genetic Algorithm II) — Deb et al. 2002。
+-- | NSGA-II (Non-dominated Sorting Genetic Algorithm II) — Deb et al. 2002.
 --
--- **Phase R0.2 — スケルトン段階**: 型と関数シグネチャのみ定義し、
--- 本実装は Phase S で行う。これにより:
+-- A widely-used multi-objective evolutionary algorithm based on fast
+-- non-dominated sorting + crowding-distance comparison.
 --
--- - 型レベルで API 設計を確定
--- - Phase S 内で `undefined` を順次実装に置換
--- - 後続 Phase (T, U, V) は型を信頼してコードを書ける
---
--- アルゴリズム (Phase S で実装):
+-- Algorithm:
 --
 -- @
--- 1. 初期母集団 P_0 を生成 (LHS or random)
--- 2. for t = 0..T:
---    a) 子母集団 Q_t を生成 (selection + SBX crossover + polynomial mutation)
---    b) R_t = P_t ∪ Q_t
---    c) Non-dominated sorting で R_t を front F_1, F_2, ... に分割
---    d) crowding distance で各 front 内をソート
---    e) P_{t+1} を上位 N 個から取る
--- 3. 最終 front を Pareto 近似として返す
+-- 1. Generate the initial population P_0 (LHS or random).
+-- 2. For t = 0..T:
+--    a) Generate offspring Q_t (selection + SBX crossover + polynomial mutation).
+--    b) R_t = P_t ∪ Q_t.
+--    c) Fast non-dominated sort partitions R_t into fronts F_1, F_2, ...
+--    d) Sort each front by crowding distance.
+--    e) Take the top N to form P_{t+1}.
+-- 3. Return the final front as a Pareto approximation.
 -- @
 module Optim.NSGA
   ( -- * 型

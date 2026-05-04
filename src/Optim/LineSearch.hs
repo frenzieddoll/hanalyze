@@ -1,13 +1,17 @@
--- | 1D 最適化: Brent 法 + 黄金分割探索 (Golden Section)。
+-- | One-dimensional optimization: Brent's method + golden-section search.
 --
--- 目的: 単峰区間 [a, b] 内の局所最小を高精度に求める。
+-- Both find a local minimum on a unimodal interval @[a, b]@ to high
+-- precision.
 --
--- - 'goldenSection': シンプル・確実 (関数が単峰なら線形収束)。
--- - 'brent': Brent 1973。放物線補間 + 黄金分割の hybrid。超線形収束、
---   外れ値に頑健。`scipy.optimize.brent` / `R::optimize` の標準。
+--   * 'goldenSection' — simple and robust; linear convergence on unimodal
+--     functions.
+--   * 'brent' — Brent (1973): a hybrid of parabolic interpolation and
+--     golden section. Superlinear convergence, robust to outliers; matches
+--     @scipy.optimize.brent@ and R's @optimize@.
 --
--- いずれも勾配不要。両端から狭めるので bracket (a < x < b で f(x) < f(a), f(b))
--- を最初に与える必要あり (`bracketMinimum` で自動探索可)。
+-- Both are gradient-free. They need an initial bracket
+-- @a < x < b@ with @f(x) < f(a), f(b)@; use 'bracketMinimum' to find one
+-- automatically.
 module Optim.LineSearch
   ( BrentConfig (..)
   , defaultBrentConfig

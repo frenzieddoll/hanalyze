@@ -1,20 +1,25 @@
--- | 制約付き最適化 — **Augmented Lagrangian** 法。
+-- | Constrained optimization via the **Augmented Lagrangian** method.
 --
--- 等式制約 g_i(x) = 0 と不等式制約 h_j(x) ≤ 0 を Lagrange 乗数 + 二次罰則で
--- 内部化し、無制約問題として既存の `Optim.LBFGS` 等で解く外側ループを提供。
+-- Internalizes equality constraints @g_i(x) = 0@ and inequality constraints
+-- @h_j(x) ≤ 0@ via Lagrange multipliers + a quadratic penalty, exposing an
+-- outer loop that calls an existing unconstrained solver (typically
+-- @Optim.LBFGS@) on each subproblem.
 --
--- 拡張 Lagrangian:
+-- Augmented Lagrangian:
 --
---   L_A(x, λ, μ, ρ) = f(x)
---                   + Σ_i λ_i g_i(x) + (ρ/2) Σ_i g_i(x)²
---                   + Σ_j (1/(2ρ)) [max(0, μ_j + ρ h_j(x))² - μ_j²]
+-- @
+-- L_A(x, λ, μ, ρ) = f(x)
+--                 + Σ_i λ_i g_i(x) + (ρ/2) Σ_i g_i(x)²
+--                 + Σ_j (1/(2ρ)) [max(0, μ_j + ρ h_j(x))² - μ_j²]
+-- @
 --
--- 各外側反復で:
---   1. L_A を x について最小化 (内側 = L-BFGS or Nelder-Mead)
---   2. 乗数を更新: λ ← λ + ρ g(x*)、μ ← max(0, μ + ρ h(x*))
---   3. 罰則 ρ を増加 (制約違反が改善しなければ)
+-- Each outer iteration:
 --
--- 参考: Nocedal & Wright "Numerical Optimization" Ch. 17。
+--   1. Minimize @L_A@ in @x@ with the inner solver (L-BFGS or Nelder-Mead).
+--   2. Update multipliers: @λ ← λ + ρ g(x*)@, @μ ← max(0, μ + ρ h(x*))@.
+--   3. Grow the penalty @ρ@ if the constraint violation did not improve.
+--
+-- Reference: Nocedal & Wright, /Numerical Optimization/, Ch. 17.
 module Optim.Constrained
   ( ConstrainedConfig (..)
   , ConstraintSet (..)
