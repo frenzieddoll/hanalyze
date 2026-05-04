@@ -1,18 +1,22 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | DataFrame の健全性チェック。読み込んだ後に潜む「人間の目には怪しい」
--- パターンを警告コードで列挙する。
+-- | DataFrame health check. Surfaces the "looks suspicious" patterns that
+-- can hide in a successfully-loaded DataFrame, as warning codes.
 --
--- 検出する W コード:
+-- Codes detected:
 --
--- * W001 ヘッダ無し疑い: 列名が全て numeric token
--- * W003 ragged: 列ごとの長さに差がある (Hackage は通常揃えるが念のため)
--- * W004 重複列名 / 空列名 / 前後空白
--- * W005 delimiter ミスマッチ: 1 列のみで値に他 delimiter 候補が頻出
--- * W006 NA 文字列の多型混在
--- * W007 単位混入疑い (text 列で @^\d+\.?\d*[a-zA-Z]+$@ が過半)
--- * W008 通貨/桁区切り疑い
+--   * @W001@ — header is suspect (all column names parse as numbers).
+--   * @W003@ — ragged: per-column lengths differ (Hackage normally pads,
+--     but we double-check).
+--   * @W004@ — duplicate / empty / surrounding-whitespace column names.
+--   * @W005@ — delimiter mismatch: single-column DataFrame whose values
+--     contain another delimiter candidate.
+--   * @W006@ — heterogeneous mix of NA strings.
+--   * @W007@ — unit suffix inferred (most cells in a Text column match
+--     @^\\d+\\.?\\d*[a-zA-Z]+$@).
+--   * @W008@ — currency or thousand-separator suspect.
 --
--- 補足チェック (raw byte preview を引数で受け取る系) は 'inspectWithPreview'。
+-- Auxiliary checks that need a raw-byte preview are in
+-- 'inspectWithPreview'.
 -- それ以外は 'inspectDataFrame' で DataFrame だけから判定可能。
 --
 -- 利用シナリオ:

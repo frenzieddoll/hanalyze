@@ -1,13 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
--- | Hackage @dataframe@ ('DXD.DataFrame') から数値 / Text ベクタを安全に
--- 取り出す共通ヘルパ。Model.* / Viz.* 各層から widely 利用される。
+-- | Safe extraction of numeric / Text vectors from a Hackage @dataframe@
+-- ('DXD.DataFrame'). Used widely across @Model.*@ and @Viz.*@.
 --
--- - 'getDoubleVec': Double / Int / Maybe Double / Maybe Int / Text 列のいずれでも
---   @V.Vector Double@ に正規化。Text 列は parse、欠損 (null bitmap or NA 文字列)
---   が 1 つでもあれば 'Nothing' を返す (モデル fit が落ちないようにするため)。
--- - 'getTextVec': Text 列の取り出し。型不一致時は 'Nothing'。
+--   * 'getDoubleVec' — normalize Double / Int / Maybe Double / Maybe Int /
+--     Text columns to @V.Vector Double@. Text values are parsed; if any
+--     missing slot is present (null bitmap or NA string), returns
+--     'Nothing' so model fits cannot crash on missing data.
+--   * 'getTextVec'   — extract a Text column. Returns 'Nothing' on type
+--     mismatch.
 module DataIO.Convert
   ( getDoubleVec
   , getTextVec

@@ -1,18 +1,21 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
--- | 列単位のクリーニング DSL (Phase C)。
+-- | Column-level cleaning DSL.
 --
--- 通貨記号 / 桁区切り / 単位 / decimal point 違いなど、Phase A の Health
--- 検査では「警告止まり」だった列を、明示的なルール ('ColumnRule') で
--- 数値化する。
+-- Health checks ('DataIO.Health') only emit warnings for columns
+-- containing currency symbols, thousands separators, units, or alternate
+-- decimal points. This module turns each warning into an explicit rule
+-- ('ColumnRule') that converts the column into a numeric column.
 --
--- 設計方針
+-- Design notes:
 --
--- * 各ルールは「Text 列を取り出す → 変換 → DXD.DataFrame に書き戻す」の
---   形を取り、変換ログ ('LogReport') を必ず返す。
--- * 変換に失敗したセルは 'Nothing' (= null bitmap) として保存。
---   失敗件数は I100 系の Info コードでログに残す。
--- * パイプライン ('cleanPipeline') で複数ルールを順次適用できる。
+--   * Each rule has the shape "extract a Text column → transform →
+--     write back into the DataFrame", and always returns a transformation
+--     log ('LogReport').
+--   * Cells that fail to convert are stored as 'Nothing' (the null
+--     bitmap). The number of failures is recorded as I100-series Info
+--     codes in the log.
+--   * 'cleanPipeline' applies multiple rules in sequence.
 -- * Phase B の自動推論との二段構え: sniff で読み込みは通るがセル値が
 --   text のままになる #08 / #16 を、Clean で数値化して回帰可能にする。
 --

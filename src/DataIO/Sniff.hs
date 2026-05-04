@@ -1,17 +1,19 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | CSV 冒頭 8 KB を読み、delimiter / コメント行 / ヘッダ有無 / NA 候補
--- などを **自動推論** する。Phase A の `LoadOpts` がユーザの明示指定だった
--- のに対し、Phase B の `Sniff` は「未指定なら推測する」レイヤを足す。
+-- | Auto-detect a CSV's delimiter, comment lines, presence of header,
+-- and NA candidates by inspecting the first 8 KB. While 'LoadOpts' lets
+-- the user state these explicitly, this module adds a layer that guesses
+-- when nothing is specified.
 --
--- 設計方針:
+-- Design notes:
 --
--- - 8 KB を超えるファイルでも先頭だけ見れば判別できる前提 (大量データを
---   ストリーム処理しない)。
--- - 推論結果は 'Sniff' レコードに集約し、根拠 (各 delimiter 候補のスコア
---   など) は 'sfNotes' に保持して LogReport に Info コードで出す。
--- - 厳密判定とは別レイヤで使われ、推論ミスを許容するため `--no-sniff` で
---   完全に切れる、`--strict` で不一致を error 化できる、という方針を取る
---   (実際の組み込みは Phase B2 で `loadAutoSafeWith` 側に行う)。
+--   * 8 KB is assumed to be enough to decide structure (we don't stream
+--     huge files).
+--   * Inference results live in a 'Sniff' record. Supporting evidence
+--     (per-delimiter scores etc.) is recorded in 'sfNotes' and emitted
+--     as Info codes through 'LogReport'.
+--   * Sniffing is best-effort and decoupled from the strict path: users
+--     can disable it entirely with @--no-sniff@, or escalate any
+--     mismatch to an error with @--strict@.
 module DataIO.Sniff
   ( -- * 型
     Sniff (..)

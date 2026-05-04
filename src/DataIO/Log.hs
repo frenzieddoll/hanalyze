@@ -1,10 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | データ読込・前処理時の警告 / 情報メッセージを構造化して扱う共通基盤。
+-- | Structured warning / informational messaging shared by data loaders
+-- and preprocessing.
 --
--- - 'LogEntry' は重要度・コード・本文・ヒントを持つ 1 件のメッセージ。
--- - 'LogReport' は 'LogEntry' のモノイド (リストラッパ)。
--- - 'Loaded' で「値 + ログ」のペアを表す (loader が共通に返す形)。
--- - 'printLogReport' は stdout 用、'logEntriesAsHtml' は ReportBuilder 連携用。
+--   * 'LogEntry'        — a single message (severity / code / body / hint).
+--   * 'LogReport'       — a 'Monoid' wrapper around @[LogEntry]@.
+--   * 'Loaded'          — the @(value, log)@ pair returned by every loader.
+--   * 'printLogReport'  — stdout pretty printer.
+--   * 'logEntriesAsHtml' — adapter for 'Viz.ReportBuilder'.
 --
 -- 利用シナリオ:
 --

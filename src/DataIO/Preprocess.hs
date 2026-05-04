@@ -2,12 +2,12 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
--- | Hackage @dataframe@ ベースのデータ前処理ヘルパ。
+-- | Data-preprocessing helpers built on Hackage's @dataframe@.
 --
--- Phase 1 で独自 'DataFrame.Core' から Hackage 'DataFrame.DataFrame'
--- (本モジュールでは @DXD.DataFrame@) に全面切替された。
+-- All operations consume and produce 'DXD.DataFrame'.
 --
--- - 欠損値の検出 / 除去 / 補完 (mean / median / 定数)
+--   * Missing-value detection, removal, and imputation
+--     (mean / median / constant).
 -- - 列の選択 / 削除 / リネーム
 -- - 行のフィルタリング
 -- - 派生列の計算 (mapNumeric / deriveNumeric / deriveText)

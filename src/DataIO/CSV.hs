@@ -1,11 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | CSV / TSV / SSV ローダ。Phase 2 以降は Hackage @dataframe@ の
--- 'DataFrame.Internal.DataFrame.DataFrame' を直接返す。
+-- | CSV / TSV / SSV loaders that return Hackage @dataframe@'s
+-- 'DataFrame.Internal.DataFrame.DataFrame' directly.
 --
--- - CSV / TSV: Hackage の 'DX.readCsv' / 'DX.readTsv' に委譲 (型推論強化、
---   欠損ビットマップ対応)。
--- - SSV: Hackage に専用ローダが無いため cassava で読みつつ、各列を
---   'DX.fromList' で 'DX.Column' 化、'DX.insertColumn' で組み立てる。
+--   * CSV / TSV — delegated to Hackage's 'DX.readCsv' / 'DX.readTsv'
+--     (improved type inference, missing-bitmap support).
+--   * SSV       — Hackage has no dedicated loader, so we read with
+--     @cassava@ and assemble columns via 'DX.fromList' /
+--     'DX.insertColumn'.
 module DataIO.CSV
   ( loadCSV
   , loadTSV

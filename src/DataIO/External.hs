@@ -1,11 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | 外部データフォーマット (Parquet / JSON) を Hackage の @dataframe@
--- ライブラリ経由で読み込む。
+-- | External data-format loaders (Parquet / JSON) via the Hackage
+-- @dataframe@ library.
 --
--- Phase 2 で旧ラッパー API (loadCSVExt / loadTSVExt / loadCsvX / loadTsvX /
--- loadParquetX / loadJsonX / fromExternalDF / 内部 'DataFrame.Core' 変換)
--- は撤廃し、Hackage 'DataFrame.Internal.DataFrame.DataFrame' を直接返す経路
--- に統一した。CSV / TSV は 'DataIO.CSV.loadCSV' / 'loadTSV' を利用する。
+-- Returns Hackage's 'DataFrame.Internal.DataFrame.DataFrame' directly.
+-- For CSV and TSV use 'DataIO.CSV.loadCSV' / 'loadTSV' instead.
 module DataIO.External
   ( loadParquet
   , loadJSON
