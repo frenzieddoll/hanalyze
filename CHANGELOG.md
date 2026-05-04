@@ -7,6 +7,16 @@ and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
 
 ## [Unreleased]
 
+### Release engineering
+- `cabal sdist` and `cabal haddock --haddock-for-hackage` both succeed
+  cleanly (`cabal check` reports no errors or warnings). Hackage candidate
+  upload is left as a manual step:
+  ```
+  cabal upload dist-newstyle/sdist/hanalyze-0.1.0.0.tar.gz                 # candidate
+  cabal upload --documentation dist-newstyle/hanalyze-0.1.0.0-docs.tar.gz   # candidate docs
+  cabal upload --publish dist-newstyle/sdist/hanalyze-0.1.0.0.tar.gz       # final
+  ```
+
 ### Documentation
 - Added Haddock `>>>` examples to a curated set of pure helpers
   (`Stat.Interpolate.interp1d`, `Stat.AdaptiveGrid.uniformGrid`,
