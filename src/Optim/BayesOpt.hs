@@ -34,14 +34,17 @@ import qualified Optim.LineSearch as LS
 import qualified Optim.LBFGS      as LBFGS
 import qualified Optim.Common     as OC
 
+-- | Bayesian Optimization configuration.
 data BayesOptConfig = BayesOptConfig
-  { boIterations :: Int        -- 評価予算 (初期点除く)
-  , boInitPoints :: Int        -- 初期 LHS の点数
-  , boKernel     :: Kernel
-  , boUCBBeta    :: Double     -- UCB の β
-  , boGridSize   :: Int        -- 内側最適化のグリッド密度 (1D 用)
+  { boIterations :: Int        -- ^ Evaluation budget (excluding initial points).
+  , boInitPoints :: Int        -- ^ Number of initial sample points.
+  , boKernel     :: Kernel     -- ^ GP kernel.
+  , boUCBBeta    :: Double     -- ^ @β@ for UCB.
+  , boGridSize   :: Int        -- ^ Inner-optimization grid density (1D).
   } deriving (Show)
 
+-- | Default configuration: 30 iterations, 5 initial points, RBF kernel,
+-- @β = 2.0@ for UCB, grid size 200 for 1D inner optimization.
 defaultBayesOptConfig :: BayesOptConfig
 defaultBayesOptConfig = BayesOptConfig
   { boIterations = 30
@@ -51,17 +54,13 @@ defaultBayesOptConfig = BayesOptConfig
   , boGridSize   = 200
   }
 
--- | 単一目的 Bayesian Optimization (1D 限定の簡易版)。
+-- | Single-objective Bayesian Optimization (1D simplified entry point).
 --
--- 引数:
---   * cfg
---   * f: 目的関数 (1D, 最小化)
---   * (lo, hi): 探索範囲
---
--- 戻り値: (全観測 [(x, y)], 最良 (x*, y*))
+-- Returns @(observations, best)@: the full @(x, y)@ history and the best
+-- @(x*, y*)@.
 bayesOpt :: BayesOptConfig
-         -> (Double -> IO Double)
-         -> (Double, Double)
+         -> (Double -> IO Double)   -- ^ Objective (1D, minimized).
+         -> (Double, Double)        -- ^ Search bounds.
          -> GenIO
          -> IO ([(Double, Double)], (Double, Double))
 bayesOpt cfg f (lo, hi) gen = do
@@ -128,7 +127,7 @@ bayesOpt cfg f (lo, hi) gen = do
                             , y == minimum (map snd finalHist)]
   return (finalHist, bestPair)
 
--- | N 次元単目的 Bayesian Optimization。
+-- | N-dimensional single-objective Bayesian Optimization.
 -- 内側 acquisition 最大化を **L-BFGS multi-start** で行う:
 -- bounds 範囲内で nStarts 個の初期点を一様乱数で生成、各点から L-BFGS で
 -- 負 EI を最小化、最良点を採用。
@@ -188,7 +187,7 @@ bayesOptND cfg nStarts f bounds gen = do
   let bestPair = minimumBy (comparing snd) finalHist
   return (finalHist, bestPair)
 
--- | 多目的 BO の **scalarization 版** (ParEGO 風)。
+-- | Multi-objective BO using **scalarization** (ParEGO-style).
 -- 各反復で random 重み w で Tchebycheff scalarize し、単目的 BO の 1 ステップ
 -- (L-BFGS multi-start で acquisition 最大化) を実行する。
 -- NSGA 版より高速、acquisition 計算コストが軽い問題に向く。
@@ -269,22 +268,22 @@ argmax xs = snd (maximum (zip xs [0..]))
 -- 多目的 BO with NSGA-II (Phase V4)
 -- ---------------------------------------------------------------------------
 
--- | 多目的 BO の簡易版: 各観測点を NSGA-II で acquisition 関数値を
--- 多目的最適化することで提案する。
+-- | Multi-objective BO using NSGA-II to optimize the acquisition function.
 --
--- 内部で MultiGP を fit し、各目的の (μ, σ) を予測。
--- NSGA-II で「(目的 1 の μ, 目的 2 の μ, ...) の Pareto front」を求め、
--- そこから 1 点を選んで評価。
+-- Internally fits a 'MultiGP' to obtain per-objective @(μ, σ)@, then
+-- runs NSGA-II to find the Pareto front in @(μ_1, μ_2, ...)@ space; one
+-- point from that front is chosen and evaluated.
 --
--- ※ シンプルな実装。EHVI ベースのより洗練された方式は将来拡張。
+-- A deliberately simple implementation; an EHVI-based variant is left
+-- for future extension.
 bayesOptMOWithNSGA
-  :: Int                                -- イテレーション数
-  -> Int                                -- 初期点
+  :: Int                                -- ^ Number of BO iterations.
+  -> Int                                -- ^ Number of initial samples.
   -> Kernel
-  -> ([Double] -> IO [Double])          -- 多目的関数
+  -> ([Double] -> IO [Double])          -- ^ Multi-objective function.
   -> Bounds
   -> GenIO
-  -> IO [([Double], [Double])]          -- (x, y) の系列
+  -> IO [([Double], [Double])]          -- ^ Sequence of @(x, y)@ pairs.
 bayesOptMOWithNSGA nIter nInit kern f bounds gen = do
   -- 初期点
   initX <- replicateM nInit (do

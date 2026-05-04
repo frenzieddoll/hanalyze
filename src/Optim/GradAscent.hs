@@ -18,13 +18,15 @@ module Optim.GradAscent
   , gradientDescent
   ) where
 
+-- | Configuration for gradient ascent / descent.
 data GradConfig = GradConfig
-  { gradIterations  :: Int     -- ^ 最大反復数
-  , gradLearningRate :: Double  -- ^ 初期学習率
-  , gradDecay       :: Double  -- ^ 反復ごとの学習率減衰率 (例: 0.995)
-  , gradTolerance   :: Double  -- ^ 早期終了の勾配ノルム閾値
+  { gradIterations   :: Int     -- ^ Maximum number of iterations.
+  , gradLearningRate :: Double  -- ^ Initial learning rate.
+  , gradDecay        :: Double  -- ^ Per-iteration learning-rate decay (e.g. 0.995).
+  , gradTolerance    :: Double  -- ^ Early-stop threshold on gradient norm.
   } deriving (Show)
 
+-- | Default configuration: 400 iterations, lr 0.1, decay 0.995, tol 1e-8.
 defaultGradConfig :: GradConfig
 defaultGradConfig = GradConfig
   { gradIterations  = 400
@@ -33,14 +35,14 @@ defaultGradConfig = GradConfig
   , gradTolerance   = 1e-8
   }
 
--- | 勾配上昇法 (目的関数の勾配を渡す → 最大化)。
+-- | Gradient ascent. Pass the gradient of the objective to maximize it.
 --
--- @gradFn x@ が現在地での勾配を返す。各反復で:
+-- @gradFn x@ returns the gradient at the current point. Each iteration:
 --
--- 1. 勾配 g を計算
--- 2. \|g\| < tol なら終了
--- 3. x ← x + lr × g/|g|   (正規化勾配で安定化)
--- 4. lr ← lr × decay
+--   1. Compute the gradient @g@.
+--   2. Stop when @|g| < tol@.
+--   3. @x ← x + lr × g/|g|@ (normalized for stability).
+--   4. @lr ← lr × decay@.
 gradientAscent :: GradConfig -> ([Double] -> [Double]) -> [Double] -> [Double]
 gradientAscent cfg gradFn = go (gradIterations cfg) (gradLearningRate cfg)
   where
@@ -54,6 +56,7 @@ gradientAscent cfg gradFn = go (gradIterations cfg) (gradLearningRate cfg)
              let x' = zipWith (\xi gi -> xi + lr * gi / gnorm) x g
              in go (itr - 1) (lr * gradDecay cfg) x'
 
--- | 勾配下降法。'gradientAscent' で勾配の符号を反転して使う。
+-- | Gradient descent. Negates the gradient and delegates to
+-- 'gradientAscent'.
 gradientDescent :: GradConfig -> ([Double] -> [Double]) -> [Double] -> [Double]
 gradientDescent cfg gradFn = gradientAscent cfg (map negate . gradFn)

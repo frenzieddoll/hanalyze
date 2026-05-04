@@ -22,21 +22,22 @@ module Optim.LineSearch
 
 import Optim.Common
 
--- | 黄金比 φ。
+-- | The golden ratio @φ@.
 phi :: Double
 phi = (1 + sqrt 5) / 2
 
--- | 1 - 1/φ ≈ 0.382 (黄金分割の縮小比)。
+-- | @1 − 1/φ ≈ 0.382@ — the golden-section shrink ratio.
 gold :: Double
 gold = (3 - sqrt 5) / 2
 
--- | Brent 設定。
+-- | Brent configuration.
 data BrentConfig = BrentConfig
-  { bcMaxIter :: !Int
-  , bcTol     :: !Double      -- ^ 相対許容、最終区間幅の目安
-  , bcDir     :: !Direction
+  { bcMaxIter :: !Int        -- ^ Maximum iterations.
+  , bcTol     :: !Double     -- ^ Relative tolerance (target final bracket width).
+  , bcDir     :: !Direction  -- ^ Optimization direction.
   } deriving (Show, Eq)
 
+-- | Default Brent configuration: 200 iterations, tolerance 1e-8, minimization.
 defaultBrentConfig :: BrentConfig
 defaultBrentConfig = BrentConfig
   { bcMaxIter = 200
@@ -44,18 +45,18 @@ defaultBrentConfig = BrentConfig
   , bcDir     = Minimize
   }
 
--- | 黄金分割探索。
+-- | Golden-section search.
 --
--- 仕様: 区間 [a, b] が単峰 (内部に唯一の最小) と仮定。
--- 4 点 a < c < d < b を維持し、c = a + gold*(b-a), d = b - gold*(b-a)
--- (gold = 1 - 1/φ ≈ 0.382)。各反復で区間を 1/φ ≈ 0.618 倍に縮小、
--- 1 反復あたり関数評価 1 回。
+-- Assumes @[a, b]@ is unimodal (a single interior minimum). Maintains four
+-- points @a < c < d < b@ with @c = a + gold·(b-a)@, @d = b - gold·(b-a)@
+-- (@gold ≈ 0.382@). Each iteration shrinks the interval by @1/φ ≈ 0.618@
+-- with one new function evaluation.
 goldenSection :: Direction
-              -> ([Double] -> Double)   -- ^ 1D だが [Double] で受ける (1 要素)
-              -> Double                  -- ^ a
-              -> Double                  -- ^ b
-              -> Double                  -- ^ tol
-              -> Int                     -- ^ maxIter
+              -> ([Double] -> Double)    -- ^ Objective; @1D@ wrapped in a one-element list.
+              -> Double                  -- ^ Bracket left @a@.
+              -> Double                  -- ^ Bracket right @b@.
+              -> Double                  -- ^ Tolerance.
+              -> Int                     -- ^ Maximum iterations.
               -> OptimResult
 goldenSection dir fUser a0 b0 tol maxIter =
   let f x = flipFor dir fUser [x]
@@ -92,13 +93,15 @@ goldenSection dir fUser a0 b0 tol maxIter =
       histU = case dir of { Minimize -> reverse hist; Maximize -> map negate (reverse hist) }
   in OptimResult [xb] vUser histU iters conv
 
--- | Brent's method (放物線補間 + 黄金分割の hybrid)。
+-- | Brent's method: a hybrid of parabolic interpolation and
+-- golden-section search.
 --
--- Numerical Recipes / scipy.optimize.brent 互換のシンプル実装。
+-- Compatible with the simple form found in Numerical Recipes and
+-- @scipy.optimize.brent@.
 brent :: BrentConfig
       -> ([Double] -> Double)
-      -> Double                 -- ^ a
-      -> Double                 -- ^ b
+      -> Double                 -- ^ Bracket left @a@.
+      -> Double                 -- ^ Bracket right @b@.
       -> OptimResult
 brent cfg fUser ax bx =
   let f x = flipFor (bcDir cfg) fUser [x]
@@ -169,15 +172,16 @@ loopBrent cfg f a b x w v fx fw fv iter e hist
           dG = gold * eG
       in (dG, eG)
 
--- | 入口探索: f(c) < f(a), f(c) < f(b) を満たす (a, c, b) を見つける。
--- 単純な拡張アルゴリズム (Numerical Recipes mnbrak 簡易版)。
+-- | Bracket search: find @(a, c, b)@ such that @f(c) < f(a)@ and
+-- @f(c) < f(b)@.
 --
--- 戻り値: (a, b) — c は内部で発見し、bracket が成立する区間幅を返す。
--- bracket できなければ Nothing。
+-- A simple expanding scan (a slimmed-down @mnbrak@ from Numerical
+-- Recipes). Returns 'Nothing' if no bracket is found.
 bracketMinimum :: ([Double] -> Double)
-               -> Double               -- ^ 初期 a
-               -> Double               -- ^ 初期 b
-               -> Maybe (Double, Double, Double)  -- (a, c, b) with f(c) < f(a),f(b)
+               -> Double               -- ^ Initial @a@.
+               -> Double               -- ^ Initial @b@.
+               -> Maybe (Double, Double, Double)
+                                       -- ^ @(a, c, b)@ with @f(c) < f(a), f(b)@.
 bracketMinimum fUser a0 b0 =
   let f x = fUser [x]
       step = (b0 - a0) * 0.5

@@ -27,17 +27,23 @@ import qualified Numeric.LinearAlgebra as LA
 import Control.Monad (replicateM, forM)
 import Optim.Common
 
--- | CMA-ES (フルランク) 設定。
+-- | Configuration for full-rank CMA-ES.
 data CMAESFConfig = CMAESFConfig
   { cmfStop    :: !StopCriteria
-  , cmfSigma0  :: !Double          -- ^ 初期ステップ幅 σ
-  , cmfLambda  :: !(Maybe Int)     -- ^ 集団サイズ λ (Nothing なら 4 + ⌊3 ln n⌋)
+  , cmfSigma0  :: !Double          -- ^ Initial step size @σ@.
+  , cmfLambda  :: !(Maybe Int)     -- ^ Population size @λ@ (defaults to
+                                   --   @4 + ⌊3 ln n⌋@ when 'Nothing').
   , cmfDir     :: !Direction
-  , cmfBounds  :: !(Maybe Bounds)  -- ^ box 制約 (任意)。サンプル x を範囲内へ
-                                    --   反射 (clipToBounds) してから評価。
-                                    --   y (= (x-m)/σ) は元のまま保持し共分散更新を歪めない
+  , cmfBounds  :: !(Maybe Bounds)  -- ^ Optional box constraints. Each
+                                   --   sampled @x@ is reflected with
+                                   --   'clipToBounds' /before/ being
+                                   --   evaluated; @y = (x-m)/σ@ is left
+                                   --   untouched so the covariance
+                                   --   update is not distorted.
   } deriving (Show, Eq)
 
+-- | Default configuration: 200 iterations, @σ₀ = 0.5@, default @λ@,
+-- minimization, no bounds.
 defaultCMAESFConfig :: CMAESFConfig
 defaultCMAESFConfig = CMAESFConfig
   { cmfStop   = defaultStopCriteria { stMaxIter = 200, stTolFun = 1e-12 }
@@ -47,14 +53,14 @@ defaultCMAESFConfig = CMAESFConfig
   , cmfBounds = Nothing
   }
 
--- | 既定設定で実行。
+-- | Run full-rank CMA-ES with the default configuration.
 runCMAESFull :: ([Double] -> Double)
-             -> [Double]
+             -> [Double]              -- ^ Initial mean @m₀@.
              -> MWC.GenIO
              -> IO OptimResult
 runCMAESFull = runCMAESFullWith defaultCMAESFConfig
 
--- | 設定指定で実行。
+-- | Run full-rank CMA-ES with a user-specified configuration.
 runCMAESFullWith :: CMAESFConfig
                  -> ([Double] -> Double)
                  -> [Double]

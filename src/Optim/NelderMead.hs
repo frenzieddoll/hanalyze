@@ -22,25 +22,29 @@ import Data.List (sortBy)
 import Data.Ord (comparing)
 import Optim.Common
 
--- | Nelder-Mead 設定。
+-- | Nelder-Mead configuration.
 --
--- 標準パラメタ:
--- - 反射  ρ = 1.0
--- - 拡張  χ = 2.0
--- - 内縮小 γc = 0.5
--- - 全縮小 σ = 0.5
+-- Standard parameters:
+--
+--   * Reflection      @ρ = 1.0@
+--   * Expansion       @χ = 2.0@
+--   * Contraction     @γ = 0.5@
+--   * Shrink          @σ = 0.5@
 data NMConfig = NMConfig
-  { nmStop   :: !StopCriteria
-  , nmInitStep :: !Double      -- ^ 初期単体のステップ幅 (各軸方向)
-  , nmRho    :: !Double        -- ^ 反射係数 ρ
-  , nmChi    :: !Double        -- ^ 拡張係数 χ
-  , nmGamma  :: !Double        -- ^ 縮小係数 γ
-  , nmSigma  :: !Double        -- ^ 全体縮小係数 σ
-  , nmDir    :: !Direction
-  , nmBounds :: !(Maybe Bounds)  -- ^ box 制約 (任意)。指定時は目的関数に
-                                  --   `boundsPenalty` を加算する soft penalty 方式
+  { nmStop     :: !StopCriteria
+  , nmInitStep :: !Double      -- ^ Initial simplex step (per axis).
+  , nmRho      :: !Double      -- ^ Reflection coefficient @ρ@.
+  , nmChi      :: !Double      -- ^ Expansion coefficient @χ@.
+  , nmGamma    :: !Double      -- ^ Contraction coefficient @γ@.
+  , nmSigma    :: !Double      -- ^ Shrink coefficient @σ@.
+  , nmDir      :: !Direction
+  , nmBounds   :: !(Maybe Bounds)  -- ^ Optional box constraints; when set,
+                                   --   adds 'boundsPenalty' to the objective
+                                   --   (soft-penalty enforcement).
   } deriving (Show, Eq)
 
+-- | Default configuration: standard parameters, minimization, no bounds,
+-- step 0.5, default 'StopCriteria'.
 defaultNMConfig :: NMConfig
 defaultNMConfig = NMConfig
   { nmStop     = defaultStopCriteria
@@ -53,13 +57,13 @@ defaultNMConfig = NMConfig
   , nmBounds   = Nothing
   }
 
--- | 既定設定で実行。
-runNelderMead :: ([Double] -> Double)   -- ^ 目的関数
-              -> [Double]                -- ^ 初期点 x0
+-- | Run Nelder-Mead with the default configuration.
+runNelderMead :: ([Double] -> Double)   -- ^ Objective function.
+              -> [Double]                -- ^ Initial point @x₀@.
               -> IO OptimResult
 runNelderMead = runNelderMeadWith defaultNMConfig
 
--- | 設定を指定して実行。
+-- | Run Nelder-Mead with a user-specified configuration.
 runNelderMeadWith :: NMConfig
                   -> ([Double] -> Double)
                   -> [Double]

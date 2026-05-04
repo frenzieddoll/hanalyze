@@ -49,26 +49,31 @@ import qualified Optim.Common as OC
 -- 型
 -- ---------------------------------------------------------------------------
 
--- | 各次元の探索範囲 (lo, hi)。`Optim.Common.Bounds` の再エクスポート。
+-- | Per-dimension @(lo, hi)@ bounds. Re-exported from 'Optim.Common.Bounds'.
 type Bounds = OC.Bounds
 
--- | 個体: 決定変数 + 評価結果 (目的関数値ベクトル) + 制約違反量。
+-- | An individual: decision variables, objective-value vector, and
+-- constraint violation.
 data Solution = Solution
-  { solDecision   :: [Double]   -- ^ 決定変数 (長さ d)
-  , solObjectives :: [Double]   -- ^ 目的関数値 (長さ m)、すべて最小化問題として扱う
-  , solViolation  :: Double     -- ^ 制約違反量 (0 = 実行可能、>0 = 違反)
+  { solDecision   :: [Double]   -- ^ Decision vector (length @d@).
+  , solObjectives :: [Double]   -- ^ Objective values (length @m@); all
+                                --   objectives are treated as minimized.
+  , solViolation  :: Double     -- ^ Constraint violation (0 = feasible,
+                                --   @> 0@ = violated).
   } deriving (Show, Eq)
 
--- | NSGA-II の設定。
+-- | NSGA-II configuration.
 data NSGAConfig = NSGAConfig
-  { nsgaPopSize     :: Int       -- ^ 母集団サイズ N (偶数推奨)
-  , nsgaGenerations :: Int       -- ^ 世代数 T
-  , nsgaCrossoverP  :: Double    -- ^ 交叉確率 p_c (default 0.9)
-  , nsgaMutationP   :: Maybe Double  -- ^ 突然変異確率 (Nothing = 1/d)
-  , nsgaEtaCross    :: Double    -- ^ SBX の分布指数 η_c (default 15)
-  , nsgaEtaMut      :: Double    -- ^ Polynomial mutation の η_m (default 20)
+  { nsgaPopSize     :: Int            -- ^ Population size @N@ (prefer even).
+  , nsgaGenerations :: Int            -- ^ Number of generations @T@.
+  , nsgaCrossoverP  :: Double         -- ^ Crossover probability @p_c@ (default 0.9).
+  , nsgaMutationP   :: Maybe Double   -- ^ Mutation probability ('Nothing' uses @1/d@).
+  , nsgaEtaCross    :: Double         -- ^ SBX distribution index @η_c@ (default 15).
+  , nsgaEtaMut      :: Double         -- ^ Polynomial-mutation @η_m@ (default 20).
   } deriving (Show)
 
+-- | Default configuration: population 100, 200 generations, @p_c = 0.9@,
+-- mutation @1/d@, @η_c = 15@, @η_m = 20@.
 defaultNSGAConfig :: NSGAConfig
 defaultNSGAConfig = NSGAConfig
   { nsgaPopSize     = 100
@@ -83,26 +88,29 @@ defaultNSGAConfig = NSGAConfig
 -- API (実装は Phase S で行う)
 -- ---------------------------------------------------------------------------
 
--- | NSGA-II 本体。`objFun` は決定変数を受け取り目的関数値ベクトルを返す。
--- 戻り値は最終世代の Pareto 近似 front (= rank 0 の個体集合)。
+-- | NSGA-II main entry point. The user-supplied function maps a decision
+-- vector to an objective vector. Returns the final generation's Pareto
+-- approximation (= rank-0 individuals).
 --
--- 制約なし版。制約付きには 'nsga2WithConstraints' を使う。
+-- This is the unconstrained variant; for constraints use
+-- 'nsga2WithConstraints'.
 nsga2 :: NSGAConfig
-      -> ([Double] -> [Double])  -- ^ 目的関数 (m 次元出力)
-      -> Bounds                  -- ^ 探索範囲 (d 次元)
+      -> ([Double] -> [Double])  -- ^ Objective function (@m@-dimensional output).
+      -> Bounds                  -- ^ Search bounds (@d@ dimensions).
       -> GenIO
       -> IO [Solution]
 nsga2 cfg f bounds gen =
   nsga2WithConstraints cfg f (const 0) bounds gen
 
--- | 制約付き NSGA-II。`constrFun` は決定変数を受け取り、制約違反量を返す
--- (0 = 実行可能、>0 = 違反量)。複数の制約 g_i(x) ≤ 0 がある場合は
--- @sum [max 0 (g_i x)]@ などで集約して渡す。
+-- | Constrained NSGA-II. The constraint function maps a decision vector
+-- to a /violation amount/ (@0@ = feasible, @> 0@ = violated). When there
+-- are multiple constraints @g_i(x) ≤ 0@, aggregate them via e.g.
+-- @sum [max 0 (g_i x)]@.
 nsga2WithConstraints
   :: NSGAConfig
-  -> ([Double] -> [Double])    -- 目的関数 (m 次元)
-  -> ([Double] -> Double)      -- 制約違反量 (≥ 0、0 = feasible)
-  -> Bounds                    -- 探索範囲 (d 次元)
+  -> ([Double] -> [Double])    -- ^ Objective function (@m@ dimensions).
+  -> ([Double] -> Double)      -- ^ Constraint violation (@≥ 0@; @0@ = feasible).
+  -> Bounds                    -- ^ Search bounds (@d@ dimensions).
   -> GenIO
   -> IO [Solution]
 nsga2WithConstraints cfg f cFn bounds gen = do
@@ -129,7 +137,8 @@ nsga2WithConstraints cfg f cFn bounds gen = do
     (front : _) -> return front
     []          -> return []
 
--- | 決定変数 x から Solution を作る (目的関数 + 制約評価)。
+-- | Build a 'Solution' from a decision vector by evaluating both the
+-- objective and the constraint function.
 evaluateSolution :: ([Double] -> [Double])
                  -> ([Double] -> Double)
                  -> [Double]
@@ -259,7 +268,8 @@ selectTopN n (fr : rest)
           remaining = n - length fr
       in fr' ++ selectTopN remaining rest
 
--- | 個体 a が個体 b を **支配** するか (制約付き Pareto dominance)。
+-- | Does individual @a@ /dominate/ @b@ under constrained Pareto
+-- dominance?
 --
 -- 制約 (Deb 2000 "constrained-domination"):
 --   1. a が実行可能 (violation = 0) かつ b が不実行可能 → a が支配
@@ -276,8 +286,8 @@ dominates a b
     va = solViolation a
     vb = solViolation b
 
--- | 通常の (制約無視) Pareto dominance: a dominates b ⇔
--- ∀ i: aᵢ ≤ bᵢ かつ ∃ j: aⱼ < bⱼ。
+-- | Standard (constraint-free) Pareto dominance: @a@ dominates @b@ iff
+-- @∀ i: aᵢ ≤ bᵢ@ and @∃ j: aⱼ < bⱼ@.
 paretoDominates :: [Double] -> [Double] -> Bool
 paretoDominates as bs =
   all (\(x, y) -> x <= y) zipped
@@ -285,7 +295,8 @@ paretoDominates as bs =
   where
     zipped = zip as bs
 
--- | 非優越ソート (Deb 2002 fast nondominated sort)。
+-- | Fast non-dominated sort (Deb 2002): partitions the population into
+-- ranked Pareto fronts.
 -- 母集団を Pareto front に分割: F_1 (最も非優越), F_2, ...
 --
 -- アルゴリズム (O(MN²)):
@@ -340,7 +351,8 @@ nonDominatedSort pop =
       idxFronts = go front1 [] initialCounts
   in map (map (ps !!)) idxFronts
 
--- | 各 front 内で crowding distance (Deb 2002) を計算し、距離降順にソート。
+-- | Compute the crowding distance (Deb 2002) inside a front and sort it
+-- by descending distance.
 --
 -- アルゴリズム (O(MN log N)):
 --
@@ -398,7 +410,8 @@ crowdingDistance front
 -- 遺伝的演算子 (Phase S3)
 -- ---------------------------------------------------------------------------
 
--- | SBX (Simulated Binary Crossover, Deb 1995)。
+-- | Simulated Binary Crossover (SBX, Deb 1995). A real-coded analogue of
+-- single-point crossover for binary GAs.
 --
 -- 2 親 (p1, p2) から 2 子 (c1, c2) を生成。各次元独立に:
 --
@@ -439,7 +452,7 @@ sbxOneVar etaC gen (lo, hi) (a, b) = do
           clip x = min hi (max lo x)
       return (clip c1, clip c2)
 
--- | Polynomial mutation (Deb & Goyal 1996)。
+-- | Polynomial mutation (Deb & Goyal 1996).
 --
 -- 各次元独立に確率 @pMut@ で:
 --
@@ -471,12 +484,13 @@ mutateOneVar etaM pMut gen (lo, hi) x = do
           y = x + dq * (hi - lo)
       return (min hi (max lo y))
 
--- | 各次元の範囲から uniform にランダムドロー (初期母集団生成用)。
--- `Optim.Common.sampleUniformIn` の thin wrapper (後方互換のため残置)。
+-- | Sample one decision vector uniformly from the bounds (used for the
+-- initial population). Thin wrapper around 'Optim.Common.sampleUniformIn',
+-- kept for backwards compatibility.
 randomInBounds :: Bounds -> GenIO -> IO [Double]
 randomInBounds = OC.sampleUniformIn
 
--- | NSGA-II の crowded comparison operator:
+-- | NSGA-II's crowded-comparison operator:
 --   1. rank が低い (front 番号小) 方が良い
 --   2. rank 同じなら crowding distance 大が良い
 --

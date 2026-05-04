@@ -25,16 +25,19 @@ import qualified Optim.Numeric as ON
 -- | L-BFGS 設定。
 data LBFGSConfig = LBFGSConfig
   { lbStop    :: !StopCriteria
-  , lbMemory  :: !Int        -- ^ 履歴ベクトル数 m (典型 5〜20)
-  , lbLSMax   :: !Int        -- ^ 線形探索最大反復
-  , lbLSC1    :: !Double     -- ^ Armijo 定数 c1 (典型 1e-4)
-  , lbLSShrink :: !Double    -- ^ backtracking 縮小率 (典型 0.5)
-  , lbDir     :: !Direction
-  , lbBounds  :: !(Maybe Bounds)  -- ^ box 制約 (任意)。指定時は f と ∇f に
-                                   --   `boundsPenalty` の二次罰則を加算する
-                                   --   soft penalty 方式 (k=1e6)
+  , lbMemory   :: !Int        -- ^ History size @m@ (5–20 typical).
+  , lbLSMax    :: !Int        -- ^ Maximum line-search iterations.
+  , lbLSC1     :: !Double     -- ^ Armijo constant @c₁@ (1e-4 typical).
+  , lbLSShrink :: !Double     -- ^ Backtracking shrink rate (0.5 typical).
+  , lbDir      :: !Direction
+  , lbBounds   :: !(Maybe Bounds)  -- ^ Optional box constraints. When set,
+                                   --   adds a quadratic 'boundsPenalty'
+                                   --   (with @k = 10^6@) to both @f@ and
+                                   --   @∇f@ (soft-penalty enforcement).
   } deriving (Show, Eq)
 
+-- | Default L-BFGS configuration: 200 iterations, history 10, Armijo c1
+-- 1e-4, backtracking shrink 0.5, minimization, no bounds.
 defaultLBFGSConfig :: LBFGSConfig
 defaultLBFGSConfig = LBFGSConfig
   { lbStop     = defaultStopCriteria { stMaxIter = 200 }
@@ -46,11 +49,11 @@ defaultLBFGSConfig = LBFGSConfig
   , lbBounds   = Nothing
   }
 
--- | 解析勾配を渡す版。
+-- | Run L-BFGS with an explicit analytic gradient.
 runLBFGSWith :: LBFGSConfig
-             -> ([Double] -> Double)        -- f
-             -> ([Double] -> [Double])      -- ∇f
-             -> [Double]                    -- x0
+             -> ([Double] -> Double)        -- ^ Objective @f@.
+             -> ([Double] -> [Double])      -- ^ Gradient @∇f@.
+             -> [Double]                    -- ^ Initial point @x₀@.
              -> IO OptimResult
 runLBFGSWith cfg fUser gUser x0 =
   let mbs       = lbBounds cfg
@@ -88,14 +91,15 @@ runLBFGSWith cfg fUser gUser x0 =
        , orConverged = conv
        }
 
--- | 既定設定 + 解析勾配。
+-- | Run L-BFGS with the default configuration and an analytic gradient.
 runLBFGS :: ([Double] -> Double)
          -> ([Double] -> [Double])
          -> [Double]
          -> IO OptimResult
 runLBFGS = runLBFGSWith defaultLBFGSConfig
 
--- | 勾配を中央差分で自動計算する版。h=1e-5 既定。
+-- | Numeric-gradient variant: gradients are computed by central
+-- differences (@h = 1e-5@).
 runLBFGSNumeric :: LBFGSConfig
                 -> ([Double] -> Double)
                 -> [Double]

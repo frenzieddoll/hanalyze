@@ -31,19 +31,22 @@ import Control.Monad (forM, forM_)
 import Data.IORef
 import Optim.Common
 
--- | DE 設定。
+-- | DE configuration.
 --
--- F (mutation factor) と CR (crossover rate) は典型値。
--- 集団サイズは次元 D に対して 5×D〜10×D 程度を推奨。
+-- @F@ (mutation factor) and @CR@ (crossover rate) defaults are typical
+-- values. The population size should be roughly @5×D@ to @10×D@.
 data DEConfig = DEConfig
   { deStop      :: !StopCriteria
-  , dePopSize   :: !Int        -- ^ 集団サイズ N (典型 5*D 〜 10*D)
-  , deF         :: !Double     -- ^ mutation 係数 F (典型 0.5-0.8)
-  , deCR        :: !Double     -- ^ crossover 確率 CR (典型 0.7-0.9)
-  , deBounds    :: !Bounds                -- ^ 各次元 (lo, hi)、初期化と境界補正に使用
+  , dePopSize   :: !Int        -- ^ Population size @N@ (5×D – 10×D typical).
+  , deF         :: !Double     -- ^ Mutation factor @F@ (0.5–0.8 typical).
+  , deCR        :: !Double     -- ^ Crossover probability @CR@ (0.7–0.9 typical).
+  , deBounds    :: !Bounds     -- ^ Per-dimension @(lo, hi)@; used for both
+                               --   initialization and boundary reflection.
   , deDir       :: !Direction
   } deriving (Show, Eq)
 
+-- | Default configuration: 200 iterations, population @max(20, 10×D)@,
+-- @F = 0.7@, @CR = 0.9@, minimization.
 defaultDEConfig :: [(Double, Double)] -> DEConfig
 defaultDEConfig bs = DEConfig
   { deStop    = defaultStopCriteria { stMaxIter = 200 }
@@ -54,14 +57,14 @@ defaultDEConfig bs = DEConfig
   , deDir     = Minimize
   }
 
--- | 既定設定で実行。`bounds` から `defaultDEConfig` を構築。
-runDE :: [(Double, Double)]            -- ^ 各次元の探索範囲
-      -> ([Double] -> Double)          -- ^ 目的関数
+-- | Run DE with the default configuration built from @bounds@.
+runDE :: [(Double, Double)]            -- ^ Per-dimension bounds.
+      -> ([Double] -> Double)          -- ^ Objective.
       -> MWC.GenIO
       -> IO OptimResult
 runDE bounds f gen = runDEWith (defaultDEConfig bounds) f gen
 
--- | 設定を指定して実行。
+-- | Run DE with a user-supplied configuration.
 runDEWith :: DEConfig
           -> ([Double] -> Double)
           -> MWC.GenIO

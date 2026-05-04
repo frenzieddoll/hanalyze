@@ -17,14 +17,14 @@ module Optim.Desirability
   , overallDesirability
   ) where
 
--- | 望ましさの 3 種類。
+-- | The three desirability shapes.
 data DesirabilityType
-  = Maximize  Double Double  -- ^ 最大化: low (= 0), high (= 1) のしきい値
-  | Minimize  Double Double  -- ^ 最小化: high (= 0), low (= 1)
-  | Target    Double Double Double  -- ^ 目標値 t、許容範囲 [low, high]
+  = Maximize  Double Double          -- ^ Maximize: thresholds @low@ (→ 0) and @high@ (→ 1).
+  | Minimize  Double Double          -- ^ Minimize: thresholds @high@ (→ 0) and @low@ (→ 1).
+  | Target    Double Double Double   -- ^ Target value @t@ with allowed range @[low, high]@.
   deriving (Show, Eq)
 
--- | 個別 desirability d_j (y) を計算。
+-- | Compute the individual desirability @d_j(y)@.
 individualDesirability :: DesirabilityType -> Double -> Double
 individualDesirability dt y = case dt of
   Maximize lo hi
@@ -41,8 +41,10 @@ individualDesirability dt y = case dt of
     | y < t                   -> (y - lo) / (t - lo)
     | otherwise               -> (hi - y) / (hi - t)
 
--- | 総合 desirability D = (Π d_j)^(1/q)。
--- どれか 1 つでも 0 なら全体 0 (= 「許容外」を強く罰する)。
+-- | Overall desirability @D = (Π d_j)^(1/q)@.
+--
+-- Any single zero collapses @D@ to zero — out-of-range responses are
+-- strongly penalized.
 overallDesirability :: [DesirabilityType] -> [Double] -> Double
 overallDesirability dts ys
   | length dts /= length ys = 0

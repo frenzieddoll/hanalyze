@@ -32,24 +32,27 @@ module Optim.Constrained
 import qualified Optim.LBFGS  as LBFGS
 import qualified Optim.Common as OC
 
--- | 制約セット。
+-- | A set of constraints.
 --
--- 等式制約: g_i(x) = 0
--- 不等式制約: h_j(x) ≤ 0
+-- Equality constraints:   @g_i(x) = 0@.
+-- Inequality constraints: @h_j(x) ≤ 0@.
 data ConstraintSet = ConstraintSet
-  { csEq   :: ![[Double] -> Double]   -- ^ 等式制約 g_i (= 0 が満たすべき値)
-  , csIneq :: ![[Double] -> Double]   -- ^ 不等式制約 h_j (≤ 0)
+  { csEq   :: ![[Double] -> Double]   -- ^ Equality constraints @g_i@
+                                      --   (the satisfying value is 0).
+  , csIneq :: ![[Double] -> Double]   -- ^ Inequality constraints @h_j ≤ 0@.
   }
 
--- | Augmented Lagrangian の設定。
+-- | Augmented Lagrangian configuration.
 data ConstrainedConfig = ConstrainedConfig
-  { ccOuterIter :: !Int           -- ^ 外側反復数 (典型 10-30)
-  , ccRho0      :: !Double         -- ^ 初期罰則係数 ρ_0
-  , ccRhoGrowth :: !Double         -- ^ ρ の成長率 (典型 2.0-10.0)
-  , ccTolViol   :: !Double         -- ^ 制約違反 tolerance
-  , ccInnerStop :: !OC.StopCriteria   -- ^ 内側 LBFGS の停止基準
+  { ccOuterIter :: !Int                -- ^ Outer iterations (10–30 typical).
+  , ccRho0      :: !Double             -- ^ Initial penalty coefficient @ρ₀@.
+  , ccRhoGrowth :: !Double             -- ^ Growth rate for @ρ@ (2.0–10.0 typical).
+  , ccTolViol   :: !Double             -- ^ Constraint-violation tolerance.
+  , ccInnerStop :: !OC.StopCriteria    -- ^ Stop criteria for the inner L-BFGS solver.
   } deriving (Show, Eq)
 
+-- | Default configuration: 20 outer iterations, @ρ₀ = 1.0@, growth 5.0,
+-- violation tolerance 1e-6, inner solver capped at 200 iterations.
 defaultConstrainedConfig :: ConstrainedConfig
 defaultConstrainedConfig = ConstrainedConfig
   { ccOuterIter = 20
@@ -59,15 +62,15 @@ defaultConstrainedConfig = ConstrainedConfig
   , ccInnerStop = OC.defaultStopCriteria { OC.stMaxIter = 200 }
   }
 
--- | Augmented Lagrangian で制約付き最適化を解く。
+-- | Solve a constrained problem via the Augmented Lagrangian method.
 --
--- 戻り値: (最良 x, f(x), 制約違反ノルム)。
+-- Returns @(inner solver result, constraint-violation norm)@.
 runAugmentedLagrangian
   :: ConstrainedConfig
-  -> ([Double] -> Double)        -- ^ 目的関数 (最小化)
+  -> ([Double] -> Double)        -- ^ Objective (minimized).
   -> ConstraintSet
-  -> [Double]                     -- ^ 初期点
-  -> IO (OC.OptimResult, Double)  -- (内部 LBFGS の結果, 制約違反ノルム)
+  -> [Double]                     -- ^ Initial point.
+  -> IO (OC.OptimResult, Double)  -- ^ Inner L-BFGS result and violation norm.
 runAugmentedLagrangian cfg f cs x0 = do
   let neq    = length (csEq cs)
       nineq  = length (csIneq cs)
@@ -116,10 +119,12 @@ runAugmentedLagrangian cfg f cs x0 = do
           ineqV = sum [(max 0 (h xs))^(2::Int) | h <- csIneq cs]
       in sqrt (eqV + ineqV)
 
--- | box 制約 (各次元 lo_i ≤ x_i ≤ hi_i) を 2 本ずつの不等式制約 (≤ 0) に展開。
+-- | Expand box constraints (@lo_i ≤ x_i ≤ hi_i@) into two inequality
+-- constraints (@≤ 0@) per dimension.
 --
--- 各次元 i から `lo_i - x_i ≤ 0` (下限) と `x_i - hi_i ≤ 0` (上限) を生成。
--- 戻り値は @2 * length bs@ 本の `[Double] -> Double` リスト。
+-- For each dimension @i@ this emits @lo_i - x_i ≤ 0@ (lower bound) and
+-- @x_i - hi_i ≤ 0@ (upper bound). The returned list has length
+-- @2 × length bs@.
 --
 -- @
 -- let cs = ConstraintSet { csEq = []
@@ -132,9 +137,9 @@ boxToIneq bs = concat
     , \xs -> (xs !! i) - hi ]
   | (i, (lo, hi)) <- zip [0 ..] bs ]
 
--- | シンプルな **罰則法** (penalty method)。
--- 拡張 Lagrangian の簡易版で、乗数更新を省略し罰則だけを増加させる。
--- 実装が単純で軽量だが、ill-conditioning が起きやすい。
+-- | The simpler **penalty method** — a stripped-down Augmented Lagrangian
+-- that omits the multiplier updates and only grows the penalty. Easy to
+-- implement and lightweight, but prone to ill-conditioning.
 penaltyMethod
   :: ConstrainedConfig
   -> ([Double] -> Double)

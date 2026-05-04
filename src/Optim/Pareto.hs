@@ -21,17 +21,20 @@ module Optim.Pareto
 
 import Data.List (sortBy, sortOn)
 
--- | 点 p が集合 ps の中で非優越 (= どの ps の点にも支配されない) か。
+-- | True iff @p@ is non-dominated within the set @ps@ (no element of @ps@
+-- dominates it).
 isNonDominated :: [Double] -> [[Double]] -> Bool
 isNonDominated p ps = not (any (`dominates'` p) ps)
 
--- | 通常の Pareto dominance (内部用、`Optim.NSGA.paretoDominates` と同形)。
+-- | Plain Pareto dominance (internal helper; same definition as
+-- 'Optim.NSGA.paretoDominates').
 dominates' :: [Double] -> [Double] -> Bool
 dominates' a b =
   all (uncurry (<=)) zipped && any (uncurry (<)) zipped
   where zipped = zip a b
 
--- | 点集合から **非優越な点** だけ抽出する。重複点は最初の 1 つだけ残す。
+-- | Extract just the non-dominated points from a set. When points repeat,
+-- only the first occurrence is kept.
 paretoFront :: [[Double]] -> [[Double]]
 paretoFront pts =
   [p | (i, p) <- indexed,
@@ -39,14 +42,14 @@ paretoFront pts =
   where
     indexed = zip [0 :: Int ..] pts
 
--- | Hypervolume 指標 (HV)。
--- 参照点 r から見て Pareto front が支配する体積。
--- 大きいほど良い (収束 + 多様性 の両方を反映)。
+-- | Hypervolume (HV) indicator: the volume dominated by the Pareto
+-- front, measured from a reference point @r@. Larger is better
+-- (captures both convergence and diversity).
 --
--- 2D: 厳密公式 (面積)。
--- 3D 以上: HSO (Hypervolume by Slicing Objectives) で軸ごとに再帰計算。
+-- 2D uses the exact area formula; higher dimensions use HSO
+-- (Hypervolume by Slicing Objectives) recursively.
 --
--- 全目的は **最小化** を仮定 (NSGA-II の慣習)。
+-- All objectives are assumed to be minimized (NSGA-II convention).
 hypervolume :: [Double] -> [[Double]] -> Double
 hypervolume ref front
   | null front = 0
@@ -101,10 +104,11 @@ hvND ref front =
              else go xCur ps (acc + width * slice)
   in go r1 sortedDesc 0
 
--- | Inverted Generational Distance: 真の front の各点から推定 front への
--- 最短距離の平均。**小さいほど良い**。多様性も評価できる。
+-- | Inverted Generational Distance: the average of, for each point in
+-- the /true/ front, the minimum distance to the /estimated/ front.
+-- Smaller is better; rewards diversity as well as convergence.
 --
--- IGD = (1/|R|) Σ_{r ∈ R} min_{e ∈ E} dist(r, e)
+-- @IGD = (1/|R|) Σ_{r ∈ R} min_{e ∈ E} dist(r, e)@.
 igd :: [[Double]] -> [[Double]] -> Double
 igd trueF estF
   | null trueF || null estF = 1 / 0
@@ -113,8 +117,9 @@ igd trueF estF
           minDistTo r = minimum [euclid r e | e <- estF]
       in sum (map minDistTo trueF) / fromIntegral n
 
--- | Generational Distance: 推定 front の各点から真の front への最短距離の平均。
--- **小さいほど良い** が、多様性は評価しない。
+-- | Generational Distance: the average minimum distance from each point
+-- of the /estimated/ front to the /true/ front. Smaller is better, but
+-- this does not penalize a lack of diversity.
 gd :: [[Double]] -> [[Double]] -> Double
 gd trueF estF
   | null trueF || null estF = 1 / 0
@@ -123,6 +128,6 @@ gd trueF estF
           minDistTo e = minimum [euclid e t | t <- trueF]
       in sum (map minDistTo estF) / fromIntegral n
 
--- | ユークリッド距離。
+-- | Euclidean distance.
 euclid :: [Double] -> [Double] -> Double
 euclid a b = sqrt (sum [(x - y) ^ (2 :: Int) | (x, y) <- zip a b])

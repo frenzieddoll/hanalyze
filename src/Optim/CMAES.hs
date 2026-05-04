@@ -28,16 +28,21 @@ import qualified System.Random.MWC.Distributions as MWCD
 import Control.Monad (replicateM, forM)
 import Optim.Common
 
--- | CMA-ES (簡易対角版) 設定。
+-- | Configuration for the simplified diagonal CMA-ES.
 data CMAESConfig = CMAESConfig
   { cmStop    :: !StopCriteria
-  , cmSigma0  :: !Double         -- ^ 初期ステップ幅 σ
-  , cmLambda  :: !(Maybe Int)    -- ^ 集団サイズ λ (Nothing なら 4 + 3 ln D)
+  , cmSigma0  :: !Double          -- ^ Initial step size @σ@.
+  , cmLambda  :: !(Maybe Int)     -- ^ Population size @λ@ (defaults to
+                                  --   @4 + ⌊3 ln D⌋@ when 'Nothing').
   , cmDir     :: !Direction
-  , cmBounds  :: !(Maybe Bounds)  -- ^ box 制約 (任意)。指定時はサンプル後に
-                                   --   `clipToBounds` で範囲内へ反射する
+  , cmBounds  :: !(Maybe Bounds)  -- ^ Optional box constraints. When set,
+                                  --   each sampled point is reflected
+                                  --   back into the bounds via
+                                  --   'clipToBounds'.
   } deriving (Show, Eq)
 
+-- | Default configuration: 200 iterations, @σ₀ = 0.5@, default @λ@,
+-- minimization, no bounds.
 defaultCMAESConfig :: CMAESConfig
 defaultCMAESConfig = CMAESConfig
   { cmStop   = defaultStopCriteria { stMaxIter = 200, stTolFun = 1e-10 }
@@ -47,14 +52,14 @@ defaultCMAESConfig = CMAESConfig
   , cmBounds = Nothing
   }
 
--- | 既定設定で実行。
+-- | Run simplified CMA-ES with the default configuration.
 runCMAES :: ([Double] -> Double)
-         -> [Double]              -- ^ 初期点
+         -> [Double]              -- ^ Initial mean @m₀@.
          -> MWC.GenIO
          -> IO OptimResult
 runCMAES = runCMAESWith defaultCMAESConfig
 
--- | 設定指定で実行。
+-- | Run simplified CMA-ES with a user-specified configuration.
 runCMAESWith :: CMAESConfig
              -> ([Double] -> Double)
              -> [Double]

@@ -32,15 +32,17 @@ import Data.IORef
 import Control.Monad (forM_)
 import System.IO.Unsafe (unsafePerformIO)
 
--- | Adam の設定。
+-- | Adam configuration.
 data AdamConfig = AdamConfig
-  { adamIterations   :: Int     -- ^ 反復数
-  , adamLearningRate :: Double  -- ^ 学習率 α
-  , adamBeta1        :: Double  -- ^ 1 次モーメント減衰率 (default 0.9)
-  , adamBeta2        :: Double  -- ^ 2 次モーメント減衰率 (default 0.999)
-  , adamEpsilon      :: Double  -- ^ 数値安定化定数 (default 1e-8)
+  { adamIterations   :: Int     -- ^ Number of iterations.
+  , adamLearningRate :: Double  -- ^ Learning rate @α@.
+  , adamBeta1        :: Double  -- ^ First-moment decay (default 0.9).
+  , adamBeta2        :: Double  -- ^ Second-moment decay (default 0.999).
+  , adamEpsilon      :: Double  -- ^ Numerical stabilizer (default 1e-8).
   } deriving (Show)
 
+-- | Default Adam configuration: 1000 iterations, @α = 0.01@,
+-- @β₁ = 0.9@, @β₂ = 0.999@, @ε = 1e-8@.
 defaultAdamConfig :: AdamConfig
 defaultAdamConfig = AdamConfig
   { adamIterations   = 1000
@@ -50,16 +52,18 @@ defaultAdamConfig = AdamConfig
   , adamEpsilon      = 1e-8
   }
 
--- | Adam の 1 ステップ更新。
+-- | Single Adam update.
 --
--- 引数:
---   * @β1, β2, ε, α@ — Adam パラメタ
---   * @t@ — 反復回数 (1-origin、bias correction 用)
---   * @m1, m2@ — 直前の 1 次/2 次モーメント
---   * @g@ — 現在の勾配
+-- Arguments:
 --
--- 戻り値: @(m1', m2', dx)@ — 更新後モーメントと進む方向 (= +勾配方向)。
--- 呼び出し側は @x ← x + dx@ で**勾配上昇**または @x ← x − dx@ で**勾配下降**。
+--   * @β1@, @β2@, @ε@, @α@ — Adam hyperparameters.
+--   * @t@ — iteration count (1-based; needed for bias correction).
+--   * @m1@, @m2@ — previous first- and second-moment estimates.
+--   * @g@ — current gradient.
+--
+-- Returns @(m1', m2', dx)@: the updated moments and the step direction
+-- (in the @+gradient@ direction). Callers do @x ← x + dx@ for ascent or
+-- @x ← x − dx@ for descent.
 adamStep
   :: Double -> Double -> Double -> Double -> Int
   -> [Double] -> [Double] -> [Double]
@@ -72,13 +76,15 @@ adamStep b1 b2 eps alpha t m1 m2 g =
       dx  = zipWith (\m_ v -> alpha * m_ / (sqrt v + eps))   mH vH
   in (m1', m2', dx)
 
--- | 勾配上昇ループ。`gradFn` は **目的関数の勾配** を返す。
--- @x ← x + Δx@ で更新するので、最大化したい量の勾配を渡す。
+-- | Gradient-ascent loop. @gradFn@ returns the gradient of the objective.
+-- The update @x ← x + Δx@ moves in the @+gradient@ direction, so pass the
+-- gradient of the quantity to maximize.
 --
--- 戻り値: @(x_final, x_history)@。各反復後の x を保存 (デバッグ/可視化用)。
+-- Returns @(x_final, x_history)@; the per-iteration trajectory is kept
+-- for debugging and visualization.
 runAdamMaximize :: AdamConfig
-                -> ([Double] -> [Double])  -- ^ 勾配関数
-                -> [Double]                -- ^ 初期値
+                -> ([Double] -> [Double])  -- ^ Gradient function.
+                -> [Double]                -- ^ Initial point.
                 -> ([Double], [[Double]])
 runAdamMaximize cfg gradFn x0 = unsafePerformIO $ do
   let n = length x0
@@ -103,14 +109,14 @@ runAdamMaximize cfg gradFn x0 = unsafePerformIO $ do
   hist <- fmap reverse (readIORef histRef)
   return (xF, hist)
 
--- | 勾配下降版。
--- @gradFn@ を反転させて 'runAdamMaximize' を呼ぶ。
+-- | Gradient-descent variant: negates @gradFn@ and delegates to
+-- 'runAdamMaximize'.
 runAdamMinimize :: AdamConfig -> ([Double] -> [Double]) -> [Double]
                 -> ([Double], [[Double]])
 runAdamMinimize cfg gradFn x0 =
   runAdamMaximize cfg (map negate . gradFn) x0
 
--- | エイリアス: 'runAdamMaximize' (デフォルトは最大化として使う)。
+-- | Alias for 'runAdamMaximize' (the default convention is ascent).
 runAdam :: AdamConfig -> ([Double] -> [Double]) -> [Double]
         -> ([Double], [[Double]])
 runAdam = runAdamMaximize

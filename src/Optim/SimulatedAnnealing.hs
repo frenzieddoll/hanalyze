@@ -26,17 +26,20 @@ import qualified System.Random.MWC as MWC
 import qualified System.Random.MWC.Distributions as MWCD
 import Optim.Common
 
--- | SA 設定。
+-- | SA configuration.
 data SAConfig = SAConfig
   { saStop      :: !StopCriteria
-  , saInitTemp  :: !Double          -- ^ 初期温度 T_0
-  , saAlpha     :: !Double          -- ^ 冷却係数 α (0.85 〜 0.99)
-  , saStepSigma :: !Double          -- ^ 提案分布の sd
-  , saStepDecay :: !Double          -- ^ sd の冷却係数 (1.0 で固定)
-  , saBounds    :: !Bounds                -- ^ (lo, hi) per dim、反射用
+  , saInitTemp  :: !Double          -- ^ Initial temperature @T₀@.
+  , saAlpha     :: !Double          -- ^ Cooling coefficient @α@ (0.85–0.99).
+  , saStepSigma :: !Double          -- ^ Proposal SD.
+  , saStepDecay :: !Double          -- ^ Per-iteration shrink for the SD
+                                    --   (1.0 leaves the SD constant).
+  , saBounds    :: !Bounds          -- ^ Per-dimension bounds for reflection.
   , saDir       :: !Direction
   } deriving (Show, Eq)
 
+-- | Default configuration: 5000 iterations, @T₀ = 1.0@, @α = 0.995@,
+-- proposal SD 0.5 with decay 0.999, minimization.
 defaultSAConfig :: [(Double, Double)] -> SAConfig
 defaultSAConfig bs = SAConfig
   { saStop      = defaultStopCriteria { stMaxIter = 5000 }
@@ -48,15 +51,15 @@ defaultSAConfig bs = SAConfig
   , saDir       = Minimize
   }
 
--- | 既定設定で実行。
+-- | Run SA with the default configuration built from @bounds@.
 runSA :: [(Double, Double)]
       -> ([Double] -> Double)
-      -> [Double]                  -- ^ 初期点
+      -> [Double]                  -- ^ Initial point.
       -> MWC.GenIO
       -> IO OptimResult
 runSA bs f x0 gen = runSAWith (defaultSAConfig bs) f x0 gen
 
--- | 設定指定で実行。
+-- | Run SA with a user-specified configuration.
 runSAWith :: SAConfig
           -> ([Double] -> Double)
           -> [Double]

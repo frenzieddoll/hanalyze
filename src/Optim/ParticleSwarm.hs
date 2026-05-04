@@ -27,18 +27,21 @@ import Data.IORef
 import qualified System.Random.MWC as MWC
 import Optim.Common
 
--- | PSO 設定。
+-- | PSO configuration.
 data PSOConfig = PSOConfig
   { psoStop     :: !StopCriteria
-  , psoNum      :: !Int               -- ^ 粒子数 (典型 20-50)
-  , psoInertia  :: !Double             -- ^ w (典型 0.4-0.9)
-  , psoCog      :: !Double             -- ^ c_1 (typical 1.5-2.0)
-  , psoSoc      :: !Double             -- ^ c_2 (typical 1.5-2.0)
-  , psoBounds   :: !Bounds              -- ^ (lo, hi) per dim
-  , psoVMax     :: !Double             -- ^ |v_i| の上限 (range の比率、0.5 等)
+  , psoNum      :: !Int        -- ^ Number of particles (20–50 typical).
+  , psoInertia  :: !Double     -- ^ Inertia @w@ (0.4–0.9 typical).
+  , psoCog      :: !Double     -- ^ Cognitive coefficient @c₁@ (1.5–2.0 typical).
+  , psoSoc      :: !Double     -- ^ Social coefficient @c₂@ (1.5–2.0 typical).
+  , psoBounds   :: !Bounds     -- ^ Per-dimension bounds.
+  , psoVMax     :: !Double     -- ^ Velocity cap as a fraction of the
+                               --   range per dimension (e.g. 0.5).
   , psoDir      :: !Direction
   } deriving (Show, Eq)
 
+-- | Default configuration: 200 iterations, swarm size @max(20, 5×D)@,
+-- @w = 0.7@, @c₁ = c₂ = 1.5@, @vMax = 0.5@.
 defaultPSOConfig :: [(Double, Double)] -> PSOConfig
 defaultPSOConfig bs = PSOConfig
   { psoStop    = defaultStopCriteria { stMaxIter = 200 }
@@ -51,14 +54,14 @@ defaultPSOConfig bs = PSOConfig
   , psoDir     = Minimize
   }
 
--- | 既定設定で実行。
+-- | Run PSO with the default configuration built from @bounds@.
 runPSO :: [(Double, Double)]
        -> ([Double] -> Double)
        -> MWC.GenIO
        -> IO OptimResult
 runPSO bs f gen = runPSOWith (defaultPSOConfig bs) f gen
 
--- | 設定指定で実行。
+-- | Run PSO with a user-specified configuration.
 runPSOWith :: PSOConfig
            -> ([Double] -> Double)
            -> MWC.GenIO
