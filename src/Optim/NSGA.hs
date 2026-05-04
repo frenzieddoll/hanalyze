@@ -43,7 +43,8 @@ import Control.Monad (zipWithM)
 import Data.List (sortBy)
 import Data.Ord  (comparing)
 import System.Random.MWC (GenIO, uniform, uniformR)
-import qualified Optim.Common as OC
+import qualified Optim.Common    as OC
+import qualified Stat.QuasiRandom as QR
 
 -- ---------------------------------------------------------------------------
 -- 型
@@ -123,11 +124,11 @@ nsga2WithConstraints cfg f cFn bounds gen = do
       etaM = nsgaEtaMut cfg
       pC   = nsgaCrossoverP cfg
 
-  -- 初期母集団
-  initPop <- mapM (const (do
-                            x <- randomInBounds bounds gen
-                            return (evaluateSolution f cFn x)))
-                  [1 .. n]
+  -- 初期母集団: Latin-Hypercube Sampling で各次元のセルを 1 度ずつ
+  -- 埋める (iid uniform より初期世代の被覆良 → 第 1 世代で既に
+  -- 全域の情報が手に入るため、世代あたりの収束が上がる)。
+  initXs <- QR.lhsSamplesIn n bounds gen
+  let initPop = [ evaluateSolution f cFn x | x <- initXs ]
 
   -- 世代ループ
   finalPop <- generationLoop (nsgaGenerations cfg) initPop pC etaC etaM pM bounds f cFn gen
@@ -439,7 +440,7 @@ sbxCrossover etaC bounds p1 p2 gen = do
 sbxOneVar :: Double -> GenIO -> (Double, Double) -> (Double, Double)
           -> IO (Double, Double)
 sbxOneVar etaC gen (lo, hi) (a, b) = do
-  flip_ <- uniform gen :: IO Double  -- 各次元 50% で交叉
+  flip_ <- uniform gen :: IO Double  -- 各次元 50% で交叉 (pymoo と同方式)
   if flip_ >= 0.5 || abs (a - b) < 1e-12
     then return (a, b)
     else do

@@ -153,6 +153,26 @@ main = hspec $ do
       all (\[a, b] -> a >= -2 && a <  2
                    && b >= 10 && b <  20) pts `shouldBe` True
 
+    it "lhsSamples 10 3 lies in [0,1)^3 and fills every per-dim cell" $ do
+      gen <- MWC.createSystemRandom
+      pts <- QR.lhsSamples 10 3 gen
+      length pts `shouldBe` 10
+      all (\xs -> all (\u -> u >= 0 && u < 1) xs) pts `shouldBe` True
+      -- For each dim, the 10 points should occupy 10 distinct cells
+      -- (= floor(10 * u) is a permutation of [0..9]).
+      let cellsAlong k = map (\xs -> floor (10 * (xs !! k)) :: Int) pts
+          ok k = sort (cellsAlong k) == [0 .. 9]
+      ok 0 `shouldBe` True
+      ok 1 `shouldBe` True
+      ok 2 `shouldBe` True
+
+    it "lhsSamplesIn rescales into bounds" $ do
+      gen <- MWC.createSystemRandom
+      let bs = [(-1, 1), (5, 10)] :: [(Double, Double)]
+      pts <- QR.lhsSamplesIn 8 bs gen
+      all (\[a, b] -> a >= -1 && a <  1
+                   && b >=  5 && b < 10) pts `shouldBe` True
+
   describe "Stat.Cholesky" $ do
     let aSPD = LA.fromLists [[4, 2, 1], [2, 5, 3], [1, 3, 6]]
                  :: LA.Matrix Double

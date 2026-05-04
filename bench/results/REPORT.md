@@ -317,6 +317,38 @@ The 'LBFGS' solver remains available for callers who hit the
 @p > 50@, @n ≫ p²@ regime (the asymptotic crossover) or once
 'Optim.LBFGS' itself is moved to 'Storable' 'Vector'.
 
+## After N2 (NSGA-II initial-design upgrade) — partial result
+
+`Stat.QuasiRandom` gains 'lhsSamples' / 'lhsSamplesIn' (Latin
+Hypercube via stratified-random-then-permute), and
+`Optim.NSGA.nsga2WithConstraints` switches the initial population from
+iid uniform to LHS.
+
+We also tried bumping the per-dimension SBX crossover probability from
+50 % to 100 %; this regressed ZDT performance (HV → 0 on ZDT1/3 at
+100 generations) and was reverted. pymoo gates per-dimension at 50 %
+exactly, so the original behaviour matches the reference.
+
+Result at the same 500-generation budget as N1:
+
+| Problem | HV (hs N1) | HV (hs N2) | HV (pymoo) | IGD (hs N2) | IGD (pymoo) |
+|---|---|---|---|---|---|
+| ZDT1     | 0.854 | **0.863** | 0.839 | **0.008** | 0.022 |
+| ZDT2     | 0.528 | 0.528    | 0.484 | **0.009** | 0.034 |
+| ZDT3     | 1.307 | 1.294    | 1.291 | **0.012** | 0.014 |
+| DTLZ2_3  | 2.695 | **2.723** | 2.722 | 0.091     | 0.079 |
+
+LHS modestly improves the asymptotic Pareto quality (DTLZ2 HV
+2.695 → 2.723; ZDT1 IGD halved). hanalyze now meets or exceeds pymoo
+on HV for **all four** problems and on IGD for three (DTLZ2 IGD a
+shade behind).
+
+The original goal of "100-generation parity with pymoo" was **not**
+achieved: at the shorter budget hanalyze still needs more generations
+than pymoo. The remaining gap is per-iteration algorithmic, not an
+initial-design issue (e.g. pymoo's faster `nonDominatedSort` /
+incremental crowding distance / vectorized SBX in numpy).
+
 ## High-leverage improvement queue
 
 In rough order of expected wall-time impact across the suite:

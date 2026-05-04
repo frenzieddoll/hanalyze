@@ -15,7 +15,15 @@ module Stat.QuasiRandom
   , haltonSequence
   , haltonSequenceIn
   , primes
+    -- * Latin Hypercube Sampling
+  , lhsSamples
+  , lhsSamplesIn
   ) where
+
+import           Control.Monad         (forM, replicateM)
+import qualified Data.Vector.Mutable   as MV
+import qualified Data.Vector           as V
+import           System.Random.MWC     (GenIO, uniformR)
 
 -- | Infinite list of prime numbers via a simple Sieve.
 primes :: [Int]
@@ -57,3 +65,46 @@ haltonSequenceIn n bs =
   let d   = length bs
       pts = haltonSequence n d
   in [ zipWith (\u (lo, hi) -> lo + u * (hi - lo)) p bs | p <- pts ]
+
+-- ---------------------------------------------------------------------------
+-- Latin Hypercube Sampling
+-- ---------------------------------------------------------------------------
+
+-- | Generate @n@ Latin-Hypercube samples in @[0, 1)^d@.
+--
+-- Algorithm (McKay-Beckman-Conover 1979):
+--
+--   1. For each dimension @k@, partition @[0, 1)@ into @n@ equal cells
+--      @[i/n, (i+1)/n)@ and pick one stratified-random point per cell:
+--      @u_{i,k} = (i + r_{i,k}) / n@ where @r ~ U(0, 1)@.
+--   2. Independently for each dimension, randomly permute the @n@ cells.
+--   3. Stack the per-dim permutations into @n@ points of @d@ coords.
+--
+-- The result fills every per-dimension marginal cell exactly once,
+-- giving much better coverage than @n@ iid uniform draws while still
+-- being random.
+lhsSamples :: Int -> Int -> GenIO -> IO [[Double]]
+lhsSamples n d gen = do
+  -- per-dim stratified samples (length n each)
+  perDim <- forM [1 .. d] $ \_ -> do
+    -- 1) one stratified sample per cell
+    base <- forM [0 .. n - 1] $ \i -> do
+      r <- uniformR (0, 1) gen :: IO Double
+      pure ((fromIntegral i + r) / fromIntegral n)
+    -- 2) random permutation (Fisher-Yates)
+    mv <- V.thaw (V.fromList base)
+    let nLast = n - 1
+    mapM_ (\i -> do
+              j <- uniformR (i, nLast) gen
+              MV.swap mv i j) [0 .. nLast - 1]
+    V.toList <$> V.unsafeFreeze mv
+  -- transpose: perDim is d × n, want n × d
+  pure [ [ (perDim !! k) !! i | k <- [0 .. d - 1] ] | i <- [0 .. n - 1] ]
+
+-- | LHS samples rescaled into the per-dimension box @[lo_k, hi_k)@.
+-- @bounds@ must have length @d@.
+lhsSamplesIn :: Int -> [(Double, Double)] -> GenIO -> IO [[Double]]
+lhsSamplesIn n bs gen = do
+  let d = length bs
+  pts <- lhsSamples n d gen
+  pure [ zipWith (\u (lo, hi) -> lo + u * (hi - lo)) p bs | p <- pts ]
