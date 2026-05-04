@@ -66,6 +66,10 @@ module Viz.ReportBuilder
   , secCalibration
   , sec3DScatter
   , secHeatmap
+    -- * 補間 / regrid レポート (Phase G4)
+  , InterpReport (..)
+  , defaultInterpReport
+  , secInterpolation
     -- * 対話的予測 (LM/GLM 用)
   , secInteractiveLM
   , secInteractiveMulti
@@ -90,6 +94,9 @@ module Viz.ReportBuilder
   , calibrationSpec
   , scatter3DSpec
   , heatmapSpec
+  , interpolationOverlaySpec
+  , densityProfileSpec
+  , idAlignmentSpec
   ) where
 
 import Data.Aeson (encode)
@@ -2262,4 +2269,236 @@ interactiveMultiOutScript sid imo =
        , "  window['__updMO_' + sid] = update;"
        , "  setTimeout(update, 0);"
        , "})();"
+       ]
+
+-- ---------------------------------------------------------------------------
+-- 補間 / regrid レポート (Phase G4)
+-- ---------------------------------------------------------------------------
+
+-- | regrid 結果を可視化するためのデータ。
+--
+-- R1-R7 は必須情報、R8-R10 はオプション (空リスト/Nothing で非表示)。
+-- 'DataIO.Preprocess.RegridResult' から構築する想定だが、
+-- セクション側ではプリミティブ型のみで受けて柔軟性を保つ。
+data InterpReport = InterpReport
+  { irTitle         :: !Text
+  , irInterpKind    :: !Text                       -- ^ "Linear" | "NaturalSpline" | "PCHIP"
+  , irGridKind      :: !Text                       -- ^ "Uniform" | "Adaptive"
+  , irN             :: !Int                        -- ^ 出力 grid 点数
+  , irZBoundsMode   :: !Text                       -- ^ "intersect" | "union"
+  , irZMin          :: !Double
+  , irZMax          :: !Double
+  , irPerIdObserved :: ![(Text, [(Double, Double)])]
+                          -- ^ id ごとの元観測点 [(z, y)]
+  , irPerIdInterpY  :: ![(Text, [(Double, Double)])]
+                          -- ^ id ごとの (z_grid, y_interp) (R2 ライン用)
+  , irGrid          :: ![Double]                   -- ^ 共通 grid (R3 spacing 用)
+  , irDensity       :: ![(Double, Double)]         -- ^ (z, peak |dy/dz|) — adaptive 時のみ
+  , irPerIdSummary  :: ![(Text, Int, Double, Double, Double, Double, Double)]
+                          -- ^ (id, n_obs, zmin, zmax, extrap_below, extrap_above, residual_max)
+                          -- R4 用
+    -- R8-R10 オプション
+  , irExtraEnabled  :: !Bool                       -- ^ True で R8-R10 を出力
+  , irPerIdYRange   :: ![(Text, Double, Double, Double, Double)]
+                          -- ^ (id, ymin_orig, ymax_orig, ymin_grid, ymax_grid) — R10 用
+  } deriving (Show)
+
+-- | 最低限のフィールドだけ埋めた InterpReport (テスト/ダミー用)。
+defaultInterpReport :: Text -> InterpReport
+defaultInterpReport t = InterpReport
+  { irTitle         = t
+  , irInterpKind    = "Linear"
+  , irGridKind      = "Uniform"
+  , irN             = 0
+  , irZBoundsMode   = "intersect"
+  , irZMin          = 0
+  , irZMax          = 1
+  , irPerIdObserved = []
+  , irPerIdInterpY  = []
+  , irGrid          = []
+  , irDensity       = []
+  , irPerIdSummary  = []
+  , irExtraEnabled  = False
+  , irPerIdYRange   = []
+  }
+
+-- | 補間 / regrid のレポートセクションを構築。
+--
+-- 出力構造:
+--
+-- * Card "Regrid summary"
+--   - R1: パラメタテーブル (KeyValue)
+--   - R4: id ごとの観測点数 / z レンジ / 外挿距離 / 残差表 (Table)
+--   - R6: 外挿警告テーブル (該当 id のみ; 0 件なら省略)
+--   - R7: id 間 z アラインメント dot plot (Vega)
+--   - R2: 補間オーバーレイ small multiples (Vega)
+--   - R3: adaptive 時のみ density(z) + grid spacing (Vega)
+--   - R5: 補間残差サマリ (R4 と統合済)
+--   - (オプション) R8: id ごとの観測点数 bar chart
+--   - (オプション) R9: 単調性チェック (PCHIP 以外、簡易判定)
+--   - (オプション) R10: y レンジ比較表
+secInterpolation :: InterpReport -> ReportSection
+secInterpolation ir =
+  let -- R1 params
+      r1 = secKeyValue "Parameters"
+             [ ("Interpolation",  irInterpKind ir)
+             , ("Grid",           irGridKind ir)
+             , ("Grid points (N)", T.pack (show (irN ir)))
+             , ("Z bounds mode",  irZBoundsMode ir)
+             , ("Effective zmin", T.pack (showFFloat (Just 4) (irZMin ir) ""))
+             , ("Effective zmax", T.pack (showFFloat (Just 4) (irZMax ir) ""))
+             , ("Number of ids",  T.pack (show (length (irPerIdSummary ir))))
+             ]
+      -- R4 per-id summary table
+      fmt n x = T.pack (showFFloat (Just n) x "")
+      r4Rows = [ [ i, T.pack (show n), fmt 4 zmn, fmt 4 zmx
+                 , fmt 4 eb, fmt 4 ea, fmt 4 res ]
+               | (i, n, zmn, zmx, eb, ea, res) <- irPerIdSummary ir ]
+      r4 = secTable "Per-id summary"
+             ["id", "n_observed", "z_min", "z_max"
+             , "extrap_below", "extrap_above", "interp_residual_max"]
+             r4Rows
+      -- R6 extrapolation warning (only ids with extrap > 0)
+      r6Rows = [ [ i, fmt 4 eb, fmt 4 ea ]
+               | (i, _, _, _, eb, ea, _) <- irPerIdSummary ir
+               , eb > 1e-12 || ea > 1e-12 ]
+      r6 = if null r6Rows
+             then Nothing
+             else Just (secTable "Extrapolation warnings"
+                          ["id", "extrap_below", "extrap_above"]
+                          r6Rows)
+      -- R7 id-z alignment dot plot
+      r7 = secVega "Z alignment across ids" (idAlignmentSpec ir)
+      -- R2 interpolation overlay (small multiples)
+      r2 = secVega "Interpolation overlay (per id)" (interpolationOverlaySpec ir)
+      -- R3 density profile (adaptive only)
+      r3 = if null (irDensity ir)
+             then Nothing
+             else Just (secVega "Adaptive density profile" (densityProfileSpec ir))
+      -- R8 obs count bar (extra)
+      r8 = if irExtraEnabled ir
+             then Just (secBarChart "Observation count per id"
+                         [ (i, fromIntegral n)
+                         | (i, n, _, _, _, _, _) <- irPerIdSummary ir ])
+             else Nothing
+      -- R10 y-range comparison (extra)
+      r10Rows = [ [ i, fmt 4 yo0, fmt 4 yo1, fmt 4 yg0, fmt 4 yg1
+                  , fmt 4 (yg0 - yo0), fmt 4 (yg1 - yo1) ]
+                | (i, yo0, yo1, yg0, yg1) <- irPerIdYRange ir ]
+      r10 = if irExtraEnabled ir && not (null r10Rows)
+              then Just (secTable
+                          "Y range: original vs interpolated"
+                          ["id", "y_min_orig", "y_max_orig"
+                          , "y_min_grid", "y_max_grid"
+                          , "Δ_min", "Δ_max"]
+                          r10Rows)
+              else Nothing
+      -- R9 monotonicity check (extra; skip for PCHIP since guaranteed)
+      r9 = if irExtraEnabled ir && irInterpKind ir /= "PCHIP"
+             then
+               let nonMono =
+                     [ i
+                     | (i, ys) <- irPerIdInterpY ir
+                     , let vs = map snd ys
+                     , let asc = and (zipWith (<=) vs (tail vs))
+                     , let desc = and (zipWith (>=) vs (tail vs))
+                     , not asc && not desc
+                       -- かつ 元データが単調なら警告
+                     , let obs = Prelude.lookup i (irPerIdObserved ir)
+                     , case obs of
+                         Just ps ->
+                           let os = map snd ps
+                           in and (zipWith (<=) os (tail os))
+                              || and (zipWith (>=) os (tail os))
+                         Nothing -> False
+                     ]
+               in if null nonMono
+                    then Nothing
+                    else Just (secMarkdown "Monotonicity warning"
+                                ("Non-monotone interpolation curves "
+                                 <> "(observed data was monotone): "
+                                 <> T.intercalate ", " nonMono))
+             else Nothing
+      sections = [r1, r4]
+              ++ maybe [] (:[]) r6
+              ++ [r7, r2]
+              ++ maybe [] (:[]) r3
+              ++ maybe [] (:[]) r8
+              ++ maybe [] (:[]) r9
+              ++ maybe [] (:[]) r10
+  in secCard (irTitle ir) sections
+
+-- | R2: 補間オーバーレイ — id ごとに facet 化 (small multiples)。
+-- 元観測点を dot、補間曲線を line で重ね描き (kind 列で区別)。
+interpolationOverlaySpec :: InterpReport -> VegaLite
+interpolationOverlaySpec ir =
+  let mkObsRows = concat
+        [ [ dataRow [ ("id", Str i), ("z", Number z), ("y", Number y)
+                    , ("kind", Str "obs") ] []
+          | (z, y) <- pts ]
+        | (i, pts) <- irPerIdObserved ir ]
+      mkLineRows = concat
+        [ [ dataRow [ ("id", Str i), ("z", Number z), ("y", Number y)
+                    , ("kind", Str "interp") ] []
+          | (z, y) <- ys ]
+        | (i, ys) <- irPerIdInterpY ir ]
+      datValues = dataFromRows [] (concat (mkObsRows ++ mkLineRows))
+      enc = encoding
+            . position X [PName "z", PmType Quantitative]
+            . position Y [PName "y", PmType Quantitative]
+            . color [MName "kind", MmType Nominal
+                   , MScale [SDomain (DStrings ["obs", "interp"])
+                           , SRange (RStrings ["#d62728", "#1f77b4"])]]
+            . VL.shape [MName "kind", MmType Nominal]
+      facetCfg = facetFlow [FName "id", FmType Nominal, FHeader [HTitle ""]]
+      spec = asSpec
+        [ mark Point [MOpacity 0.7]
+        , (enc [])
+        ]
+  in toVegaLite
+       [ datValues
+       , columns 3
+       , facetCfg
+       , specification spec
+       , VL.width 200, VL.height 150
+       ]
+
+-- | R3: adaptive density(z) を line で表示し、その下に grid 点を rule (vertical) で重ねる。
+densityProfileSpec :: InterpReport -> VegaLite
+densityProfileSpec ir =
+  let densRows  = [ dataRow [("z", Number z), ("density", Number d)] []
+                  | (z, d) <- irDensity ir ]
+      gridRows  = [ dataRow [("z", Number z)] [] | z <- irGrid ir ]
+      densSpec  = asSpec
+        [ dataFromRows [] (concat densRows)
+        , mark Line [MStrokeWidth 2, MColor "#2ca02c"]
+        , (encoding . position X [PName "z", PmType Quantitative]
+                   . position Y [PName "density", PmType Quantitative
+                               , PAxis [AxTitle "peak |dy/dz|"]]) []
+        ]
+      gridSpec  = asSpec
+        [ dataFromRows [] (concat gridRows)
+        , mark Rule [MStrokeWidth 1, MColor "#ff7f0e", MOpacity 0.4]
+        , (encoding . position X [PName "z", PmType Quantitative]) []
+        ]
+  in toVegaLite
+       [ layer [densSpec, gridSpec]
+       , VL.width 600, VL.height 200
+       ]
+
+-- | R7: id ごとの z 観測点を縦並びの dot plot で表示 (z レンジ揃え目視確認)。
+idAlignmentSpec :: InterpReport -> VegaLite
+idAlignmentSpec ir =
+  let rows = concat
+        [ [ dataRow [("id", Str i), ("z", Number z)] [] | (z, _) <- pts ]
+        | (i, pts) <- irPerIdObserved ir ]
+      enc  = encoding
+             . position X [PName "z", PmType Quantitative]
+             . position Y [PName "id", PmType Nominal]
+  in toVegaLite
+       [ dataFromRows [] (concat rows)
+       , mark Tick [MOpacity 0.7, MColor "#4c78a8"]
+       , (enc [])
+       , VL.width 600
+       , VL.height 200
        ]

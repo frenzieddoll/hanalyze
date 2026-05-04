@@ -24,6 +24,7 @@ import qualified Stat.Standardize  as Std
 import qualified Stat.NumberFormat as NF
 import qualified Stat.Interpolate  as Interp
 import qualified Stat.AdaptiveGrid as AG
+import qualified Viz.ReportBuilder as RB
 import qualified Data.ByteString   as BS
 import System.IO.Temp (withSystemTempFile)
 import System.IO     (hPutStr, hClose)
@@ -1300,3 +1301,35 @@ main = hspec $ do
       r <- RFF.gridSearchLOOCVRBFMV_DE 1 50 xMat yVec 20 gen
       RFF.lcLOOCV r `shouldSatisfy` (\v -> not (isNaN v) && v >= 0)
       RFF.lcEll   r `shouldSatisfy` (> 1e-3)
+
+  -- ===========================================================================
+  -- Viz.ReportBuilder.secInterpolation (Phase G4)
+  -- ===========================================================================
+  describe "Viz.ReportBuilder.secInterpolation" $ do
+    it "defaultInterpReport で renderReport まで通る (smoke)" $
+      withSystemTempFile "ha-interp.html" $ \fp h -> do
+        hClose h
+        let ir = RB.defaultInterpReport "test"
+        RB.renderReport fp (RB.defaultReportConfig "T") [RB.secInterpolation ir]
+        out <- readFile fp
+        length out `shouldSatisfy` (> 100)
+
+    it "InterpReport 全フィールド + extra で HTML に主要要素が含まれる" $
+      withSystemTempFile "ha-interp2.html" $ \fp h -> do
+        hClose h
+        let ir = (RB.defaultInterpReport "regrid")
+                   { RB.irInterpKind    = "PCHIP"
+                   , RB.irGridKind      = "Adaptive"
+                   , RB.irN             = 3
+                   , RB.irPerIdObserved = [("a", [(0, 0), (1, 1)])]
+                   , RB.irPerIdInterpY  = [("a", [(0, 0), (0.5, 0.5), (1, 1)])]
+                   , RB.irGrid          = [0, 0.5, 1]
+                   , RB.irDensity       = [(0, 1), (0.5, 2), (1, 1)]
+                   , RB.irPerIdSummary  = [("a", 2, 0, 1, 0, 0, 0)]
+                   , RB.irExtraEnabled  = True
+                   , RB.irPerIdYRange   = [("a", 0, 1, 0, 1)]
+                   }
+        RB.renderReport fp (RB.defaultReportConfig "T") [RB.secInterpolation ir]
+        out <- readFile fp
+        out `shouldContain` "Parameters"
+        out `shouldContain` "PCHIP"
