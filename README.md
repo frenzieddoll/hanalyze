@@ -177,6 +177,7 @@ A free-monad DSL from which **four interpretations** (structural inspection / lo
 | Page | Contents |
 |---|---|
 | [Dirty data reading guide](docs/io/01-dirty-data.md) | W001..W008 / LoadOpts / 19 fixtures / sniff / clean DSL / CLI repair examples |
+| [Regridding jagged long-form (regrid)](docs/io/03-regrid.md) | 3 interp (Linear/Spline/PCHIP) × 2 grid (uniform/adaptive) + R1-R10 report |
 
 ---
 

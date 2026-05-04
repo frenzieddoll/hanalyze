@@ -175,6 +175,7 @@ myModel = do
 | ページ | 内容 |
 |---|---|
 | [汚いデータの読込ガイド](docs/io/01-dirty-data.ja.md) | W001..W008 / LoadOpts / 19 fixture / sniff / clean DSL / CLI 修復例 |
+| [歯抜け long-form を共通 grid に揃える (regrid)](docs/io/03-regrid.ja.md) | 3 補間 (Linear/Spline/PCHIP) × 2 grid (uniform/adaptive) + R1-R10 レポート |
 
 ---
 
