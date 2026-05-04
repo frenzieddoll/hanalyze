@@ -25,6 +25,7 @@ import qualified Stat.NumberFormat as NF
 import qualified Stat.Interpolate  as Interp
 import qualified Stat.AdaptiveGrid as AG
 import qualified Stat.KernelDist   as KD
+import qualified Model.Kernel      as Kn
 import qualified Viz.ReportBuilder as RB
 import qualified Data.ByteString   as BS
 import System.IO.Temp (withSystemTempFile)
@@ -82,6 +83,59 @@ main = hspec $ do
                    | i <- [0 .. LA.rows xs - 1]
                    , j <- [0 .. LA.rows ys - 1] ]
       LA.norm_Inf (dXY - ref') < 1e-9 `shouldBe` True
+
+  describe "Model.Kernel multi-input (MV)" $ do
+    -- 2D regression target: y = sin(x1) + 0.5 cos(x2)
+    let n     = 60
+        h     = 0.5
+        lam   = 1e-4
+        f x1 x2 = sin x1 + 0.5 * cos x2
+        xs    = LA.fromLists
+                  [ [ fromIntegral i / 10
+                    , fromIntegral (n - i) / 10
+                    ]
+                  | i <- [0 .. n - 1] ]
+        ys    = LA.asColumn $ LA.fromList
+                  [ f (xs `LA.atIndex` (i, 0)) (xs `LA.atIndex` (i, 1))
+                  | i <- [0 .. n - 1] ]
+        fit   = Kn.kernelRidgeMV Kn.Gaussian h lam xs ys
+        yhat  = Kn.fittedKernelRidgeMV fit
+        ssErr = LA.sumElements ((ys - yhat) ** 2)
+        ssTot = let muY = LA.sumElements ys / fromIntegral n
+                in LA.sumElements ((ys - LA.konst muY (n, 1)) ** 2)
+        r2    = 1 - ssErr / ssTot
+
+    it "achieves R² > 0.95 on a 2D smooth target" $
+      r2 > 0.95 `shouldBe` True
+
+    it "predict at training points equals fitted" $ do
+      let p = Kn.predictKernelRidgeMV fit xs
+      LA.norm_Inf (p - yhat) < 1e-9 `shouldBe` True
+
+    it "gramMatrixMV matches kernelFromSqDist by element" $ do
+      let xS  = LA.fromLists [[0.0, 0.0], [1.0, 0.0], [0.5, 0.5]] :: LA.Matrix Double
+          gMV = Kn.gramMatrixMV Kn.Gaussian 1.0 xS
+          rs  = LA.toRows xS
+          ref = LA.fromLists
+                  [ [ let d = rs !! i - rs !! j
+                          s = (d `LA.dot` d) / (1.0 * 1.0)
+                      in Kn.kernelFromSqDist Kn.Gaussian s
+                    | j <- [0 .. 2] ]
+                  | i <- [0 .. 2] ]
+      LA.norm_Inf (gMV - ref) < 1e-12 `shouldBe` True
+
+    it "MV gramMatrix on a single-column input agrees with kernelFromSqDist" $ do
+      let xs1 = LA.fromLists [[fromIntegral i / 5] | i <- [0 .. 19 :: Int]]
+                  :: LA.Matrix Double
+          gMV2 = Kn.gramMatrixMV Kn.Gaussian 0.4 xs1
+          ref  = LA.fromLists
+                   [ [ let xi = xs1 `LA.atIndex` (i, 0)
+                           xj = xs1 `LA.atIndex` (j, 0)
+                           d  = xi - xj
+                       in Kn.kernelFromSqDist Kn.Gaussian (d * d / (0.4 * 0.4))
+                     | j <- [0 .. 19] ]
+                   | i <- [0 .. 19] ]
+      LA.norm_Inf (gMV2 - ref) < 1e-12 `shouldBe` True
 
   describe "Model.GLMM" $ do
     -- Dataset: 3 groups × 4 obs, strong between-group signal, weak within-group noise.

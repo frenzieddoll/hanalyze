@@ -12,6 +12,7 @@
 module Model.Kernel
   ( Kernel (..)
   , kernelEval
+  , kernelFromSqDist
   , nwRegression
   , nwRegressionMulti
   , KernelRidgeFit (..)
@@ -19,7 +20,7 @@ module Model.Kernel
   , predictKernelRidge
   , gridSearchBandwidth
   , autoBandwidthBrent
-    -- * Multi-output (primary API)
+    -- * Multi-output (1D input, multiple Y columns)
   , KernelRidgeFitMulti (..)
   , kernelRidgeMulti
   , predictKernelRidgeMulti
@@ -28,12 +29,21 @@ module Model.Kernel
   , autoTuneKernelRidgeMulti
   , defaultHGrid
   , defaultLamGrid
+    -- * Multi-input (primary API; X is @n × p@, Y is @n × q@)
+  , gramMatrixMV
+  , gramMatrixMVXY
+  , KernelRidgeFitMV (..)
+  , kernelRidgeMV
+  , predictKernelRidgeMV
+  , fittedKernelRidgeMV
+  , nwRegressionMV
   ) where
 
 import qualified Data.Vector as V
 import qualified Numeric.LinearAlgebra as LA
 import qualified Optim.LineSearch as LS
 import qualified Optim.Common     as OC
+import qualified Stat.KernelDist  as KD
 
 -- ---------------------------------------------------------------------------
 -- カーネル関数
@@ -48,6 +58,26 @@ data Kernel
   | Uniform        -- ^ @0.5@ on @|u| ≤ 1@ (coarsest).
   | TriCube        -- ^ @(1-|u|³)³@ on @|u| ≤ 1@.
   deriving (Show, Eq)
+
+-- | Evaluate the kernel at scaled squared distance @s = ‖x − x'‖² / h²@.
+-- Generalizes 'kernelEval' to multivariate inputs: every supported
+-- kernel is radially symmetric, so the kernel value depends only on
+-- @‖x − x'‖ / h@.
+--
+-- For the Gaussian kernel this avoids the redundant @sqrt@; for kernels
+-- with bounded support (Epanechnikov / Triangular / Uniform / TriCube)
+-- the boundary check uses @s ≤ 1@.
+kernelFromSqDist :: Kernel -> Double -> Double
+kernelFromSqDist k s = case k of
+  Gaussian     -> exp (-0.5 * s) / sqrt (2 * pi)
+  Epanechnikov -> if s <= 1 then 0.75 * (1 - s) else 0
+  Triangular   -> if s <= 1 then 1 - sqrt s else 0
+  Uniform      -> if s <= 1 then 0.5 else 0
+  TriCube      -> if s <= 1
+                    then let u = sqrt s
+                             t = 1 - u * u * u
+                         in t * t * t
+                    else 0
 
 -- | Evaluate the kernel at @u = (x - x_i) / h@.
 kernelEval :: Kernel -> Double -> Double
@@ -332,3 +362,93 @@ defaultLamGrid =
       lHi = log 1e0
       step = (lHi - lLo) / fromIntegral (n - 1)
   in [ exp (lLo + fromIntegral i * step) | i <- [0 .. n - 1 :: Int] ]
+
+-- ---------------------------------------------------------------------------
+-- Multi-input (multivariate X) API
+--
+-- These functions take @X@ as an @n × p@ matrix (rows = samples) and use a
+-- single shared bandwidth @h@ across every input dimension. Distance
+-- matrices are computed via 'Stat.KernelDist' (BLAS GEMM) and the kernel
+-- function is applied element-wise via 'LA.cmap'; no list traversals over
+-- the @O(n²)@ pair set.
+--
+-- For axis-specific bandwidths, scale columns of @X@ by @1 / h_d@ before
+-- calling these functions.
+-- ---------------------------------------------------------------------------
+
+-- | Multi-input Gram matrix @K[i, j] = κ(‖X[i,:] − X[j,:]‖ / h)@.
+gramMatrixMV :: Kernel -> Double -> LA.Matrix Double -> LA.Matrix Double
+gramMatrixMV kern h x =
+  let h2 = h * h
+      d2 = KD.pairwiseSqDist x
+  in LA.cmap (\s -> kernelFromSqDist kern (s / h2)) d2
+
+-- | Multi-input cross Gram matrix @K[i, j] = κ(‖X[i,:] − Y[j,:]‖ / h)@.
+gramMatrixMVXY
+  :: Kernel -> Double
+  -> LA.Matrix Double   -- ^ Query @X_*@ (@m × p@).
+  -> LA.Matrix Double   -- ^ Training @X@ (@n × p@).
+  -> LA.Matrix Double   -- ^ Result (@m × n@).
+gramMatrixMVXY kern h xs ts =
+  let h2 = h * h
+      d2 = KD.pairwiseSqDistXY xs ts
+  in LA.cmap (\s -> kernelFromSqDist kern (s / h2)) d2
+
+-- | Multi-input kernel ridge fit. Holds the training matrix and the
+-- solution coefficients; @α@ has shape @n × q@.
+data KernelRidgeFitMV = KernelRidgeFitMV
+  { krmvKernel :: Kernel
+  , krmvH      :: Double
+  , krmvLambda :: Double
+  , krmvXs     :: LA.Matrix Double  -- ^ Training inputs (@n × p@).
+  , krmvAlpha  :: LA.Matrix Double  -- ^ @(K + λI)⁻¹ Y@ (@n × q@).
+  } deriving (Show)
+
+-- | Multi-input multi-output kernel ridge regression.
+--
+-- @α = (K + λI)⁻¹ Y@ with @K = gramMatrixMV kern h X@. Solving once and
+-- reusing across the @q@ output columns.
+kernelRidgeMV
+  :: Kernel
+  -> Double                 -- ^ Bandwidth @h@.
+  -> Double                 -- ^ Ridge penalty @λ@.
+  -> LA.Matrix Double       -- ^ Training inputs @X@ (@n × p@).
+  -> LA.Matrix Double       -- ^ Training response @Y@ (@n × q@).
+  -> KernelRidgeFitMV
+kernelRidgeMV kern h lam x y =
+  let n     = LA.rows x
+      kMat  = gramMatrixMV kern h x
+      regK  = kMat + LA.scale lam (LA.ident n)
+      alpha = regK LA.<\> y
+  in KernelRidgeFitMV kern h lam x alpha
+
+-- | Predict @Ŷ = K_* α@ for new query inputs (@m × p@). Output shape is
+-- @m × q@.
+predictKernelRidgeMV :: KernelRidgeFitMV -> LA.Matrix Double -> LA.Matrix Double
+predictKernelRidgeMV fit xNew =
+  gramMatrixMVXY (krmvKernel fit) (krmvH fit) xNew (krmvXs fit)
+    LA.<> krmvAlpha fit
+
+-- | Fitted values at the training inputs.
+fittedKernelRidgeMV :: KernelRidgeFitMV -> LA.Matrix Double
+fittedKernelRidgeMV fit = predictKernelRidgeMV fit (krmvXs fit)
+
+-- | Multi-input multi-output Nadaraya-Watson regression.
+--
+-- @ŷ(x*) = (Σⱼ K_h(x* − xⱼ) yⱼ) / Σⱼ K_h(x* − xⱼ)@, computed for every
+-- query row in one pass via @W = K(X_*, X)@ then @W Y / row-sums@.
+nwRegressionMV
+  :: Kernel
+  -> Double                 -- ^ Bandwidth @h@.
+  -> LA.Matrix Double       -- ^ Training inputs @X@ (@n × p@).
+  -> LA.Matrix Double       -- ^ Training response @Y@ (@n × q@).
+  -> LA.Matrix Double       -- ^ Query inputs @X_*@ (@m × p@).
+  -> LA.Matrix Double       -- ^ Predictions (@m × q@).
+nwRegressionMV kern h xs ys xNew =
+  let wMat   = gramMatrixMVXY kern h xNew xs            -- m × n
+      num    = wMat LA.<> ys                             -- m × q
+      onesN  = LA.konst 1 (LA.cols wMat) :: LA.Vector Double
+      denom  = wMat LA.#> onesN                          -- m
+      safe   = LA.cmap (\d -> if d == 0 then 1 else 1 / d) denom
+      scaler = LA.diag safe                              -- m × m
+  in scaler LA.<> num
