@@ -151,9 +151,24 @@ Rastrigin 10D は 10^10+ 個の局所最適があり、5 seeds 中 1 個 (3.3%) 
 scipy が 7.8e-14 を出すのは L-BFGS-B local を **毎反復** 走らせるため
 (我々は 50 反復毎)。完全機械精度には更に頻繁な local 必要。
 
-**次の改善案** (機械精度到達): saLocalEvery を 1 (毎反復) にして
-L-BFGS local を本格的に組み込む (但し 1 SA run あたり ~5-10s 必要、
-trade-off)。現状で実用十分。
+**追加改善 (LocalLBFGS option)**: `Optim.SimulatedAnnealing` に
+`SALocalMethod = LocalNelderMead | LocalLBFGS` 型と `saLocalMethod`
+フィールドを追加。L-BFGS-B (numeric grad + box bounds) を local
+refinement として使えるようにした。bench-optim を `LocalLBFGS` +
+`saLocalEvery=10` + `saInitTemp=5230` (scipy default) に切替:
+
+| Bench | 旧 (NM) | 新 (LBFGS) |
+|---|---|---|
+| Rastrigin_10D | 1.99 (success 3.3%) | **1.99** (success 16.7%) |
+| Sphere_30D | 9.4e-13 | **8.7e-40** (^2 機械精度!) |
+| Ackley_10D | 2.2e-14 | **4.4e-16** |
+| Levy_10D | 1.5e-15 | **7.8e-21** |
+
+Sphere/Ackley/Levy は更に機械精度に近づき、scipy `dual_annealing` を
+凌駕。Rastrigin の成功率は 5× に向上 (3.3% → 16.7%)、median は
+1.99 のまま (隣接局所最適に張付く 25/30 seeds)。完全機械精度には
+**Tsallis acceptance criterion** (q_a = -5、scipy 既定) の追加実装が
+必要 (~半日)。
 
 ---
 

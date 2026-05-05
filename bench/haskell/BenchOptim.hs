@@ -109,8 +109,10 @@ algoSA = Algo "SA" $ \f d -> do
   -- multi-modal landscapes (Rastrigin) at modest budgets.
   let cfg = (SA.defaultSAConfig bs)
               { SA.saProposal       = SA.Tsallis 2.62
-              , SA.saLocalEvery     = Just 50    -- frequent NM polish
-              , SA.saRestartIfStuck = Nothing    -- Tsallis tails handle escape
+              , SA.saLocalMethod    = SA.LocalLBFGS  -- gradient-based
+              , SA.saLocalEvery     = Just 10        -- every 10 iters
+              , SA.saInitTemp       = 5230.0         -- scipy default
+              , SA.saRestartIfStuck = Nothing        -- Tsallis tails escape
               , SA.saStop           = (SA.saStop (SA.defaultSAConfig bs))
                                         { OC.stMaxIter = 10000 }
               }
