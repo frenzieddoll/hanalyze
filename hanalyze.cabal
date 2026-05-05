@@ -107,6 +107,7 @@ library
     Stat.Cholesky
     Stat.QuasiRandom
     Stat.Test
+    Stat.ClassMetrics
     Optim.Adam
     Optim.GradAscent
     Optim.Numeric

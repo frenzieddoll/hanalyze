@@ -28,6 +28,7 @@ import qualified Stat.KernelDist   as KD
 import qualified Stat.Cholesky     as Chol
 import qualified Stat.QuasiRandom  as QR
 import qualified Stat.Test         as ST
+import qualified Stat.ClassMetrics as CM
 import qualified Model.PCA         as PCA
 import qualified Optim.NSGA        as NSGA
 import qualified System.Random.MWC as MWC
@@ -1698,3 +1699,50 @@ main = hspec $ do
       -- SD は元データの per-col SD で保存される
       LA.size (PCA.pcaScale r) `shouldBe` 3
       all (> 0) (LA.toList (PCA.pcaScale r)) `shouldBe` True
+
+  -- ===========================================================================
+  -- Stat.ClassMetrics (Phase 3)
+  -- ===========================================================================
+  describe "Stat.ClassMetrics" $ do
+    it "confusionMatrix: 完全一致で TP/TN のみ" $ do
+      let c = CM.confusionMatrix [1, 0, 1, 0, 1] [1, 0, 1, 0, 1]
+      CM.confTP c `shouldBe` 3
+      CM.confTN c `shouldBe` 2
+      CM.confFP c `shouldBe` 0
+      CM.confFN c `shouldBe` 0
+      CM.accuracy c `shouldBe` 1.0
+      CM.f1Score c  `shouldBe` 1.0
+
+    it "precision/recall/f1: 不均衡な誤分類" $ do
+      let c = CM.confusionMatrix [1, 1, 1, 0, 0] [1, 1, 0, 1, 0]
+      -- TP=2, FN=1, FP=1, TN=1
+      CM.precision c `shouldBe` 2/3   -- 2/(2+1)
+      CM.recall c    `shouldBe` 2/3   -- 2/(2+1)
+      CM.f1Score c   `shouldBe` 2/3
+
+    it "AUC: 完全分離で 1.0、ランダムスコアで ~0.5" $ do
+      let ys = [0, 0, 0, 1, 1, 1]
+          perfectScores  = [0.1, 0.2, 0.3, 0.7, 0.8, 0.9]
+          aucPerfect = CM.auc ys perfectScores
+      aucPerfect `shouldBe` 1.0
+
+    it "logLoss: 自信ある正解で小、自信ある誤りで大" $ do
+      let lossGood = CM.logLoss [1, 0, 1, 0] [0.99, 0.01, 0.99, 0.01]
+          lossBad  = CM.logLoss [1, 0, 1, 0] [0.01, 0.99, 0.01, 0.99]
+      lossGood `shouldSatisfy` (< 0.05)
+      lossBad  `shouldSatisfy` (> 4.0)
+
+    it "brierScore: 完全予測で 0、最悪予測で 1" $ do
+      let bsGood = CM.brierScore [1, 0, 1, 0] [1.0, 0.0, 1.0, 0.0]
+          bsBad  = CM.brierScore [1, 0, 1, 0] [0.0, 1.0, 0.0, 1.0]
+      bsGood `shouldSatisfy` (< 1e-10)
+      bsBad  `shouldBe` 1.0
+
+    it "MCC: 完全一致で 1、ランダムで 0 付近" $ do
+      let cGood = CM.confusionMatrix [1, 0, 1, 0, 1] [1, 0, 1, 0, 1]
+      CM.matthewsCorr cGood `shouldBe` 1.0
+
+    it "macroF1 (multi-class): 完全分類で 1.0" $ do
+      let cm = CM.confusionMulti [0, 1, 2, 0, 1, 2] [0, 1, 2, 0, 1, 2]
+      CM.accuracyMulti cm `shouldBe` 1.0
+      CM.macroF1 cm       `shouldBe` 1.0
