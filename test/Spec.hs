@@ -37,6 +37,7 @@ import qualified Model.PCA         as PCA
 import qualified Model.Cluster     as Cl
 import qualified Model.DecisionTree as DT
 import qualified Model.TimeSeries   as TS
+import qualified Model.Survival     as Surv
 import qualified DataIO.Reshape    as Reshape
 import qualified Optim.NSGA        as NSGA
 import qualified System.Random.MWC as MWC
@@ -2086,3 +2087,54 @@ main = hspec $ do
           y  = LA.fromList ys
           (_trend, seasonal, _resid) = TS.stlDecompose 4 y
       LA.size seasonal `shouldBe` LA.size y
+
+  -- ===========================================================================
+  -- Model.Survival (Phase 12)
+  -- ===========================================================================
+  describe "Model.Survival" $ do
+    it "kaplanMeier: 全 event observed で S(t) は単調減少" $ do
+      let samples = [ Surv.SurvSample t Surv.Observed | t <- [1, 2, 3, 4, 5] ]
+          km = Surv.kaplanMeier samples
+      length (Surv.kmrTimes km) `shouldBe` 5
+      let ss = Surv.kmrSurvival km
+      and (zipWith (>=) ss (tail ss)) `shouldBe` True
+
+    it "kaplanMeier: censored data でも非負の生存確率" $ do
+      let samples = [ Surv.SurvSample 1 Surv.Observed
+                    , Surv.SurvSample 2 Surv.Censored
+                    , Surv.SurvSample 3 Surv.Observed
+                    , Surv.SurvSample 4 Surv.Observed
+                    , Surv.SurvSample 5 Surv.Censored
+                    ]
+          km = Surv.kaplanMeier samples
+      all (>= 0) (Surv.kmrSurvival km) `shouldBe` True
+      all (<= 1) (Surv.kmrSurvival km) `shouldBe` True
+
+    it "nelsonAalen: 累積ハザードは monotone non-decreasing" $ do
+      let samples = [ Surv.SurvSample t Surv.Observed | t <- [1, 2, 3, 4, 5] ]
+          na = Surv.nelsonAalen samples
+          h = Surv.narCumHazard na
+      and (zipWith (<=) h (tail h)) `shouldBe` True
+
+    it "logRankTest: 同一分布で p > 0.05" $ do
+      let g1 = [ Surv.SurvSample t Surv.Observed | t <- [1, 2, 3, 4, 5] ]
+          g2 = [ Surv.SurvSample t Surv.Observed | t <- [1, 2, 3, 4, 5] ]
+          lr = Surv.logRankTest [g1, g2]
+      Surv.lrPValue lr `shouldSatisfy` (> 0.05)
+
+    it "logRankTest: 異なる分布で p < 0.05" $ do
+      let g1 = [ Surv.SurvSample t Surv.Observed | t <- [1, 2, 3, 4, 5] ]
+          g2 = [ Surv.SurvSample t Surv.Observed | t <- [10, 11, 12, 13, 14] ]
+          lr = Surv.logRankTest [g1, g2]
+      Surv.lrPValue lr `shouldSatisfy` (< 0.05)
+
+    it "coxPH: 共変量と event 時間に強い相関で β > 0" $ do
+      -- x が大きい個体が早く event を起こす想定の合成データ
+      let n = 30
+          xs = [ LA.fromList [fromIntegral i / fromIntegral n :: Double]
+               | i <- [1 .. n] ]
+          times = [ 30 - i | i <- [1 .. n] ]   -- x 大きいほど early
+          samples = [ Surv.SurvSample (fromIntegral t) Surv.Observed
+                    | t <- times ]
+          fit = Surv.coxPH xs samples
+      LA.atIndex (Surv.coxBeta fit) 0 `shouldSatisfy` (> 0)
