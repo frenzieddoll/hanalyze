@@ -30,7 +30,9 @@ import qualified System.Random.MWC as MWC
 import qualified System.Random.MWC.Distributions as MWCD
 import Control.Monad (forM, forM_)
 import Data.IORef
+import Control.Exception (SomeException, try, evaluate)
 import Optim.Common
+import qualified Optim.LBFGS as LB
 
 -- | DE strategy.
 --
@@ -64,6 +66,12 @@ data DEConfig = DEConfig
                                --   initialization and boundary reflection.
   , deStrategy  :: !DEStrategy -- ^ Trial-generation strategy.
   , deDir       :: !Direction
+  , dePolish    :: !Bool
+    -- ^ When 'True' (default), run a final L-BFGS-B (numeric gradient)
+    --   refinement on @x_best@ at termination. Mirrors scipy's
+    --   @differential_evolution(polish=True)@. Brings smooth landscapes
+    --   (Sphere, Levy etc.) to near-machine precision after DE has
+    --   localised the basin.
   } deriving (Show, Eq)
 
 -- | Default configuration: 200 iterations, population @max(20, 10×D)@,
@@ -82,6 +90,7 @@ defaultDEConfig bs = DEConfig
   , deBounds   = bs
   , deStrategy = JDE
   , deDir      = Minimize
+  , dePolish   = True
   }
 
 -- | Run DE with the default configuration built from @bounds@.
@@ -135,11 +144,38 @@ runDEWith cfg fUser gen = do
   conv     <- readIORef convRef
   histR    <- readIORef histRef
   let (xb, vb, _, _) = minimumBy (comparing (\(_, ff, _, _) -> ff)) popFinal
-      vUser    = case deDir cfg of { Minimize -> vb; Maximize -> negate vb }
+  -- Optional final L-BFGS-B polish on x_best (scipy parity).
+  -- Numeric gradient because the user's f is opaque. Bounds stay
+  -- within deBounds. If polish improves, replace; otherwise keep.
+  (xPol, vPol) <-
+    if dePolish cfg
+      then do
+        let polCfg = LB.defaultLBFGSConfig
+                       { LB.lbStop   = defaultStopCriteria
+                                         { stMaxIter = 100
+                                         , stTolFun  = 1e-12
+                                         , stTolX    = 1e-12 }
+                       , LB.lbBounds = Just (deBounds cfg)
+                       }
+        -- Polish can fail (numeric grad → linearSolveSVDR etc. for
+        -- objectives that internally invert near-singular matrices).
+        -- Catch any exception and fall back to the unpolished best.
+        eR <- try (LB.runLBFGSNumeric polCfg f xb) :: IO (Either SomeException OptimResult)
+        case eR of
+          Left _  -> pure (xb, vb)
+          Right r ->
+            let xR = clipToBounds (deBounds cfg) (orBest r)
+            in do
+              evR <- try (evaluate (f xR)) :: IO (Either SomeException Double)
+              case evR of
+                Right vR | vR < vb -> pure (xR, vR)
+                _                  -> pure (xb, vb)
+      else pure (xb, vb)
+  let vUser    = case deDir cfg of { Minimize -> vPol; Maximize -> negate vPol }
       histUser = case deDir cfg of
                    Minimize -> reverse histR
                    Maximize -> map negate (reverse histR)
-  return $ OptimResult xb vUser histUser iters conv
+  return $ OptimResult xPol vUser histUser iters conv
 
 -- | jDE re-sampling probabilities (Brest 2006 standard values).
 jdeTau :: Double

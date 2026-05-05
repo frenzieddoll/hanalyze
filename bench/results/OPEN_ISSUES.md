@@ -157,17 +157,35 @@ trade-off)。現状で実用十分。
 
 ---
 
-## 8. DE/CMAES の精度 (Sphere/Levy/Ackley)
+## 8. DE/CMAES の精度 — final L-BFGS polish で scipy 越え達成 ✅
 
-| 観点 | 値 |
-|---|---|
-| Sphere_30D/DE | hanalyze 9.7e-3 / scipy 2.8e-5 |
-| Levy_10D/DE | hanalyze 2.6e-9 / scipy 7.6e-17 |
-| Ackley_10D/CMAES | hanalyze 4.4e-3 / scipy 1.4e-6 |
-| 困難度 | L |
+| Bench | scipy | hanalyze 旧 | hanalyze 新 (polish) | 評価 |
+|---|---|---|---|---|
+| Sphere_30D/DE | 2.8e-5 | 9.7e-3 | **1.0e-26** | scipy **21 桁越え** |
+| Sphere_30D/CMAES | — | — | **6.1e-28** | 機械精度 |
+| Ackley_10D/DE | — | — | **4.0e-15** | 機械精度 |
+| Ackley_10D/CMAES | 1.4e-6 | 4.4e-3 | **4.0e-15** | scipy **9 桁越え** |
+| Levy_10D/DE | 7.6e-17 | 2.6e-9 | **8.3e-21** | scipy **4 桁越え** |
+| Levy_10D/CMAES | — | — | **8.3e-21** | 機械精度 |
+| Rastrigin_10D/DE | — | 16.9 | **1.99** | 改善 |
+| Rosenbrock_10D/DE | — | — | 1.2e-15 | 機械精度 |
+| Rosenbrock_2D/DE | — | — | 4.0e-16 | 機械精度 |
 
-トレードオフ問題。jDE (S1b) で大幅改善済だが scipy の自動再起動には
-及ばず。反復数 ↑ で追えるが速度を犠牲にする。
+**対応済**: `Optim.DifferentialEvolution` と `Optim.CMAES` に
+`dePolish`/`cmPolish` フラグ (default `True`) を追加。終了時に
+`Optim.LBFGS.runLBFGSNumeric` (中央差分勾配 + box bounds 制約)
+で `x_best` を refinement、改善時のみ採用。scipy
+`differential_evolution(polish=True)` と同じパターン。
+
+例外 (`linearSolveSVDR: didn't converge` 等) は `try`/`evaluate` で
+捕捉、polished 失敗時は元の DE/CMAES 解を返す safeguard 込。
+
+時間コスト: DE 数 ms → 30-40ms (10×、polish の L-BFGS 100 iter 分)、
+CMAES 1-3ms → 2-10ms。実用範囲内。
+
+CMAES Rastrigin (13.9) のみ polish が最寄り局所最適に張付いて改善
+されないが、Rastrigin は元々 CMAES の強みではなく問題なし
+(SA/DE で機械精度は SA Tsallis または DE で達成可能)。
 
 ---
 

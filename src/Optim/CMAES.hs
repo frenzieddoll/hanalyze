@@ -26,7 +26,9 @@ import Data.Ord (comparing)
 import qualified System.Random.MWC as MWC
 import qualified System.Random.MWC.Distributions as MWCD
 import Control.Monad (replicateM, forM)
+import Control.Exception (SomeException, try, evaluate)
 import Optim.Common
+import qualified Optim.LBFGS as LB
 
 -- | Configuration for the simplified diagonal CMA-ES.
 data CMAESConfig = CMAESConfig
@@ -39,6 +41,12 @@ data CMAESConfig = CMAESConfig
                                   --   each sampled point is reflected
                                   --   back into the bounds via
                                   --   'clipToBounds'.
+  , cmPolish  :: !Bool
+    -- ^ When 'True' (default), run a final L-BFGS-B (numeric gradient)
+    --   refinement on @x_best@ at termination. Mirrors scipy's
+    --   @differential_evolution(polish=True)@ pattern. Brings smooth
+    --   landscapes to near-machine precision after CMA-ES localised
+    --   the basin.
   } deriving (Show, Eq)
 
 -- | Default configuration: 200 iterations, @σ₀ = 0.5@, default @λ@,
@@ -50,6 +58,7 @@ defaultCMAESConfig = CMAESConfig
   , cmLambda = Nothing
   , cmDir    = Minimize
   , cmBounds = Nothing
+  , cmPolish = True
   }
 
 -- | Run simplified CMA-ES with the default configuration.
@@ -79,7 +88,38 @@ runCMAESWith cfg fUser m0 gen = do
       ws     = map (/ wsSum) wsRaw
       -- 初期分散 (対角) = 1
       diag0  = replicate d 1.0
-  loop cfg f gen 0 m0 (cmSigma0 cfg) diag0 ws lam mu (f m0) [f m0]
+  res <- loop cfg f gen 0 m0 (cmSigma0 cfg) diag0 ws lam mu (f m0) [f m0]
+  -- Optional final L-BFGS-B polish (scipy parity).
+  if cmPolish cfg
+    then do
+      let polCfg = LB.defaultLBFGSConfig
+                     { LB.lbStop   = defaultStopCriteria
+                                       { stMaxIter = 100
+                                       , stTolFun  = 1e-12
+                                       , stTolX    = 1e-12 }
+                     , LB.lbBounds = cmBounds cfg
+                     , LB.lbDir    = cmDir cfg
+                     }
+      ePol <- try (LB.runLBFGSNumeric polCfg fUser (orBest res))
+                :: IO (Either SomeException OptimResult)
+      case ePol of
+        Left _ -> pure res
+        Right polRes ->
+          let xC = case cmBounds cfg of
+                     Nothing -> orBest polRes
+                     Just bs -> clipToBounds bs (orBest polRes)
+          in do
+            evC <- try (evaluate (fUser xC)) :: IO (Either SomeException Double)
+            case evC of
+              Right vC ->
+                let better = case cmDir cfg of
+                               Minimize -> vC < orValue res
+                               Maximize -> vC > orValue res
+                in pure $ if better
+                            then res { orBest = xC, orValue = vC }
+                            else res
+              Left _   -> pure res
+    else pure res
 
 -- | 反復本体。
 loop :: CMAESConfig
