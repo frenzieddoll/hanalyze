@@ -117,6 +117,7 @@ library
     Stat.MultipleTesting
     Stat.Bootstrap
     Stat.Effect
+    Stat.Interpret
     Optim.Adam
     Optim.GradAscent
     Optim.Numeric
