@@ -29,6 +29,7 @@ import qualified Stat.Cholesky     as Chol
 import qualified Stat.QuasiRandom  as QR
 import qualified Stat.Test         as ST
 import qualified Stat.ClassMetrics as CM
+import qualified Stat.CV           as CV
 import qualified Model.PCA         as PCA
 import qualified Optim.NSGA        as NSGA
 import qualified System.Random.MWC as MWC
@@ -1746,3 +1747,46 @@ main = hspec $ do
       let cm = CM.confusionMulti [0, 1, 2, 0, 1, 2] [0, 1, 2, 0, 1, 2]
       CM.accuracyMulti cm `shouldBe` 1.0
       CM.macroF1 cm       `shouldBe` 1.0
+
+  -- ===========================================================================
+  -- Stat.CV (Phase 4)
+  -- ===========================================================================
+  describe "Stat.CV" $ do
+    it "kFold(5, 100): 5 fold で全 100 行を test に使用、重複なし" $ do
+      gen <- MWC.createSystemRandom
+      folds <- CV.kFold 5 100 gen
+      length folds `shouldBe` 5
+      let allTest = concatMap snd folds
+      length allTest `shouldBe` 100
+      length (V.toList (V.fromList allTest)) `shouldBe` 100  -- 重複なし
+
+    it "kFold: train + test = total samples per fold" $ do
+      gen <- MWC.createSystemRandom
+      folds <- CV.kFold 5 100 gen
+      mapM_ (\(tr, te) -> length tr + length te `shouldBe` 100) folds
+
+    it "leaveOneOut(10): 10 folds、test set size 1 each" $ do
+      folds <- CV.leaveOneOut 10
+      length folds `shouldBe` 10
+      mapM_ (\(_, te) -> length te `shouldBe` 1) folds
+
+    it "stratifiedKFold(3): クラスバランスがほぼ保持される" $ do
+      gen <- MWC.createSystemRandom
+      let labels = replicate 30 0 ++ replicate 30 1 ++ replicate 30 2
+      folds <- CV.stratifiedKFold 3 labels gen
+      length folds `shouldBe` 3
+      -- 各 fold の test set には各クラスの ~10 が含まれる
+      mapM_ (\(_, te) -> length te `shouldSatisfy` (\n -> n >= 27 && n <= 33)) folds
+
+    it "shuffleSplit: 反復回数とテストサイズが正しい" $ do
+      gen <- MWC.createSystemRandom
+      folds <- CV.shuffleSplit 5 0.2 100 gen
+      length folds `shouldBe` 5
+      mapM_ (\(_, te) -> length te `shouldBe` 20) folds
+
+    it "timeSeriesSplit: forward-chaining で過去のみで学習" $ do
+      let folds = CV.timeSeriesSplit 50 10 100  -- initial=50, step=10, n=100
+      length folds `shouldBe` 5  -- (100-50)/10 = 5 folds
+      -- 全 fold で train indices < min(test indices)
+      mapM_ (\(tr, te) ->
+               (maximum tr < minimum te) `shouldBe` True) folds

@@ -108,6 +108,7 @@ library
     Stat.QuasiRandom
     Stat.Test
     Stat.ClassMetrics
+    Stat.CV
     Optim.Adam
     Optim.GradAscent
     Optim.Numeric
