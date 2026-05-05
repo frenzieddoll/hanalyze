@@ -76,6 +76,7 @@ library
     Model.PCA
     Model.Cluster
     Model.DecisionTree
+    Model.TimeSeries
     Design.Factorial
     Design.Block
     Design.Mixed
