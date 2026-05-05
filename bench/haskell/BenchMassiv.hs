@@ -9,6 +9,7 @@
 module Main where
 
 import qualified Numeric.LinearAlgebra as LA
+import qualified Stat.KernelDist       as KD ()
 import qualified Stat.KernelDist       as KD
 import qualified Data.Massiv.Array     as A
 import           Data.Massiv.Array     ( Array, Comp (..), Ix2 (..), Sz (..) )
@@ -179,3 +180,38 @@ main = do
   d8 <- timeIt "  massiv v3 Par" $ pure $! pairwiseSqDistMassiv3Par x2000
   let !diff5 = LA.norm_2 (LA.flatten (d5 - d8))
   putStrLn $ "  numeric diff: " ++ show diff5
+
+  putStrLn ""
+  putStrLn "=== applyKernel-style cmap exp on n×n matrix ==="
+  let !d2K = KD.pairwiseSqDist x2000  -- 2000×2000 distance matrix
+      l2   = 1.0 :: Double
+      goH i = let sfI = 1.0 + fromIntegral (i :: Int) * 1e-15
+                  m = LA.cmap (\s -> sfI * exp (- s / (2 * l2))) d2K
+              in LA.norm_2 (LA.flatten m)
+      goM i = let sfI = 1.0 + fromIntegral (i :: Int) * 1e-15
+                  m = applyKernelMassiv sfI l2 d2K
+              in LA.norm_2 (LA.flatten m)
+  _ <- timeItN "  hmatrix cmap exp" 5 goH
+  _ <- timeItN "  massiv A.map exp" 5 goM
+  pure ()
+
+-- | Time a function (Int -> a) over 'n' calls, each with distinct
+-- input to defeat constant-folding.
+timeItN :: NFData a => String -> Int -> (Int -> a) -> IO ()
+timeItN label n f = do
+  let !w = f 0
+  w `deepseq` pure ()
+  t0 <- getCurrentTime
+  results <- mapM (\i -> let !r = f i in r `deepseq` pure r) [1 .. n]
+  t1 <- getCurrentTime
+  let totalMs = realToFrac (diffUTCTime t1 t0) * 1000 :: Double
+      avgMs   = totalMs / fromIntegral n
+  results `deepseq` pure ()
+  putStrLn $ label ++ ": " ++ show avgMs ++ " ms (avg over " ++ show n ++ " runs)"
+
+-- | cmap-style RBF kernel via massiv map.
+applyKernelMassiv :: Double -> Double -> LA.Matrix Double -> LA.Matrix Double
+applyKernelMassiv sf l2 d2 =
+  let am  = hMatrixToMassiv d2
+      out = A.computeAs A.S (A.map (\s -> sf * exp (- s / (2 * l2))) am)
+  in massivToHMatrix out
