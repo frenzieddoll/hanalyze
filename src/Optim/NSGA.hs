@@ -31,6 +31,11 @@ module Optim.NSGA
   , paretoDominates
   , nonDominatedSort
   , crowdingDistance
+    -- * Matrix-based internal API (N3)
+  , PopMatrix (..)
+  , fromSolutions
+  , toSolutions
+  , dominationMatrix
     -- * Genetic operators
   , sbxCrossover
   , polynomialMutation
@@ -42,7 +47,10 @@ module Optim.NSGA
 import Control.Monad (zipWithM)
 import Data.List (sortBy)
 import Data.Ord  (comparing)
+import qualified Data.IntSet as IS
+import qualified Data.Vector as V
 import System.Random.MWC (GenIO, uniform, uniformR)
+import qualified Numeric.LinearAlgebra as LA
 import qualified Optim.Common    as OC
 import qualified Stat.QuasiRandom as QR
 
@@ -62,6 +70,146 @@ data Solution = Solution
   , solViolation  :: Double     -- ^ Constraint violation (0 = feasible,
                                 --   @> 0@ = violated).
   } deriving (Show, Eq)
+
+-- ---------------------------------------------------------------------------
+-- PopMatrix — Matrix-based internal population representation
+-- ---------------------------------------------------------------------------
+
+-- | Internal population representation backed by hmatrix matrices.
+--
+-- The user-facing 'Solution' type stores per-individual lists, which
+-- forces the inner non-dominated sort and crowding-distance loops to
+-- pay @O(MN)@ list traversals on every pair compare. 'PopMatrix' keeps
+-- the same data laid out as one dense matrix per attribute, so that
+-- the same loops become a small number of @O(N²)@ BLAS / 'LA.cmap'
+-- calls — the same vectorisation that lets pymoo do a generation in
+-- ~5 ms on numpy.
+--
+-- /Layout/:
+--
+--   * @pmX@ — decision matrix of shape @n × d@ (one row per individual)
+--   * @pmF@ — objective matrix of shape @n × m@ (minimisation; smaller
+--     is better)
+--   * @pmCV@ — constraint-violation vector of length @n@ (zero =
+--     feasible, positive = violated)
+--
+-- The 'Solution' API is preserved as a boundary representation; we
+-- convert via 'fromSolutions' / 'toSolutions' once per generation.
+data PopMatrix = PopMatrix
+  { pmX  :: !(LA.Matrix Double)  -- ^ Decision matrix (@n × d@).
+  , pmF  :: !(LA.Matrix Double)  -- ^ Objective matrix (@n × m@).
+  , pmCV :: !(LA.Vector Double)  -- ^ Constraint violations (length @n@).
+  } deriving (Show)
+
+-- | Number of individuals in a 'PopMatrix'.
+pmSize :: PopMatrix -> Int
+pmSize = LA.rows . pmF
+
+-- | Number of objectives in a 'PopMatrix'.
+pmObjs :: PopMatrix -> Int
+pmObjs = LA.cols . pmF
+
+-- | Convert a list of 'Solution' to a 'PopMatrix'. All solutions must
+-- share the same dimensions; the empty list yields an empty matrix.
+fromSolutions :: [Solution] -> PopMatrix
+fromSolutions []   = PopMatrix
+  { pmX  = (0 LA.>< 0) []
+  , pmF  = (0 LA.>< 0) []
+  , pmCV = LA.fromList []
+  }
+fromSolutions sols = PopMatrix
+  { pmX  = LA.fromLists (map solDecision   sols)
+  , pmF  = LA.fromLists (map solObjectives sols)
+  , pmCV = LA.fromList  (map solViolation  sols)
+  }
+
+-- | Inverse of 'fromSolutions'.
+toSolutions :: PopMatrix -> [Solution]
+toSolutions pm =
+  let xs  = LA.toLists (pmX  pm)
+      fs  = LA.toLists (pmF  pm)
+      cvs = LA.toList  (pmCV pm)
+  in zipWith3 (\d o v -> Solution d o v) xs fs cvs
+
+-- | Pairwise constrained-Pareto domination matrix.
+--
+-- Returns an @n × n@ matrix @M@ in which:
+--
+--   * @M[i, j] = +1@ iff individual @i@ dominates @j@
+--   * @M[i, j] = -1@ iff individual @j@ dominates @i@
+--   * @M[i, j] =  0@ otherwise (mutually non-dominated, identical, or
+--     diagonal entries)
+--
+-- Equivalent to calling 'dominates' on every pair, but evaluated as a
+-- handful of @n × n@ array operations:
+--
+--   1. For each objective @k@, build the @n × n@ pairwise-difference
+--      matrix @D_k[i, j] = F[i, k] - F[j, k]@ via two outer products.
+--   2. @smallerK[i, j] = (D_k[i, j] < 0)@; @largerK[i, j] = (D_k[i, j] > 0)@.
+--   3. Aggregate over @k@: @anySm = OR_k smallerK@, @anyLg = OR_k largerK@.
+--   4. @iDomJ = anySm AND NOT anyLg@; @jDomI = anyLg AND NOT anySm@.
+--   5. Constraint layer: a feasible individual dominates an infeasible
+--      one; among two infeasible ones the smaller violation wins.
+dominationMatrix :: PopMatrix -> LA.Matrix Double
+dominationMatrix pm =
+  let f      = pmF pm
+      cv     = pmCV pm
+      n      = LA.rows f
+      m      = LA.cols f
+      ones   = LA.konst 1 n :: LA.Vector Double
+      onesNN = LA.konst 1 (n, n) :: LA.Matrix Double
+      indicator x | x > 0     = 1
+                  | otherwise = 0
+
+      -- Per-objective contributions to "any smaller" and "any larger".
+      -- We accumulate by addition, then collapse with @indicator@; this
+      -- avoids constructing a 3-D tensor.
+      perObj k =
+        let fk = LA.flatten (f LA.¿ [k])
+            d  = LA.outer fk ones - LA.outer ones fk     -- D_k[i,j] = f_k[i] - f_k[j]
+            sm = LA.cmap (\v -> if v < 0 then 1 else 0) d
+            lg = LA.cmap (\v -> if v > 0 then 1 else 0) d
+        in (sm, lg)
+
+      zeroNN = LA.konst 0 (n, n) :: LA.Matrix Double
+      objContribs :: [(LA.Matrix Double, LA.Matrix Double)]
+      objContribs =
+        if m == 0
+          then [(zeroNN, zeroNN)]
+          else map perObj [0 .. m - 1]
+      anySm = LA.cmap indicator (sum (map fst objContribs))
+      anyLg = LA.cmap indicator (sum (map snd objContribs))
+
+      -- Pareto-only domination ignoring constraints.
+      iDomJpar = LA.cmap indicator (anySm * (onesNN - anyLg))
+      jDomIpar = LA.cmap indicator (anyLg * (onesNN - anySm))
+      paretoM  = iDomJpar - jDomIpar
+
+      -- Constraint layer.
+      cvFeas   = LA.cmap (\v -> if v == 0 then 1 else 0) cv
+      cvInfes  = LA.cmap (\v -> if v >  0 then 1 else 0) cv
+      -- a_feas[i,j] = 1 iff i feasible
+      aFeas    = LA.outer cvFeas ones
+      aInfes   = LA.outer cvInfes ones
+      bFeas    = LA.outer ones cvFeas
+      bInfes   = LA.outer ones cvInfes
+      -- Both feasible: keep paretoM
+      bothFeas = aFeas * bFeas
+      -- a feasible, b infeasible: a dominates → +1
+      aBeatsB  = aFeas * bInfes
+      -- a infeasible, b feasible: b dominates → -1
+      bBeatsA  = aInfes * bFeas
+      -- Both infeasible: smaller cv wins
+      cvDiff   = LA.outer cv ones - LA.outer ones cv
+      aSmCV    = LA.cmap (\v -> if v < 0 then 1 else 0) cvDiff
+      bSmCV    = LA.cmap (\v -> if v > 0 then 1 else 0) cvDiff
+      bothInf  = aInfes * bInfes
+      cvLayer  = bothInf * (aSmCV - bSmCV)
+
+      m0 = bothFeas * paretoM + aBeatsB - bBeatsA + cvLayer
+      -- Zero-out diagonal (i == j has no domination).
+      identityMask = onesNN - LA.diag (LA.konst 1 n)
+  in m0 * identityMask
 
 -- | NSGA-II configuration.
 data NSGAConfig = NSGAConfig
@@ -442,44 +590,97 @@ paretoDominates as bs =
 nonDominatedSort :: [Solution] -> [[Solution]]
 nonDominatedSort [] = []
 nonDominatedSort pop =
-  let n = length pop
-      idxs = [0 .. n - 1]
-      ps   = pop                 -- インデックスでアクセス
-      -- (S_p, n_p) を計算
+  -- Pop is moved into a 'Data.Vector' so per-individual access is O(1)
+  -- (the original list-based @ps !! j@ was @O(j)@ which made the whole
+  -- sort @O(n³)@ rather than @O(n²m)@). Front/dominance bookkeeping
+  -- still uses BLAS Vector for fused @LA.accum@ updates and an IntSet
+  -- to track placed individuals across iterations.
+  let n      = length pop
+      ps     = V.fromList pop
+      idxs   = [0 .. n - 1]
       domInfo i =
-        let pi = ps !! i
+        let pi = ps V.! i
             (sp, np) = foldr step ([], 0 :: Int) idxs
             step j (s, c)
-              | i == j               = (s, c)
-              | dominates pi (ps !! j) = (j : s, c)
-              | dominates (ps !! j) pi = (s, c + 1)
-              | otherwise              = (s, c)
+              | i == j                   = (s, c)
+              | dominates pi (ps V.! j)  = (j : s, c)
+              | dominates (ps V.! j) pi  = (s, c + 1)
+              | otherwise                = (s, c)
         in (sp, np)
-      info = [domInfo i | i <- idxs]   -- [(S_i, n_i)]
-      -- F_1 の構築
-      front1 = [i | (i, (_, np)) <- zip idxs info, np == 0]
-      -- 反復で次の front を作る
-      go currentFront acc remaining =
-        if null currentFront then reverse acc
-        else
-          let -- currentFront の S_p 集合から各 q について n_q を 1 減らし、
-              -- 0 になったものを次の front に
-              decrements = concat [ fst (info !! i) | i <- currentFront ]
-              counts'    = foldr (\j m -> updateAt j (subtract 1) m) remaining decrements
-              nextF      = [j | j <- [0 .. length counts' - 1]
-                              , counts' !! j == 0
-                              , j `elem` candidatePool]
-              candidatePool = [j | j <- [0 .. n - 1]
-                                 , j `notElem` concat (currentFront : acc)]
-          in go nextF (currentFront : acc) counts'
-      -- mutable-style update on list
-      updateAt :: Int -> (a -> a) -> [a] -> [a]
-      updateAt _ _ [] = []
-      updateAt 0 f (x:xs) = f x : xs
-      updateAt k f (x:xs) = x : updateAt (k - 1) f xs
-      initialCounts = map snd info
-      idxFronts = go front1 [] initialCounts
-  in map (map (ps !!)) idxFronts
+      info   = V.fromList [domInfo i | i <- idxs]
+      sList  = V.map fst info
+      front0 = [ i | (i, (_, c)) <- zip idxs (V.toList info), c == 0 ]
+      nVec0  = LA.fromList (map (fromIntegral . snd) (V.toList info))
+                 :: LA.Vector Double
+      go counts current placedSet acc
+        | null current = reverse acc
+        | otherwise =
+            let decrements = [ (j, -1)
+                             | i <- current
+                             , j <- sList V.! i ]
+                counts'    = LA.accum counts (+) decrements
+                placedSet' = foldr IS.insert placedSet current
+                nextF =
+                  [ j
+                  | j <- [0 .. n - 1]
+                  , not (IS.member j placedSet')
+                  , let v = LA.atIndex counts' j
+                  , v <= 0.5 && v > -0.5
+                  ]
+            in go counts' nextF placedSet' (current : acc)
+      idxFronts = go nVec0 front0 IS.empty []
+  in map (map (ps V.!)) idxFronts
+
+-- | Matrix-driven non-dominated sort. Given a 'PopMatrix', returns a
+-- list of fronts as @[[Int]]@ index lists.
+--
+-- Implementation: build the @n × n@ 'dominationMatrix' once; from it
+-- derive @S_p@ (set of individuals dominated by @p@) and @n_p@ (count
+-- of individuals dominating @p@) by row sums on the @+1@ / @-1@
+-- patterns. The remainder is the standard Deb 2002 BFS-style level
+-- assignment, but on integer arrays rather than per-element list
+-- traversals.
+nonDominatedSortIdx :: PopMatrix -> [[Int]]
+nonDominatedSortIdx pm
+  | pmSize pm == 0 = []
+  | otherwise      =
+      let n     = pmSize pm
+          mDom  = dominationMatrix pm
+          rows  = LA.toRows mDom
+          -- Single pass per row: extract S_i (j with +1) and count
+          -- dominators (entries with -1).
+          dInfo = [ rowToSN (LA.toList r) | r <- rows ]
+          sList = map fst dInfo
+          nVec0 = LA.fromList (map (fromIntegral . snd) dInfo)
+                    :: LA.Vector Double
+          front0 = [ i | (i, (_, c)) <- zip [0 ..] dInfo, c == 0 ]
+          go counts current placedSet acc
+            | null current = reverse acc
+            | otherwise =
+                let decrements = [ (j, -1)
+                                 | i <- current
+                                 , j <- sList !! i ]
+                    counts'    = LA.accum counts (+) decrements
+                    placedSet' = foldr IS.insert placedSet current
+                    nextF =
+                      [ j
+                      | j <- [0 .. n - 1]
+                      , not (IS.member j placedSet')
+                      , let v = LA.atIndex counts' j
+                      , v <= 0.5 && v > -0.5
+                      ]
+                in go counts' nextF placedSet' (current : acc)
+      in go nVec0 front0 IS.empty []
+  where
+    -- Walk one row, producing (S_i, n_i) in a single pass.
+    rowToSN :: [Double] -> ([Int], Int)
+    rowToSN vs = go' 0 [] 0 vs
+      where
+        go' _ s c []     = (reverse s, c)
+        go' j s c (x:xs)
+          | x >  0.5 = go' (j + 1) (j : s) c xs
+          | x < -0.5 = go' (j + 1) s       (c + 1) xs
+          | otherwise = go' (j + 1) s       c       xs
 
 -- | Compute the crowding distance (Deb 2002) inside a front and sort it
 -- by descending distance.

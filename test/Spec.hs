@@ -122,6 +122,24 @@ main = hspec $ do
           sorted = NSGA.crowdingDistance f3
       length sorted `shouldBe` 3
 
+    it "dominationMatrix matches per-pair dominates on a 3-individual pop" $ do
+      let s00 = NSGA.Solution [0, 0] [0.0, 0.0] 0   -- best
+          s11 = NSGA.Solution [1, 1] [1.0, 1.0] 0   -- worst
+          s05 = NSGA.Solution [0.5, 0.5] [0.5, 0.5] 0  -- middle
+          pop  = [s00, s05, s11]
+          pm   = NSGA.fromSolutions pop
+          mDom = NSGA.dominationMatrix pm
+          n    = length pop
+          ref  = LA.fromLists
+                   [ [ if i == j then 0
+                       else if NSGA.dominates (pop !! i) (pop !! j) then 1
+                       else if NSGA.dominates (pop !! j) (pop !! i) then -1
+                       else 0
+                     | j <- [0 .. n - 1] ]
+                   | i <- [0 .. n - 1] ]
+                   :: LA.Matrix Double
+      LA.norm_Inf (mDom - ref) `shouldBe` 0
+
     it "polynomialMutation: respects bounds and pMut=0 keeps x" $ do
       gen <- MWC.createSystemRandom
       let bs = [(0, 1), (0, 1), (0, 1)] :: [(Double, Double)]
