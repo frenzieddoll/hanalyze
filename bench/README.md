@@ -27,7 +27,8 @@ bench/
 python3 -m venv bench/venv
 bench/venv/bin/pip install -r bench/requirements.txt
 
-# 2. Generate shared data
+# 2. Generate shared data (fixed-seed, deterministic; not committed to
+#    git because lm_n100000_p100.csv > 100 MB exceeds GitHub limits).
 cabal run bench-data-gen
 
 # 3. Run Haskell side
