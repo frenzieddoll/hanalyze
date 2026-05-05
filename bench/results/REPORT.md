@@ -745,6 +745,51 @@ k-means, taking centroids — Wang et al. 2014 style), or (b) ARD
 re-enabled in BO so each L-BFGS run becomes more efficient per
 iteration. Both deferred.
 
+## After E phase (Branin accuracy gap investigation)
+
+Goal: close the Branin precision gap (0.64 vs skopt 0.398). skopt
+achieves machine precision (= one of the 3 true global mins). Three
+constructional differences with skopt's `cook_estimator`
+(`utils.py:380-388`) were targeted:
+
+| 観点 | skopt | hanalyze (pre-E) |
+|---|---|---|
+| GP HP restarts | 3 (= 1 + `n_restarts_optimizer=2`) | 1 |
+| GP HP bounds | `(0.01, 100)` per ℓ | unconstrained |
+| ARD | enabled (`length_scale_bounds=…`) | disabled in BO |
+
+**E1 (multi-restart HP, with and without bounds)**: implemented
+`optimizeHPMultiRestart` (3 fixed log-spaced ℓ inits + bounded
+L-BFGS). Result: Branin **regressed** to 0.86, Hartmann6 to -3.06.
+The maximum-LML choice did not lead to better BO. Bounds alone
+forced ℓ inside `(0.01, 100)`, which preserved the regression.
+This reproduces a known BO phenomenon: maximum-LML kernels
+can over-exploit and miss exploration — so picking the “best fit”
+HP is suboptimal compared to a single-init L-BFGS that lands in a
+slightly looser basin.
+
+**E2 (ARD with bounds, single restart)**: enabled
+`gpLengthScales = Just (LA.konst ell0 dim)` so the L-BFGS HP fit
+learns per-dim ℓ_d, with `(0.01, 100)` bounds preventing ℓ_d
+divergence. Result: Branin **0.65 (no improvement)**, Hartmann6
+-2.74 (regressed). Tried conditional ARD (only @dim ≤ 3@) to keep
+Hartmann6 isotropic: Branin 0.65 unchanged, Hartmann6 preserved
+(-3.07). ARD provides **no measurable Branin benefit** in this
+budget regime.
+
+**Conclusion**: the Branin 0.64 → 0.398 gap is not closeable by GP
+HP construction tweaks. The remaining factor is likely numerical
+implementation depth (BLAS routing, L-BFGS bookkeeping precision,
+RNG quality at the inner-optimization edge — all areas where
+skopt + scipy + cython have a deep stack of optimisations we don't
+match). The `optimizeHPMultiRestart` helper is kept (exposed via
+the module export list) for future use cases where the BO problem
+benefits from it (currently not the default).
+
+State after E: bayesOptND uses single-restart isotropic L-BFGS HP
+fit (= same as the D-phase commit). No further BO accuracy or
+speed change.
+
 ## Reproduction
 
 ```bash

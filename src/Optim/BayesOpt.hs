@@ -17,6 +17,7 @@ module Optim.BayesOpt
   , bayesOptMOWithNSGA
     -- * GP HP optimization helpers
   , optimizeGPMVRestart
+  , optimizeHPMultiRestart
   ) where
 
 import Control.Exception (SomeException, try, evaluate)
@@ -495,6 +496,94 @@ bayesOptND cfg nStarts f bounds gen = do
   finalHist <- loop (boIterations cfg) history0 [0, 0, 0]
   let bestPair = minimumBy (comparing snd) finalHist
   return (finalHist, bestPair)
+
+-- ---------------------------------------------------------------------------
+-- Phase E1: bounded multi-restart HP optimisation
+-- ---------------------------------------------------------------------------
+
+-- | Bounded multi-restart kernel HP optimization for use inside the BO
+-- loop. Mirrors skopt's @cook_estimator@ + @n_restarts_optimizer=2@:
+-- runs L-BFGS-B from @n@ random log-uniform inits in
+-- @log ℓ ∈ [log 0.01, log 100]@, picks the maximum-LML solution.
+--
+-- Compared to a single-init 'optimizeGPMV' this is significantly more
+-- robust on multi-modal log-marginal-likelihood surfaces (Branin, where
+-- the 3 global mins demand a sharp ℓ but the LML basin near a broad ℓ
+-- is also locally optimal).
+--
+-- The first init is the user-provided @p0@; subsequent inits are
+-- log-uniform perturbations of @p0@ over [0.01, 100].
+optimizeHPMultiRestart
+  :: Int                       -- ^ Total restarts (≥ 1)
+  -> Kernel
+  -> LA.Matrix Double          -- ^ Training X (n × p)
+  -> LA.Vector Double          -- ^ Training y (length n)
+  -> GPParams                  -- ^ Initial guess (first restart)
+  -> GPParams
+optimizeHPMultiRestart nRestarts kern trainX y p0 =
+  let pdim   = LA.cols trainX
+      isARD  = case gpLengthScales p0 of
+                 Just v | LA.size v == pdim && pdim > 0 -> True
+                 _                                       -> False
+      -- log-space bounds: skopt の length_scale_bounds=(0.01, 100)
+      logLo  = log 0.01
+      logHi  = log 100
+      -- σ_f² and σ_n² の bounds は緩めに (kernel HP より広い)
+      logVarLo = log 1e-6
+      logVarHi = log 1e6
+      -- LBFGS bounds for HP vector
+      hpBounds
+        | isARD     = replicate pdim (logLo, logHi)
+                      ++ [(logVarLo, logVarHi), (logVarLo, logVarHi)]
+        | otherwise = [(logLo, logHi), (logVarLo, logVarHi)
+                                     , (logVarLo, logVarHi)]
+      -- Pack/unpack between [Double] (LBFGS state) and GPParams
+      paramsToVec p
+        | isARD     = let Just v = gpLengthScales p
+                          ls = LA.toList v
+                      in map log ls
+                         ++ [log (gpSignalVar p), log (gpNoiseVar p)]
+        | otherwise = [ log (gpLengthScale p)
+                      , log (gpSignalVar  p)
+                      , log (gpNoiseVar   p) ]
+      vecToParams u
+        | isARD     =
+            let lsV = LA.fromList (map exp (take pdim u))
+            in p0
+                 { gpLengthScales = Just lsV
+                 , gpSignalVar    = exp (u !! pdim)
+                 , gpNoiseVar     = exp (u !! (pdim + 1))
+                 }
+        | otherwise = p0
+            { gpLengthScale = exp (u !! 0)
+            , gpSignalVar   = exp (u !! 1)
+            , gpNoiseVar    = exp (u !! 2)
+            }
+      -- Negative LML to minimise (LBFGS minimises by default).
+      negLML u = - logMarginalLikelihoodMV trainX y kern (vecToParams u)
+      -- Build restart inits: keep σ_f²/σ_n² at p0, vary ℓ over a few
+      -- fixed log-spaced points (Branin needs sharp ℓ near 0.1, others
+      -- benefit from broad ℓ near 1-10).
+      p0Vec     = paramsToVec p0
+      sigfLog   = p0Vec !! pdim     -- (paramsToVec layout) for ARD
+      signLog   = p0Vec !! (pdim + 1)
+      sigfLogIso = p0Vec !! 1
+      signLogIso = p0Vec !! 2
+      ellGrid   = take (max 0 (nRestarts - 1)) [log 0.1, log 1.0, log 10.0]
+      mkInit ll
+        | isARD     = replicate pdim ll ++ [sigfLog, signLog]
+        | otherwise = [ll, sigfLogIso, signLogIso]
+      inits = p0Vec : map mkInit ellGrid
+      cfg = LBFGS.defaultLBFGSConfig
+              { LBFGS.lbStop   = OC.defaultStopCriteria
+                                   { OC.stMaxIter = 50, OC.stTolFun = 1e-7 }
+              , LBFGS.lbBounds = Just hpBounds
+              }
+      runOne u0 = unsafePerformIO $ LBFGS.runLBFGSNumeric cfg negLML u0
+      results = map runOne inits
+      -- Pick the lowest-negLML result (= highest LML)
+      best = minimumBy (comparing OC.orValue) results
+  in vecToParams (OC.orBest best)
 
 -- | Multi-objective BO using **scalarization** (ParEGO-style).
 -- 各反復で random 重み w で Tchebycheff scalarize し、単目的 BO の 1 ステップ
