@@ -67,7 +67,7 @@ hartmann6Star = -3.32237
 -- ---------------------------------------------------------------------------
 
 nSeeds :: Int
-nSeeds = 5
+nSeeds = 2     -- 一時的に短縮 (BO1 動作確認用)
 
 mainBranin :: IO BenchRow
 mainBranin = do
@@ -104,7 +104,7 @@ runND cfg f bs = do
 
 main :: IO ()
 main = do
-  rs <- sequence [mainBranin, mainHartmann6]
+  rs <- sequence [mainBranin]
   writeRows "bench/results/haskell/bo.csv" rs
   putStrLn $ "wrote " ++ show (length rs)
           ++ " rows → bench/results/haskell/bo.csv"

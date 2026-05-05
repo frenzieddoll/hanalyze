@@ -39,6 +39,7 @@ import qualified Optim.LBFGS      as LBFGS
 import qualified Optim.Common     as OC
 import qualified Numeric.LinearAlgebra as LA
 import qualified Stat.QuasiRandom      as QR
+import qualified Stat.Standardize      as Std
 
 -- | Bayesian Optimization configuration.
 data BayesOptConfig = BayesOptConfig
@@ -214,15 +215,25 @@ bayesOptND cfg nStarts f bounds gen = do
         | otherwise = do
             let xss   = map fst hist
                 ys    = map snd hist
-                yBest = minimum ys
-                -- True multi-input GP via Model.GP MV API. Pre-K6 code
-                -- collapsed dim>1 inputs by summation, which made the
-                -- GP blind to most of the search-space geometry.
-                xMat = LA.fromLists xss
-                yVec = LA.fromList ys
-                p0   = initParamsFromData (concat xss) ys
-                pOpt = optimizeGPMV kern xMat yVec p0
-                model = GPModel kern pOpt
+                xMat  = LA.fromLists xss
+                yVec0 = LA.fromList ys
+                -- BO1: z-score y so HP optimization is scale-free (skopt
+                -- normalize_y=True equivalent). Both GP fitting and EI
+                -- run in normalized space; the next-x choice is
+                -- scale-equivariant, so unnormalising is unnecessary.
+                stdr  = Std.fitStandardizer (LA.asColumn yVec0)
+                yVec  = LA.flatten
+                          (Std.applyStandardizer stdr (LA.asColumn yVec0))
+                yBest = LA.minElement yVec
+                -- BO1 補強: p0 の length scale を **bounds の平均幅**
+                -- に揃える (per-dim 幅の平均)。pooled (concat xss) より
+                -- 適切な spatial scale を初期値に与えられる。
+                avgWidth = sum [ hi - lo | (lo, hi) <- bounds ]
+                           / fromIntegral (max 1 dim)
+                p0Base   = initParamsFromData (concat xss) (LA.toList yVec)
+                p0       = p0Base { gpLengthScale = max 1e-3 (avgWidth / 4) }
+                pOpt     = optimizeGPMV kern xMat yVec p0
+                model    = GPModel kern pOpt
                 negEI xVec = unsafePerformIO $ do
                   let xRow = LA.asRow (LA.fromList xVec)
                       computed = do
