@@ -32,6 +32,7 @@ import qualified Stat.ClassMetrics as CM
 import qualified Stat.CV           as CV
 import qualified Stat.MultipleTesting as MT
 import qualified Stat.Bootstrap       as Boot
+import qualified Stat.Effect          as Eff
 import qualified Model.PCA         as PCA
 import qualified Model.Cluster     as Cl
 import qualified DataIO.Reshape    as Reshape
@@ -1928,3 +1929,48 @@ main = hspec $ do
                  [("c", DX.fromList ["X", "Y", "Z" :: T.Text])]
           df' = Reshape.oneHot True "c" df
       length (DX.columnNames df') `shouldBe` 2  -- Y, Z (X drop)
+
+  -- ===========================================================================
+  -- Stat.Effect (Phase 9)
+  -- ===========================================================================
+  describe "Stat.Effect" $ do
+    it "cohenD: 同じ分布で 0、平均差 1 SD で ~1" $ do
+      let xs = LA.fromList [1, 2, 3, 4, 5] :: LA.Vector Double
+          ys = LA.fromList [1, 2, 3, 4, 5] :: LA.Vector Double
+      Eff.cohenD xs ys `shouldBe` 0.0
+
+      let zs = LA.fromList [2, 3, 4, 5, 6] :: LA.Vector Double  -- shifted
+          d2 = Eff.cohenD zs xs
+      d2 `shouldSatisfy` (> 0.5)
+
+    it "hedgesG ≤ |cohenD| (small-sample correction)" $ do
+      let xs = LA.fromList [1, 2, 3, 4, 5] :: LA.Vector Double
+          ys = LA.fromList [3, 4, 5, 6, 7] :: LA.Vector Double
+          d  = Eff.cohenD xs ys
+          g  = Eff.hedgesG xs ys
+      abs g `shouldSatisfy` (<= abs d + 1e-9)
+
+    it "eta2: 完全分離で大、同分布で 0" $ do
+      let g1 = LA.fromList [1, 2, 3] :: LA.Vector Double
+          g2 = LA.fromList [10, 11, 12] :: LA.Vector Double
+          g3 = LA.fromList [20, 21, 22] :: LA.Vector Double
+      Eff.eta2 [g1, g2, g3] `shouldSatisfy` (> 0.9)
+
+    it "powerTTest: d = 0 で α 付近 (= ~0.05)" $ do
+      let p = Eff.powerTTest 30 0.05 0.0
+      p `shouldSatisfy` (\x -> abs (x - 0.05) < 0.01)
+
+    it "powerTTest: 大きい d で高い power" $ do
+      let p = Eff.powerTTest 30 0.05 0.8
+      p `shouldSatisfy` (> 0.85)
+
+    it "sampleSizeTTest: 小 d ほど大 n が必要" $ do
+      let n1 = Eff.sampleSizeTTest 0.80 0.05 0.2  -- small effect
+          n2 = Eff.sampleSizeTTest 0.80 0.05 0.5  -- medium
+          n3 = Eff.sampleSizeTTest 0.80 0.05 0.8  -- large
+      n1 `shouldSatisfy` (> n2)
+      n2 `shouldSatisfy` (> n3)
+
+    it "cramerV: 2×2 完全独立で ~0、強従属で大" $ do
+      Eff.cramerV 0 100 2 2 `shouldBe` 0.0
+      Eff.cramerV 50 100 2 2 `shouldSatisfy` (> 0.5)
