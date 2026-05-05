@@ -31,6 +31,7 @@ import qualified Stat.Test         as ST
 import qualified Stat.ClassMetrics as CM
 import qualified Stat.CV           as CV
 import qualified Model.PCA         as PCA
+import qualified Model.Cluster     as Cl
 import qualified Optim.NSGA        as NSGA
 import qualified System.Random.MWC as MWC
 import qualified Model.Kernel      as Kn
@@ -1790,3 +1791,41 @@ main = hspec $ do
       -- 全 fold で train indices < min(test indices)
       mapM_ (\(tr, te) ->
                (maximum tr < minimum te) `shouldBe` True) folds
+
+  -- ===========================================================================
+  -- Model.Cluster (Phase 5)
+  -- ===========================================================================
+  describe "Model.Cluster" $ do
+    it "kMeans: 2 つの離れたクラスタで正しく分類" $ do
+      gen <- MWC.createSystemRandom
+      -- Cluster 1: around (0, 0); cluster 2: around (10, 10)
+      let xs = LA.fromLists $
+            [[0.1*x, 0.1*y] | x <- [-3..3], y <- [-3..3]] ++
+            [[10 + 0.1*x, 10 + 0.1*y] | x <- [-3..3], y <- [-3..3]]
+          cfg = Cl.defaultKMeansConfig 2
+      r <- Cl.kMeans cfg xs gen
+      LA.rows (Cl.kmrCentroids r) `shouldBe` 2
+      -- 全 49 points がクラスタ 1、49 が クラスタ 2
+      let labels = Cl.kmrLabels r
+          (c0, c1) = (length (filter (== 0) labels), length (filter (== 1) labels))
+      (min c0 c1) `shouldBe` 49
+      (max c0 c1) `shouldBe` 49
+
+    it "silhouette: well-separated clusters で > 0.5" $ do
+      gen <- MWC.createSystemRandom
+      let xs = LA.fromLists $
+            [[0.1*x, 0.1*y] | x <- [-3..3], y <- [-3..3]] ++
+            [[20 + 0.1*x, 20 + 0.1*y] | x <- [-3..3], y <- [-3..3]]
+          cfg = Cl.defaultKMeansConfig 2
+      r <- Cl.kMeans cfg xs gen
+      let s = Cl.silhouette xs (Cl.kmrLabels r)
+      s `shouldSatisfy` (> 0.7)
+
+    it "kMeans: inertia は monotone non-increasing in iter" $ do
+      gen <- MWC.createSystemRandom
+      let xs = LA.fromLists [[fromIntegral i, fromIntegral j]
+                            | i <- [0..9::Int], j <- [0..9::Int]]
+          cfg = (Cl.defaultKMeansConfig 4) { Cl.kmRestarts = 5 }
+      r <- Cl.kMeans cfg xs gen
+      Cl.kmrInertia r `shouldSatisfy` (>= 0)
+      Cl.kmrConverged r `shouldBe` True

@@ -73,6 +73,7 @@ library
     Model.MultiGP
     Model.MultiOutput
     Model.PCA
+    Model.Cluster
     Design.Factorial
     Design.Block
     Design.Mixed
