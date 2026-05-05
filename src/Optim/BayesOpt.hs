@@ -32,7 +32,8 @@ import Model.GP (Kernel (..), GPModel (..), GPResult (..), GPParams (..),
                  GPResultMV (..), fitGPMV, optimizeGPMV,
                  logMarginalLikelihoodMV,
                  buildKernelMatrixMV, noiseKernelMV)
-import qualified Stat.Cholesky as Chol
+import qualified Stat.Cholesky    as Chol
+import qualified Stat.KernelDist  as KD
 import Optim.Acquisition (ei, ucb, pi_, parEGO)
 import Optim.NSGA       (NSGAConfig (..), defaultNSGAConfig,
                          Solution (..), nsga2)
@@ -325,11 +326,8 @@ bayesOptND cfg nStarts f bounds gen = do
                   let kStar = buildKernelMatrixMV kern params xCand xMat  -- m × n
                       mus   = kStar LA.#> alpha                            -- m
                       vMat  = Chol.cholSolveWithFactor rChol (LA.tr kStar) -- n × m
-                      -- σ²_j = sf - Σ_i kStar[j,i] · vMat[i,j]
-                      --      = sf - Σ_i (kStar ⊙ vMat^T)[j,i]
-                      kStarDotV = LA.fromList
-                        [ r `LA.dot` c
-                        | (r, c) <- zip (LA.toRows kStar) (LA.toColumns vMat) ]
+                      -- F1: diag(kStar · vMat) without forming m×m.
+                      kStarDotV = KD.diagAB kStar vMat
                       sigmas = LA.cmap (\v -> sqrt (max 0 (sf - v))) kStarDotV
                   in (mus, sigmas)
 

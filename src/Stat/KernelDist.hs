@@ -14,11 +14,39 @@ module Stat.KernelDist
   ( pairwiseSqDist
   , pairwiseSqDistXY
   , rowSqNorms
+  , diagAB
+  , rowDotsAB
   ) where
 
 import qualified Numeric.LinearAlgebra as LA
 import qualified Data.Massiv.Array     as A
 import           Data.Massiv.Array     (Array, Comp (..), Ix2 (..), Sz (..))
+
+-- | Diagonal of the matrix product @A · B@ where @A@ is @m × n@ and
+-- @B@ is @n × m@, computed without forming the full @m × m@ product.
+--
+-- @diag(A·B)[i] = Σ_j A[i, j] · B[j, i] = Σ_j (A ⊙ Bᵀ)[i, j]@,
+-- i.e. one element-wise multiply (@m × n@) plus one row-sum (GEMV
+-- against a length-@n@ ones vector). Replaces the naive
+-- @[A[i,:] `dot` B[:,i] | i]@ which paid an m-times BLAS-dispatch
+-- overhead. Used for GP posterior variance computation
+-- (@σ² = sf − diag(K_* · K_y⁻¹ K_*ᵀ)@).
+diagAB :: LA.Matrix Double -> LA.Matrix Double -> LA.Vector Double
+diagAB a b =
+  let n    = LA.cols a
+      ones = LA.konst 1 n :: LA.Vector Double
+  in (a * LA.tr b) LA.#> ones
+
+-- | Per-row dot products of two same-shape matrices.
+--
+-- @rowDotsAB A B[i] = Σ_j A[i, j] · B[i, j] = (A ⊙ B)[i, :] · 1@.
+-- Replaces @[A[i,:] `dot` B[i,:] | i]@ which paid an m-times BLAS
+-- dispatch overhead.
+rowDotsAB :: LA.Matrix Double -> LA.Matrix Double -> LA.Vector Double
+rowDotsAB a b =
+  let n    = LA.cols a
+      ones = LA.konst 1 n :: LA.Vector Double
+  in (a * b) LA.#> ones
 
 -- | Squared Euclidean norm of every row of @X@. Length-@n@ vector.
 --

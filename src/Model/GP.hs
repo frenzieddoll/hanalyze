@@ -253,8 +253,9 @@ fitGPMulti model trainX trainY testX =
       -- Then var_i = k(x*_i, x*_i) − K_*[i,:] · v[:,i].
       v       = Chol.cholSolveJitter ky (LA.tr kStar)
       diagKss = [kernelFn ker params x x | x <- testX]
-      varList = zipWith3 (\d ks vi -> max 0 (d - LA.dot ks vi))
-                  diagKss (LA.toRows kStar) (LA.toColumns v)
+      -- F1: vectorise diag(kStar · v).
+      kStarDotV = LA.toList (KD.diagAB kStar v)
+      varList   = zipWith (\d kv -> max 0 (d - kv)) diagKss kStarDotV
   in (meanMt, varList)
 
 -- ---------------------------------------------------------------------------
@@ -477,10 +478,9 @@ fitGPMVMulti model trainX trainY testX =
       meanMt = kStar LA.<> alpha                   -- m × q
       sf     = gpSignalVar params
       diagKss = LA.konst sf (LA.rows testX)         -- k(x*, x*) = σ_f²
-      varVec  = LA.cmap (max 0)
-                 (diagKss - LA.fromList
-                   (zipWith LA.dot
-                     (LA.toRows kStar) (LA.toColumns v)))
+      -- F1: diagonal of (kStar · v) without forming the m×m product.
+      -- 'KD.diagAB' = element-wise (kStar ⊙ vᵀ) · ones.
+      varVec  = LA.cmap (max 0) (diagKss - KD.diagAB kStar v)
   in (meanMt, varVec)
 
 -- | Multi-input GP hyperparameter optimization. Mirrors 'optimizeGP' but

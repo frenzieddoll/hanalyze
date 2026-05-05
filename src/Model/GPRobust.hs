@@ -43,6 +43,7 @@ module Model.GPRobust
 
 import qualified Numeric.LinearAlgebra as LA
 import qualified Stat.Cholesky        as Chol
+import qualified Stat.KernelDist      as KD
 import Model.GP
   ( Kernel
   , GPParams (..)
@@ -183,8 +184,9 @@ predictGPRobust fit testX =
       kyInv   = rgpKyInv fit
       diagKss = [ kernelFn ker params x x | x <- testX ]
       ws      = kStar LA.<> kyInv                              -- (m, n)
-      varList = zipWith3 (\d ksRow wRow -> max 0 (d - LA.dot ksRow wRow))
-                  diagKss (LA.toRows kStar) (LA.toRows ws)
+      -- F1: vectorise per-row dots.
+      rowDots = LA.toList (KD.rowDotsAB kStar ws)
+      varList = zipWith (\d kw -> max 0 (d - kw)) diagKss rowDots
   in zip means varList
 
 -- ---------------------------------------------------------------------------
@@ -315,9 +317,8 @@ predictGPRobustMV fit testX =
       sf      = gpSignalVar params
       diagKss = LA.konst sf (LA.rows testX)
       ws      = kStar LA.<> kyInv                            -- m × n
-      vars    = LA.cmap (max 0)
-                  (diagKss - LA.fromList
-                    (zipWith LA.dot (LA.toRows kStar) (LA.toRows ws)))
+      -- F1: vectorise per-row dots.
+      vars    = LA.cmap (max 0) (diagKss - KD.rowDotsAB kStar ws)
   in (means, vars)
 
 -- | Multi-input multi-output robust GP. Per-column IRLS (weights are
