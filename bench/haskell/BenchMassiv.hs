@@ -182,6 +182,18 @@ main = do
   putStrLn $ "  numeric diff: " ++ show diff5
 
   putStrLn ""
+  putStrLn "=== Vector cmap exp (length n=10000, 10 calls) ==="
+  let !v10k = LA.fromList [sin (fromIntegral (i :: Int)) | i <- [1 .. 10000]] :: LA.Vector Double
+      goVH i = let m = LA.cmap (\s -> exp s + fromIntegral (i :: Int) * 1e-15) v10k
+               in LA.norm_2 m
+      goVM i = let arr = A.fromStorableVector A.Seq v10k
+                   m   = A.computeAs A.S
+                          (A.map (\s -> exp s + fromIntegral i * 1e-15) arr)
+               in LA.norm_2 (A.toStorableVector m)
+  _ <- timeItN "  hmatrix LA.cmap exp" 50 goVH
+  _ <- timeItN "  massiv A.map exp"    50 goVM
+
+  putStrLn ""
   putStrLn "=== applyKernel-style cmap exp on n×n matrix ==="
   let !d2K = KD.pairwiseSqDist x2000  -- 2000×2000 distance matrix
       l2   = 1.0 :: Double

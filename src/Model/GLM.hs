@@ -33,6 +33,8 @@ import Data.Text (Text)
 import qualified Data.Vector as V
 import qualified Numeric.LinearAlgebra as LA
 import qualified Stat.Cholesky        as Chol
+import qualified Stat.KernelDist      as KD
+import qualified Data.Massiv.Array    as MA
 import qualified Optim.LBFGS          as LBFGS
 import qualified Optim.Common         as OC
 import           System.IO.Unsafe     (unsafePerformIO)
@@ -148,13 +150,23 @@ irlsStep :: Link -> (Double -> Double)
           -> Family -> LA.Matrix Double -> LA.Vector Double -> LA.Vector Double
           -> LA.Vector Double
 irlsStep (_, gInv, gDeriv) varFn clamp family x y beta =
+  -- F2: replace per-element list comprehensions (which allocated an
+  -- n-element Haskell list per IRLS step) with massiv's fused 'A.map'
+  -- and 'A.zipWith3'. The element-wise weight (ws) and working
+  -- response (zs) are computed in-place from Storable buffers without
+  -- any list intermediate.
   let eta   = x LA.#> beta
-      mu    = clamp family (LA.cmap gInv eta)
-      muL   = LA.toList mu
-      etaL  = LA.toList eta
-      yL    = LA.toList y
-      ws    = LA.fromList [ max 1e-10 (1.0 / (gDeriv m ^ (2::Int) * varFn m)) | m <- muL ]
-      zs    = LA.fromList [ ei + (yi - mi) * gDeriv mi | (ei,yi,mi) <- zip3 etaL yL muL ]
+      mu    = clamp family (KD.mapVector gInv eta)
+      etaA  = MA.fromStorableVector MA.Seq eta
+      muA   = MA.fromStorableVector MA.Seq mu
+      yA    = MA.fromStorableVector MA.Seq y
+      ws    = MA.toStorableVector $ MA.computeAs MA.S $
+                MA.map (\m -> max 1e-10
+                                (1.0 / (gDeriv m ^ (2 :: Int) * varFn m)))
+                       muA
+      zs    = MA.toStorableVector $ MA.computeAs MA.S $
+                MA.zipWith3 (\ei yi mi -> ei + (yi - mi) * gDeriv mi)
+                            etaA yA muA
       -- Normal-equations form: solve (Xᵀ W X) β = Xᵀ W z via SPD Cholesky.
       -- Faster than solving (√W X) β = (√W z) with the general LSQ
       -- (dgels) when n ≫ p, which is the common GLM regime.
