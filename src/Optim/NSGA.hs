@@ -497,42 +497,63 @@ makeChildPair pC etaC etaM pM bounds f cFn ranked gen = do
   return ( evaluateSolution f cFn c1Mut
          , evaluateSolution f cFn c2Mut )
 
--- | front の各個体の crowding distance を取り出す。
--- crowdingDistance はソート済リストを返すので、正確な距離は内部に隠れる。
--- 簡易対処: 距離を再計算してインデックスで突き合わせ。
+-- | front の各個体の crowding distance (元の順序で) を返す。
+--
+-- N3d 改修: 旧版は (1) per-objective sort 後の vals/sorted を !! で
+-- index して @O(l)@ ずつ拾う、 (2) totalDist で contrib リストを線形
+-- 検索していたため全体 @O(m·l²)@ 以上。新版は
+--
+--   * 全 front 個体の objective を 'V.Vector' に置く (V.! は @O(1)@)
+--   * 各 obj について index 列を sortBy で 1 度だけソート
+--   * 隣接 diff を 1 pass で計算、対応 index に直接書き戻す
+--     (累積は @LA.accum@ で fused)
+--
+-- 全体 @O(m·l·log l)@ + @O(m·l)@、ほぼ pymoo (numpy ソート + diff +
+-- fancy-indexing) と同 order に。
 frontDistances :: [Solution] -> [Double]
 frontDistances front
-  | length front <= 2 = replicate (length front) (1 / 0)
+  | l <= 2    = replicate l inf
   | otherwise =
-      let l    = length front
-          m    = length (solObjectives (head front))
-          ps   = zip [0 :: Int ..] front
-          contrib objIdx =
-            let sorted = sortBy
-                          (comparing (\(_, s) -> solObjectives s !! objIdx)) ps
-                vals   = map (\(_, s) -> solObjectives s !! objIdx) sorted
-                fMin   = minimum vals
-                fMax   = maximum vals
-                rng    = fMax - fMin
-            in if rng == 0
-                 then [(idx, 0) | (idx, _) <- sorted]
-                 else
-                   let nL = length sorted
-                       go k acc
-                         | k <  0      = acc
-                         | k == 0      = go (k + 1) ((fst (sorted !! k), 1/0) : acc)
-                         | k == nL - 1 = (fst (sorted !! k), 1/0) : acc
-                         | otherwise   =
-                             let prev = vals !! (k - 1)
-                                 next = vals !! (k + 1)
-                                 d    = (next - prev) / rng
-                             in go (k + 1) ((fst (sorted !! k), d) : acc)
-                   in go 0 []
-          totalDist origIdx =
-            sum [ d | objIdx <- [0 .. m - 1]
-                    , (i, d) <- contrib objIdx
-                    , i == origIdx ]
-      in [totalDist i | (i, _) <- ps]
+      let -- Each individual contributes a per-objective spacing term.
+          -- We sum them all into a single length-l Vector via 'LA.accum'.
+          totals = foldl addObjective zeros [0 .. m - 1]
+      in LA.toList totals
+  where
+    l    = length front
+    m    = if l == 0 then 0 else length (solObjectives (head front))
+    inf  = 1 / 0
+    zeros = LA.konst 0 l :: LA.Vector Double
+
+    -- Per-objective values, indexed by the original front position.
+    objVecs :: V.Vector (LA.Vector Double)
+    objVecs =
+      let mat = LA.fromLists [ solObjectives s | s <- front ]
+                 :: LA.Matrix Double
+      in V.generate m (\k -> LA.flatten (mat LA.¿ [k]))
+
+    addObjective :: LA.Vector Double -> Int -> LA.Vector Double
+    addObjective acc k =
+      let vec    = objVecs V.! k
+          -- Sort indices by objective value (ascending).
+          sorted = sortBy (comparing (\i -> LA.atIndex vec i))
+                          [0 .. l - 1]
+          sortedV = V.fromList sorted
+          fMin   = LA.atIndex vec (sortedV V.! 0)
+          fMax   = LA.atIndex vec (sortedV V.! (l - 1))
+          rng    = fMax - fMin
+      in if rng == 0
+           then acc
+           else
+             let endpts = [ (sortedV V.! 0,      inf)
+                          , (sortedV V.! (l-1), inf) ]
+                 mids =
+                   [ (sortedV V.! k', d)
+                   | k' <- [1 .. l - 2]
+                   , let prev = LA.atIndex vec (sortedV V.! (k' - 1))
+                         next = LA.atIndex vec (sortedV V.! (k' + 1))
+                         d    = (next - prev) / rng
+                   ]
+             in LA.accum acc (+) (endpts ++ mids)
 
 -- | ソート済 fronts (上から良い順) から n 個を選別。
 -- - 入る front は丸ごと採用
@@ -696,46 +717,15 @@ nonDominatedSortIdx pm
 -- 戻り値: 距離の降順 (= 多様性が高い個体が先頭)。NSGA-II の選別で使う。
 crowdingDistance :: [Solution] -> [Solution]
 crowdingDistance front
-  | length front <= 2 = front           -- 全員 ∞ 扱いなので順序不問
+  | length front <= 2 = front
   | otherwise =
-      let l    = length front
-          m    = length (solObjectives (head front))
-          ps   = zip [0 ..] front       -- index 付き
-          -- 各目的について寄与を計算
-          contributions :: Int -> [(Int, Double)]
-          contributions objIdx =
-            let sorted = sortBy
-                          (comparing (\(_, s) -> solObjectives s !! objIdx)) ps
-                vals   = map (\(_, s) -> solObjectives s !! objIdx) sorted
-                fMin   = minimum vals
-                fMax   = maximum vals
-                rng    = fMax - fMin
-            in if rng == 0
-                 then [(idx, 0) | (idx, _) <- sorted]
-                 else
-                   let n = length sorted
-                       go k acc
-                         | k <  0      = acc
-                         | k == 0      = go (k + 1) ((fst (sorted !! k), inf) : acc)
-                         | k == n - 1  = (fst (sorted !! k), inf) : acc
-                         | otherwise   =
-                             let prev = vals !! (k - 1)
-                                 next = vals !! (k + 1)
-                                 d    = (next - prev) / rng
-                             in go (k + 1) ((fst (sorted !! k), d) : acc)
-                   in go 0 []
-          -- 全目的の寄与を合算
-          totalDist :: Int -> Double
-          totalDist origIdx =
-            sum [ d | objIdx <- [0 .. m - 1]
-                    , (i, d) <- contributions objIdx
-                    , i == origIdx ]
-          withDist = [(totalDist i, s) | (i, s) <- ps]
-          -- 距離降順にソート
-          sortedDesc = sortBy (\(d1, _) (d2, _) -> compare d2 d1) withDist
-      in map snd sortedDesc
-  where
-    inf = 1 / 0  -- ∞
+      -- N3d: reuse 'frontDistances' (vectorized) instead of recomputing
+      -- everything per individual.
+      let dists = frontDistances front
+          fV    = V.fromList front
+          tagged = zip dists [0 .. length front - 1]
+          sortedDesc = sortBy (\(d1, _) (d2, _) -> compare d2 d1) tagged
+      in [ fV V.! i | (_, i) <- sortedDesc ]
 
 -- ---------------------------------------------------------------------------
 -- 遺伝的演算子 (Phase S3)
