@@ -28,6 +28,7 @@ import qualified Stat.KernelDist   as KD
 import qualified Stat.Cholesky     as Chol
 import qualified Stat.QuasiRandom  as QR
 import qualified Stat.Test         as ST
+import qualified Model.PCA         as PCA
 import qualified Optim.NSGA        as NSGA
 import qualified System.Random.MWC as MWC
 import qualified Model.Kernel      as Kn
@@ -1661,3 +1662,39 @@ main = hspec $ do
     it "fisherExact2x2: 強い偏りで p < 0.05" $ do
       let tr = ST.fisherExact2x2 ((20, 5), (5, 20)) ST.TwoSided
       ST.trPValue tr `shouldSatisfy` (< 0.05)
+
+  -- ===========================================================================
+  -- Model.PCA (Phase 2)
+  -- ===========================================================================
+  describe "Model.PCA" $ do
+    it "PCA on rank-1 matrix: 1st component explains ~100% var" $ do
+      let -- Rank-1: each row = scalar × [1, 2, 3]
+          ks = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+          xs = LA.fromLists [[k, 2 * k, 3 * k] | k <- ks]
+          r  = PCA.pca PCA.Center Nothing xs
+      head (LA.toList (PCA.pcaExplainedRatio r))
+        `shouldSatisfy` (> 0.999)
+
+    it "pcaTransform + pcaInverse は Center mode で全成分なら復元 ≈ x" $ do
+      let xs = LA.fromLists [[1, 2, 3], [4, 5, 6], [7, 8, 9], [2, 1, 0]]
+          r  = PCA.pca PCA.Center Nothing xs
+          scores = PCA.pcaTransform r xs
+          recon  = PCA.pcaInverse r scores
+          diff   = LA.norm_2 (LA.flatten (xs - recon))
+      diff `shouldSatisfy` (< 1e-9)
+
+    it "pcaCumExplained は monotone increasing で max ≤ 1" $ do
+      let xs = LA.fromLists [[k, 2*k+1, k*k]
+                            | k <- [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]]
+          r  = PCA.pca PCA.Center Nothing xs
+          cum = LA.toList (PCA.pcaCumExplained r)
+      last cum `shouldSatisfy` (<= 1.0001)
+      and (zipWith (<=) cum (tail cum)) `shouldBe` True
+
+    it "CenterScale で各列の SD が 1 に正規化される" $ do
+      let xs = LA.fromLists [[1, 100, 0.1], [2, 200, 0.2],
+                             [3, 300, 0.3], [4, 400, 0.4]]
+          r  = PCA.pca PCA.CenterScale Nothing xs
+      -- SD は元データの per-col SD で保存される
+      LA.size (PCA.pcaScale r) `shouldBe` 3
+      all (> 0) (LA.toList (PCA.pcaScale r)) `shouldBe` True
