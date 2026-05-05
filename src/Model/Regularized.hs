@@ -182,11 +182,15 @@ cdLoop
   -> (Double -> Double -> Double)      -- (ρ, cSq) → β_j_new
   -> (LA.Vector Double, Int)
 cdLoop x y maxIter tol upd = unsafePerformIO $ do
-  let n      = fromIntegral (LA.rows x) :: Double
+  let nRows  = LA.rows x
+      n      = fromIntegral nRows :: Double
       p      = LA.cols x
       colsB  = V.fromList (LA.toColumns x)        -- O(1) indexing
-      colSqN = LA.fromList
-                 [ LA.sumElements (c * c) / n | c <- LA.toColumns x ]
+      -- F1: per-column squared sum via 1 GEMV instead of p
+      -- 'sumElements (c*c)' calls. ones_n^T (X⊙X) gives length-p
+      -- vector of column sums; divide by n.
+      onesN  = LA.konst 1 nRows :: LA.Vector Double
+      colSqN = LA.scale (1 / n) (onesN LA.<# (x * x))
 
   -- Mutable buffer for β (single-index updates each coordinate step).
   bMut <- VS.thaw (LA.konst 0 p :: LA.Vector Double)
