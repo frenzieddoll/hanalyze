@@ -54,6 +54,8 @@ import System.Random.MWC (GenIO, uniform, uniformR)
 import qualified Numeric.LinearAlgebra as LA
 import qualified Optim.Common    as OC
 import qualified Stat.QuasiRandom as QR
+import Control.DeepSeq (NFData)
+import GHC.Generics (Generic)
 
 -- ---------------------------------------------------------------------------
 -- 型
@@ -70,7 +72,9 @@ data Solution = Solution
                                 --   objectives are treated as minimized.
   , solViolation  :: Double     -- ^ Constraint violation (0 = feasible,
                                 --   @> 0@ = violated).
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Generic)
+
+instance NFData Solution
 
 -- ---------------------------------------------------------------------------
 -- PopMatrix — Matrix-based internal population representation
@@ -400,6 +404,12 @@ fillOffspring needed pop pC etaC etaM pM bounds f cFn ranked gen =
                        (cAll0 c1raw c2raw) gen
 
             -- ユーザ評価
+            -- Phase C 試行: parMap rdeepseq で並列化 → ZDT bench で逆
+            -- 効果 (cheap objective ~1µs / spark overhead 数 µs)。
+            -- 高コスト objective (engineering simulation 等) で
+            -- ユーザが明示的に並列化したい場合は Control.Parallel.Strategies
+            -- を直接呼び出す or 別の Async 経路を提供すべき。
+            -- bench-mo (cheap f) では sequential が最適。
             let xss     = LA.toLists cAll
                 rawSols = [ Solution { solDecision   = xs
                                      , solObjectives = f xs

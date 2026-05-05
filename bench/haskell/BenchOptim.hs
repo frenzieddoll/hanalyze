@@ -117,6 +117,10 @@ algoSA = Algo "SA" $ \f d -> do
                                         { OC.stMaxIter = 10000 }
               }
       nRuns = 20 :: Int
+  -- Phase A 試行: Async.mapConcurrently で 20 runs を並列実行 → 逆効果
+  -- (Rastrigin -N=1: 1500ms / -N=8: 2002ms)。SA の inner LBFGS が
+  -- BLAS-heavy で OpenBLAS の lock contention により並列が serial 化。
+  -- mapM 版に戻して single-thread の最良成績を維持。
   (ms, r) <- timeitIO 1 OC.orValue $ \_ -> do
     rs <- mapM (\_ -> do
                    x0 <- initSeed d

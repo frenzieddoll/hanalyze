@@ -274,7 +274,31 @@ infrastructure (`Stat.KernelDist.compFor` + `setComp` based Comp 切替)
 - 多 restart HP optimization → `Control.Concurrent.Async.mapConcurrently`
 - BO 内側 acquisition multi-start → 並列 L-BFGS
 - NSGA-II の objective 評価 → `parMap`
-これらは algorithm 構造を変える改修なので別 phase で扱う。
+
+**Phase A/C 試行結果 (2 候補で逆効果と判明)**:
+
+- **Phase A (SA multi-start を Async.mapConcurrently 並列化)**:
+  - +RTS -N1: Rastrigin 1500ms / +RTS -N=8: 2002ms
+  - 原因: SA の inner LBFGS local refinement (saLocalEvery=10) が
+    Cholesky 等の BLAS を多用 → OpenBLAS の lock contention で並列が
+    serial 化、さらに -threaded の overhead が加わり逆効果
+  - revert
+
+- **Phase C (NSGA-II objective を parMap rdeepseq 並列化)**:
+  - ZDT1/NSGA-II: 626ms → 1262ms (2.0× 悪化)
+  - 原因: ZDT/DTLZ の objective は ~1µs と cheap、parMap の spark
+    setup overhead (数 µs) が work を超える
+  - revert
+
+**結論 (parallelism の現実)**: bench 用の cheap objective + BLAS-heavy
+inner loop の組合せでは、algorithm-outer 並列化は overhead で逆効果。
+**真に有効なのは「expensive user f (engineering simulation 等)」の場合
+のみ**で、その場合はユーザーが `Control.Parallel.Strategies` /
+`Control.Concurrent.Async` を直接呼べば済む。
+
+`parallel` package は依存に追加済 (今後の必要時に活用)、`Solution` 型に
+`NFData` instance を追加 (parMap / rdeepseq 利用可能)、infrastructure は
+残置。Phase D/E (BO 内側 / HP restart) は同じ理由で実装せず。
 
 ✅ 完了済 (algorithm-level):
 - NSGA-II 100 gen 精度 (#1) — pymoo 越え
