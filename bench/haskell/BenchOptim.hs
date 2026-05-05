@@ -109,6 +109,8 @@ algoSA = Algo "SA" $ \f d -> do
   -- multi-modal landscapes (Rastrigin) at modest budgets.
   let cfg = (SA.defaultSAConfig bs)
               { SA.saProposal       = SA.Tsallis 2.62
+              -- saAccept は Boltzmann のまま (TsallisAccept は API として
+              -- 提供したが本実装の温度スケールと相性悪く Rastrigin で退化)
               , SA.saLocalMethod    = SA.LocalLBFGS  -- gradient-based
               , SA.saLocalEvery     = Just 10        -- every 10 iters
               , SA.saInitTemp       = 5230.0         -- scipy default

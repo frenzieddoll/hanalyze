@@ -19,6 +19,7 @@ module Optim.SimulatedAnnealing
   , SACoolingSchedule (..)
   , SAProposal (..)
   , SALocalMethod (..)
+  , SAAccept (..)
   , defaultSAConfig
   , runSA
   , runSAWith
@@ -82,6 +83,19 @@ data SALocalMethod
   | LocalLBFGS
   deriving (Show, Eq)
 
+-- | Acceptance criterion for worsening proposals.
+--
+--   * @Boltzmann@: classical Metropolis — @P_acc = exp(-ΔF / T)@.
+--   * @TsallisAccept q_a@: generalised acceptance
+--     @P_acc = max(0, 1 - (1 - q_a) ΔF / T)^(1/(1-q_a))@.
+--     For @q_a = -5@ (scipy dual_annealing default) the worsening tail
+--     is heavier than Boltzmann at high T, encouraging escape from
+--     local minima. As @q_a → 1@ this reduces to Boltzmann.
+data SAAccept
+  = Boltzmann
+  | TsallisAccept !Double
+  deriving (Show, Eq)
+
 -- | SA configuration.
 data SAConfig = SAConfig
   { saStop       :: !StopCriteria
@@ -118,6 +132,10 @@ data SAConfig = SAConfig
   , saLocalMethod    :: !SALocalMethod
     -- ^ Local refinement method (see 'saLocalEvery' and the final
     --   polish). Default 'LocalNelderMead'.
+  , saAccept         :: !SAAccept
+    -- ^ Acceptance criterion for worsening proposals. Default
+    --   'Boltzmann'. 'TsallisAccept (-5)' = scipy dual_annealing
+    --   default.
   } deriving (Show, Eq)
 
 -- | Default configuration: 5000 iterations, @T₀ = 1.0@, geometric
@@ -153,6 +171,11 @@ defaultSAConfig bs = SAConfig
                                            -- objectives where every-iter
                                            -- gradient refinement helps
                                            -- (Rastrigin etc.).
+  , saAccept         = Boltzmann           -- back-compat default; switch to
+                                           -- 'TsallisAccept (-5)' for
+                                           -- scipy-style dual_annealing
+                                           -- (heavier acceptance tail at
+                                           -- high T → escapes basins).
   }
 
 -- | Draw a single per-dimension proposal increment for the current
@@ -251,7 +274,26 @@ runSAWith cfg fUser x0 gen = do
           let fNew = f xCand
           u <- MWC.uniformR (0, 1 :: Double) gen
           let dF = fNew - fxR
-              accept = dF < 0 || u < exp (- dF / temp)
+              -- Tsallis acceptance: P_acc = max(0, 1 - (1-q_a)·dF/T)^(1/(1-q_a))
+              -- For q_a → 1, reduces to Boltzmann exp(-dF/T).
+              -- For q_a < 1 (e.g. -5), heavier tail at high T.
+              accept =
+                dF < 0 ||
+                  case saAccept cfg of
+                    Boltzmann ->
+                      u < exp (- dF / temp)
+                    TsallisAccept qa ->
+                      let qm    = 1 - qa
+                          base  = 1 + qm * dF / temp  -- note: -(1-qa) = qa-1
+                          -- For minimisation dF > 0, the standard form is
+                          -- P = max(0, 1 - (1-qa)·dF/T)^(1/(1-qa))
+                          -- = max(0, 1 - qm·dF/T)^(1/qm).
+                          base' = 1 - qm * dF / temp
+                          pAcc
+                            | base' <= 0 = 0
+                            | otherwise  = base' ** (1 / qm)
+                          _ = base
+                      in u < pAcc
               (xN, fxN)  = if accept then (xCand, fNew) else (xR, fxR)
               (xBN0, fBN0) = if fxN < fBest then (xN, fxN) else (xBest, fBest)
               improved   = fBN0 < fBest
