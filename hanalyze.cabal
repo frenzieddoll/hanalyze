@@ -52,6 +52,7 @@ library
     DataIO.Health
     DataIO.Sniff
     DataIO.Clean
+    DataIO.Reshape
     Viz.Core
     Viz.Scatter
     Viz.Histogram

@@ -34,6 +34,7 @@ import qualified Stat.MultipleTesting as MT
 import qualified Stat.Bootstrap       as Boot
 import qualified Model.PCA         as PCA
 import qualified Model.Cluster     as Cl
+import qualified DataIO.Reshape    as Reshape
 import qualified Optim.NSGA        as NSGA
 import qualified System.Random.MWC as MWC
 import qualified Model.Kernel      as Kn
@@ -1886,3 +1887,44 @@ main = hspec $ do
       Boot.sampleMean v `shouldBe` 3.0
       Boot.sampleVar v `shouldBe` 2.5  -- variance of 1..5 (unbiased)
       Boot.sampleMedian v `shouldBe` 3.0
+
+  -- ===========================================================================
+  -- DataIO.Reshape (Phase 8)
+  -- ===========================================================================
+  describe "DataIO.Reshape" $ do
+    it "lagColumn(1): 先頭が NaN、残りは 1 つずれる" $ do
+      let df = DX.fromNamedColumns
+                 [("x", DX.fromList [1.0, 2.0, 3.0, 4.0, 5.0 :: Double])]
+          df' = Reshape.lagColumn 1 "x" "x_lag1" df
+      -- Lagged column should exist
+      "x_lag1" `elem` DX.columnNames df' `shouldBe` True
+
+    it "leadColumn(1): 末尾が NaN、残りは 1 つ前進" $ do
+      let df = DX.fromNamedColumns
+                 [("x", DX.fromList [1.0, 2.0, 3.0, 4.0, 5.0 :: Double])]
+          df' = Reshape.leadColumn 1 "x" "x_lead1" df
+      "x_lead1" `elem` DX.columnNames df' `shouldBe` True
+
+    it "rollingMean(3): 最初 2 つが NaN、3 番目以降は窓内平均" $ do
+      let df = DX.fromNamedColumns
+                 [("x", DX.fromList [1.0, 2.0, 3.0, 4.0, 5.0 :: Double])]
+          df' = Reshape.rollingMean 3 "x" "x_rmean3" df
+      "x_rmean3" `elem` DX.columnNames df' `shouldBe` True
+
+    it "oneHot: text 列を indicator 列に展開" $ do
+      let df = DX.fromNamedColumns
+                 [ ("id", DX.fromList [1, 2, 3, 4, 5 :: Int])
+                 , ("category", DX.fromList ["A", "B", "A", "C", "B" :: T.Text])
+                 ]
+          df' = Reshape.oneHot False "category" df
+      let cols = DX.columnNames df'
+      "category" `elem` cols `shouldBe` False  -- 元列削除
+      "category_A" `elem` cols `shouldBe` True
+      "category_B" `elem` cols `shouldBe` True
+      "category_C" `elem` cols `shouldBe` True
+
+    it "oneHot dropFirst=True: 1 列分減る" $ do
+      let df = DX.fromNamedColumns
+                 [("c", DX.fromList ["X", "Y", "Z" :: T.Text])]
+          df' = Reshape.oneHot True "c" df
+      length (DX.columnNames df') `shouldBe` 2  -- Y, Z (X drop)
