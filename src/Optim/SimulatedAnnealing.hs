@@ -17,6 +17,7 @@
 module Optim.SimulatedAnnealing
   ( SAConfig (..)
   , SACoolingSchedule (..)
+  , SAProposal (..)
   , defaultSAConfig
   , runSA
   , runSAWith
@@ -42,6 +43,25 @@ data SACoolingSchedule
   | Linear    !Double
   | LundyMees !Double
   | Cauchy
+  deriving (Show, Eq)
+
+-- | Proposal (visiting) distribution for the next-x candidate.
+--
+--   * @Gaussian@: classical Kirkpatrick — @x' = x + N(0, σ)@ per dim.
+--   * @Cauchy@: Szu-Hartley "Fast SA" (1987) — @x' = x + Cauchy(0, σ)@.
+--     Heavy-tailed → occasional big jumps escape local minima.
+--   * @Tsallis q_v@: Generalized SA visiting distribution
+--     (Xiang-Gong-Liu-Yan 1997, Tsallis-Stariolo 1996), the engine
+--     behind scipy's @dual_annealing@. For @q_v = 2.62@ (scipy default)
+--     the jump distribution interpolates between Cauchy (@q_v = 2@)
+--     and even fatter tails, while a temperature-dependent scale
+--     contracts the typical jump as the system cools. The strongest
+--     option for highly multi-modal landscapes (Rastrigin, Schwefel
+--     etc.) at modest budgets.
+data SAProposal
+  = Gaussian
+  | Cauchy_
+  | Tsallis !Double
   deriving (Show, Eq)
 
 -- | SA configuration.
@@ -73,6 +93,10 @@ data SAConfig = SAConfig
     --   Helps SA escape pathological multi-modal landscapes
     --   (Rastrigin etc.) where vanilla SA — even with periodic NM
     --   refinement — gets trapped in a single basin.
+  , saProposal       :: !SAProposal
+    -- ^ Proposal (visiting) distribution. Default 'Gaussian' for
+    --   back-compat. Set 'Tsallis 2.62' for scipy-style dual_annealing
+    --   behaviour on multi-modal problems.
   } deriving (Show, Eq)
 
 -- | Default configuration: 5000 iterations, @T₀ = 1.0@, geometric
@@ -100,9 +124,36 @@ defaultSAConfig bs = SAConfig
                                            -- continuous refinement
                                            -- (Levy regressed by 12 orders
                                            --  of magnitude with restart on)
+  , saProposal       = Gaussian            -- back-compat default; switch to
+                                           -- 'Tsallis 2.62' for Rastrigin-
+                                           -- like multi-modal problems.
   }
 
--- | Apply the cooling schedule to the current temperature.
+-- | Draw a single per-dimension proposal increment for the current
+-- 'SAProposal' and (sigma, T) state.
+--
+-- For Tsallis q_v: sample @ξ / |η|^((q_v-1)/(3-q_v))@ where
+-- @ξ ~ N(0, T^(1/(q_v-1)))@ and @η ~ N(0, 1)@. This is the
+-- Xiang-Gong-Liu-Yan 1997 visiting distribution; the typical jump
+-- shrinks as T cools but the heavy tails (~ |η|^-α) keep occasional
+-- large jumps possible. q_v = 2 reduces to Cauchy(0, T); q_v → 1
+-- approaches Gaussian.
+sampleProposal :: SAProposal -> Double -> Double -> MWC.GenIO -> IO Double
+sampleProposal Gaussian       sigma _ gen = MWCD.normal 0 sigma gen
+sampleProposal Cauchy_        sigma _ gen = do
+  u <- MWC.uniformR (1e-12, 1 - 1e-12 :: Double) gen
+  pure (sigma * tan (pi * (u - 0.5)))
+sampleProposal (Tsallis q) _ temp gen = do
+  let qm   = q - 1
+      qmp  = 3 - q
+      -- T-dependent scale: σ_T = T^(1/(q-1))
+      sigT = max 1e-30 temp ** (1 / qm)
+      -- exponent on |η|
+      expo = qm / qmp
+  xi  <- MWCD.normal 0 sigT gen
+  eta <- MWCD.normal 0 1   gen
+  let etaA = max 1e-300 (abs eta)
+  pure (xi / (etaA ** expo))
 nextTemp :: SACoolingSchedule -> Double -> Int -> Double -> Double
 nextTemp sched t0 iter t = case sched of
   Geometric alpha -> t * alpha
@@ -168,7 +219,7 @@ runSAWith cfg fUser x0 gen = do
               else pure (x, fx, sinceImprove, sigma)
 
           xRaw <- forM xR $ \xi -> do
-                    eps <- MWCD.normal 0 sigmaR gen
+                    eps <- sampleProposal (saProposal cfg) sigmaR temp gen
                     pure (xi + eps)
           let xCand = clipToBounds (saBounds cfg) xRaw
           let fNew = f xCand

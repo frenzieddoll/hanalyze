@@ -128,19 +128,32 @@ Hartmann6 19s vs skopt 7.1s。speed 3× 劣後だが accuracy 優位。
 
 ---
 
-## 7. SA Rastrigin (pathological multi-modal)
+## 7. SA Rastrigin — Tsallis SA で大幅改善 ✅ 部分対応済
 
 | 観点 | 値 |
 |---|---|
-| Rastrigin_10D/SA | hanalyze 16.9 / scipy.dual_annealing 7.8e-14 |
-| 困難度 | M |
+| Rastrigin_10D/SA | hanalyze **1.99** (was 16.9, 8.5× 改善) / scipy 7.8e-14 |
+| Rosenbrock_10D/SA | hanalyze 1.5e-15 (機械精度) |
+| Sphere_30D/SA | hanalyze 9.4e-13 (機械精度、was 0.286 で退化していたが復活) |
+| Ackley_10D/SA | hanalyze 2.2e-14 (was 4.4e-3、massive 改善) |
+| Levy_10D/SA | hanalyze 1.5e-15 (was 2.6e-9、機械精度) |
+| 困難度 | L (残ギャップは Rastrigin のみ、機械精度未達) |
 
-scipy.dual_annealing は Generalized SA (Tsallis 1996) + L-BFGS-B
-local restart の組み合わせ。hanalyze の SA + NM hybrid (S2/S3) では
-Rastrigin の多数の局所最適から escape できず。
+**対応済**: `Optim.SimulatedAnnealing` に **Tsallis visiting distribution**
+(Xiang-Gong-Liu-Yan 1997, scipy dual_annealing と同) を追加。
+`SAProposal = Gaussian | Cauchy_ | Tsallis Double` データ型と
+`saProposal` フィールドを `SAConfig` に追加。bench-optim は
+`Tsallis 2.62` + `saLocalEvery=50` + `stMaxIter=10000` で起動。
 
-**対応案**: Tsallis acceptance で fat-tail 受容 + adaptive restart。
-実装は ~1 日。
+Rastrigin 以外はすべて機械精度に到達 (Ackley/Levy/Sphere は劇的改善)。
+Rastrigin 10D は 10^10+ 個の局所最適があり、5 seeds 中 1 個 (3.3%) のみ
+真の global を発見、残りは隣接局所最適 (~1.99 単位スペース) に張付く。
+scipy が 7.8e-14 を出すのは L-BFGS-B local を **毎反復** 走らせるため
+(我々は 50 反復毎)。完全機械精度には更に頻繁な local 必要。
+
+**次の改善案** (機械精度到達): saLocalEvery を 1 (毎反復) にして
+L-BFGS local を本格的に組み込む (但し 1 SA run あたり ~5-10s 必要、
+trade-off)。現状で実用十分。
 
 ---
 

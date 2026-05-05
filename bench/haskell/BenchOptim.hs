@@ -103,7 +103,18 @@ algoSA = Algo "SA" $ \f d -> do
   let bs = replicate d (-5.0, 5.0)
   x0  <- initSeed d
   gen <- MWC.createSystemRandom
-  (ms, r) <- timeitIO 1 OC.orValue (\_ -> SA.runSA bs f x0 gen)
+  -- Switched from default Gaussian proposal to Tsallis q_v=2.62
+  -- (scipy dual_annealing default). Heavy-tailed visiting distribution
+  -- gives the chain occasional large jumps and is essential for
+  -- multi-modal landscapes (Rastrigin) at modest budgets.
+  let cfg = (SA.defaultSAConfig bs)
+              { SA.saProposal       = SA.Tsallis 2.62
+              , SA.saLocalEvery     = Just 50    -- frequent NM polish
+              , SA.saRestartIfStuck = Nothing    -- Tsallis tails handle escape
+              , SA.saStop           = (SA.saStop (SA.defaultSAConfig bs))
+                                        { OC.stMaxIter = 10000 }
+              }
+  (ms, r) <- timeitIO 1 OC.orValue (\_ -> SA.runSAWith cfg f x0 gen)
   return (OC.orValue r, ms)
 
 algoPSO = Algo "PSO" $ \f d -> do
