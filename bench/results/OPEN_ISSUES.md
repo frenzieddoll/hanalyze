@@ -28,17 +28,22 @@ pymoo を上回る)。500 gen では全問題で安定して凌駕。
 
 ---
 
-## 2. NSGA-II per-generation 速度
+## 2. NSGA-II per-generation 速度 — ✅ 大半解決 (N3a-d)
 
-| 観点 | 値 |
-|---|---|
-| 1 世代あたり時間 | hanalyze ~32 ms / pymoo ~5 ms (~6×) |
-| ボトルネック | nonDominatedSort, crowdingDistance がリスト経由 O(MN²) |
-| 困難度 | M (1-2 日の refactor; 内部表現を 2D Matrix に) |
+| 観点 | 改善前 | 改善後 | pymoo |
+|---|---|---|---|
+| ZDT1 per-gen | 32 ms | **12 ms** | 5 ms |
+| ZDT2 per-gen | 30 ms | **13 ms** | 5 ms |
+| ZDT3 per-gen | 31 ms | **13 ms** | 5 ms |
+| DTLZ2 per-gen | 56 ms | **8 ms**  | 5 ms |
 
-pymoo は numpy で全要素同時処理 (vectorized non-dominated sort,
-SBX, polynomial mutation 全て array op)。hanalyze はリスト/個別個体
-処理。
+`Optim.NSGA` の per-gen は約 **3× 高速化** (Matrix 化 + V.Vector
+indexing + frontDistances 1-pass)。pymoo との比は 6× → 1.6-2.6×
+に縮小。残る差は SBX/PM の per-individual 関数オーバヘッドと
+fillOffspring の retry/duplicate ロジックの細部、純粋 Haskell の
+function call cost vs Cython native loop の構造的差。
+
+詳細は REPORT.md "After N3" セクション。
 
 ---
 
