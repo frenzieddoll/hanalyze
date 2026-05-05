@@ -110,6 +110,8 @@ library
     Stat.Test
     Stat.ClassMetrics
     Stat.CV
+    Stat.MultipleTesting
+    Stat.Bootstrap
     Optim.Adam
     Optim.GradAscent
     Optim.Numeric

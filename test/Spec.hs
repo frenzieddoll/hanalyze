@@ -30,6 +30,8 @@ import qualified Stat.QuasiRandom  as QR
 import qualified Stat.Test         as ST
 import qualified Stat.ClassMetrics as CM
 import qualified Stat.CV           as CV
+import qualified Stat.MultipleTesting as MT
+import qualified Stat.Bootstrap       as Boot
 import qualified Model.PCA         as PCA
 import qualified Model.Cluster     as Cl
 import qualified Optim.NSGA        as NSGA
@@ -1829,3 +1831,58 @@ main = hspec $ do
       r <- Cl.kMeans cfg xs gen
       Cl.kmrInertia r `shouldSatisfy` (>= 0)
       Cl.kmrConverged r `shouldBe` True
+
+  -- ===========================================================================
+  -- Stat.MultipleTesting (Phase 6)
+  -- ===========================================================================
+  describe "Stat.MultipleTesting" $ do
+    it "Bonferroni: p × m, capped at 1" $ do
+      let ps = [0.01, 0.04, 0.05, 0.10]
+          adj = MT.bonferroni ps
+      adj `shouldBe` [0.04, 0.16, 0.20, 0.40]
+
+    it "Holm: 単調 + Bonferroni より緩い" $ do
+      let ps = [0.01, 0.02, 0.03, 0.04]
+          adj = MT.holm ps
+      -- 各 adj ≥ 元 p、最初は p × m = 0.04
+      head adj `shouldBe` 0.04
+      and (zipWith (<=) ps adj) `shouldBe` True
+
+    it "BH: monotonic non-decreasing in sorted p order" $ do
+      let ps = [0.01, 0.04, 0.03, 0.05]
+          adj = MT.benjaminiHochberg ps
+      length adj `shouldBe` 4
+      all (<= 1.0) adj `shouldBe` True
+      all (>= 0.0) adj `shouldBe` True
+
+    it "BY: BH より conservative" $ do
+      let ps = [0.01, 0.02, 0.03, 0.04, 0.05]
+          bh = MT.benjaminiHochberg ps
+          by = MT.benjaminiYekutieli ps
+      -- BY は cumulative harmonic factor を掛けるので大きい
+      and (zipWith (>=) by bh) `shouldBe` True
+
+  -- ===========================================================================
+  -- Stat.Bootstrap (Phase 7)
+  -- ===========================================================================
+  describe "Stat.Bootstrap" $ do
+    it "bootstrapCI on N(0,1) sample: 0 が 95% CI 内" $ do
+      gen <- MWC.createSystemRandom
+      let xs = LA.fromList [-1.0, -0.5, 0.0, 0.5, 1.0,
+                            -0.3, 0.3, -0.7, 0.7, 0.0]
+      (lo, hi) <- Boot.bootstrapCI 2000 0.95 Boot.sampleMean xs gen
+      lo `shouldSatisfy` (< 0.5)
+      hi `shouldSatisfy` (> -0.5)
+
+    it "permutationTest: 異なる平均で p < 0.05" $ do
+      gen <- MWC.createSystemRandom
+      let xs = LA.fromList [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+          ys = LA.fromList [10.0, 11.0, 12.0, 13.0, 14.0, 15.0]
+      (_diff, p) <- Boot.permutationTest 2000 xs ys gen
+      p `shouldSatisfy` (< 0.05)
+
+    it "sampleMean / sampleVar / sampleMedian の整合性" $ do
+      let v = LA.fromList [1.0, 2.0, 3.0, 4.0, 5.0]
+      Boot.sampleMean v `shouldBe` 3.0
+      Boot.sampleVar v `shouldBe` 2.5  -- variance of 1..5 (unbiased)
+      Boot.sampleMedian v `shouldBe` 3.0
