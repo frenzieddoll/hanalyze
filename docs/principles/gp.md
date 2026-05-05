@@ -37,4 +37,4 @@ chosen by maximising the **log marginal likelihood**:
 
 $\log p(y \mid X, \theta) = -\tfrac{1}{2} y^T K_y^{-1} y - \tfrac{1}{2} \log|K_y| - \tfrac{n}{2} \log 2\pi$
 
-Details: [docs/regression/04-spline-kernel-regularized.md](../regression/04-spline-kernel-regularized.md).
+Details: [docs/regression/04-regularized.md](../regression/04-regularized.md).

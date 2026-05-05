@@ -674,5 +674,5 @@ RB.secInteractiveLM "Interactive prediction" xc yc xs ys credibleBand range
 
 - [01-visualization.ja.md](01-visualization.ja.md) — 単発プロット (棒グラフ、ヒストグラム、散布図、Mermaid DAG 等)
 - [../doe/02-orthogonal-taguchi.ja.md](../doe/02-orthogonal-taguchi.ja.md) — 直交表とタグチメソッド (Viz.Taguchi 含む)
-- [../regression/06-quantile-gam-rf.ja.md](../regression/06-quantile-gam-rf.ja.md) — Quantile / GAM / Random Forest
+- [../regression/06-randomforest.ja.md](../regression/06-randomforest.ja.md) — Quantile / GAM / Random Forest
 - 既存 `Viz.AnalysisReport` (LM/GLM/GLMM/GP/HBM 専用) — ソース読みでの理解推奨

@@ -1,7 +1,7 @@
 # Model.DecisionTree — 分類用 CART
 
 > sklearn `DecisionTreeClassifier` 相当。
-> 回帰は既存の [`Model.RandomForest`](06-quantile-gam-rf.ja.md) を参照。
+> 回帰は既存の [`Model.RandomForest`](06-randomforest.ja.md) を参照。
 
 ## 1. API
 

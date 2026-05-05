@@ -3,7 +3,7 @@
 > 🌐 **English** | [日本語](theory-regression-extensions.ja.md)
 
 > Mathematical background and intuition for spline / kernel / regularized regression.
-> Practical usage: [docs/regression/04-spline-kernel-regularized.md](04-spline-kernel-regularized.md).
+> Practical usage: [docs/regression/04-regularized.md](04-regularized.md).
 
 ## 1. Limitations of linear regression and directions for extension
 

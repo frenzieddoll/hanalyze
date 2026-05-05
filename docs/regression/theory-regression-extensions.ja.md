@@ -1,7 +1,7 @@
 # 学習資料 6 — 回帰拡張の理論
 
 > Spline / Kernel / Regularized 回帰の数学的背景と直観。
-> 使い方は [docs/regression/04-spline-kernel-regularized.ja.md](04-spline-kernel-regularized.ja.md)。
+> 使い方は [docs/regression/04-regularized.ja.md](04-regularized.ja.md)。
 
 ## 1. 線形回帰の限界と拡張の方向
 

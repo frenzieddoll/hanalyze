@@ -37,4 +37,4 @@ $\sigma^2_* = k(x_*, x_*) - K_*^T (K + \sigma^2_n I)^{-1} K_*$
 
 $\log p(y \mid X, \theta) = -\tfrac{1}{2} y^T K_y^{-1} y - \tfrac{1}{2} \log|K_y| - \tfrac{n}{2} \log 2\pi$
 
-詳細: [docs/regression/04-spline-kernel-regularized.ja.md](../regression/04-spline-kernel-regularized.ja.md)
+詳細: [docs/regression/04-regularized.ja.md](../regression/04-regularized.ja.md)
