@@ -24,6 +24,27 @@ import qualified Numeric.LinearAlgebra as LA
 import qualified Data.Massiv.Array     as A
 import           Data.Massiv.Array     (Array, Comp (..), Ix2 (..), Sz (..))
 
+-- | Choose massiv 'Comp' mode based on workload size.
+--
+-- Default: 'Seq'. Tested 'Par' at thresholds 250 K, 4 M elements but
+-- both regressed real-world benchmarks because:
+--
+-- 1. Iterative algorithms (GP HP loop, Lasso CD) call kernel/elementwise
+--    helpers many times per fit. Per-call Par-scheduler setup overhead
+--    accumulates over the iterations.
+-- 2. Even with @-threaded@ off (single capability), 'Par' adds
+--    bookkeeping cost that 'Seq' avoids.
+-- 3. Standalone bench (bench-massiv) shows ~1.7× speedup on a single
+--    large call, but in algorithms the calls are smaller and more
+--    frequent.
+--
+-- For users who need parallelism on a single huge kernel matrix
+-- (e.g. GP fit with n > 5000 in one shot), the underlying massiv
+-- API can be invoked directly with @setComp Par@. Inside the
+-- iterative paths used here, 'Seq' is the right default.
+compFor :: Int -> Comp
+compFor _ = Seq
+
 -- | Diagonal of the matrix product @A · B@ where @A@ is @m × n@ and
 -- @B@ is @n × m@, computed without forming the full @m × m@ product.
 --
@@ -78,10 +99,11 @@ pairwiseSqDist x =
   let n     = LA.rows x
       sq    = rowSqNorms x                              -- length n
       cross = x LA.<> LA.tr x                           -- n × n, BLAS GEMM
-      sqA   = A.fromStorableVector Seq sq               -- Array S Ix1 Double
-      crA   = hmatrixToMassiv cross                     -- Array S Ix2 Double
+      comp  = compFor (n * n)
+      sqA   = A.fromStorableVector comp sq              -- Array S Ix1 Double
+      crA   = A.setComp comp (hmatrixToMassiv cross)
       raw   = A.computeAs A.S $
-                A.makeArrayR A.D Seq (Sz (n :. n)) $ \(i :. j) ->
+                A.makeArrayR A.D comp (Sz (n :. n)) $ \(i :. j) ->
                   if i == j
                     then 0
                     else max 0 ( A.index' sqA i
@@ -102,11 +124,12 @@ pairwiseSqDistXY x y =
       sx    = rowSqNorms x
       sy    = rowSqNorms y
       cross = x LA.<> LA.tr y                           -- m × n, BLAS GEMM
-      sxA   = A.fromStorableVector Seq sx
-      syA   = A.fromStorableVector Seq sy
-      crA   = hmatrixToMassiv cross
+      comp  = compFor (m * n)
+      sxA   = A.fromStorableVector comp sx
+      syA   = A.fromStorableVector comp sy
+      crA   = A.setComp comp (hmatrixToMassiv cross)
       raw   = A.computeAs A.S $
-                A.makeArrayR A.D Seq (Sz (m :. n)) $ \(i :. j) ->
+                A.makeArrayR A.D comp (Sz (m :. n)) $ \(i :. j) ->
                   max 0 ( A.index' sxA i
                         + A.index' syA j
                         - 2 * A.index' crA (i :. j) )
@@ -138,12 +161,13 @@ massivToHmatrix a =
 {-# INLINE mapMatrix #-}
 mapMatrix :: (Double -> Double) -> LA.Matrix Double -> LA.Matrix Double
 mapMatrix f m =
-  let rs   = LA.rows m
-      cs   = LA.cols m
-      flat = LA.flatten m
-      arrFlat = A.fromStorableVector Seq flat
-      arr  = A.resize' (Sz (rs :. cs)) arrFlat
-      out  = A.computeAs A.S (A.map f arr)
+  let rs      = LA.rows m
+      cs      = LA.cols m
+      comp    = compFor (rs * cs)
+      flat    = LA.flatten m
+      arrFlat = A.fromStorableVector comp flat
+      arr     = A.resize' (Sz (rs :. cs)) arrFlat
+      out     = A.computeAs A.S (A.map f arr)
   in LA.reshape cs (A.toStorableVector (A.flatten out))
 
 -- | Element-wise map over a hmatrix Vector using massiv. ~1.6× faster
@@ -152,5 +176,6 @@ mapMatrix f m =
 {-# INLINE mapVector #-}
 mapVector :: (Double -> Double) -> LA.Vector Double -> LA.Vector Double
 mapVector f v =
-  let arr = A.fromStorableVector Seq v
+  let comp = compFor (LA.size v)
+      arr  = A.fromStorableVector comp v
   in A.toStorableVector (A.computeAs A.S (A.map f arr))

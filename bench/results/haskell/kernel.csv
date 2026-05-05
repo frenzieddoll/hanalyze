@@ -1,14 +1,14 @@
 system,suite,name,time_ms,acc_main,acc_aux,extra
-haskell,kernel,GramMV_n500_p5,8.409201,0.000000,0.000000,"gramMatrixMV BLAS, n=500"
-haskell,kernel,GramMV_n1000_p5,38.029941,0.000000,0.000000,"gramMatrixMV BLAS, n=1000"
-haskell,kernel,GramMV_n2000_p5,136.986679,0.000000,0.000000,"gramMatrixMV BLAS, n=2000"
-haskell,kernel,KR_n500_p5,14.280316,0.999998,1.290920e-3,kernelRidgeMV Gaussian h=1 λ=1e-3
-haskell,kernel,KR_n1000_p5,70.612191,0.999998,1.250823e-3,kernelRidgeMV Gaussian h=1 λ=1e-3
-haskell,kernel,KR_n2000_p5,382.730562,0.999997,1.818606e-3,kernelRidgeMV Gaussian h=1 λ=1e-3
-haskell,kernel,NW_n1000_p5,53.807990,0.905005,0.283540,nwRegressionMV Gaussian h=1
-haskell,kernel,RFF_n1000_D256_p5,52.791575,0.626617,0.562137,RFFFeaturesMV D=256
-haskell,kernel,RFF_n2000_D256_p5,67.237855,0.665213,0.567817,RFFFeaturesMV D=256
-haskell,kernel,GP_fit_n500_p5,30.719312,0.999400,2.362661e-2,fitGPMV RBF (HP fixed)
-haskell,kernel,GP_fit_n1000_p5,165.723903,0.999493,2.070784e-2,fitGPMV RBF (HP fixed)
-haskell,kernel,GP_opt_n500_p5,2673.363399,0.997955,4.191444,optimizeGPMV (L-BFGS / log marginal likelihood)
-haskell,kernel,GPRobust_n500_p5,70.455319,0.999982,6.000000,"fitGPRobustMV StudentT(4, 0.1)"
+haskell,kernel,GramMV_n500_p5,10.361437,0.000000,0.000000,"gramMatrixMV BLAS, n=500"
+haskell,kernel,GramMV_n1000_p5,38.673906,0.000000,0.000000,"gramMatrixMV BLAS, n=1000"
+haskell,kernel,GramMV_n2000_p5,163.268539,0.000000,0.000000,"gramMatrixMV BLAS, n=2000"
+haskell,kernel,KR_n500_p5,18.533749,0.999998,1.290920e-3,kernelRidgeMV Gaussian h=1 λ=1e-3
+haskell,kernel,KR_n1000_p5,83.868786,0.999998,1.250823e-3,kernelRidgeMV Gaussian h=1 λ=1e-3
+haskell,kernel,KR_n2000_p5,426.006062,0.999997,1.818606e-3,kernelRidgeMV Gaussian h=1 λ=1e-3
+haskell,kernel,NW_n1000_p5,53.079543,0.905005,0.283540,nwRegressionMV Gaussian h=1
+haskell,kernel,RFF_n1000_D256_p5,53.445860,0.648399,0.545494,RFFFeaturesMV D=256
+haskell,kernel,RFF_n2000_D256_p5,68.460341,0.715619,0.523328,RFFFeaturesMV D=256
+haskell,kernel,GP_fit_n500_p5,32.866225,0.999400,2.362661e-2,fitGPMV RBF (HP fixed)
+haskell,kernel,GP_fit_n1000_p5,173.001361,0.999493,2.070784e-2,fitGPMV RBF (HP fixed)
+haskell,kernel,GP_opt_n500_p5,2889.766206,0.997955,4.191444,optimizeGPMV (L-BFGS / log marginal likelihood)
+haskell,kernel,GPRobust_n500_p5,70.997026,0.999982,6.000000,"fitGPRobustMV StudentT(4, 0.1)"

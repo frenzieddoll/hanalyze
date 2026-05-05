@@ -973,12 +973,13 @@ executable bench-bo
     , vector               >= 0.12 && < 0.14
 
 -- Standalone bench: hmatrix vs massiv on pairwise squared distance
--- (F4 evaluation).
+-- (F4 evaluation, F5 multi-core Par evaluation).
 executable bench-massiv
   import:           warnings
   main-is:          BenchMassiv.hs
   hs-source-dirs:   bench/haskell
   default-language: GHC2021
+  ghc-options:      -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base                 >= 4.14 && < 5
     , hanalyze

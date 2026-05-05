@@ -182,6 +182,17 @@ main = do
   putStrLn $ "  numeric diff: " ++ show diff5
 
   putStrLn ""
+  putStrLn "=== Par mode profitability sweep (pairwiseSqDist) ==="
+  let szs = [200, 500, 1000, 2000, 4000]
+  mapM_ (\sz -> do
+            let xs = mkX 1 sz 20
+            putStrLn $ "  n=" ++ show sz
+            _ <- timeIt "    Seq" $ pure $! pairwiseSqDistMassiv3 xs
+            _ <- timeIt "    Par" $ pure $! pairwiseSqDistMassiv3Par xs
+            pure ()
+        ) szs
+
+  putStrLn ""
   putStrLn "=== Vector cmap exp (length n=10000, 10 calls) ==="
   let !v10k = LA.fromList [sin (fromIntegral (i :: Int)) | i <- [1 .. 10000]] :: LA.Vector Double
       goVH i = let m = LA.cmap (\s -> exp s + fromIntegral (i :: Int) * 1e-15) v10k
