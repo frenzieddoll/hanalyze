@@ -155,6 +155,7 @@ library
     , vector               >= 0.12 && < 0.14
     , dataframe            >= 0.3  && < 2
     , deepseq              >= 1.4  && < 1.6
+    , massiv               >= 1.0  && < 1.1
 
 executable hanalyze
   import:           warnings
@@ -970,6 +971,21 @@ executable bench-bo
     , text                 >= 1.2  && < 2.2
     , time                 >= 1.9  && < 1.13
     , vector               >= 0.12 && < 0.14
+
+-- Standalone bench: hmatrix vs massiv on pairwise squared distance
+-- (F4 evaluation).
+executable bench-massiv
+  import:           warnings
+  main-is:          BenchMassiv.hs
+  hs-source-dirs:   bench/haskell
+  default-language: GHC2021
+  build-depends:
+      base                 >= 4.14 && < 5
+    , hanalyze
+    , hmatrix              >= 0.20 && < 0.22
+    , massiv               >= 1.0  && < 1.1
+    , time                 >= 1.9  && < 1.13
+    , deepseq              >= 1.4  && < 1.6
 
 -- Multi-objective optimization bench (B4): NSGA-II on ZDT/DTLZ.
 executable bench-mo
