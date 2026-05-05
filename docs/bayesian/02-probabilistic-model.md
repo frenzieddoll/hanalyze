@@ -151,6 +151,85 @@ schoolData =
 
 ---
 
+## Saving derived quantities (`deterministic`) — PyMC `pm.Deterministic` equivalent
+
+You can declare named **derived quantities** (precision, log-transform,
+signal-to-noise ratio, etc.) computed from sampled latents, and inject them
+into the posterior chain. They do not contribute to the log-joint, so the
+model density is unaffected.
+
+```haskell
+import Model.HBM (deterministic, augmentChainWithDeterministic)
+
+modelWithDerived :: ModelP ()
+modelWithDerived = do
+  mu  <- sample "mu"    (Normal 0 5)
+  sig <- sample "sigma" (HalfNormal 2)
+  -- Derived quantities (computed values, not samples)
+  _ <- deterministic "tau"       (1 / (sig * sig))   -- precision
+  _ <- deterministic "log_sigma" (log sig)
+  _ <- deterministic "snr"       (mu / sig)          -- signal-to-noise
+  observe "y" (Normal mu sig) ys
+```
+
+After sampling, applying `augmentChainWithDeterministic` once evaluates the
+derived quantities at every posterior draw and adds them to the `Chain`
+**indistinguishably from latents**:
+
+```haskell
+rawCh <- nuts modelWithDerived cfg initParams gen
+let ch = augmentChainWithDeterministic modelWithDerived rawCh
+printPosteriorSummary ["mu", "sigma", "tau", "log_sigma", "snr"] [ch]
+```
+
+Derived quantities flow through `posteriorSummaryFile` /
+`tracePlotHDIFile` / `secMCMCDiagnostics` etc. with no special handling
+(they appear in tables/traces alongside latents).
+Demo: [`deterministic-demo`](../../demo/bayesian/DeterministicDemo.hs).
+
+> **PyMC mapping**: `tau = pm.Deterministic("tau", 1/sig**2)` ↔
+> `_ <- deterministic "tau" (1/(sig*sig))`. The return value can be
+> discarded (`_ <-`) or used in subsequent expressions.
+
+---
+
+## Data placeholders (`dataNamed` / `withData`) — PyMC `pm.Data` equivalent
+
+Used when switching between train/test data, or reusing the same model
+structure with different observations. A named `[Double]` is embedded in
+the model definition and can be replaced later with `withData`.
+
+```haskell
+import Model.HBM (dataNamed, withData)
+
+m :: ModelP ()
+m = do
+  ys  <- dataNamed "y" trainY        -- default value is the training data
+  mu  <- sample "mu"    (Normal 0 5)
+  sig <- sample "sigma" (HalfNormal 2)
+  observe "y" (Normal mu sig) ys
+```
+
+```haskell
+-- Training: NUTS on the training data
+chTrain <- nuts m            cfg initParams gen
+-- Posterior predictive check: swap to test data and evaluate log-likelihood
+let mTest = withData "y" testY m
+let lp    = logLikelihood mTest psPosterior
+```
+
+`withData` rebuilds the model **while preserving the rank-2 type**
+(it traverses each `a` individually under `forall a. ...`, so AD / Track /
+Double interpretations all work after substitution). When the same
+placeholder appears in multiple places, all occurrences are replaced.
+
+> **PyMC mapping**: `pm.Data("y", train_y)` + `pm.set_data({"y": test_y})`
+> ↔ `dataNamed "y" trainY` + `withData "y" testY model`. The difference
+> is that the hanalyze side is a **pure function that rebuilds the whole
+> model** with no global state.
+
+---
+
 ## Inspecting model structure
 
 ```haskell

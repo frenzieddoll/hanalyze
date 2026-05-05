@@ -146,6 +146,81 @@ schoolData =
 
 ---
 
+## 派生量の保存 (`deterministic`) — PyMC `pm.Deterministic` 相当
+
+`sample` した潜在変数から計算される **派生量** (precision、log 変換、信号対雑音比など)
+をモデル中で名前付きで宣言し、posterior chain に注入できます。
+log-joint には寄与しないので、モデルの密度には影響しません。
+
+```haskell
+import Model.HBM (deterministic, augmentChainWithDeterministic)
+
+modelWithDerived :: ModelP ()
+modelWithDerived = do
+  mu  <- sample "mu"    (Normal 0 5)
+  sig <- sample "sigma" (HalfNormal 2)
+  -- 派生量 (sample ではなく値の計算)
+  _ <- deterministic "tau"       (1 / (sig * sig))   -- 精度
+  _ <- deterministic "log_sigma" (log sig)
+  _ <- deterministic "snr"       (mu / sig)          -- 信号対雑音比
+  observe "y" (Normal mu sig) ys
+```
+
+サンプリング後に `augmentChainWithDeterministic` を 1 回適用すると、
+各サンプルで派生量が評価されて `Chain` に **latent と同じ扱い** で追加されます:
+
+```haskell
+rawCh <- nuts modelWithDerived cfg initParams gen
+let ch = augmentChainWithDeterministic modelWithDerived rawCh
+printPosteriorSummary ["mu", "sigma", "tau", "log_sigma", "snr"] [ch]
+```
+
+派生量は `posteriorSummaryFile` / `tracePlotHDIFile` / `secMCMCDiagnostics` 等に
+そのまま流せます (latent と区別なくテーブル/トレースに並びます)。
+デモ: [`deterministic-demo`](../../demo/bayesian/DeterministicDemo.hs)。
+
+> **PyMC との対応**: `tau = pm.Deterministic("tau", 1/sig**2)` ↔
+> `_ <- deterministic "tau" (1/(sig*sig))`。返り値は捨てても (`_ <-`)、
+> 後続の式に流しても良いです。
+
+---
+
+## データプレースホルダ (`dataNamed` / `withData`) — PyMC `pm.Data` 相当
+
+train/test データの切替や、同じ構造のモデルで観測データを差し替えたいときに使います。
+モデル定義中に「名前付きの `[Double]`」を埋め込み、
+後で `withData` により別の値で置換できます。
+
+```haskell
+import Model.HBM (dataNamed, withData)
+
+m :: ModelP ()
+m = do
+  ys  <- dataNamed "y" trainY        -- 既定値は train データ
+  mu  <- sample "mu"    (Normal 0 5)
+  sig <- sample "sigma" (HalfNormal 2)
+  observe "y" (Normal mu sig) ys
+```
+
+```haskell
+-- 学習: train データで NUTS
+chTrain <- nuts m            cfg initParams gen
+-- 予測時の事後予測検査: test データに差し替えて log-likelihood 評価
+let mTest = withData "y" testY m
+let lp    = logLikelihood mTest psPosterior
+```
+
+`withData` は **rank-2 型を保ったまま** モデルを再構築します
+(`forall a. ...` の各 `a` で個別に走査するため、AD/Track/Double どの解釈でも
+差替後のデータで動作します)。同名のプレースホルダが複数箇所あれば全箇所で差替わります。
+
+> **PyMC との対応**: `pm.Data("y", train_y)` + `pm.set_data({"y": test_y})` ↔
+> `dataNamed "y" trainY` + `withData "y" testY model`。
+> 違いは hanalyze 側は **モデル全体を再構築する純粋関数** で、
+> グローバル状態を持たない点です。
+
+---
+
 ## モデル構造の確認
 
 ```haskell
