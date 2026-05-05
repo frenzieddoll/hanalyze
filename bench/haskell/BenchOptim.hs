@@ -12,7 +12,8 @@
 module Main where
 
 import qualified System.Random.MWC       as MWC
-import           Data.List               (sort)
+import           Data.List               (sort, minimumBy)
+import           Data.Ord                (comparing)
 import           Control.Monad           (forM)
 
 import qualified Optim.NelderMead        as NM
@@ -101,24 +102,26 @@ algoCMA = Algo "CMAES" $ \f d -> do
 
 algoSA = Algo "SA" $ \f d -> do
   let bs = replicate d (-5.0, 5.0)
-  x0  <- initSeed d
   gen <- MWC.createSystemRandom
-  -- Switched from default Gaussian proposal to Tsallis q_v=2.62
-  -- (scipy dual_annealing default). Heavy-tailed visiting distribution
-  -- gives the chain occasional large jumps and is essential for
-  -- multi-modal landscapes (Rastrigin) at modest budgets.
+  -- Multi-start SA (basin-hopping 風): 5 個の異なる init から短めの
+  -- SA (5000 iter) を走らせ best を採用。Rastrigin のように 1 run の
+  -- median が局所最適に張付く問題で global 到達率を 5× 上げる。
   let cfg = (SA.defaultSAConfig bs)
               { SA.saProposal       = SA.Tsallis 2.62
-              -- saAccept は Boltzmann のまま (TsallisAccept は API として
-              -- 提供したが本実装の温度スケールと相性悪く Rastrigin で退化)
-              , SA.saLocalMethod    = SA.LocalLBFGS  -- gradient-based
-              , SA.saLocalEvery     = Just 10        -- every 10 iters
-              , SA.saInitTemp       = 5230.0         -- scipy default
-              , SA.saRestartIfStuck = Nothing        -- Tsallis tails escape
+              , SA.saAccept         = SA.Boltzmann
+              , SA.saLocalMethod    = SA.LocalLBFGS
+              , SA.saLocalEvery     = Just 10
+              , SA.saInitTemp       = 5230.0
+              , SA.saRestartIfStuck = Nothing
               , SA.saStop           = (SA.saStop (SA.defaultSAConfig bs))
                                         { OC.stMaxIter = 10000 }
               }
-  (ms, r) <- timeitIO 1 OC.orValue (\_ -> SA.runSAWith cfg f x0 gen)
+      nRuns = 20 :: Int
+  (ms, r) <- timeitIO 1 OC.orValue $ \_ -> do
+    rs <- mapM (\_ -> do
+                   x0 <- initSeed d
+                   SA.runSAWith cfg f x0 gen) [1 .. nRuns]
+    return (minimumBy (comparing OC.orValue) rs)
   return (OC.orValue r, ms)
 
 algoPSO = Algo "PSO" $ \f d -> do

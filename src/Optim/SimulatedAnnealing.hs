@@ -47,6 +47,12 @@ data SACoolingSchedule
   | Linear    !Double
   | LundyMees !Double
   | Cauchy
+  | TsallisCool !Double
+    -- ^ Generalised SA cooling (Xiang-Gong-Liu-Yan 1997, scipy
+    --   dual_annealing). With parameter @q_v@:
+    --   @T(t) = T_0 · (2^(q_v−1) − 1) / ((t+2)^(q_v−1) − 1)@.
+    --   Drops fast initially then asymptotically slow; pairs naturally
+    --   with the 'Tsallis' visiting distribution.
   deriving (Show, Eq)
 
 -- | Proposal (visiting) distribution for the next-x candidate.
@@ -94,6 +100,12 @@ data SALocalMethod
 data SAAccept
   = Boltzmann
   | TsallisAccept !Double
+  | GreedyAccept
+    -- ^ Accept only improvements. The exploration role is delegated
+    --   entirely to the proposal distribution (set 'saProposal' to
+    --   'Tsallis q_v' for heavy-tailed jumps). This matches scipy's
+    --   @dual_annealing@ effective behaviour (its Tsallis acceptance
+    --   with @q_a = -5@ essentially rejects all worsenings).
   deriving (Show, Eq)
 
 -- | SA configuration.
@@ -209,6 +221,10 @@ nextTemp sched t0 iter t = case sched of
   Linear    a     -> max 1e-12 (t - a)
   LundyMees beta  -> t / (1 + beta * t)
   Cauchy          -> t0 / (1 + fromIntegral (iter + 1))
+  TsallisCool qv  ->
+    let s = fromIntegral (iter + 2) :: Double
+        e = qv - 1
+    in t0 * (2 ** e - 1) / (s ** e - 1)
 
 -- | Run SA with the default configuration built from @bounds@.
 runSA :: [(Double, Double)]
@@ -284,16 +300,12 @@ runSAWith cfg fUser x0 gen = do
                       u < exp (- dF / temp)
                     TsallisAccept qa ->
                       let qm    = 1 - qa
-                          base  = 1 + qm * dF / temp  -- note: -(1-qa) = qa-1
-                          -- For minimisation dF > 0, the standard form is
-                          -- P = max(0, 1 - (1-qa)·dF/T)^(1/(1-qa))
-                          -- = max(0, 1 - qm·dF/T)^(1/qm).
                           base' = 1 - qm * dF / temp
                           pAcc
                             | base' <= 0 = 0
                             | otherwise  = base' ** (1 / qm)
-                          _ = base
                       in u < pAcc
+                    GreedyAccept -> False
               (xN, fxN)  = if accept then (xCand, fNew) else (xR, fxR)
               (xBN0, fBN0) = if fxN < fBest then (xN, fxN) else (xBest, fBest)
               improved   = fBN0 < fBest
