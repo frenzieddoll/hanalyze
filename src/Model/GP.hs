@@ -87,29 +87,38 @@ kernelName Periodic  = "Periodic"
 
 -- | GP hyperparameters.
 data GPParams = GPParams
-  { gpLengthScale :: Double
-    -- ^ Length scale @ℓ@; larger means smoother.
-  , gpSignalVar   :: Double
+  { gpLengthScale  :: Double
+    -- ^ Isotropic length scale @ℓ@; larger means smoother. Used unless
+    --   'gpLengthScales' is 'Just' (= ARD), in which case the per-dim
+    --   vector overrides this for multi-input kernel evaluation.
+  , gpSignalVar    :: Double
     -- ^ Signal variance @σ_f²@; the variability of the function values.
-  , gpNoiseVar    :: Double
+  , gpNoiseVar     :: Double
     -- ^ Observation noise variance @σ_n²@; near 0 interpolates, larger
     --   smooths.
-  , gpPeriod      :: Double
+  , gpPeriod       :: Double
     -- ^ Period @p@ (only used by the @Periodic@ kernel).
+  , gpLengthScales :: Maybe (LA.Vector Double)
+    -- ^ Per-dim length scales for ARD (Automatic Relevance
+    --   Determination). When 'Just' v, the multi-input kernel uses
+    --   @D_ARD[i,j] = Σ_d (X[i,d] − X'[j,d])² / ℓ_d²@ instead of the
+    --   isotropic distance / ℓ². Has no effect on the 1D 'kernelFn' /
+    --   'fitGP' path. 'Nothing' = isotropic (default).
   } deriving (Show)
 
 -- | Default hyperparameters: @ℓ = σ_f² = p = 1@, @σ_n² = 0.1@.
 defaultGPParams :: GPParams
-defaultGPParams = GPParams 1.0 1.0 0.1 1.0
+defaultGPParams = GPParams 1.0 1.0 0.1 1.0 Nothing
 
 -- | Build a sensible initial 'GPParams' from data statistics, suitable
 -- as a starting point for optimization.
 initParamsFromData :: [Double] -> [Double] -> GPParams
 initParamsFromData xs ys = GPParams
-  { gpLengthScale = max 0.01 ((xMax - xMin) / 4)
-  , gpSignalVar   = max 0.01 yVar
-  , gpNoiseVar    = max 1e-4 (yVar * 0.05)
-  , gpPeriod      = max 0.01 (xMax - xMin)
+  { gpLengthScale  = max 0.01 ((xMax - xMin) / 4)
+  , gpSignalVar    = max 0.01 yVar
+  , gpNoiseVar     = max 1e-4 (yVar * 0.05)
+  , gpPeriod       = max 0.01 (xMax - xMin)
+  , gpLengthScales = Nothing
   }
   where
     xMin  = minimum xs
@@ -355,20 +364,48 @@ applyKernel Periodic p d2 =
                         ss = sin (pi * r / pr)
                     in sf * exp (- 2 * ss * ss / (l * l))) d2
 
+-- | Apply ARD scaling to (X, X') if 'gpLengthScales' is 'Just'. Returns
+-- the (possibly rescaled) matrices and a 'GPParams' with @ℓ = 1@ so
+-- that 'applyKernel' divides by 1 (the per-dim ℓ_d already absorbed
+-- into the column scaling). 'Nothing' = isotropic, returns inputs and
+-- params unchanged. The 'Periodic' kernel does not support ARD.
+ardScaleXY
+  :: Kernel -> GPParams -> LA.Matrix Double -> LA.Matrix Double
+  -> (LA.Matrix Double, LA.Matrix Double, GPParams)
+ardScaleXY Periodic p x y = (x, y, p)
+ardScaleXY _        p x y = case gpLengthScales p of
+  Nothing -> (x, y, p)
+  Just ls ->
+    let p_     = LA.cols x
+        lsExt  = if LA.size ls == p_
+                   then ls
+                   else LA.konst (gpLengthScale p) p_  -- safety fallback
+        invL   = LA.cmap (1 /) lsExt                 -- 1 / ℓ_d
+        scaleCols m = m LA.<> LA.diag invL
+        x'     = scaleCols x
+        y'     = scaleCols y
+        p'     = p { gpLengthScale = 1.0 }
+    in (x', y', p')
+
 -- | Build the kernel matrix @K(X, X')@ of shape @|X| × |X'|@ from
 -- multi-input matrices. @X@ is @n × p@; @X'@ is @m × p@.
+--
+-- When 'gpLengthScales' is 'Just', uses ARD: each input dimension is
+-- scaled by @1 / ℓ_d@ before computing pairwise squared distances.
 buildKernelMatrixMV
   :: Kernel -> GPParams -> LA.Matrix Double -> LA.Matrix Double
   -> LA.Matrix Double
 buildKernelMatrixMV ker p x x' =
-  applyKernel ker p (KD.pairwiseSqDistXY x x')
+  let (xs, ys, p') = ardScaleXY ker p x x'
+  in applyKernel ker p' (KD.pairwiseSqDistXY xs ys)
 
 -- | Multi-input @K + σ_n² I@.
 noiseKernelMV :: Kernel -> GPParams -> LA.Matrix Double -> LA.Matrix Double
 noiseKernelMV ker p x =
-  let n      = LA.rows x
-      k      = applyKernel ker p (KD.pairwiseSqDist x)
-      jitter = max (gpNoiseVar p) 1e-6
+  let n            = LA.rows x
+      (xs, _, p')  = ardScaleXY ker p x x
+      k            = applyKernel ker p' (KD.pairwiseSqDist xs)
+      jitter       = max (gpNoiseVar p) 1e-6
   in k `LA.add` LA.scale jitter (LA.ident n)
 
 -- | Multi-input log marginal likelihood.
@@ -448,10 +485,26 @@ fitGPMVMulti model trainX trainY testX =
 
 -- | Multi-input GP hyperparameter optimization. Mirrors 'optimizeGP' but
 -- accepts a multi-input training matrix.
+--
+-- When @gpLengthScales p0 = Just v@, optimizes per-dim length scales
+-- (ARD): the parameter vector becomes
+-- @[log ℓ_1, …, log ℓ_p, log σ_f², log σ_n²]@. Otherwise optimises the
+-- isotropic @[log ℓ, log σ_f², log σ_n²]@.
 optimizeGPMV
   :: Kernel -> LA.Matrix Double -> LA.Vector Double -> GPParams -> GPParams
 optimizeGPMV ker trainX y p0 =
-  let u0   = [log (gpLengthScale p0), log (gpSignalVar p0), log (gpNoiseVar p0)]
+  let p     = LA.cols trainX
+      isARD = case gpLengthScales p0 of
+                Just v | LA.size v == p && p > 0 -> True
+                _                                -> False
+      u0
+        | isARD     = let Just v = gpLengthScales p0
+                          ls     = LA.toList v
+                      in map log ls
+                         ++ [log (gpSignalVar p0), log (gpNoiseVar p0)]
+        | otherwise = [ log (gpLengthScale p0)
+                      , log (gpSignalVar  p0)
+                      , log (gpNoiseVar   p0) ]
       cfg  = LBFGS.defaultLBFGSConfig
                { LBFGS.lbDir   = OC.Maximize
                , LBFGS.lbStop  = OC.defaultStopCriteria
@@ -459,15 +512,38 @@ optimizeGPMV ker trainX y p0 =
                }
       result = unsafePerformIO $ LBFGS.runLBFGSNumeric cfg obj u0
       uOpt   = OC.orBest result
-  in p0
-       { gpLengthScale = exp (uOpt !! 0)
-       , gpSignalVar   = exp (uOpt !! 1)
-       , gpNoiseVar    = exp (uOpt !! 2)
-       }
+  in toParams uOpt
   where
-    toParams u = p0
-      { gpLengthScale = exp (u !! 0)
-      , gpSignalVar   = exp (u !! 1)
-      , gpNoiseVar    = exp (u !! 2)
-      }
-    obj u = logMarginalLikelihoodMV trainX y ker (toParams u)
+    p      = LA.cols trainX
+    isARD  = case gpLengthScales p0 of
+               Just v | LA.size v == p && p > 0 -> True
+               _                                -> False
+    toParams u
+      | isARD     =
+          let lsV = LA.fromList (map exp (take p u))
+          in p0
+               { gpLengthScales = Just lsV
+               , gpSignalVar    = exp (u !! p)
+               , gpNoiseVar     = exp (u !! (p + 1))
+               }
+      | otherwise = p0
+          { gpLengthScale = exp (u !! 0)
+          , gpSignalVar   = exp (u !! 1)
+          , gpNoiseVar    = exp (u !! 2)
+          }
+    -- For ARD, add a weak log-normal prior on each ℓ_d centred at the
+    -- initial value (Gaussian in log-space, σ_prior = 1.5 ≈ ratio 4.5).
+    -- Without it, log marginal likelihood with only 30 BO points and
+    -- many ℓ_d's tends to drive ℓ_d to extreme values (over-fit). The
+    -- prior is informative enough to keep ℓ_d within ~one order of
+    -- magnitude of the init while still letting individual dims relax.
+    obj u
+      | isARD     =
+          let lml      = logMarginalLikelihoodMV trainX y ker (toParams u)
+              Just v0  = gpLengthScales p0
+              logL0    = map log (LA.toList v0)
+              sig2     = 1.5 * 1.5
+              prior    = sum [ -0.5 * (l - l0) ^ (2 :: Int) / sig2
+                             | (l, l0) <- zip (take p u) logL0 ]
+          in lml + prior
+      | otherwise = logMarginalLikelihoodMV trainX y ker (toParams u)

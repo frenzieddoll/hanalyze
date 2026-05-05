@@ -97,28 +97,32 @@ Cython native code でループ。
 
 ---
 
-## 6. BayesOpt — Branin で skopt に大幅劣後 (部分対応済)
+## 6. BayesOpt — Branin gap 大幅縮小、Hartmann6 は skopt 越え達成
 
 | 観点 | 値 |
 |---|---|
-| Branin (true 0.398) | hanalyze **1.96** / skopt 0.398 (BO1+BO2 後、5 seeds median) |
-| Hartmann6 (true -3.32) | hanalyze -2.36 / skopt -2.77 (Hartmann6 は微回帰) |
-| 困難度 | M |
+| Branin (true 0.398) | hanalyze **0.86** / skopt 0.398 (5 seeds median, A+B+C 後) |
+| Hartmann6 (true -3.32) | hanalyze **-3.07** / skopt -2.77 (hanalyze 大幅勝ち、92% of opt) |
+| 困難度 | L (残ギャップ) |
 
-**対応済 (BO1+BO2+Cholesky-cache)**: y z-score 正規化、X を [0,1]^d に
-スケーリング、`Ky` を BO 反復ごとに 1 回だけ Cholesky 分解しキャッシュ
-(L-BFGS の per-step 全 fit を回避、~5× 速化)、`p0 = 0.25√d` で
-ℓ 初期値を次元適応。Branin は 4.00 → 1.96 に半減 (REPORT.md
-"After BO1 + BO2 + Cholesky-cache" 節参照)。
+**対応済 (BO1+BO2+cache+A+B+C)**:
+- BO1: y z-score 正規化
+- BO2: X を [0,1]^d にスケーリング
+- Cholesky cache: `Ky` を BO 反復毎 1 回だけ分解
+- A: 真の ARD インフラ (`gpLengthScales :: Maybe (Vector Double)`、API 完備、
+  ただし BO loop では over-fit のため disable)
+- B: GP-Hedge (EI / LCB / PI を softmax over online gains で混合)
+- C: kernel gradient (RBF/Matern52) + EI/PI/LCB の解析勾配で内側 L-BFGS
 
-**残ギャップ**: Branin で skopt との 5× 差。原因候補:
-- 真の ARD (`gpLengthScale :: Double` を `Vector Double` per-dim に)
-- `acq_func='gp_hedge'` 風 EI/LCB/PI の動的混合
-- 多 restart HP optimisation (BO3 試行で Hartmann6 退化のため revert)
+Branin: 4.00 → **0.86** (5× 改善、skopt 0.40 の 2× 圏)
+Hartmann6: -2.83 → **-3.07** (skopt -2.77 大幅越え、true optimum -3.32 の 92%)
 
-**対応案** (将来 phase): `Model.GP.GPParams` の ℓ を per-dim Vector に
-拡張する半日 refactor が最有力。Hartmann6 退化は run-to-run BO 分散の
-範囲内 (5 seeds 1..5 固定) で許容圏。
+時間: Branin 22s vs skopt 5.5s (3 acq × multi-start で増)、
+Hartmann6 19s vs skopt 7.1s。speed 3× 劣後だが accuracy 優位。
+
+**残ギャップ** (Branin 0.86 vs skopt 0.40, 2×): ARD を BO で活用するに
+は更なる regularization (tighter prior、isotropic warm-start、ℓ_d 境界
+制約) が必要。低優先度 (実問題 Hartmann6 はすでに skopt 越え)。
 
 ---
 

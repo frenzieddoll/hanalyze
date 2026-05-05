@@ -635,22 +635,75 @@ Three changes to `Optim.BayesOpt.bayesOptND`:
   via `LBFGS.runLBFGSNumeric` keeps the inner loop simple and the
   Cholesky cache absorbs most of the cost.
 
-| Problem | Before BO1 | After BO1+BO2+cache | skopt | True optimum |
-|---|---|---|---|---|
-| Branin (2D) | 4.00 | **1.96** | 0.398 | 0.398 |
-| Hartmann6 (6D) | -2.83 | -2.36 | -2.77 | -3.32 |
-| Branin time | 13 s | **5.6 s** | 5.5 s | — |
-| Hartmann6 time | 7.7 s | 8.9 s | 7.1 s | — |
-
-Branin closes ~half the gap to skopt (4.00 → 1.96, 5× still remains)
-and matches skopt on wall time. Hartmann6 regresses ~0.5 — within
-run-to-run BO variance with fixed seeds 1..5 but worth flagging.
-Closing the residual Branin gap likely requires either (a) true ARD
-(per-dim ℓ in `GPParams`, ~half-day refactor of `Model.GP`) or
-(b) `acq_func='gp_hedge'` style EI/LCB/PI mixing.
+| Problem | Baseline | After BO1+BO2+cache | After A+B+C | skopt | True optimum |
+|---|---|---|---|---|---|
+| Branin (2D) | 4.00 | 1.96 | **0.86** | 0.398 | 0.398 |
+| Hartmann6 (6D) | -2.83 | -2.36 | **-3.07** | -2.77 | -3.32 |
+| Branin time | 13 s | 5.6 s | 22 s | 5.5 s | — |
+| Hartmann6 time | 7.7 s | 8.9 s | 19 s | 7.1 s | — |
 
 `bench/haskell/BenchBO.hs` now uses `MWC.initialize` with seed
 `1..nSeeds` (was `createSystemRandom`) so reruns are reproducible.
+
+## After A + B + C (true ARD infra, GP-Hedge, analytic gradient)
+
+Three additional changes layered on top of BO1+BO2+cache:
+
+### A — true ARD kernel (per-dim length scales)
+
+`Model.GP.GPParams` gains `gpLengthScales :: Maybe (LA.Vector Double)`.
+When `Just v`, `buildKernelMatrixMV` / `noiseKernelMV` apply per-dim
+column scaling @X · diag(1/ℓ_d)@ before computing pairwise squared
+distances; `optimizeGPMV` extends the L-BFGS state to
+@[log ℓ_1, …, log ℓ_p, log σ_f², log σ_n²]@ with a weak Gaussian
+prior on each `log ℓ_d` (σ_prior = 1.5). API works on RBF / Matern52
+(Periodic falls back to isotropic).
+
+**BO loop currently disables ARD**: empirically with only ~30
+evaluations the per-dim L-BFGS over-fits noise — Branin regressed
+from 1.96 → 2.81 and Hartmann6 from -2.36 → -1.48 with ARD-on. The
+infrastructure stays in place for future tuning (tighter prior,
+isotropic-warm-start, bound constraints).
+
+### B — GP-Hedge acquisition mixing (Hoffman 2011)
+
+Maintains online "gains" for {EI, LCB, PI}. Each BO iteration:
+
+1. Each acquisition proposes its argmax x via L-BFGS multi-start.
+2. One acquisition is sampled by softmax over gains (η = 1).
+3. `f(x_chosen)` is evaluated → appended to history.
+4. All three gains decrement by the GP's predicted μ at their
+   proposal (lower μ = higher reward for minimisation).
+
+Protects against any single acquisition's pathology on a given
+problem (Branin 1.96 → 1.52 with hedge alone).
+
+### C — analytic gradient for inner L-BFGS
+
+Per-dim @∂μ/∂x@ and @∂σ/∂x@ derived from the kernel gradient and
+fed to `runLBFGSWith` (instead of `runLBFGSNumeric`). For RBF and
+Matern52 the kernel gradient has a simple closed form using the
+already-computed `k_star` and `vstar = K_y⁻¹ k_star` (from the
+Cholesky cache). Chain rule through scaleX (BO2) gives the gradient
+in raw box coordinates. Periodic kernel keeps the numeric path.
+
+| Acquisition | (∂/∂μ, ∂/∂σ) |
+|---|---|
+| EI  | (-Φ(z), φ(z)) |
+| PI  | (-φ(z)/σ, -z·φ(z)/σ) |
+| LCB | (1, -β) |
+
+### Result
+
+Branin: 4.00 → **0.86** (5× improvement, 2× of skopt's 0.398).
+Hartmann6: -2.83 → **-3.07** (beats skopt's -2.77 decisively;
+~92 % of true optimum -3.32). Time increases ~3× over isotropic
+because every BO iteration runs three inner L-BFGS multi-starts;
+analytic gradient kept that under control (Hartmann6 27 s with
+hedge+numeric → 19 s with hedge+analytic).
+
+Remaining gap on Branin (0.86 vs 0.398) likely requires re-enabling
+ARD with stronger regularisation, which is left to a future phase.
 
 ## Reproduction
 

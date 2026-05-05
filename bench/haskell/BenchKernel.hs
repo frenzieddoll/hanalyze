@@ -146,7 +146,7 @@ gpFitPhantom _ mdl x y t = GP.fitGPMV mdl x y t
 benchGPFit :: FilePath -> String -> IO [BenchRow]
 benchGPFit path name = do
   (x, y) <- readCsvXY path
-  let mdl = GP.GPModel GP.RBF (GP.GPParams 1.0 1.0 0.05 1.0)
+  let mdl = GP.GPModel GP.RBF (GP.GPParams 1.0 1.0 0.05 1.0 Nothing)
   (ms, res) <- timeitIO 3 (\r -> LA.sumElements (GP.gpmvMean r)
                                 + LA.sumElements (GP.gpmvVar r))
                  (\i -> return $! gpFitPhantom i mdl x y x)
@@ -164,7 +164,7 @@ benchGPFit path name = do
 {-# NOINLINE gpOptPhantom #-}
 gpOptPhantom :: Int -> LA.Matrix Double -> LA.Vector Double -> GP.GPParams
 gpOptPhantom _ x y = GP.optimizeGPMV GP.RBF x y
-                       (GP.GPParams 0.5 1.0 0.05 1.0)
+                       (GP.GPParams 0.5 1.0 0.05 1.0 Nothing)
 
 benchGPOpt :: FilePath -> String -> IO [BenchRow]
 benchGPOpt path name = do
@@ -187,7 +187,7 @@ benchGPOpt path name = do
 gprPhantom :: Int -> LA.Matrix Double -> LA.Vector Double
            -> GPR.RobustGPFitMV
 gprPhantom _ x y = GPR.fitGPRobustMV GP.RBF
-                      (GP.GPParams 1.0 1.0 0.05 1.0)
+                      (GP.GPParams 1.0 1.0 0.05 1.0 Nothing)
                       (GPR.RStudentT 4.0 0.1)
                       x y
 

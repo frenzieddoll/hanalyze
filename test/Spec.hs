@@ -262,7 +262,7 @@ main = hspec $ do
       let xL  = [fromIntegral i / 5 | i <- [0 .. 19 :: Int]]
           yL  = map sin xL
           tL  = [0.5, 1.5, 2.5]
-          mdl = GP.GPModel GP.RBF (GP.GPParams 1.0 1.0 0.05 1.0)
+          mdl = GP.GPModel GP.RBF (GP.GPParams 1.0 1.0 0.05 1.0 Nothing)
           legacy = GP.fitGP mdl xL yL tL
           xMV = LA.fromLists (map (:[]) xL) :: LA.Matrix Double
           yMV = LA.fromList yL
@@ -282,7 +282,7 @@ main = hspec $ do
           ftn (x1, x2) = sin x1 + 0.5 * cos x2
           xMV = LA.fromLists [ [a, b] | (a, b) <- gx ] :: LA.Matrix Double
           yMV = LA.fromList [ ftn p | p <- gx ]
-          p0  = GP.GPParams 1.0 1.0 0.01 1.0
+          p0  = GP.GPParams 1.0 1.0 0.01 1.0 Nothing
           po  = GP.optimizeGPMV GP.RBF xMV yMV p0
           mdl = GP.GPModel GP.RBF po
           res = GP.fitGPMV mdl xMV yMV xMV
@@ -299,7 +299,7 @@ main = hspec $ do
           yL  = map sin xL
           tL  = [0.5, 1.5, 2.5]
           ker = GP.RBF
-          ps  = GP.GPParams 1.0 1.0 0.05 1.0
+          ps  = GP.GPParams 1.0 1.0 0.05 1.0 Nothing
           lik = GPR.RGaussian 0.1
           legFit = GPR.fitGPRobust ker ps lik xL yL
           legacy = GPR.predictGPRobust legFit tL
@@ -838,7 +838,7 @@ main = hspec $ do
           -- Inject outlier at index 5
           ys = zipWith (\i y -> if i == 5 then y + 5 else y)
                        [0::Int ..] cleanY
-          hp = GP.GPParams 1.0 1.0 0.05 1.0
+          hp = GP.GPParams 1.0 1.0 0.05 1.0 Nothing
           gpRes  = GP.fitGP (GP.GPModel GP.RBF hp) xs ys xs
           gaussRMSE = sqrt (sum [ (a - b) ^ (2::Int)
                                 | (a, b) <- zip cleanY (GP.gpMean gpRes) ]
@@ -853,7 +853,7 @@ main = hspec $ do
     it "IRLS converges in finite iterations" $ do
       let xs = [0.0, 1.0, 2.0, 3.0, 4.0]
           ys = [0.1, 1.05, 1.95, 2.9, 4.1]
-          hp = GP.GPParams 1.0 1.0 0.1 1.0
+          hp = GP.GPParams 1.0 1.0 0.1 1.0 Nothing
           fit = GPR.fitGPRobust GP.RBF hp (GPR.RStudentT 4 0.5) xs ys
       GPR.rgpIters fit `shouldSatisfy` (\n -> n > 0 && n <= 50)
 

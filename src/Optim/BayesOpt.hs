@@ -32,7 +32,7 @@ import Model.GP (Kernel (..), GPModel (..), GPResult (..), GPParams (..),
                  logMarginalLikelihoodMV,
                  buildKernelMatrixMV, noiseKernelMV)
 import qualified Stat.Cholesky as Chol
-import Optim.Acquisition (ei, ucb, parEGO)
+import Optim.Acquisition (ei, ucb, pi_, parEGO)
 import Optim.NSGA       (NSGAConfig (..), defaultNSGAConfig,
                          Solution (..), nsga2)
 import Optim.Common     (Bounds)
@@ -42,6 +42,8 @@ import qualified Optim.Common     as OC
 import qualified Numeric.LinearAlgebra as LA
 import qualified Stat.QuasiRandom      as QR
 import qualified Stat.Standardize      as Std
+import Statistics.Distribution        (cumulative, density)
+import Statistics.Distribution.Normal (standard)
 
 -- | Bayesian Optimization configuration.
 data BayesOptConfig = BayesOptConfig
@@ -221,7 +223,24 @@ bayesOptND cfg nStarts f bounds gen = do
       scaleX xs = [ if hi > lo then (v - lo) / (hi - lo) else v
                   | ((lo, hi), v) <- zip bounds xs ]
       unitBounds = replicate dim (0, 1)
-  let loop t hist
+  -- Phase B (GP-Hedge, Hoffman 2011): maintain online "gains" for
+  -- {EI, LCB, PI}. Each iteration each acquisition proposes its best
+  -- candidate via L-BFGS multi-start; one is selected by softmax over
+  -- gains, evaluated, and gains are updated using the GP's predicted
+  -- μ at every proposal (lower μ = higher reward for minimisation).
+  -- This protects against any single acquisition's pathological
+  -- behaviour on a given problem (e.g. EI's exploitation bias on
+  -- multi-modal Branin).
+  let hedgeEta = 1.0 :: Double
+      pickAcq gains gen0 = do
+        let m   = maximum gains
+            ws  = map (\g -> exp (hedgeEta * (g - m))) gains
+            tot = sum ws
+            ps  = map (/ tot) ws
+        u <- uniform gen0 :: IO Double
+        let cum = scanl1 (+) ps
+        pure (length (takeWhile (< u) cum))
+  let loop t hist gains
         | t == 0 = return hist
         | otherwise = do
             let xss     = map fst hist
@@ -240,12 +259,20 @@ bayesOptND cfg nStarts f bounds gen = do
                             (Std.applyStandardizer stdr (LA.asColumn yVec0))
                 yBest   = LA.minElement yVec
                 -- After BO2 scaling, X lives on [0, 1]^d. The natural ℓ
-                -- grows as √d (mean pairwise distance scales that way), so
-                -- start L-BFGS from ℓ = 0.25 √d to keep correlations
+                -- grows as √d (mean pairwise distance scales that way),
+                -- so start L-BFGS from ℓ = 0.25 √d to keep correlations
                 -- meaningful as input dimension grows.
+                --
+                -- Phase A (true ARD): the per-dim ℓ_d API is implemented
+                -- in 'Model.GP.GPParams.gpLengthScales' but disabled in
+                -- the BO loop because with only ~30 evaluations the
+                -- per-dim L-BFGS over-fits noise and underperforms
+                -- isotropic on both Branin and Hartmann6. Future tuning
+                -- (e.g. tighter ℓ_d prior, isotropic-warm-start) can
+                -- re-enable it by setting 'gpLengthScales = Just v'.
                 p0Base  = initParamsFromData (concat xssScl) (LA.toList yVec)
-                p0      = p0Base
-                            { gpLengthScale = 0.25 * sqrt (fromIntegral dim) }
+                ell0    = 0.25 * sqrt (fromIntegral dim)
+                p0      = p0Base { gpLengthScale = ell0 }
                 pOpt    = optimizeGPMV kern xMat yVec p0
                 params  = pOpt
                 -- BO core fix: precompute Cholesky factor (R) and
@@ -269,51 +296,182 @@ bayesOptND cfg nStarts f bounds gen = do
                               (LA.asColumn yVec))
                 sf      = gpSignalVar params
 
-                negEI xVec = unsafePerformIO $ do
-                  let xScl = LA.fromList (scaleX xVec)
-                      xRow = LA.asRow xScl                 -- 1 × p
-                      computed = do
-                        let kStarRow = buildKernelMatrixMV kern params xRow xMat
-                                       -- 1 × n
-                            kStarV   = LA.flatten kStarRow
-                            mu       = LA.dot kStarV alpha
-                            v        = LA.flatten
-                                         (Chol.cholSolveWithFactor rChol
-                                           (LA.asColumn kStarV))
-                            varV     = max 0 (sf - LA.dot kStarV v)
-                            sg       = sqrt varV
-                        _ <- evaluate mu; _ <- evaluate sg
-                        pure (negate (ei yBest 0.01 (mu, sg)))
-                  r <- try computed :: IO (Either SomeException Double)
-                  case r of { Left _ -> pure 1e30; Right v -> pure v }
+                -- Predict (μ, σ, k_star, vstar) at a single x via the
+                -- cached factor. vstar = Ky⁻¹ k_star is reused for both
+                -- the variance and its gradient.
+                predictAt xVec =
+                  let xScl    = LA.fromList (scaleX xVec)
+                      xRow    = LA.asRow xScl
+                      kStarV  = LA.flatten
+                                 (buildKernelMatrixMV kern params xRow xMat)
+                      mu      = LA.dot kStarV alpha
+                      vstar   = LA.flatten
+                                 (Chol.cholSolveWithFactor rChol
+                                   (LA.asColumn kStarV))
+                      varV    = max 0 (sf - LA.dot kStarV vstar)
+                  in (mu, sqrt varV, kStarV, vstar)
+
+                predictMuSig xVec = let (m, s, _, _) = predictAt xVec in (m, s)
+
+                -- Phase C (BO4 analytic gradient): per-input partial
+                -- derivatives of μ and σ w.r.t. x. Avoids the 2(p+1)
+                -- function-call overhead of central differences inside
+                -- the inner L-BFGS. Periodic kernel falls back to the
+                -- numeric path (gradient unsupported).
+                --
+                -- diffs[i, d] = scaleX(x)_d − xMat[i, d]
+                -- factor_i = ∂k_i/∂(diffs_i,d) / diffs_i,d  (kernel-specific)
+                -- ∂μ/∂x_scaled_d = (factor ⊙ α)ᵀ · diffs[:, d]
+                -- ∂σ/∂x_scaled_d = −(1/σ) · (factor ⊙ vstar)ᵀ · diffs[:, d]
+                -- Chain back to raw x_d via 1/(hi - lo) factor (BO2).
+                gradMuSig xVec =
+                  let xScl    = LA.fromList (scaleX xVec)
+                      diffs   = LA.fromRows
+                                  [ xScl - xRow | xRow <- LA.toRows xMat ]
+                      sqd     = LA.fromList
+                                  [ d `LA.dot` d | d <- LA.toRows diffs ]
+                      l       = gpLengthScale params
+                      l2      = l * l
+                      kStarV  = LA.flatten
+                                  (buildKernelMatrixMV kern params
+                                     (LA.asRow xScl) xMat)
+                      factor  = case kern of
+                                  RBF      ->
+                                    LA.scale (-1 / l2) kStarV
+                                  Matern52 ->
+                                    let r = LA.cmap (\s ->
+                                              sqrt (max 0 s) * sqrt 5 / l) sqd
+                                        ef = LA.cmap exp (LA.scale (-1) r)
+                                        c  = LA.scale (-5 / (3 * l2))
+                                                (sf `LA.scale`
+                                                  (ef * (LA.cmap (1 +) r)))
+                                    in c
+                                  Periodic ->
+                                    LA.konst 0 (LA.size kStarV)  -- numeric fallback
+                      vstar   = LA.flatten
+                                  (Chol.cholSolveWithFactor rChol
+                                    (LA.asColumn kStarV))
+                      mu      = LA.dot kStarV alpha
+                      varV    = max 0 (sf - LA.dot kStarV vstar)
+                      sg      = sqrt varV
+                      -- ∇μ in scaled coordinates: diffsᵀ · (α ⊙ factor)
+                      gradMuS  = LA.tr diffs LA.#> (alpha * factor)
+                      -- ∇σ in scaled coordinates: −(1/σ) · diffsᵀ · (vstar ⊙ factor)
+                      gradSgS
+                        | sg < 1e-12 = LA.konst 0 (LA.cols xMat)
+                        | otherwise  = LA.scale (-1 / sg)
+                                         (LA.tr diffs LA.#> (vstar * factor))
+                      -- Chain back through scaleX: ∂scaledX/∂x = 1/(hi-lo)
+                      invSpan = LA.fromList
+                                  [ if hi > lo then 1 / (hi - lo) else 1
+                                  | (lo, hi) <- bounds ]
+                      gradMu  = LA.toList (gradMuS * invSpan)
+                      gradSg  = LA.toList (gradSgS * invSpan)
+                  in (mu, sg, gradMu, gradSg)
+
+                -- Build (negAcq, gradNegAcq) pair for each acquisition.
+                -- ∂EI/∂(μ,σ) = (-Φ(z), φ(z)) so ∇EI = -Φ(z) ∇μ + φ(z) ∇σ.
+                -- ∂PI/∂(μ,σ) = (-φ(z)/σ, -z·φ(z)/σ) so
+                --   ∇PI = -φ(z)/σ · ∇μ - z·φ(z)/σ · ∇σ.
+                -- LCB is linear: ∇LCB = ∇μ − β ∇σ.
+                wrapAcqGrad
+                  :: ((Double, Double) -> Double)        -- acq value
+                  -> ((Double, Double) -> (Double, Double)) -- (∂/∂μ, ∂/∂σ) of acq
+                  -> ([Double] -> Double, [Double] -> [Double])
+                wrapAcqGrad acqFn dAcq =
+                  let fn xVec = unsafePerformIO $ do
+                        r <- try (evaluate
+                                   (negate (acqFn (let (m, s) = predictMuSig xVec
+                                                   in (m, s)))))
+                              :: IO (Either SomeException Double)
+                        case r of { Left _ -> pure 1e30; Right v -> pure v }
+                      gn xVec = unsafePerformIO $ do
+                        r <- try (evaluate
+                                   (let (mu, sg, gMu, gSg) = gradMuSig xVec
+                                        (dM, dS) = dAcq (mu, sg)
+                                    in [ - (dM * gm + dS * gs)
+                                       | (gm, gs) <- zip gMu gSg ]))
+                              :: IO (Either SomeException [Double])
+                        case r of
+                          Left _  -> pure (replicate (length xVec) 0)
+                          Right v -> pure v
+                  in (fn, gn)
+
+                eiGrad (mu, sg)
+                  | sg <= 1e-12 = (0, 0)
+                  | otherwise   =
+                      let z   = (yBest - mu - 0.01) / sg
+                          phi = density standard z
+                          cdf = cumulative standard z
+                      in (-cdf, phi)
+                piGrad (mu, sg)
+                  | sg <= 1e-12 = (0, 0)
+                  | otherwise   =
+                      let z   = (yBest - mu - 0.01) / sg
+                          phi = density standard z
+                      in (-phi / sg, -z * phi / sg)
+                lcbGrad _      = (1, -2.0)  -- ∂(μ - 2σ)/∂μ = 1, ∂/∂σ = -2
+
+                (negEI,  gNegEI)  = wrapAcqGrad (ei yBest 0.01)         eiGrad
+                (negPI,  gNegPI)  = wrapAcqGrad (pi_ yBest 0.01)        piGrad
+                -- For LCB we want to minimise μ - βσ. Wrap as the value
+                -- itself (acq = -LCB), so negate(acq) = LCB.
+                (negLCB, gNegLCB) =
+                  wrapAcqGrad (negate . ucb 2.0)
+                              (\ms -> let (a, b) = lcbGrad ms in (-a, -b))
                 _ = unitBounds
-            -- L-BFGS multi-start: use 'nStarts' Halton-spaced starts
-            -- so we cover the box more uniformly than nStarts
-            -- iid-uniform restarts. Falls back to uniform if nStarts
-            -- is large enough that Halton correlations matter.
+
+            -- L-BFGS multi-start: 'nStarts' Halton-spaced starts +
+            -- small uniform jitter. Run for each acquisition.
             haltonStarts <- pure (QR.haltonSequenceIn nStarts bounds)
-            -- jitter each Halton start by a small uniform perturbation
-            -- to avoid having every BO iteration start the inner
-            -- optimization at the same anchor points.
             starts <- forM haltonStarts $ \xs ->
               forM (zip bounds xs) $ \((lo, hi), v) -> do
                 u <- uniform gen :: IO Double
                 let span_ = hi - lo
                     jit   = (u - 0.5) * 0.05 * span_
                 pure (max lo (min hi (v + jit)))
-            results <- mapM (\x0 ->
-              LBFGS.runLBFGSNumeric
-                (LBFGS.defaultLBFGSConfig
-                   { LBFGS.lbStop = OC.defaultStopCriteria
-                                      { OC.stMaxIter = 100 } })
-                negEI x0) starts
-            let best = minimumBy (comparing OC.orValue) results
-                xNextRaw = OC.orBest best
-                xNext = zipWith (\(lo, hi) v -> max lo (min hi v)) bounds xNextRaw
+            let runMSG objFn gradFn = mapM (\x0 ->
+                  LBFGS.runLBFGSWith
+                    (LBFGS.defaultLBFGSConfig
+                       { LBFGS.lbStop = OC.defaultStopCriteria
+                                          { OC.stMaxIter = 100 } })
+                    objFn gradFn x0) starts
+                runMS objFn = mapM (\x0 ->
+                  LBFGS.runLBFGSNumeric
+                    (LBFGS.defaultLBFGSConfig
+                       { LBFGS.lbStop = OC.defaultStopCriteria
+                                          { OC.stMaxIter = 100 } })
+                    objFn x0) starts
+                pickXNext rs =
+                  let best     = minimumBy (comparing OC.orValue) rs
+                      xRaw     = OC.orBest best
+                  in zipWith (\(lo, hi) v -> max lo (min hi v)) bounds xRaw
+                -- Use analytic gradients for RBF / Matern52, fall back
+                -- to numeric for Periodic.
+                useAnalytic = case kern of
+                                Periodic -> False
+                                _        -> True
+            xEI  <- pickXNext <$> if useAnalytic
+                                    then runMSG negEI  gNegEI
+                                    else runMS  negEI
+            xLCB <- pickXNext <$> if useAnalytic
+                                    then runMSG negLCB gNegLCB
+                                    else runMS  negLCB
+            xPI  <- pickXNext <$> if useAnalytic
+                                    then runMSG negPI  gNegPI
+                                    else runMS  negPI
+            let candidates = [xEI, xLCB, xPI]
+            -- GP-Hedge selection.
+            k <- pickAcq gains gen
+            let kSafe   = max 0 (min 2 k)
+                xNext   = candidates !! kSafe
             yNext <- f xNext
-            loop (t - 1) (hist ++ [(xNext, yNext)])
+            -- Update gains: reward = -μ at each candidate (we want low μ).
+            let mus     = map (fst . predictMuSig) candidates
+                gains'  = zipWith (\g m -> g - m) gains mus
+            loop (t - 1) (hist ++ [(xNext, yNext)]) gains'
 
-  finalHist <- loop (boIterations cfg) history0
+  finalHist <- loop (boIterations cfg) history0 [0, 0, 0]
   let bestPair = minimumBy (comparing snd) finalHist
   return (finalHist, bestPair)
 
