@@ -54,6 +54,24 @@ levy xs =
    + sumMid
    + (w (d-1) - 1)^(2::Int) * (1 + sin (2 * pi * w (d-1))^(2::Int))
 
+-- | Griewank function: smooth multimodal with global min at 0.
+-- f(x) = sum(x_i^2)/4000 - prod(cos(x_i/sqrt(i+1))) + 1
+griewank :: [Double] -> Double
+griewank xs =
+  let s = sum (map (^(2::Int)) xs) / 4000
+      p = product [ cos (x / sqrt (fromIntegral i))
+                  | (i, x) <- zip [1 :: Int ..] xs ]
+  in s - p + 1
+
+-- | Schwefel function: very deceptive, global min near boundary at
+-- x_i = 420.9687, f* = 0. Hard for local optimizers.
+-- f(x) = 418.9829 d - sum(x_i sin(sqrt|x_i|))
+schwefel :: [Double] -> Double
+schwefel xs =
+  let d = length xs
+  in 418.9829 * fromIntegral d
+   - sum [ x * sin (sqrt (abs x)) | x <- xs ]
+
 testFns :: [(String, Int, [Double] -> Double)]
 testFns =
   [ ("Rosenbrock_2D",  2, rosenbrock)
@@ -62,6 +80,8 @@ testFns =
   , ("Sphere_30D",     30, sphere)
   , ("Ackley_10D",     10, ackley)
   , ("Levy_10D",       10, levy)
+  , ("Griewank_10D",   10, griewank)
+  , ("Schwefel_5D",    5,  schwefel)
   ]
 
 -- ---------------------------------------------------------------------------

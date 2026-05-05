@@ -168,14 +168,17 @@ def main() -> int:
         bench_gram(DATA / "kernel_n500_p5.csv",  "GramMV_n500_p5"),
         bench_gram(DATA / "kernel_n1000_p5.csv", "GramMV_n1000_p5"),
         bench_gram(DATA / "kernel_n2000_p5.csv", "GramMV_n2000_p5"),
+        bench_gram(DATA / "kernel_n4000_p5.csv", "GramMV_n4000_p5"),
         bench_kr(DATA / "kernel_n500_p5.csv",  "KR_n500_p5"),
         bench_kr(DATA / "kernel_n1000_p5.csv", "KR_n1000_p5"),
         bench_kr(DATA / "kernel_n2000_p5.csv", "KR_n2000_p5"),
+        bench_kr(DATA / "kernel_n4000_p5.csv", "KR_n4000_p5"),
         bench_nw(DATA / "kernel_n1000_p5.csv", "NW_n1000_p5"),
         bench_rff(DATA / "kernel_n1000_p5.csv", "RFF_n1000_D256_p5", 256),
         bench_rff(DATA / "kernel_n2000_p5.csv", "RFF_n2000_D256_p5", 256),
         bench_gp_fit(DATA / "kernel_n500_p5.csv",  "GP_fit_n500_p5"),
         bench_gp_fit(DATA / "kernel_n1000_p5.csv", "GP_fit_n1000_p5"),
+        bench_gp_fit(DATA / "kernel_n2000_p5.csv", "GP_fit_n2000_p5"),
         bench_gp_opt(DATA / "kernel_n500_p5.csv",  "GP_opt_n500_p5"),
         # GPRobust: no direct sklearn equivalent — skipped.
     ]

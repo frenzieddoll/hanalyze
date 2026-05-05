@@ -24,14 +24,17 @@ main = do
     [ benchGram     "bench/data/kernel_n500_p5.csv"  "GramMV_n500_p5"
     , benchGram     "bench/data/kernel_n1000_p5.csv" "GramMV_n1000_p5"
     , benchGram     "bench/data/kernel_n2000_p5.csv" "GramMV_n2000_p5"
+    , benchGram     "bench/data/kernel_n4000_p5.csv" "GramMV_n4000_p5"
     , benchKR       "bench/data/kernel_n500_p5.csv"  "KR_n500_p5"
     , benchKR       "bench/data/kernel_n1000_p5.csv" "KR_n1000_p5"
     , benchKR       "bench/data/kernel_n2000_p5.csv" "KR_n2000_p5"
+    , benchKR       "bench/data/kernel_n4000_p5.csv" "KR_n4000_p5"
     , benchNW       "bench/data/kernel_n1000_p5.csv" "NW_n1000_p5"
     , benchRFF      "bench/data/kernel_n1000_p5.csv" "RFF_n1000_D256_p5"  256
     , benchRFF      "bench/data/kernel_n2000_p5.csv" "RFF_n2000_D256_p5"  256
     , benchGPFit    "bench/data/kernel_n500_p5.csv"  "GP_fit_n500_p5"
     , benchGPFit    "bench/data/kernel_n1000_p5.csv" "GP_fit_n1000_p5"
+    , benchGPFit    "bench/data/kernel_n2000_p5.csv" "GP_fit_n2000_p5"
     , benchGPOpt    "bench/data/kernel_n500_p5.csv"  "GP_opt_n500_p5"
     , benchGPRobust "bench/data/kernel_n500_p5.csv"  "GPRobust_n500_p5"
     ]

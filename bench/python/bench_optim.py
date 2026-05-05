@@ -62,6 +62,19 @@ def levy(x):
     return term1 + term2 + term3
 
 
+def griewank(x):
+    x = np.asarray(x)
+    s = float(np.sum(x ** 2)) / 4000
+    p = float(np.prod(np.cos(x / np.sqrt(np.arange(1, len(x) + 1)))))
+    return s - p + 1
+
+
+def schwefel(x):
+    x = np.asarray(x)
+    d = len(x)
+    return 418.9829 * d - float(np.sum(x * np.sin(np.sqrt(np.abs(x)))))
+
+
 TESTS = [
     ("Rosenbrock_2D", 2, rosenbrock),
     ("Rosenbrock_10D", 10, rosenbrock),
@@ -69,6 +82,8 @@ TESTS = [
     ("Sphere_30D", 30, sphere),
     ("Ackley_10D", 10, ackley),
     ("Levy_10D", 10, levy),
+    ("Griewank_10D", 10, griewank),
+    ("Schwefel_5D", 5, schwefel),
 ]
 
 
