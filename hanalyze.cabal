@@ -105,6 +105,7 @@ library
     Stat.KernelDist
     Stat.Cholesky
     Stat.QuasiRandom
+    Stat.Test
     Optim.Adam
     Optim.GradAscent
     Optim.Numeric

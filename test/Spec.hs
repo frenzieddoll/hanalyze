@@ -27,6 +27,7 @@ import qualified Stat.AdaptiveGrid as AG
 import qualified Stat.KernelDist   as KD
 import qualified Stat.Cholesky     as Chol
 import qualified Stat.QuasiRandom  as QR
+import qualified Stat.Test         as ST
 import qualified Optim.NSGA        as NSGA
 import qualified System.Random.MWC as MWC
 import qualified Model.Kernel      as Kn
@@ -1606,3 +1607,57 @@ main = hspec $ do
         out <- readFile fp
         out `shouldContain` "Parameters"
         out `shouldContain` "PCHIP"
+
+  -- ===========================================================================
+  -- Stat.Test (Phase 1: hypothesis tests)
+  -- ===========================================================================
+  describe "Stat.Test" $ do
+    it "tTest1Sample: μ₀=0 で同分布なら p > 0.05" $ do
+      let xs = LA.fromList [0.1, -0.2, 0.3, 0.0, 0.15, -0.1, 0.05, 0.2]
+          tr = ST.tTest1Sample xs 0 ST.TwoSided
+      ST.trPValue tr `shouldSatisfy` (> 0.05)
+
+    it "tTestWelch: 明らかにずれた 2 群で p < 0.05" $ do
+      let xs = LA.fromList [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+          ys = LA.fromList [10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0]
+          tr = ST.tTestWelch xs ys ST.TwoSided
+      ST.trPValue tr `shouldSatisfy` (< 0.05)
+
+    it "anovaOneWay: 3 群が異なる平均なら有意" $ do
+      let g1 = LA.fromList [1.0, 2.0, 3.0]
+          g2 = LA.fromList [4.0, 5.0, 6.0]
+          g3 = LA.fromList [7.0, 8.0, 9.0]
+          tr = ST.anovaOneWay [g1, g2, g3]
+      ST.trStatistic tr `shouldSatisfy` (> 1)
+      ST.trPValue   tr `shouldSatisfy` (< 0.05)
+
+    it "chiSquareIndep: 強い独立で p > 0.05" $ do
+      let tbl = LA.matrix 2 [25, 25, 25, 25]  -- 完全独立
+          tr = ST.chiSquareIndep tbl
+      ST.trPValue tr `shouldSatisfy` (> 0.5)
+
+    it "chiSquareIndep: 強い従属で p < 0.05" $ do
+      let tbl = LA.matrix 2 [40, 10, 10, 40]  -- 高 chi2
+          tr = ST.chiSquareIndep tbl
+      ST.trPValue tr `shouldSatisfy` (< 0.05)
+
+    it "leveneTest: 分散が大きく異なれば p < 0.05" $ do
+      let g1 = LA.fromList [1, 1.1, 0.9, 1.05, 0.95, 1.02, 0.98, 1.03]
+          g2 = LA.fromList [10, 20, 5, 25, 8, 30, 3, 22]  -- much larger var
+          tr = ST.leveneTest [g1, g2]
+      ST.trPValue tr `shouldSatisfy` (< 0.05)
+
+    it "shapiroWilk: roughly-normal 系列で p > 0.05" $ do
+      let xs = LA.fromList [-1.5, -0.5, 0.0, 0.3, 0.8, 1.2, -0.3, 0.5, 1.0, -1.0]
+          tr = ST.shapiroWilk xs
+      ST.trPValue tr `shouldSatisfy` (> 0.05)
+
+    it "mannWhitneyU: 明らかにずれた 2 群で p < 0.05" $ do
+      let xs = LA.fromList [1, 2, 3, 4, 5, 6]
+          ys = LA.fromList [11, 12, 13, 14, 15, 16]
+          tr = ST.mannWhitneyU xs ys ST.TwoSided
+      ST.trPValue tr `shouldSatisfy` (< 0.05)
+
+    it "fisherExact2x2: 強い偏りで p < 0.05" $ do
+      let tr = ST.fisherExact2x2 ((20, 5), (5, 20)) ST.TwoSided
+      ST.trPValue tr `shouldSatisfy` (< 0.05)
