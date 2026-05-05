@@ -552,6 +552,39 @@ refactor が必要)。
 `Data.Vector` (boxed) + `Data.IntSet` + immutable `LA.Vector` の組み
 合わせのみで実現。
 
+## After N4 (Matrix-vectorised SBX/PM/offspring) — pymoo に肉薄
+
+`Optim.NSGA` の per-individual ループを完全撤廃。SBX、polynomial
+mutation、offspring 生成すべてを @LA.Matrix Double@ 上の一括演算に。
+
+* **N4a 'sbxCrossoverMV'**: 親行列 P1, P2 (k×d) → 子行列 C1, C2。
+  全 (pair, dim) cell の Deb 1995 boundary-aware β_q を 1 batch で
+  計算。バッチ RNG は 'Data.Vector.Storable.replicateM + uniformR'
+  → 'LA.reshape' で Matrix 化。
+* **N4b 'polynomialMutationMV'**: X (n×d) を一括 PM。pymoo の
+  @mut_pm@ と同じ matrix-broadcast 形式。
+* **N4c 'fillOffspring' refactor**: 親選び → SBX (matrix) → cross gating
+  (cMask 行列) → PM (matrix) → user objective を per-row 適用 →
+  L∞ dedup。per-pair Haskell ループは消滅。
+* 'clipMatToBounds' は Vector 1-pass で実装。
+
+ベンチ結果 (100 gen × 100 pop):
+
+| Problem | N3 後 | **N4 後** | pymoo | hs/py 比 |
+|---|---|---|---|---|
+| ZDT1    | 1.19 s | **644 ms** (6.4 ms/gen) | 455 ms | **1.41×** |
+| ZDT2    | 1.28 s | **685 ms** (6.9 ms/gen) | 414 ms | **1.65×** |
+| ZDT3    | 1.30 s | **635 ms** (6.3 ms/gen) | 423 ms | **1.50×** |
+| DTLZ2_3 | 0.80 s | **471 ms** (4.7 ms/gen) | 407 ms | **1.16×** |
+
+per-gen: 12-13 ms → **6-7 ms** (DTLZ2 では 4.7 ms = pymoo 同等)。
+pymoo との差は **6× → 1.16-1.65×** に縮小。
+
+HV/IGD は全 4 問題で hanalyze ≥ pymoo を維持 (100 gen / 500 gen 共)。
+
+**実装ポリシ準拠**: Mutable Vector 不使用、'Data.Vector.Storable'
+の immutable batch RNG + immutable Matrix arithmetic で完結。
+
 ## High-leverage improvement queue
 
 In rough order of expected wall-time impact across the suite:

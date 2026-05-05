@@ -49,6 +49,7 @@ import Data.List (sortBy)
 import Data.Ord  (comparing)
 import qualified Data.IntSet as IS
 import qualified Data.Vector as V
+import qualified Data.Vector.Storable as VS
 import System.Random.MWC (GenIO, uniform, uniformR)
 import qualified Numeric.LinearAlgebra as LA
 import qualified Optim.Common    as OC
@@ -361,42 +362,67 @@ fillOffspring
   -> GenIO
   -> IO [Solution]
 fillOffspring needed pop pC etaC etaM pM bounds f cFn ranked gen =
-  let go acc retries
+  -- N4c: per-pair Haskell ループを廃止し、1 batch で nPairs ペアの親を
+  -- pickParentsByPermutation で揃え → 親行列 P1, P2 (k×d) を sbxCrossoverMV
+  -- で SBX (matrix) → polynomialMutationMV で PM (matrix) → user objective
+  -- を per-row 適用 → matrix L∞ pairwise distance で dedup。
+  let d  = length bounds
+      go acc retries
         | length acc >= needed = return (take needed (reverse acc))
         | retries <= 0         = return (take needed (reverse acc))
         | otherwise = do
-            -- 必要な親数 = 2 child / pair × n pairs。
-            -- ここでは一度に @needed@ pair (= 2*needed 親) を作る。
             let want   = needed - length acc
-                nPairs = (want + 1) `div` 2
-                nPar   = 2 * 2 * nPairs            -- = 親 4 個 / pair (1 pair = 2 children = 4 tournament 出走)
+                nPairs = max 1 ((want + 1) `div` 2)
+                nPar   = 2 * nPairs                 -- 1 pair = 2 親
             parentsW <- pickParentsByPermutation nPar ranked gen
-            -- parentsW = [w_0, w_1, w_2, w_3, ...] (tournament 勝者列)
-            -- 1 child pair に 2 親、 1 pair に 2 child → 4 親 / pair
-            -- pairwise SBX/mutation を 1 batch
-            batch <- mapM
-              (\(p1, p2) ->
-                 makeChildPairFromParents pC etaC etaM pM
-                   bounds f cFn p1 p2 gen)
-              (chunkPairs parentsW)
-            let raw   = concatMap (\(c1, c2) -> [c1, c2]) batch
-                refs  = map solDecision (pop ++ acc)
+            -- parentsW = [w_0, w_1, w_2, w_3, ...]
+            -- 親行列 P1, P2 を作る (奇数なら最後を捨てる)
+            let pPairs = chunkPairs parentsW
+                k      = length pPairs
+                p1Mat  = LA.fromLists [solDecision a | (a, _) <- pPairs]
+                p2Mat  = LA.fromLists [solDecision b | (_, b) <- pPairs]
+
+            -- crossover gating: 親レベル pC で SBX, それ以外は親そのまま
+            uCross <- VS.replicateM k (uniformR (0, 1) gen :: IO Double)
+            (c1Mat0, c2Mat0) <- sbxCrossoverMV etaC bounds p1Mat p2Mat gen
+            let crossMaskRow = LA.fromList
+                    [ if v < pC then 1 else 0
+                    | v <- VS.toList uCross ]
+                  :: LA.Vector Double
+                onesD = LA.konst 1 d :: LA.Vector Double
+                cMask = LA.outer crossMaskRow onesD     -- k × d
+                ncMask = LA.cmap (\v -> 1 - v) cMask
+                c1raw = cMask * c1Mat0 + ncMask * p1Mat
+                c2raw = cMask * c2Mat0 + ncMask * p2Mat
+
+            -- Polynomial mutation (matrix, all 2k children at once)
+            cAll <- polynomialMutationMV etaM pM bounds
+                       (cAll0 c1raw c2raw) gen
+
+            -- ユーザ評価
+            let xss     = LA.toLists cAll
+                rawSols = [ Solution { solDecision   = xs
+                                     , solObjectives = f xs
+                                     , solViolation  = cFn xs }
+                          | xs <- xss ]
+
+                refs    = map solDecision (pop ++ acc)
                 isDup x = any (\r -> linfDist x r < dupEpsilon) refs
-                kept  = [ s | s <- raw, not (isDup (solDecision s)) ]
+                kept    = [ s | s <- rawSols, not (isDup (solDecision s)) ]
                 deduped = dedupBy
                             (\sa sb ->
                                linfDist (solDecision sa) (solDecision sb)
                                  < dupEpsilon)
                             kept
-                acc'  = foldr (:) acc deduped
+                acc'    = foldr (:) acc deduped
             go acc' (retries - 1)
   in go [] dupMaxRetries
   where
-    -- 4 つずつ取って [(p1, p2), (p1', p2'), ...] のペアにする。
-    -- 1 child pair につき 4 winners 必要 (子 1 = 親 2 のペア、子 2 も親 2)。
-    -- ここでは簡単化して 1 child pair = 親 2 で十分とし、2 つずつ取る。
     chunkPairs (a : b : rest) = (a, b) : chunkPairs rest
     chunkPairs _              = []
+    -- c1raw, c2raw を縦に積んで 2k × d の行列に
+    cAll0 c1raw c2raw =
+      LA.fromBlocks [ [ c1raw ], [ c2raw ] ]
 
 -- | Random-permutation tournament: pop 全体の順列を 2 回作って先頭から
 -- ペア取り、binaryTournament で勝者を出す。各個体が正確に 2 回出走。
@@ -871,6 +897,202 @@ mutateOneVar etaM pMut gen (lo, hi) x = do
 -- kept for backwards compatibility.
 randomInBounds :: Bounds -> GenIO -> IO [Double]
 randomInBounds = OC.sampleUniformIn
+
+-- ---------------------------------------------------------------------------
+-- N4: Matrix-vectorised SBX / PolynomialMutation
+--
+-- The legacy per-pair / per-individual / per-dimension paths above
+-- spend most of NSGA-II's time in Haskell function-call overhead. The
+-- helpers below compute the entire mating step as a handful of
+-- @LA.Matrix Double@ arithmetic operations — all per-cell work
+-- collapses into element-wise @cmap@ + @+ - * /@, which is what
+-- pymoo's @cross_sbx@ / @mut_pm@ do via numpy.
+--
+-- Mutable Vector は使わず、'Data.Vector.Storable.replicateM' で
+-- batch RNG → 'LA.reshape' で Matrix 化する (immutable で完結)。
+-- ---------------------------------------------------------------------------
+
+-- | Batch-generate an @n × d@ matrix of i.i.d. @U[0, 1)@ entries via
+-- 'mwc-random'. Cheaper than @replicateM (n*d) (uniform g)@ because the
+-- intermediate Storable Vector skips boxing.
+randomMatrixU :: GenIO -> Int -> Int -> IO (LA.Matrix Double)
+randomMatrixU gen n d = do
+  v <- VS.replicateM (n * d) (uniformR (0, 1) gen :: IO Double)
+  return (LA.reshape d v)
+
+-- | SBX matrix-version. Performs Deb 1995 boundary-aware SBX on every
+-- @(pair, dim)@ cell of two parent matrices simultaneously.
+--
+-- Inputs:
+--
+--   * @p1@, @p2@ — parent matrices of shape @k × d@.
+--   * @bounds@   — list of @d@ @(xl, xu)@ tuples.
+--
+-- Output: pair of child matrices of shape @k × d@.
+sbxCrossoverMV
+  :: Double                 -- ^ η_c
+  -> Bounds                 -- ^ length d
+  -> LA.Matrix Double       -- ^ parent matrix P1 (k × d)
+  -> LA.Matrix Double       -- ^ parent matrix P2 (k × d)
+  -> GenIO
+  -> IO (LA.Matrix Double, LA.Matrix Double)
+sbxCrossoverMV etaC bounds p1 p2 gen = do
+  let k     = LA.rows p1
+      d     = LA.cols p1
+      mPow  = 1 / (etaC + 1)
+      mNeg  = - (etaC + 1)
+
+      xl    = LA.fromList (map fst bounds) :: LA.Vector Double
+      xu    = LA.fromList (map snd bounds) :: LA.Vector Double
+      onesK = LA.konst 1 k :: LA.Vector Double
+      xlMat = LA.outer onesK xl                 -- k × d, row-broadcast xl
+      xuMat = LA.outer onesK xu
+
+  -- Per-cell random matrices.
+  flipM <- randomMatrixU gen k d                -- per-dim 50% gating
+  uM    <- randomMatrixU gen k d                -- u for β_q
+
+  let -- y1 = min(p1, p2), y2 = max(p1, p2)
+      y1     = LA.cmap id p1
+      y2     = LA.cmap id p2
+      sm     = LA.cmap (\_ -> 1 :: Double) p1   -- placeholder; will use cell-wise compare below
+      _      = (y1, y2, sm)
+
+      -- We need cell-wise min/max. hmatrix doesn't expose elementwise
+      -- min/max on Matrices directly, so flatten and use Vector ops.
+      p1f    = LA.flatten p1
+      p2f    = LA.flatten p2
+      y1f    = LA.fromList (zipWith min (LA.toList p1f) (LA.toList p2f))
+      y2f    = LA.fromList (zipWith max (LA.toList p1f) (LA.toList p2f))
+      y1m    = LA.reshape d y1f                 -- k × d
+      y2m    = LA.reshape d y2f
+      delta  = y2m - y1m
+
+      -- Crossover mask M[i,j] = 1 iff (flip < 0.5) AND (|p1-p2| > eps)
+      -- AND (xu > xl).
+      epsCross   = 1e-14 :: Double
+      diffM      = LA.cmap abs (p1 - p2)
+      maskFlip   = LA.cmap (\v -> if v < 0.5 then 1 else 0) flipM
+      maskDiff   = LA.cmap (\v -> if v > epsCross then 1 else 0) diffM
+      maskBoundV = LA.fromList
+                     [ if hi > lo then 1 else 0 | (lo, hi) <- bounds ]
+                     :: LA.Vector Double
+      maskBound  = LA.outer onesK maskBoundV
+      mask       = maskFlip * maskDiff * maskBound
+
+      -- Boundary-aware β. To avoid divide-by-zero on cells where
+      -- delta = 0 (mask = 0), bump delta with eps before dividing; the
+      -- mask zeroes out the contribution anyway.
+      deltaSafe = LA.cmap (\v -> if v == 0 then 1 else v) delta
+      beta1     = 1 + LA.scale 2 (y1m - xlMat) / deltaSafe
+      beta2     = 1 + LA.scale 2 (xuMat - y2m) / deltaSafe
+
+      alpha1    = LA.cmap (\b -> 2 - b ** mNeg) beta1
+      alpha2    = LA.cmap (\b -> 2 - b ** mNeg) beta2
+
+      -- Per-cell β_q (= condition u <= 1/α).
+      betaQ alpha =
+        let alphaF = LA.flatten alpha
+            uF     = LA.flatten uM
+            bqF    = LA.fromList
+                       [ if uVal <= 1 / aVal
+                           then (uVal * aVal) ** mPow
+                           else (1 / (2 - uVal * aVal)) ** mPow
+                       | (uVal, aVal) <- zip (LA.toList uF) (LA.toList alphaF) ]
+        in LA.reshape d bqF
+
+      bq1 = betaQ alpha1
+      bq2 = betaQ alpha2
+      avg = LA.scale 0.5 (y1m + y2m)
+      c1' = avg - LA.scale 0.5 (bq1 * delta)
+      c2' = avg + LA.scale 0.5 (bq2 * delta)
+
+      -- mask-blend: cell where mask=0 keeps parent value.
+      one_minus_mask = LA.cmap (\v -> 1 - v) mask
+      c1raw = mask * c1' + one_minus_mask * p1
+      c2raw = mask * c2' + one_minus_mask * p2
+
+      -- Clip to bounds.
+      c1 = clipMatToBounds bounds c1raw
+      c2 = clipMatToBounds bounds c2raw
+
+  return (c1, c2)
+
+-- | Polynomial mutation, matrix version. Mutates every cell of @x@
+-- with per-dimension probability @pMut@. Bounds-aware (Deb-Goyal 1996).
+polynomialMutationMV
+  :: Double                 -- ^ η_m
+  -> Double                 -- ^ per-dim mutation probability
+  -> Bounds                 -- ^ length d
+  -> LA.Matrix Double       -- ^ X (n × d)
+  -> GenIO
+  -> IO (LA.Matrix Double)
+polynomialMutationMV etaM pMut bounds x gen = do
+  let n     = LA.rows x
+      d     = LA.cols x
+      mPow  = 1 / (etaM + 1)
+      mPow1 = etaM + 1
+
+      xl    = LA.fromList (map fst bounds) :: LA.Vector Double
+      xu    = LA.fromList (map snd bounds) :: LA.Vector Double
+      onesN = LA.konst 1 n :: LA.Vector Double
+      xlMat = LA.outer onesN xl
+      xuMat = LA.outer onesN xu
+      rng   = xuMat - xlMat
+      rngSafe = LA.cmap (\v -> if v == 0 then 1 else v) rng
+
+      maskBoundV = LA.fromList
+                     [ if hi > lo then 1 else 0 | (lo, hi) <- bounds ]
+                     :: LA.Vector Double
+      maskBound  = LA.outer onesN maskBoundV
+
+  rM <- randomMatrixU gen n d                 -- per-cell mutation gate
+  uM <- randomMatrixU gen n d                 -- per-cell u for δ_q
+
+  let maskMut = LA.cmap (\v -> if v < pMut then 1 else 0) rM
+      mask    = maskMut * maskBound
+
+      delta1 = (x - xlMat) / rngSafe
+      delta2 = (xuMat - x) / rngSafe
+
+      -- Per-cell δ_q via flatten / zip / reshape.
+      uF      = LA.flatten uM
+      d1F     = LA.flatten delta1
+      d2F     = LA.flatten delta2
+      deltaQF = LA.fromList
+        [ if uVal <= 0.5
+            then
+              let xy  = 1 - d1
+                  val = 2 * uVal + (1 - 2 * uVal) * xy ** mPow1
+              in val ** mPow - 1
+            else
+              let xy  = 1 - d2
+                  val = 2 * (1 - uVal) + (2 * uVal - 1) * xy ** mPow1
+              in 1 - val ** mPow
+        | (uVal, d1, d2) <- zip3 (LA.toList uF) (LA.toList d1F) (LA.toList d2F) ]
+      deltaQ  = LA.reshape d deltaQF
+
+      yRaw    = x + mask * (deltaQ * rng)
+      y       = clipMatToBounds bounds yRaw
+  return y
+
+-- | Clip every cell of a matrix to the per-column @(lo, hi)@ bounds.
+clipMatToBounds :: Bounds -> LA.Matrix Double -> LA.Matrix Double
+clipMatToBounds bounds m =
+  let n     = LA.rows m
+      onesN = LA.konst 1 n :: LA.Vector Double
+      xl    = LA.fromList (map fst bounds) :: LA.Vector Double
+      xu    = LA.fromList (map snd bounds) :: LA.Vector Double
+      xlMat = LA.outer onesN xl
+      xuMat = LA.outer onesN xu
+      mFlat = LA.flatten m
+      lFlat = LA.flatten xlMat
+      uFlat = LA.flatten xuMat
+      cFlat = LA.fromList
+        [ max lo (min hi v)
+        | (v, lo, hi) <- zip3 (LA.toList mFlat) (LA.toList lFlat) (LA.toList uFlat)
+        ]
+  in LA.reshape (LA.cols m) cFlat
 
 -- | NSGA-II's crowded-comparison operator:
 --   1. rank が低い (front 番号小) 方が良い

@@ -28,22 +28,23 @@ pymoo を上回る)。500 gen では全問題で安定して凌駕。
 
 ---
 
-## 2. NSGA-II per-generation 速度 — ✅ 大半解決 (N3a-d)
+## 2. NSGA-II per-generation 速度 — ✅ 解決済 (N3 + N4)
 
-| 観点 | 改善前 | 改善後 | pymoo |
-|---|---|---|---|
-| ZDT1 per-gen | 32 ms | **12 ms** | 5 ms |
-| ZDT2 per-gen | 30 ms | **13 ms** | 5 ms |
-| ZDT3 per-gen | 31 ms | **13 ms** | 5 ms |
-| DTLZ2 per-gen | 56 ms | **8 ms**  | 5 ms |
+| 観点 | 改善前 | N3 後 | **N4 後** | pymoo |
+|---|---|---|---|---|
+| ZDT1 per-gen | 32 ms | 12 ms | **6.4 ms** | 4.5 ms |
+| ZDT2 per-gen | 30 ms | 13 ms | **6.9 ms** | 4.1 ms |
+| ZDT3 per-gen | 31 ms | 13 ms | **6.3 ms** | 4.2 ms |
+| DTLZ2 per-gen | 56 ms | 8 ms  | **4.7 ms** | 4.1 ms |
 
-`Optim.NSGA` の per-gen は約 **3× 高速化** (Matrix 化 + V.Vector
-indexing + frontDistances 1-pass)。pymoo との比は 6× → 1.6-2.6×
-に縮小。残る差は SBX/PM の per-individual 関数オーバヘッドと
-fillOffspring の retry/duplicate ロジックの細部、純粋 Haskell の
-function call cost vs Cython native loop の構造的差。
+N3 で Matrix 化 + Data.Vector indexing + frontDistances 1-pass、
+N4 で SBX/PM/offspring 全体を Matrix-vectorize。per-gen は最終的に
+pymoo の **1.1-1.7×**。DTLZ2 では実質同等。
 
-詳細は REPORT.md "After N3" セクション。
+HV/IGD は全 4 問題で hanalyze 凌駕 (NF1+NF3+NF4 のままで accuracy
+退行なし)。
+
+詳細は REPORT.md "After N4" セクション。
 
 ---
 
