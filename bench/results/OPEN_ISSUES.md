@@ -101,8 +101,10 @@ Cython native code でループ。
 
 | 観点 | 値 |
 |---|---|
-| Branin (true 0.398) | hanalyze **0.86** / skopt 0.398 (5 seeds median, A+B+C 後) |
+| Branin (true 0.398) | hanalyze **0.64** / skopt 0.398 (D phase 後) |
 | Hartmann6 (true -3.32) | hanalyze **-3.07** / skopt -2.77 (hanalyze 大幅勝ち、92% of opt) |
+| Branin time | hanalyze 12s / skopt 5.5s (2.2× 劣後) |
+| Hartmann6 time | hanalyze 9.6s / skopt 7.1s (1.4× 劣後) |
 | 困難度 | L (残ギャップ) |
 
 **対応済 (BO1+BO2+cache+A+B+C)**:

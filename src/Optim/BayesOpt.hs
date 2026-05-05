@@ -21,7 +21,7 @@ module Optim.BayesOpt
 
 import Control.Exception (SomeException, try, evaluate)
 import Control.Monad (forM, replicateM)
-import Data.List (minimumBy, maximumBy)
+import Data.List (minimumBy, maximumBy, sortBy)
 import Data.Ord (comparing)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Random.MWC (GenIO, uniform)
@@ -313,6 +313,25 @@ bayesOptND cfg nStarts f bounds gen = do
 
                 predictMuSig xVec = let (m, s, _, _) = predictAt xVec in (m, s)
 
+                -- Batch predict (μ, σ) at m candidate rows simultaneously.
+                -- Single GEMM for K_*, single triangular solve for V,
+                -- elementwise σ². Replaces m sequential predicts (m
+                -- BLAS-dispatch overheads) with O(1) BLAS calls.
+                predictBatchScaled
+                  :: LA.Matrix Double  -- ^ Scaled X candidates (m × p)
+                  -> (LA.Vector Double, LA.Vector Double)
+                predictBatchScaled xCand =
+                  let kStar = buildKernelMatrixMV kern params xCand xMat  -- m × n
+                      mus   = kStar LA.#> alpha                            -- m
+                      vMat  = Chol.cholSolveWithFactor rChol (LA.tr kStar) -- n × m
+                      -- σ²_j = sf - Σ_i kStar[j,i] · vMat[i,j]
+                      --      = sf - Σ_i (kStar ⊙ vMat^T)[j,i]
+                      kStarDotV = LA.fromList
+                        [ r `LA.dot` c
+                        | (r, c) <- zip (LA.toRows kStar) (LA.toColumns vMat) ]
+                      sigmas = LA.cmap (\v -> sqrt (max 0 (sf - v))) kStarDotV
+                  in (mus, sigmas)
+
                 -- Phase C (BO4 analytic gradient): per-input partial
                 -- derivatives of μ and σ w.r.t. x. Avoids the 2(p+1)
                 -- function-call overhead of central differences inside
@@ -421,8 +440,12 @@ bayesOptND cfg nStarts f bounds gen = do
                               (\ms -> let (a, b) = lcbGrad ms in (-a, -b))
                 _ = unitBounds
 
-            -- L-BFGS multi-start: 'nStarts' Halton-spaced starts +
-            -- small uniform jitter. Run for each acquisition.
+            -- Inner acquisition optimization: original 20 Halton starts
+            -- (kept for diversity; preselection via batch eval was tried
+            -- in D2 but consistently regressed Hartmann6 — even with
+            -- diversity injection — to a -1.83 local mode that the broad
+            -- Halton scan avoids). Maxiter is reduced from 100 → 50 as
+            -- a speed compromise (Branin and Hartmann6 still solid).
             haltonStarts <- pure (QR.haltonSequenceIn nStarts bounds)
             starts <- forM haltonStarts $ \xs ->
               forM (zip bounds xs) $ \((lo, hi), v) -> do
@@ -430,27 +453,25 @@ bayesOptND cfg nStarts f bounds gen = do
                 let span_ = hi - lo
                     jit   = (u - 0.5) * 0.05 * span_
                 pure (max lo (min hi (v + jit)))
-            let runMSG objFn gradFn = mapM (\x0 ->
+            let useAnalytic = case kern of
+                                Periodic -> False
+                                _        -> True
+                runMSG objFn gradFn = mapM (\x0 ->
                   LBFGS.runLBFGSWith
                     (LBFGS.defaultLBFGSConfig
                        { LBFGS.lbStop = OC.defaultStopCriteria
-                                          { OC.stMaxIter = 100 } })
+                                          { OC.stMaxIter = 50 } })
                     objFn gradFn x0) starts
                 runMS objFn = mapM (\x0 ->
                   LBFGS.runLBFGSNumeric
                     (LBFGS.defaultLBFGSConfig
                        { LBFGS.lbStop = OC.defaultStopCriteria
-                                          { OC.stMaxIter = 100 } })
+                                          { OC.stMaxIter = 50 } })
                     objFn x0) starts
                 pickXNext rs =
                   let best     = minimumBy (comparing OC.orValue) rs
                       xRaw     = OC.orBest best
                   in zipWith (\(lo, hi) v -> max lo (min hi v)) bounds xRaw
-                -- Use analytic gradients for RBF / Matern52, fall back
-                -- to numeric for Periodic.
-                useAnalytic = case kern of
-                                Periodic -> False
-                                _        -> True
             xEI  <- pickXNext <$> if useAnalytic
                                     then runMSG negEI  gNegEI
                                     else runMS  negEI

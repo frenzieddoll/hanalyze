@@ -635,12 +635,12 @@ Three changes to `Optim.BayesOpt.bayesOptND`:
   via `LBFGS.runLBFGSNumeric` keeps the inner loop simple and the
   Cholesky cache absorbs most of the cost.
 
-| Problem | Baseline | After BO1+BO2+cache | After A+B+C | skopt | True optimum |
-|---|---|---|---|---|---|
-| Branin (2D) | 4.00 | 1.96 | **0.86** | 0.398 | 0.398 |
-| Hartmann6 (6D) | -2.83 | -2.36 | **-3.07** | -2.77 | -3.32 |
-| Branin time | 13 s | 5.6 s | 22 s | 5.5 s | — |
-| Hartmann6 time | 7.7 s | 8.9 s | 19 s | 7.1 s | — |
+| Problem | Baseline | BO1+BO2+cache | A+B+C | + maxiter=50 | skopt | True optimum |
+|---|---|---|---|---|---|---|
+| Branin (2D) | 4.00 | 1.96 | 0.86 | **0.64** | 0.398 | 0.398 |
+| Hartmann6 (6D) | -2.83 | -2.36 | -3.07 | **-3.07** | -2.77 | -3.32 |
+| Branin time | 13 s | 5.6 s | 22 s | **12 s** | 5.5 s | — |
+| Hartmann6 time | 7.7 s | 8.9 s | 19 s | **9.6 s** | 7.1 s | — |
 
 `bench/haskell/BenchBO.hs` now uses `MWC.initialize` with seed
 `1..nSeeds` (was `createSystemRandom`) so reruns are reproducible.
@@ -704,6 +704,46 @@ hedge+numeric → 19 s with hedge+analytic).
 
 Remaining gap on Branin (0.86 vs 0.398) likely requires re-enabling
 ARD with stronger regularisation, which is left to a future phase.
+
+## After D phase (speed tuning, skopt parity attempt)
+
+Bottleneck analysis (skopt source `optimizer.py:629-676` 比較):
+
+* **skopt** = 1 vectorised batch eval on 10 000 candidates → top-5
+  → L-BFGS (maxiter=20) per acquisition.
+* **hanalyze (A+B+C)** = 20 Halton multi-start × maxiter=100 ×
+  3 acquisitions = ~60 L-BFGS runs / BO iter (60× more LBFGS work).
+
+Two changes attempted:
+
+* **D1+D2 (skopt-style top-K of batch eval)**: implemented vectorised
+  batch predict (`predictBatchScaled`, single GEMM for K_*, single
+  Cholesky solve for V), top-5 + Halton diversity starts. Branin
+  improved (0.50 / 2.3 s) but **Hartmann6 collapsed to -1.83**
+  regardless of nBatch (1k / 10k / 50k) or diversity injection. Top-K
+  + diversity preselection consistently drove the BO trajectory into
+  a -1.83 local mode the broad Halton scan avoids. Reverted.
+* **D3 (vectorised gradMuSig)**: replaced per-call list comprehensions
+  for diffs/sqd with broadcast subtraction. No measurable speedup
+  (the list comp wasn't the bottleneck) and slight numeric drift
+  affected LBFGS path. Reverted.
+* **maxiter 100 → 50**: only adopted change. Halves inner LBFGS work
+  per acquisition, accuracy effectively unchanged for both problems.
+  Branin 22 s → **12 s**, Hartmann6 19 s → **9.6 s**.
+
+Why D1+D2 hurt Hartmann6 (analysis): top-K starts cluster in the
+single best acquisition basin → all 3 acquisitions converge to nearby
+xs each iteration → BO trajectory loses exploration → stuck in one
+mode. The 20-Halton multi-start, while wasteful, **forces L-BFGS
+restarts from genuinely diverse points across the box**, which
+matters for 6D multi-modal Hartmann6.
+
+Final speed gap vs skopt: **Branin 2.2×, Hartmann6 1.4×**. Closing
+this fully would require either (a) a different multi-start strategy
+that preserves diversity (e.g. clustering top-100 into K = 5 by
+k-means, taking centroids — Wang et al. 2014 style), or (b) ARD
+re-enabled in BO so each L-BFGS run becomes more efficient per
+iteration. Both deferred.
 
 ## Reproduction
 
