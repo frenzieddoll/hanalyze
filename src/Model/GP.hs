@@ -44,6 +44,7 @@ module Model.GP
     -- * Multi-input (primary API; X is @n × p@, Y is @n × q@)
   , GPResultMV (..)
   , buildKernelMatrixMV
+  , noiseKernelMV
   , logMarginalLikelihoodMV
   , fitGPMV
   , fitGPMVMulti

@@ -9,6 +9,8 @@ module Main where
 
 import qualified Optim.BayesOpt          as BO
 import qualified System.Random.MWC       as MWC
+import qualified Data.Vector             as V
+import           Data.Word               (Word32)
 import           Data.List               (sort)
 import           Control.Monad           (forM)
 
@@ -67,13 +69,13 @@ hartmann6Star = -3.32237
 -- ---------------------------------------------------------------------------
 
 nSeeds :: Int
-nSeeds = 2     -- 一時的に短縮 (BO1 動作確認用)
+nSeeds = 5
 
 mainBranin :: IO BenchRow
 mainBranin = do
   let cfg = BO.defaultBayesOptConfig
               { BO.boIterations = 30, BO.boInitPoints = 5 }
-  rs <- mapM (\_ -> runND cfg branin braninBounds) [1 .. nSeeds]
+  rs <- mapM (\s -> runND cfg branin braninBounds s) [1 .. nSeeds]
   let (ts, ys) = unzip rs
       medT = median ts
       medY = median ys
@@ -85,7 +87,7 @@ mainHartmann6 :: IO BenchRow
 mainHartmann6 = do
   let cfg = BO.defaultBayesOptConfig
               { BO.boIterations = 30, BO.boInitPoints = 10 }
-  rs <- mapM (\_ -> runND cfg hartmann6 hartmann6Bounds) [1 .. nSeeds]
+  rs <- mapM (\s -> runND cfg hartmann6 hartmann6Bounds s) [1 .. nSeeds]
   let (ts, ys) = unzip rs
       medT = median ts
       medY = median ys
@@ -95,16 +97,16 @@ mainHartmann6 = do
 
 {-# NOINLINE runND #-}
 runND :: BO.BayesOptConfig -> ([Double] -> IO Double) -> [(Double, Double)]
-      -> IO (Double, Double)
-runND cfg f bs = do
-  gen <- MWC.createSystemRandom
+      -> Int -> IO (Double, Double)
+runND cfg f bs seed = do
+  gen <- MWC.initialize (V.singleton (fromIntegral seed) :: V.Vector Word32)
   (ms, (_hist, (_xstar, ystar))) <- timeitIO 1 (\(_,(_,y)) -> y)
                                       (\_ -> BO.bayesOptND cfg 20 f bs gen)
   return (ms, ystar)
 
 main :: IO ()
 main = do
-  rs <- sequence [mainBranin]
+  rs <- sequence [mainBranin, mainHartmann6]
   writeRows "bench/results/haskell/bo.csv" rs
   putStrLn $ "wrote " ++ show (length rs)
           ++ " rows → bench/results/haskell/bo.csv"

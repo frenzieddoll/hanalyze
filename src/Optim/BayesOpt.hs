@@ -21,7 +21,7 @@ module Optim.BayesOpt
 
 import Control.Exception (SomeException, try, evaluate)
 import Control.Monad (forM, replicateM)
-import Data.List (minimumBy)
+import Data.List (minimumBy, maximumBy)
 import Data.Ord (comparing)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Random.MWC (GenIO, uniform)
@@ -29,7 +29,9 @@ import System.Random.MWC (GenIO, uniform)
 import Model.GP (Kernel (..), GPModel (..), GPResult (..), GPParams (..),
                  fitGP, optimizeGP, initParamsFromData,
                  GPResultMV (..), fitGPMV, optimizeGPMV,
-                 logMarginalLikelihoodMV)
+                 logMarginalLikelihoodMV,
+                 buildKernelMatrixMV, noiseKernelMV)
+import qualified Stat.Cholesky as Chol
 import Optim.Acquisition (ei, ucb, parEGO)
 import Optim.NSGA       (NSGAConfig (..), defaultNSGAConfig,
                          Solution (..), nsga2)
@@ -210,41 +212,81 @@ bayesOptND cfg nStarts f bounds gen = do
   initY <- mapM f initX
   let history0 = zip initX initY
 
+  -- BO2: per-dim X scaling — map every dim to [0, 1] using its (lo, hi)
+  -- bound. After this, a single isotropic ℓ in the GP equates to per-dim
+  -- length scales = ℓ × (hi - lo) in the original space, i.e. ARD with
+  -- weights tied to the box width. skopt's "transform=normalize"
+  -- preprocessing achieves the same effect.
+  let scaleX :: [Double] -> [Double]
+      scaleX xs = [ if hi > lo then (v - lo) / (hi - lo) else v
+                  | ((lo, hi), v) <- zip bounds xs ]
+      unitBounds = replicate dim (0, 1)
   let loop t hist
         | t == 0 = return hist
         | otherwise = do
-            let xss   = map fst hist
-                ys    = map snd hist
-                xMat  = LA.fromLists xss
-                yVec0 = LA.fromList ys
-                -- BO1: z-score y so HP optimization is scale-free (skopt
-                -- normalize_y=True equivalent). Both GP fitting and EI
-                -- run in normalized space; the next-x choice is
-                -- scale-equivariant, so unnormalising is unnecessary.
-                stdr  = Std.fitStandardizer (LA.asColumn yVec0)
-                yVec  = LA.flatten
-                          (Std.applyStandardizer stdr (LA.asColumn yVec0))
-                yBest = LA.minElement yVec
-                -- BO1 補強: p0 の length scale を **bounds の平均幅**
-                -- に揃える (per-dim 幅の平均)。pooled (concat xss) より
-                -- 適切な spatial scale を初期値に与えられる。
-                avgWidth = sum [ hi - lo | (lo, hi) <- bounds ]
-                           / fromIntegral (max 1 dim)
-                p0Base   = initParamsFromData (concat xss) (LA.toList yVec)
-                p0       = p0Base { gpLengthScale = max 1e-3 (avgWidth / 4) }
-                pOpt     = optimizeGPMV kern xMat yVec p0
-                model    = GPModel kern pOpt
+            let xss     = map fst hist
+                ys      = map snd hist
+                -- BO2: scale X to [0,1]^d for the GP only (history is
+                -- still kept in raw units for f).
+                xssScl  = map scaleX xss
+                xMat    = LA.fromLists xssScl
+                yVec0   = LA.fromList ys
+                -- BO1: z-score y so HP optimization is scale-free
+                -- (skopt normalize_y=True equivalent). Both GP fitting
+                -- and EI run in normalized space; the next-x choice is
+                -- scale-equivariant.
+                stdr    = Std.fitStandardizer (LA.asColumn yVec0)
+                yVec    = LA.flatten
+                            (Std.applyStandardizer stdr (LA.asColumn yVec0))
+                yBest   = LA.minElement yVec
+                -- After BO2 scaling, X lives on [0, 1]^d. The natural ℓ
+                -- grows as √d (mean pairwise distance scales that way), so
+                -- start L-BFGS from ℓ = 0.25 √d to keep correlations
+                -- meaningful as input dimension grows.
+                p0Base  = initParamsFromData (concat xssScl) (LA.toList yVec)
+                p0      = p0Base
+                            { gpLengthScale = 0.25 * sqrt (fromIntegral dim) }
+                pOpt    = optimizeGPMV kern xMat yVec p0
+                params  = pOpt
+                -- BO core fix: precompute Cholesky factor (R) and
+                -- α = Ky⁻¹ y ONCE per BO iteration. The negEI callback
+                -- reuses them via 'predictFast' below; this replaces the
+                -- old fitGPMV-per-call which factorised Ky on every
+                -- L-BFGS step (O(n³) wasted per evaluation).
+                kyMat   = noiseKernelMV kern params xMat
+                rChol   = case Chol.cholFactor kyMat of
+                            Just r  -> r
+                            Nothing ->
+                              -- Jitter and try again.
+                              let n     = LA.rows xMat
+                                  kyJ   = kyMat
+                                          + LA.scale 1e-4 (LA.ident n)
+                              in case Chol.cholFactor kyJ of
+                                   Just r  -> r
+                                   Nothing -> error "BO: chol failed"
+                alpha   = LA.flatten
+                            (Chol.cholSolveWithFactor rChol
+                              (LA.asColumn yVec))
+                sf      = gpSignalVar params
+
                 negEI xVec = unsafePerformIO $ do
-                  let xRow = LA.asRow (LA.fromList xVec)
+                  let xScl = LA.fromList (scaleX xVec)
+                      xRow = LA.asRow xScl                 -- 1 × p
                       computed = do
-                        let res = fitGPMV model xMat yVec xRow
-                            mu  = LA.atIndex (gpmvMean res) 0
-                            vr  = max 0 (LA.atIndex (gpmvVar res) 0)
-                            sg  = sqrt vr
+                        let kStarRow = buildKernelMatrixMV kern params xRow xMat
+                                       -- 1 × n
+                            kStarV   = LA.flatten kStarRow
+                            mu       = LA.dot kStarV alpha
+                            v        = LA.flatten
+                                         (Chol.cholSolveWithFactor rChol
+                                           (LA.asColumn kStarV))
+                            varV     = max 0 (sf - LA.dot kStarV v)
+                            sg       = sqrt varV
                         _ <- evaluate mu; _ <- evaluate sg
                         pure (negate (ei yBest 0.01 (mu, sg)))
                   r <- try computed :: IO (Either SomeException Double)
                   case r of { Left _ -> pure 1e30; Right v -> pure v }
+                _ = unitBounds
             -- L-BFGS multi-start: use 'nStarts' Halton-spaced starts
             -- so we cover the box more uniformly than nStarts
             -- iid-uniform restarts. Falls back to uniform if nStarts
