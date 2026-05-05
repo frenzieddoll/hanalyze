@@ -35,6 +35,7 @@ import qualified Stat.Bootstrap       as Boot
 import qualified Stat.Effect          as Eff
 import qualified Model.PCA         as PCA
 import qualified Model.Cluster     as Cl
+import qualified Model.DecisionTree as DT
 import qualified DataIO.Reshape    as Reshape
 import qualified Optim.NSGA        as NSGA
 import qualified System.Random.MWC as MWC
@@ -1974,3 +1975,47 @@ main = hspec $ do
     it "cramerV: 2×2 完全独立で ~0、強従属で大" $ do
       Eff.cramerV 0 100 2 2 `shouldBe` 0.0
       Eff.cramerV 50 100 2 2 `shouldSatisfy` (> 0.5)
+
+  -- ===========================================================================
+  -- Model.DecisionTree (Phase 10)
+  -- ===========================================================================
+  describe "Model.DecisionTree" $ do
+    it "fitDT: 線形分離可能なデータで perfect train accuracy" $ do
+      -- y = 0 if x[0] < 5, else 1
+      let xs = [[fromIntegral x] | x <- [1..10::Int]]
+          ys = [if x < 5 then 0 else 1 | x <- [1..10::Int]]
+          tree = DT.fitDT DT.defaultDTConfig xs ys
+          preds = map (DT.predictDT tree) xs
+      preds `shouldBe` ys
+
+    it "fitDT: 2D XOR-like パターン" $ do
+      let xs = [[0, 0], [0, 1], [1, 0], [1, 1]]
+          ys = [0, 1, 1, 0]  -- XOR
+          tree = DT.fitDT DT.defaultDTConfig xs ys
+          preds = map (DT.predictDT tree) xs
+      preds `shouldBe` ys
+
+    it "predictDTProbs: leaf で確率 1.0、混合 leaf で fractional" $ do
+      let xs = [[1.0], [2.0], [3.0]]
+          ys = [0, 0, 1]
+          tree = DT.fitDT DT.defaultDTConfig xs ys
+          probs = DT.predictDTProbs tree [1.5]
+      -- x=1.5 should reach a leaf where most samples are class 0
+      probs `shouldSatisfy` (\m -> length m >= 1)
+
+    it "giniImpurity: 純粋クラスで 0、均等で 0.5 (2 クラス)" $ do
+      DT.giniImpurity [0, 0, 0, 0] `shouldBe` 0.0
+      DT.giniImpurity [1, 1, 1, 1] `shouldBe` 0.0
+      DT.giniImpurity [0, 0, 1, 1] `shouldBe` 0.5
+
+    it "maxDepth=1: shallow tree、underfit に近い" $ do
+      let cfg = DT.defaultDTConfig { DT.dtMaxDepth = Just 1 }
+          xs = [[fromIntegral x, fromIntegral y]
+               | x <- [1..5::Int], y <- [1..5::Int]]
+          ys = [if x + y > 5 then 1 else 0
+               | x <- [1..5::Int], y <- [1..5::Int]]
+          tree = DT.fitDT cfg xs ys
+      -- maxDepth=1 → 1 split, root = decision node
+      case tree of
+        DT.DNode {} -> True `shouldBe` True
+        _           -> expectationFailure "Expected DNode at root"

@@ -75,6 +75,7 @@ library
     Model.MultiOutput
     Model.PCA
     Model.Cluster
+    Model.DecisionTree
     Design.Factorial
     Design.Block
     Design.Mixed
