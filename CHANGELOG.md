@@ -7,6 +7,50 @@ and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
 
 ## [Unreleased]
 
+### Performance (Phase 1-13)
+- Build flags: added `-O2 -funbox-strict-fields` to all 75 stanzas (library +
+  executables + tests) via the new `common opt` block.
+- Strict data: enabled `{-# LANGUAGE StrictData #-}` on 22 hot-path modules
+  (Optim.{NSGA,LBFGS,DE,CMAES,CMAESFull,SA,PSO,Common,BayesOpt,Acquisition,
+  Pareto,NelderMead,LineSearch}, Model.{GLM,Regularized,RFF,GP,Kernel},
+  Stat.{KernelDist,Cholesky}, MCMC.{HMC,NUTS}).
+- INLINE pragmas on hot-path wrappers: `Stat.Cholesky.{cholSolve,cholFactor,
+  cholSolveWithFactor}`, `Stat.KernelDist.{diagAB,rowDotsAB,rowSqNorms}`,
+  `Optim.Common.flipFor`, plus 9 polymorphic helpers in `Stat.AD`.
+- `Stat.KernelDist.pairwiseSqDist` rewritten with `runST + Storable.Mutable`
+  flat-index loop; massiv dependency removed from this hot path
+  (16-26% speedup on KR/Gram benchmarks).
+- `Model.GLM.glmLogLik` switched from list-based `zipWith`+`sum` to
+  `VS.zipWith`+`VS.sum` (~20% speedup on GLM_logit_n=10000).
+- `Model.GLM.irlsStep` weight/working-response computation switched from
+  massiv `MA.map`/`MA.zipWith3` to `VS.map`/`VS.zipWith3`.
+- `Stat.ModelSelect.lmPosteriorLogLiks`/`glmPosteriorLogLiks` switched to
+  the same `VS.zipWith`-based pattern (avoids per-sample `LA.toList`
+  allocations).
+- Benchmark infrastructure: added `bench-tasty` (focused tasty-bench
+  micro suite) and `bench-profile` (profiling runner with
+  `cabal.project.local: profiling-detail: late-toplevel`). Migrated
+  `bench-regression` and `bench-kernel` to use the new
+  `BenchUtil.timeitTasty` (adaptive iteration, 5% relative stdev) instead
+  of fixed-N `timeit`. CSV output schema is preserved.
+- Reverted experiments documented for future reference (all in
+  `bench/results/perf_profile_findings.md`):
+  parallel `Strategies` on `Stat.Bootstrap` (Storable allocator
+  contention), mutable axpy in Lasso CD (BLAS daxpy already optimal),
+  `VS.map`-based `mapMatrix`/`mapVector` (massiv's fused map wins on
+  large matrices).
+
+### Documentation
+- Added Haddock `>>>` examples to a curated set of pure helpers
+  (`Stat.Interpolate.interp1d`, `Stat.AdaptiveGrid.uniformGrid`,
+  `Optim.Common.projectToBounds` / `inBounds`, `Model.MultiOutput.asMultiY`,
+  `DataIO.Log.hasErrors`). The doctest runner test-suite is deferred until
+  the cabal/doctest package-db wiring is settled; the examples remain
+  valid as Haddock documentation.
+- Updated `bench/results/SUMMARY.md` and `bench/results/OPEN_ISSUES.md`
+  to reflect Phase 1-13 numbers; deleted stale `bench/results/REPORT.md`
+  (Phase B0-B5) and the 160k-line auto-generated `bench/results/summary.md`.
+
 ### Release engineering
 - `cabal sdist` and `cabal haddock --haddock-for-hackage` both succeed
   cleanly (`cabal check` reports no errors or warnings). Hackage candidate
@@ -16,14 +60,6 @@ and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
   cabal upload --documentation dist-newstyle/hanalyze-0.1.0.0-docs.tar.gz   # candidate docs
   cabal upload --publish dist-newstyle/sdist/hanalyze-0.1.0.0.tar.gz       # final
   ```
-
-### Documentation
-- Added Haddock `>>>` examples to a curated set of pure helpers
-  (`Stat.Interpolate.interp1d`, `Stat.AdaptiveGrid.uniformGrid`,
-  `Optim.Common.projectToBounds` / `inBounds`, `Model.MultiOutput.asMultiY`,
-  `DataIO.Log.hasErrors`). The doctest runner test-suite is deferred until
-  the cabal/doctest package-db wiring is settled; the examples remain
-  valid as Haddock documentation.
 
 ## [0.1.0.0] - 2026-05-04
 
