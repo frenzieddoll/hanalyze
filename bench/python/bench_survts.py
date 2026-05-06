@@ -92,11 +92,19 @@ def bench_arima(name: str, n_iter: int = 3) -> Row:
     y = gen_ar1(1000)
 
     def run():
-        return ARIMA(y, order=(1, 1, 1)).fit(method_kwargs={"disp": 0})
+        # P3 fairness fix: use Hannan-Rissanen (closed-form-ish, two-step
+        # OLS) for parameter estimation instead of statsmodels' default
+        # state-space + Kalman + full MLE. Hanalyze's ARIMA uses
+        # Yule-Walker + simple MLE, so HR is the closer-method
+        # comparison. The default-MLE run gave a 128× apparent speedup
+        # that was mostly the fit-method difference, not implementation
+        # efficiency.
+        return ARIMA(y, order=(1, 1, 1)).fit(method="hannan_rissanen")
 
-    ms, fit = median_time(run, n_iter)
+    ms, _fit = median_time(run, n_iter)
     return Row(name, ms, 0, 0,
-               "statsmodels.tsa.arima.ARIMA p=1 d=1 q=1 n=1000")
+               "statsmodels.tsa.arima.ARIMA p=1 d=1 q=1 n=1000 "
+               "(method=hannan_rissanen, comparable fit pipeline)")
 
 
 # ---------------------------------------------------------------------------

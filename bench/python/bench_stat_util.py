@@ -111,20 +111,26 @@ def bench_mannwhitney() -> Row:
 
 
 def bench_ks() -> Row:
-    from scipy.stats import kstest, norm
+    # P3 fairness: hanalyze's `kolmogorovSmirnovNormal` tests against
+    # @Normal(μ̂, σ̂)@ where the parameters are fitted from the data, i.e.
+    # the Lilliefors test (KS with estimated parameters). Previously we
+    # compared against `scipy.stats.kstest`, which uses the supplied μ/σ
+    # as if known a priori — D values matched but p-values differed by
+    # 4 orders of magnitude because the null distributions are different.
+    # statsmodels' `lilliefors` is the apples-to-apples comparison.
+    from statsmodels.stats.diagnostic import lilliefors
 
     xs = synthetic_vec(1000, 0)
 
     def run():
-        # KS against fitted Normal(μ̂, σ̂) — same as Haskell side.
-        mu, sd = float(np.mean(xs)), float(np.std(xs, ddof=1))
-        r = kstest(xs, "norm", args=(mu, sd))
-        return float(r.statistic), float(r.pvalue)
+        d, p = lilliefors(xs, dist="norm")
+        return float(d), float(p)
 
     ms, (d, p) = median_time(run, n_iter=10)
     return Row(
         "KS_normal_n1000", ms, d, p,
-        f"scipy.stats.kstest vs Normal(μ̂,σ̂); D={d:.6f} p={p:.6f}",
+        f"statsmodels.stats.diagnostic.lilliefors (KS w/ estimated μ̂σ̂); "
+        f"D={d:.6f} p={p:.6f}",
     )
 
 

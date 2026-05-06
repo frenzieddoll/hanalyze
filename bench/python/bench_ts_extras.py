@@ -82,22 +82,32 @@ def bench_hw() -> Row | None:
     y = seasonal_series(500)
 
     def run():
-        # Match the Haskell side: additive trend + additive seasonality.
-        # statsmodels fits parameters by MLE; hanalyze uses fixed α=0.3, β=γ=0.1.
-        # For an apples-to-apples timing on the *fit* operation, let
-        # statsmodels do its default MLE fit (this is the realistic use).
+        # P3 fairness fix: pin smoothing parameters to the same values
+        # hanalyze uses (α=0.3, β=0.1, γ=0.1) so we measure the
+        # *smoothing* operation only, not statsmodels' MLE optimisation.
+        # The previous run let statsmodels fit α/β/γ by MLE, which is
+        # algorithmically a different operation and gave an unfair 511×
+        # apparent speedup.
         m = ExponentialSmoothing(
             y, trend="add", seasonal="add", seasonal_periods=12,
-            initialization_method="estimated",
+            initialization_method="known",
+            initial_level=float(y[:12].mean()),
+            initial_trend=float((y[12:24].mean() - y[:12].mean()) / 12),
+            initial_seasonal=[float(y[i] - y[:12].mean()) for i in range(12)],
         )
-        f = m.fit()
+        f = m.fit(
+            smoothing_level=0.3,
+            smoothing_trend=0.1,
+            smoothing_seasonal=0.1,
+            optimized=False,
+        )
         rmse = float(np.sqrt(np.mean((f.fittedvalues - y) ** 2)))
         return rmse
 
-    ms, rmse = median_time(run, n_iter=5)
+    ms, rmse = median_time(run, n_iter=10)
     return Row(
         "HW_seasonal_n500_p12_additive", ms, rmse, 0.0,
-        f"statsmodels ExponentialSmoothing(trend=add,seasonal=add,p=12) MLE fit; "
+        f"statsmodels ExponentialSmoothing(α=0.3 β=γ=0.1 fixed, no MLE); "
         f"RMSE={rmse:.6f}",
     )
 

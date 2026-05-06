@@ -114,9 +114,13 @@ def bench_cmaes_full() -> Row | None:
     x0 = [-1.5] * 5
 
     def run():
+        # P3 fairness: same convergence target as hanalyze (tolfun=1e-10,
+        # maxiter=1000). Both sides now stop on the tolfun criterion
+        # rather than maxiter, making time-to-converge the comparable
+        # metric.
         es = cma.CMAEvolutionStrategy(
             x0, 0.5,
-            {"verbose": -9, "maxiter": 200, "tolfun": 1e-10,
+            {"verbose": -9, "maxiter": 1000, "tolfun": 1e-10,
              "seed": 1},
         )
         es.optimize(rosen)
@@ -124,8 +128,9 @@ def bench_cmaes_full() -> Row | None:
 
     ms, fval = median_time(run, n_iter=3)
     return Row(
-        "CMAESFull_Rosenbrock5D_iter200", ms, fval, 0.0,
-        f"cma library full-rank σ₀=0.5 maxiter=200; f_final={fval:.6e}",
+        "CMAESFull_Rosenbrock5D_converge", ms, fval, 0.0,
+        f"cma library full-rank σ₀=0.5 tolfun=1e-10 maxiter=1000; "
+        f"f_final={fval:.6e}",
     )
 
 

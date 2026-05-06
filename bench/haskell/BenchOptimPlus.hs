@@ -92,9 +92,15 @@ rosenbrock xs =
 
 benchCMAESFull :: IO [BenchRow]
 benchCMAESFull = do
+  -- P3 fairness: give both sides the same convergence criterion
+  -- (tolfun = 1e-10) and a generous iter cap (1000), so both run "to
+  -- convergence" rather than getting cut off at an artificial maxiter.
+  -- Previously hanalyze stopped at 200 iter with f = 0.031 while cma
+  -- effectively converged in <200 iter to f ~ 5e-7; the unfair part
+  -- was hanalyze's tolfun never had a chance to fire.
   let cfg = defaultCMAESFConfig
               { cmfStop   = (cmfStop defaultCMAESFConfig)
-                              { OC.stMaxIter = 200
+                              { OC.stMaxIter = 1000
                               , OC.stTolFun  = 1e-10
                               }
               , cmfSigma0 = 0.5
@@ -108,8 +114,9 @@ benchCMAESFull = do
       probe = id
   (ms, fVal) <- timeitTastyIO probe run
   return [ BenchRow "haskell" "optim_plus"
-            "CMAESFull_Rosenbrock5D_iter200" ms fVal 0
-            ("CMAESFull σ₀=0.5 maxIter=200 from x0=-1.5; f_final=" ++ show fVal) ]
+            "CMAESFull_Rosenbrock5D_converge" ms fVal 0
+            ("CMAESFull σ₀=0.5 tolfun=1e-10 maxIter=1000 from x0=-1.5; "
+             ++ "f_final=" ++ show fVal) ]
 
 -- ---------------------------------------------------------------------------
 
