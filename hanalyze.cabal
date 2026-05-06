@@ -173,6 +173,7 @@ library
     , deepseq              >= 1.4  && < 1.6
     , massiv               >= 1.0  && < 1.1
     , parallel             >= 3.2  && < 3.3
+    , vector-algorithms    >= 0.9  && < 0.10
 
 executable hanalyze
   import:           warnings, opt
