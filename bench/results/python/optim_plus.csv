@@ -1,0 +1,4 @@
+system,suite,name,time_ms,acc_main,acc_aux,extra
+python,optim_plus,Constrained_Quad2D_eq,0.692895,4.21469e-09,2,scipy SLSQP; x=2.980233e-09 y=1.000000 f=2.000000 err=4.214685e-09
+python,optim_plus,Adam_quad50D_iter1000,8.34224,1.50769e-44,0,numpy Adam lr=0.05 1000 iter; f_final=1.507686e-44
+python,optim_plus,CMAESFull_Rosenbrock5D_iter200,78.1072,5.14759e-07,0,cma library full-rank σ₀=0.5 maxiter=200; f_final=5.147594e-07
