@@ -6,6 +6,8 @@ module BenchUtil
   , writeRows
   , timeit
   , timeitIO
+  , timeitTasty
+  , timeitTastyIO
   , readCsvXY
   , readCsvXYG
   ) where
@@ -19,6 +21,9 @@ import qualified Numeric.LinearAlgebra      as LA
 import           Data.Csv                   (decode, HasHeader (..))
 import           Data.Time.Clock            (getCurrentTime, diffUTCTime)
 import           Text.Printf                (printf)
+
+import qualified Test.Tasty.Bench           as TB
+import           Test.Tasty                 (Timeout (NoTimeout))
 import           System.IO                  (withFile, IOMode (..), hPutStrLn,
                                              hSetBuffering, BufferMode (..))
 import           Control.Exception          (evaluate)
@@ -82,6 +87,38 @@ timeitIO n force runIt = do
 -- 'timeitIO' for new code.
 timeit :: Int -> (a -> Double) -> IO a -> IO (Double, a)
 timeit n force action = timeitIO n force (\_ -> action)
+
+-- | tasty-bench based timer (Phase 13).
+--
+-- Adaptive iteration count converges to a stable mean. Returns
+-- (mean wall-time in ms, last result). The relative standard
+-- deviation cap is 5% (much tighter than the default 10%).
+--
+-- Use this for new code; 'timeit' / 'timeitIO' kept for backwards
+-- compatibility while the migration is in progress.
+timeitTastyIO :: (a -> Double) -> (Int -> IO a) -> IO (Double, a)
+timeitTastyIO force runIt = do
+  -- Build a Benchmarkable that depends on a counter so GHC cannot
+  -- common-subexpression-eliminate across iterations.
+  ref <- newIORef (0 :: Int)
+  let bm = TB.nfIO $ do
+             i <- readIORef ref
+             writeIORef ref (i + 1)
+             x <- runIt i
+             _ <- evaluate (force x)
+             pure ()
+  -- 0.05 = 5% relative stdev target. NoTimeout = run as long as
+  -- needed for convergence (typical < 1 s for ms-range benchmarks).
+  secs <- TB.measureCpuTime NoTimeout 0.05 bm
+  -- Probe value to return alongside the timing.
+  x <- runIt 0
+  _ <- evaluate (force x)
+  return (1000.0 * secs, x)
+
+-- | Like 'timeitTastyIO' but the action does not depend on the
+-- iteration index.
+timeitTasty :: (a -> Double) -> IO a -> IO (Double, a)
+timeitTasty force action = timeitTastyIO force (\_ -> action)
 
 quickSort :: Ord a => [a] -> [a]
 quickSort []     = []

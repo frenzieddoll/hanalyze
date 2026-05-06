@@ -80,7 +80,7 @@ benchLM :: FilePath -> String -> IO [BenchRow]
 benchLM path name = do
   (x, y) <- readCsvXY path
   let xWith1 = LA.fromBlocks [[ LA.konst 1 (LA.rows x, 1), x ]]
-  (ms, fr) <- timeitIO 5 forceFR
+  (ms, fr) <- timeitTastyIO forceFR
                 (\i -> return $! fitLMVecPhantom i xWith1 y)
   let yhat = LA.flatten (fitted fr LA.¿ [0])
       r2   = computeR2 y yhat
@@ -102,7 +102,7 @@ benchGLM
 benchGLM fam link extra path name = do
   (x, y) <- readCsvXY path
   let xWith1 = LA.fromBlocks [[ LA.konst 1 (LA.rows x, 1), x ]]
-  (ms, fr) <- timeitIO 3 forceFR
+  (ms, fr) <- timeitTastyIO forceFR
                 (\i -> return $! fitGLMFullPhantom i fam link xWith1 y)
   let yhat = LA.flatten (fitted fr LA.¿ [0])
       r2   = computeR2 y yhat
@@ -121,7 +121,7 @@ benchLME path name = do
       labels = V.fromList (map (T.pack . ('g' :) . show) uniq)
       sizes  = V.fromList
         [ length (filter (== g) (V.toList gIdxs)) | g <- uniq ]
-  (ms, fit) <- timeitIO 3 (\f -> LA.sumElements (coefficients (GLMM.glmmFixed f)))
+  (ms, fit) <- timeitTastyIO (\f -> LA.sumElements (coefficients (GLMM.glmmFixed f)))
                 (\i -> return $! fitLMEPhantom i xWith1 y gIdxs labels sizes)
   let yhat = LA.flatten (fitted (GLMM.glmmFixed fit) LA.¿ [0])
       r2   = computeR2 y yhat
@@ -146,7 +146,7 @@ benchLasso = benchPenalty (\lam -> Reg.L1 lam)
 benchEN :: FilePath -> String -> Double -> Double -> IO [BenchRow]
 benchEN path name lam1 lam2 = do
   (x, y) <- readCsvXY path
-  (ms, fr) <- timeitIO 3 forceReg
+  (ms, fr) <- timeitTastyIO forceReg
                 (\i -> return $! fitRegPhantom i (Reg.ElasticNet lam1 lam2) x y)
   let yhat = Reg.predictRegularized fr x
       r2   = computeR2 y yhat
@@ -161,7 +161,7 @@ benchPenalty
   -> FilePath -> String -> Double -> IO [BenchRow]
 benchPenalty mkPen mkExtra path name lam = do
   (x, y) <- readCsvXY path
-  (ms, fr) <- timeitIO 3 forceReg
+  (ms, fr) <- timeitTastyIO forceReg
                 (\i -> return $! fitRegPhantom i (mkPen lam) x y)
   let yhat = Reg.predictRegularized fr x
       r2   = computeR2 y yhat

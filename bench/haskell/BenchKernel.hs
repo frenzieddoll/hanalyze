@@ -62,7 +62,7 @@ gramPhantom _ k h x = Kn.gramMatrixMV k h x
 benchGram :: FilePath -> String -> IO [BenchRow]
 benchGram path name = do
   (x, _) <- readCsvXY path
-  (ms, g) <- timeitIO 5 LA.sumElements
+  (ms, g) <- timeitTastyIO LA.sumElements
                (\i -> return $! gramPhantom i Kn.Gaussian h0 x)
   return [ BenchRow "haskell" "kernel" name ms 0 0
             ("gramMatrixMV BLAS, n=" ++ show (LA.rows g)) ]
@@ -79,7 +79,7 @@ benchKR :: FilePath -> String -> IO [BenchRow]
 benchKR path name = do
   (x, y) <- readCsvXY path
   let yMat = LA.asColumn y
-  (ms, fit) <- timeitIO 5 (\f -> LA.sumElements (Kn.krmvAlpha f))
+  (ms, fit) <- timeitTastyIO (\f -> LA.sumElements (Kn.krmvAlpha f))
                  (\i -> return $! krPhantom i x yMat)
   let yhat = LA.flatten (Kn.fittedKernelRidgeMV fit LA.¿ [0])
       r2v  = computeR2 y yhat
@@ -100,7 +100,7 @@ benchNW :: FilePath -> String -> IO [BenchRow]
 benchNW path name = do
   (x, y) <- readCsvXY path
   let yMat = LA.asColumn y
-  (ms, yhatMat) <- timeitIO 3 LA.sumElements
+  (ms, yhatMat) <- timeitTastyIO LA.sumElements
                      (\i -> return $! nwPhantom i x yMat)
   let yhat = LA.flatten (yhatMat LA.¿ [0])
       r2v  = computeR2 y yhat
@@ -125,7 +125,7 @@ benchRFF path name d = do
       p  = LA.cols x
   gen <- MWC.createSystemRandom
   feats <- RFF.sampleRFFRBFMV p d 1.0 1.0 gen
-  (ms, _) <- timeitIO 3 (\f -> LA.sumElements (RFF.rffrmvmWeights f))
+  (ms, _) <- timeitTastyIO (\f -> LA.sumElements (RFF.rffrmvmWeights f))
                 (\i -> return $! rffPhantom i feats x ym)
   let yhatMat = RFF.predictRFFRidgeMVMulti
                   (rffPhantom 0 feats x ym) x
@@ -150,7 +150,7 @@ benchGPFit :: FilePath -> String -> IO [BenchRow]
 benchGPFit path name = do
   (x, y) <- readCsvXY path
   let mdl = GP.GPModel GP.RBF (GP.GPParams 1.0 1.0 0.05 1.0 Nothing)
-  (ms, res) <- timeitIO 3 (\r -> LA.sumElements (GP.gpmvMean r)
+  (ms, res) <- timeitTastyIO (\r -> LA.sumElements (GP.gpmvMean r)
                                 + LA.sumElements (GP.gpmvVar r))
                  (\i -> return $! gpFitPhantom i mdl x y x)
   let yhat = GP.gpmvMean res
@@ -172,7 +172,7 @@ gpOptPhantom _ x y = GP.optimizeGPMV GP.RBF x y
 benchGPOpt :: FilePath -> String -> IO [BenchRow]
 benchGPOpt path name = do
   (x, y) <- readCsvXY path
-  (ms, p) <- timeitIO 2 (\pr -> GP.gpLengthScale pr + GP.gpSignalVar pr
+  (ms, p) <- timeitTastyIO (\pr -> GP.gpLengthScale pr + GP.gpSignalVar pr
                               + GP.gpNoiseVar pr)
                (\i -> return $! gpOptPhantom i x y)
   let mdl = GP.GPModel GP.RBF p
@@ -197,7 +197,7 @@ gprPhantom _ x y = GPR.fitGPRobustMV GP.RBF
 benchGPRobust :: FilePath -> String -> IO [BenchRow]
 benchGPRobust path name = do
   (x, y) <- readCsvXY path
-  (ms, fit) <- timeitIO 2 (\f -> LA.sumElements (GPR.rgpmvAlpha f))
+  (ms, fit) <- timeitTastyIO (\f -> LA.sumElements (GPR.rgpmvAlpha f))
                  (\i -> return $! gprPhantom i x y)
   let (mu, _) = GPR.predictGPRobustMV fit x
       r2v    = computeR2 y mu

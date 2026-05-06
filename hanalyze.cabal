@@ -988,6 +988,8 @@ executable bench-bo
     , text                 >= 1.2  && < 2.2
     , time                 >= 1.9  && < 1.13
     , vector               >= 0.12 && < 0.14
+    , tasty-bench          >= 0.3  && < 0.5
+    , tasty                >= 1.4  && < 1.6
 
 -- Standalone bench: hmatrix vs massiv on pairwise squared distance
 -- (F4 evaluation, F5 multi-core Par evaluation).
@@ -1022,6 +1024,8 @@ executable bench-mo
     , text                 >= 1.2  && < 2.2
     , time                 >= 1.9  && < 1.13
     , vector               >= 0.12 && < 0.14
+    , tasty-bench          >= 0.3  && < 0.5
+    , tasty                >= 1.4  && < 1.6
 
 -- Single-objective optimization bench (B3).
 executable bench-optim
@@ -1040,6 +1044,8 @@ executable bench-optim
     , text                 >= 1.2  && < 2.2
     , time                 >= 1.9  && < 1.13
     , vector               >= 0.12 && < 0.14
+    , tasty-bench          >= 0.3  && < 0.5
+    , tasty                >= 1.4  && < 1.6
 
 -- Kernel / GP bench (B2): KR / NW / RFF / GP / GPRobust.
 executable bench-kernel
@@ -1058,6 +1064,8 @@ executable bench-kernel
     , text                 >= 1.2  && < 2.2
     , time                 >= 1.9  && < 1.13
     , vector               >= 0.12 && < 0.14
+    , tasty-bench          >= 0.3  && < 0.5
+    , tasty                >= 1.4  && < 1.6
 
 -- Regression bench (B1): LM / GLM / GLMM / Ridge / Lasso / ElasticNet.
 executable bench-regression
@@ -1075,6 +1083,8 @@ executable bench-regression
     , text                 >= 1.2  && < 2.2
     , time                 >= 1.9  && < 1.13
     , vector               >= 0.12 && < 0.14
+    , tasty-bench          >= 0.3  && < 0.5
+    , tasty                >= 1.4  && < 1.6
 
 executable bench-profile
   import:           warnings, opt
@@ -1093,6 +1103,8 @@ executable bench-profile
     , text                 >= 1.2  && < 2.2
     , time                 >= 1.9  && < 1.13
     , vector               >= 0.12 && < 0.14
+    , tasty-bench          >= 0.3  && < 0.5
+    , tasty                >= 1.4  && < 1.6
 
 executable bench-tasty
   import:           warnings, opt
@@ -1107,6 +1119,7 @@ executable bench-tasty
     , hanalyze
     , hmatrix              >= 0.20 && < 0.22
     , tasty-bench          >= 0.3  && < 0.5
+    , tasty                >= 1.4  && < 1.6
     , text                 >= 1.2  && < 2.2
     , time                 >= 1.9  && < 1.13
     , vector               >= 0.12 && < 0.14
