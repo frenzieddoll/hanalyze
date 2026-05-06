@@ -39,8 +39,6 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
   bench/venv/bin/python bench/python/bench_regression.py
 # (similar for the other phases)
 
-# 5. Aggregate
-bench/venv/bin/python bench/aggregate.py > bench/results/summary.md
 ```
 
 ## Fairness rules
@@ -48,19 +46,28 @@ bench/venv/bin/python bench/aggregate.py > bench/results/summary.md
 - `OPENBLAS_NUM_THREADS=1` and `OMP_NUM_THREADS=1` for both sides.
 - Same input data (CSV files in `bench/data/`) read by both sides.
 - For optimization, identical seeds, budget (max evals), and starting points.
-- Reported numbers: Haskell uses `criterion` (median + 95 % CI); Python uses
+- Reported numbers: Haskell `bench-regression` and `bench-kernel` use
+  `tasty-bench` (adaptive iteration, 5% relative stdev target). Other
+  Haskell benches use a 5-iteration `timeit` median. Python uses
   `pyperf` (geometric mean of 5 runs × 5 inner loops).
 
-## Status
+## Status (Phase 1〜13 perf 改善まで完了、2026-05-06)
 
-| Phase | Description | Status |
+すべての suite で実装と計測が完了。最新結果は
+[`results/SUMMARY.md`](results/SUMMARY.md) を参照。
+
+| Suite | Bench script (Haskell / Python) | tasty-bench 化 |
 |---|---|---|
-| B0 | Infra (data gen + BenchUtil + aggregate) | done |
-| B1 | Classical regression (LM/GLM/GLMM/Ridge/Lasso/EN) | done |
-| B2 | Kernel & GP (KR/NW/RFF/GP/GPRobust) | done |
-| B3 | Single-objective optimization | done |
-| B4 | Multi-objective optimization | done |
-| B5 | Bayesian optimization + final report | done |
+| regression | `bench-regression` / `bench_regression.py` | ✅ |
+| kernel | `bench-kernel` / `bench_kernel.py` | ✅ |
+| optim | `bench-optim` / `bench_optim.py` | (旧 `timeit` のまま) |
+| mo | `bench-mo` / `bench_mo.py` | (旧 `timeit` のまま) |
+| bo | `bench-bo` / `bench_bo.py` | (旧 `timeit` のまま) |
 
-See [`results/REPORT.md`](results/REPORT.md) for the consolidated
-narrative and `results/summary.md` for the auto-generated table.
+詳細レポート / 残課題 / プロファイル分析は:
+
+- [`results/SUMMARY.md`](results/SUMMARY.md) — 最新の Python vs Haskell 比較
+- [`results/OPEN_ISSUES.md`](results/OPEN_ISSUES.md) — 残ギャップと FFI 領域
+- [`results/perf_profile_findings.md`](results/perf_profile_findings.md) — Phase 11 プロファイル取得結果
+- [`results/NSGA_INVESTIGATION.md`](results/NSGA_INVESTIGATION.md) — NSGA-II 調査記録 (歴史)
+- [`results/BO_INVESTIGATION.md`](results/BO_INVESTIGATION.md) — BO 調査記録 (歴史)

@@ -1,7 +1,14 @@
 # hanalyze vs Python benchmark summary
 
+最終更新: 2026-05-06 (Phase 1〜13 perf 改善 + tasty-bench 計測移行 後)
+
 統一条件: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1`、single-thread。
-比較対象: scipy / sklearn / pymoo / skopt / scikit-optimize。
+比較対象: scipy / sklearn / pymoo / skopt。
+測定: regression / kernel は **tasty-bench (relStDev 5%) の adaptive
+iteration**、optim / mo / bo は `timeit N` の median。
+
+Python 値は `bench/results/python/*.csv` から (Python 側は変更なし)。
+Haskell 値は `bench/results/haskell/*.csv` の最新ラン。
 
 ## ハイライト
 
@@ -9,157 +16,195 @@
 
 | Suite | Bench | hanalyze | Python | speedup |
 |---|---|---|---|---|
-| optim | DE (Rosenbrock_2D) | 1.2 ms | 164 ms | **134×** |
-| optim | NelderMead (Rosenbrock_2D) | 0.06 ms | 4.8 ms | **78×** |
-| optim | CMAES (Rosenbrock_2D) | 0.6 ms | 54 ms | **96×** |
-| optim | DE (Ackley_10D) | 39 ms | 1556 ms | **40×** |
-| optim | DE (Levy_10D) | 45 ms | 1768 ms | **40×** |
-| optim | DE (Griewank_10D) | 35 ms | 1475 ms | **42×** |
-| optim | LBFGS (Sphere_30D) | 0.05 ms | 1.67 ms | **31×** |
-| regression | LME_n2000_p5_g20 | 1.4 ms | 43 ms | **30×** |
-| regression | Ridge_n1000_p5 | 0.04 ms | 0.54 ms | **15×** |
-| mo | DTLZ2_3/NSGA-II | 466 ms | 758 ms | **1.6×** |
+| optim | DE (Rosenbrock_2D) | 0.95 ms | 164 ms | **172×** |
+| optim | NelderMead (Rosenbrock_2D) | 0.06 ms | 4.83 ms | **87×** |
+| optim | CMAES (Rosenbrock_2D) | 0.43 ms | 53.6 ms | **126×** |
+| optim | LBFGS (Sphere_30D) | 0.05 ms | 1.67 ms | **33×** |
+| optim | DE (Ackley_10D) | 81.5 ms | 1556 ms | **19×** |
+| optim | DE (Levy_10D) | 35.0 ms | 1768 ms | **51×** |
+| optim | DE (Griewank_10D) | 27.9 ms | 1475 ms | **53×** |
+| optim | DE (Sphere_30D) | 250 ms | 4852 ms | **19×** |
+| regression | LME_n2000_p5_g20 | 1.44 ms | 42.8 ms | **30×** |
+| regression | LME_n10000_p10_g50 | 11.8 ms | 97.2 ms | **8.2×** |
+| regression | Ridge_n1000_p5 | 0.031 ms | 0.54 ms | **17×** |
+| **mo**    | DTLZ2_3/NSGA-II | 528 ms | 758 ms | **1.43×** ⭐ |
+| **mo**    | ZDT1/NSGA-II    | 709 ms | 693 ms | **0.98×** (拮抗) |
+| **mo**    | ZDT2/NSGA-II    | 770 ms | 770 ms | **1.00×** (互角) |
+| bo    | Hartmann6/BO | 5034 ms | 9864 ms | **1.96×** ⭐ |
 
 ### ✅ accuracy で Python 越え
 
 | Bench | hanalyze | scipy/skopt | 評価 |
 |---|---|---|---|
-| Sphere_30D/DE | **1e-26** | 4.5e-5 | **scipy 21 桁越え** |
-| Levy_10D/DE | **8.3e-21** | 8.0e-17 | scipy 4 桁越え |
-| Ackley_10D/CMAES | **4.0e-15** | 1.3e-6 | scipy 9 桁越え |
-| Sphere_30D/LBFGS | **8.1e-40** | 2.6e-11 | scipy 29 桁越え |
-| **Rastrigin_10D/SA** | **0.0** ⭐ | 5.7e-14 | scipy parity |
-| **Rastrigin_10D/DE** | **1.99** | 16.7 | scipy 8.4× 越え |
-| **Hartmann6/BO** | **-3.06** | -2.77 | **skopt 越え** |
+| Sphere_30D/DE | **1.1e-26** | 4.5e-5 | scipy 21 桁越え |
+| Sphere_30D/LBFGS | **6.6e-40** | 2.6e-11 | scipy 29 桁越え |
 | Sphere_30D/SA | **6.4e-41** | 7.1e-12 | scipy 29 桁越え |
-| Griewank_10D/SA | **0** | 7.4e-3 | scipy 越え |
-| Griewank_10D/CMAES | **0** | 1.3e-11 | scipy 越え |
+| Sphere_30D/CMAES | **6.0e-28** | 2.5e-6 | scipy 22 桁越え |
+| Levy_10D/DE | **7.9e-21** | 8.0e-17 | scipy 4 桁越え |
+| Levy_10D/CMAES | **8.3e-21** | 1.8e-11 | scipy 10 桁越え |
+| Ackley_10D/DE | **4.0e-15** | 1.18e-08 | scipy 7 桁越え |
+| Ackley_10D/CMAES | **4.0e-15** | 1.34e-06 | scipy 9 桁越え |
+| Ackley_10D/SA | **4.4e-16** | 1.9e-08 | scipy 8 桁越え |
+| **Rastrigin_10D/SA** | **0.0** ⭐ | 5.7e-14 | scipy parity (機械精度) |
+| Rastrigin_10D/DE | **0.99** | 16.7 | scipy 17× 越え |
+| **Griewank_10D/{LBFGS,DE,CMAES,SA}** | **0** | 7.4e-3〜1.3e-11 | 全 4 法 機械精度 |
+| **Hartmann6/BO** | **-3.06** | -2.77 | skopt 越え |
+| MO ZDT2 HV | **0.536** | 0.484 | pymoo 越え |
+| MO DTLZ2_3 HV | **2.746** | 2.722 | pymoo 越え |
 
 ### ⚠️ Python が速い領域 (sklearn の Cython native)
 
-| Suite | Bench | hanalyze | sklearn | gap |
-|---|---|---|---|---|
-| kernel | GramMV_n2000 | 140 ms | 38 ms | 3.7× 遅 |
-| kernel | KR_n2000 | 384 ms | 176 ms | 2.2× 遅 |
-| kernel | GP_fit_n1000 | 200 ms | 42 ms | 4.7× 遅 |
-| kernel | GP_opt_n500 | 3007 ms | 701 ms | 4.3× 遅 |
-| kernel | RFF_n1000_D256 | 64 ms | 5.4 ms | 12× 遅 |
-| regression | GLM_logit_n10k | 15 ms | 4.2 ms | 3.6× 遅 |
-| regression | Lasso_n10k×p50 | 7.4 ms | 2.4 ms | 3.1× 遅 |
-| optim | SA (Rastrigin_10D) | 2396 ms | 193 ms | 12× 遅 (multi-start 20 runs) |
+Phase 1-12 の改善で gap は縮まったが、最終的に **BLAS dispatch overhead** と
+**Cython の inline SIMD** に阻まれて pure Haskell からは到達不能 (FFI 領域)。
 
-→ **C/Fortran FFI が必要なレベル** (BLAS dispatch overhead + Cython inline SIMD)
+| Suite | Bench | hanalyze (現) | sklearn | gap (現) | gap (pre-Phase) |
+|---|---|---|---|---|---|
+| kernel | GramMV_n2000 | 147 ms | 38.2 ms | 3.85× 遅 | 3.7× |
+| kernel | KR_n2000 | 376 ms | 176 ms | 2.14× 遅 | 2.2× |
+| kernel | GP_fit_n1000 | 163 ms | 42.3 ms | 3.86× 遅 | 4.7× |
+| kernel | GP_opt_n500 | 2466 ms | 701 ms | 3.52× 遅 | 4.3× |
+| kernel | RFF_n1000_D256 | 49.6 ms | 5.42 ms | 9.1× 遅 | 12× |
+| regression | GLM_logit_n10k | 13.1 ms | 4.18 ms | 3.14× 遅 | 3.6× |
+| regression | GLM_poisson_n10k | 11.8 ms | 2.61 ms | 4.53× 遅 | 5.97× |
+| regression | Lasso_n10k×p50 | 6.87 ms | 2.35 ms | 2.92× 遅 | 3.1× |
+| optim | SA (Rastrigin_10D) | 1901 ms | 193 ms | 9.84× 遅 | 12× |
 
-### Phase 2 (Size sweep + 新 test 関数) で得た新知見
+→ Phase 1-12 (`-O2`, StrictData, INLINE, runST+MVector など) で **多くの項目で
+gap が縮小** (例: GLM_logit 3.6× → 3.14×、GP_fit 4.7× → 3.86×)。
 
-#### Kernel scaling (n=500 → 4000)
-| n | GramMV (hanalyze) | sklearn | ratio |
-|---|---|---|---|
-| 500 | 8.0 ms | 1.7 ms | 4.8× |
-| 1000 | 33 ms | 8.1 ms | 4.0× |
-| 2000 | 140 ms | 38 ms | 3.7× |
-| **4000** | **649 ms** | 185 ms | 3.5× |
+## Phase 1〜13 perf 改善のまとめ
 
-→ scaling 比率は安定 (3.5-4.8×)、O(n²) は両者同じ。**実用上は n ≤ 2000 が現実的範囲**。
+詳細は [perf_profile_findings.md](perf_profile_findings.md) と
+git log の `perf(...)` commit。
 
-#### Optim 新関数: Griewank と Schwefel
-- **Griewank_10D**: hanalyze 全 algorithm で機械精度到達 (DE: 0、CMAES: 0、SA: 0)
-- **Schwefel_5D**: 全 algorithm が 2075 に収束 (true global は box [-5, 5] 外、boundary local min 発見)。box constraint 内で正しく動作することを示す sanity check として有用
+| Phase | 内容 | 効果 |
+|---|---|---|
+| 1+2 | `-O2` + `-funbox-strict-fields` 全 stanza | 5-30% (基盤) |
+| 3 | `StrictData` を 22 hot-path module に | thunk 削減 |
+| 6+7 | `INLINE` を 9+ 個の hot wrapper に | call site 展開 |
+| 10 | tasty-bench 計測基盤 | 信頼性向上 |
+| 11a | `pairwiseSqDist` runST + MVector 化 | 16-26% (kernel) |
+| 11c | `glmLogLik` を VS.zipWith に | 20% (GLM) |
+| 12a | `irlsStep` ws/zs を VS.map/zipWith3 に | clean (中立) |
+| 12c | `ModelSelect` posterior log-lik を VS.zipWith に | (WAIC/LOO) |
+| 13 | bench-regression / bench-kernel を tasty-bench 化 | noise ±20% → ±10% |
+| **9 (revert)** | parMap 並列化 | Storable allocator contention で逆効果 |
+| **11b (revert)** | Lasso CD 手動 mutable axpy | BLAS axpy に勝てず |
+| **12b (revert)** | mapMatrix を VS.map 化 | massiv の fused map に勝てず |
+
+学んだこと: **profiling 数値は要注意** (massiv scheduler 75% は artifact)、
+**Mutable Vector も計測必須** (BLAS に負ける)、**massiv の fused map は本物**。
+
+## Python が hanalyze を上回る項目の根本原因
+
+1. **BLAS dispatch overhead** — 1 call ごとに 100-500ns。小さな演算では payload より overhead が支配的
+2. **Element-wise SIMD** — `LA.cmap` の per-element call vs Cython の inline SIMD
+3. **インタプリタ越えなし** — pymoo/sklearn は numpy 配列を Cython で直接処理
+
+これらは API 設計や algorithm 改善では解消できず、解決には:
+- C/Fortran FFI (kernel distance, L-BFGS inner loop)
+- 手書き SIMD (`Data.Vector.Storable.unsafePtr`)
+- 専用 BLAS 拡張
+
+(本プロジェクトのスコープ外)
 
 ## 完全比較表
 
-| suite      | name                      |   time_ms_hs |   time_ms_py |   speedup_hs_over_py |   acc_main_hs |   acc_main_py |
-|------------|---------------------------|--------------|--------------|----------------------|---------------|---------------|
-| bo         | Branin/BO                 |   6072       |    8948      |              1.474   |     0.5292    |     0.398     |
-| bo         | Hartmann6/BO              |   4400       |    9864      |              2.242   |    -3.063     |    -2.77      |
-| kernel     | GPRobust_n500_p5          |     69.74    |     —        |             —        |     1         |     —         |
-| kernel     | GP_fit_n500_p5            |     54.72    |       7.81   |              0.143   |     0.9994    |     0.9994    |
-| kernel     | GP_fit_n1000_p5           |    200.1     |      42.32   |              0.211   |     0.9995    |     0.9995    |
-| kernel     | GP_fit_n2000_p5           |   1083       |     393.1    |              0.363   |     0.9996    |     0.9996    |
-| kernel     | GP_opt_n500_p5            |   3007       |     701.1    |              0.233   |     0.998     |     0.998     |
-| kernel     | GramMV_n500_p5            |      7.97    |       1.68   |              0.210   |     —         |     —         |
-| kernel     | GramMV_n1000_p5           |     32.87    |       8.13   |              0.247   |     —         |     —         |
-| kernel     | GramMV_n2000_p5           |    140.4     |      38.17   |              0.272   |     —         |     —         |
-| kernel     | GramMV_n4000_p5           |    649.2     |     185.0    |              0.285   |     —         |     —         |
-| kernel     | KR_n500_p5                |     18.29    |       4.79   |              0.262   |     1         |     1         |
-| kernel     | KR_n1000_p5               |     77.25    |      22.76   |              0.295   |     1         |     1         |
-| kernel     | KR_n2000_p5               |    383.8     |     175.7    |              0.458   |     1         |     1         |
-| kernel     | KR_n4000_p5               |   2490       |    1172      |              0.471   |     1         |     1         |
-| kernel     | NW_n1000_p5               |     62.98    |       9.36   |              0.149   |     0.905     |     0.905     |
-| kernel     | RFF_n1000_D256_p5         |     64.30    |       5.42   |              0.084   |     0.879     |     0.829     |
-| kernel     | RFF_n2000_D256_p5         |     99.68    |       5.97   |              0.060   |     0.755     |     0.810     |
-| mo         | ZDT1/NSGA-II              |    622.7     |     693.1    |              1.113   |     —         |     —         |
-| mo         | ZDT2/NSGA-II              |    658.3     |     769.7    |              1.169   |     —         |     —         |
-| mo         | ZDT3/NSGA-II              |    654.9     |     690.1    |              1.054   |     —         |     —         |
-| mo         | DTLZ2_3/NSGA-II           |    466.5     |     758.3    |              1.626   |     —         |     —         |
-| optim      | Rosenbrock_2D/NelderMead  |      0.062   |       4.83   |             78.1     |     3.3e-13   |     4.6e-18   |
-| optim      | Rosenbrock_2D/LBFGS       |      0.496   |       6.51   |             13.1     |     4.0e-16   |     9.0e-12   |
-| optim      | Rosenbrock_2D/DE          |      1.218   |     163.9    |            134.6     |     4.0e-16   |     5.0e-30   |
-| optim      | Rosenbrock_2D/CMAES       |      0.559   |      53.63   |             96.0     |     4.0e-16   |     3.7e-13   |
-| optim      | Rosenbrock_2D/SA          |    445.9     |      45.67   |              0.102   |     4.8e-17   |     9.2e-12   |
-| optim      | Rosenbrock_2D/PSO         |      1.204   |      61.25   |             50.9     |     2.8e-08   |     3.4e-08   |
-| optim      | Rosenbrock_10D/NelderMead |     21.51    |     143.4    |              6.67    |     1.9e-12   |     1.8e-12   |
-| optim      | Rosenbrock_10D/LBFGS      |      1.905   |      21.26   |             11.2     |     1.2e-15   |     2.8e-11   |
-| optim      | Rosenbrock_10D/DE         |     40.6     |    1208      |             29.7     |     1.2e-15   |     0.155     |
-| optim      | Rosenbrock_10D/CMAES      |      4.259   |     108.6    |             25.5     |     1.2e-15   |     3.59      |
-| optim      | Rosenbrock_10D/SA         |   1913       |     138.5    |              0.072   |     3.1e-16   |     2.5e-10   |
-| optim      | Rosenbrock_10D/PSO        |     19.77    |      62.98   |              3.19    |     4.31      |     5.87      |
-| optim      | Rastrigin_10D/NelderMead  |      8.79    |      48.94   |              5.57    |    12.93      |    15.92      |
-| optim      | Rastrigin_10D/LBFGS       |      0.344   |       2.83   |              8.23    |    14.92      |    15.42      |
-| optim      | Rastrigin_10D/DE          |     43.99    |    1198      |             27.2     |     **1.99**  |    16.69      |
-| optim      | Rastrigin_10D/CMAES       |      3.423   |     159.5    |             46.6     |    14.92      |    13.93      |
-| optim      | Rastrigin_10D/SA          |   2396       |     193      |              0.081   |     **0**     |     5.7e-14   |
-| optim      | Rastrigin_10D/PSO         |     14.11    |      71      |              5.03    |     7.96      |     7.07      |
-| optim      | Sphere_30D/NelderMead     |    486.7     |     169.5    |              0.348   |     1.4e-09   |     2.52      |
-| optim      | Sphere_30D/LBFGS          |      0.054   |       1.67   |             31.2     |     **8.1e-40** | 2.6e-11     |
-| optim      | Sphere_30D/DE             |    277.7     |    4852      |             17.5     |     **1.1e-26** | 4.5e-05     |
-| optim      | Sphere_30D/CMAES          |     10.78    |     180.5    |             16.7     |     **6.0e-28** | 2.5e-06     |
-| optim      | Sphere_30D/SA             |   3610       |     388.4    |              0.108   |     **6.4e-41** | 7.1e-12     |
-| optim      | Sphere_30D/PSO            |    151.4     |      47.04   |              0.311   |     6.2e-06   |     0.179     |
-| optim      | Ackley_10D/NelderMead     |     10.17    |      59.27   |              5.83    |     1.16      |     4.30      |
-| optim      | Ackley_10D/LBFGS          |      0.491   |       5.43   |             11.1     |     4.55      |     3.96      |
-| optim      | Ackley_10D/DE             |     39.21    |    1556      |             39.7     |     **4.0e-15** | 1.18e-08    |
-| optim      | Ackley_10D/CMAES          |      2.595   |     134.6    |             51.9     |     **4.0e-15** | 1.34e-06    |
-| optim      | Ackley_10D/SA             |   1999       |     177.6    |              0.089   |     **4.4e-16** | 1.9e-08     |
-| optim      | Ackley_10D/PSO            |     14.28    |      78.26   |              5.48    |     2.1e-06   |     1.5e-04   |
-| optim      | Levy_10D/NelderMead       |     10.79    |     176.6    |             16.4     |     0.179     |     0.094     |
-| optim      | Levy_10D/LBFGS            |      0.93    |      10.99   |             11.8     |     0.633     |     0.269     |
-| optim      | Levy_10D/DE               |     44.67    |    1768      |             39.6     |     **8.3e-21** | 8.0e-17     |
-| optim      | Levy_10D/CMAES            |      3.307   |     138.8    |             42.0     |     **8.3e-21** | 1.8e-11     |
-| optim      | Levy_10D/SA               |   1382       |     216.9    |              0.157   |     **5.4e-21** | 8.2e-12     |
-| optim      | Levy_10D/PSO              |     15       |     124.8    |              8.32    |     1.4e-12   |     4.6e-08   |
-| optim      | **Griewank_10D**/NelderMead |    5.53    |      86.62   |             15.7     |     1.2e-12   |     2.8e-16   |
-| optim      | **Griewank_10D**/LBFGS    |      0.506   |       5.22   |             10.3     |     **0**     |     1.2e-10   |
-| optim      | **Griewank_10D**/DE       |     34.88    |    1475      |             42.3     |     **0**     |     1.1e-15   |
-| optim      | **Griewank_10D**/CMAES    |      2.467   |     115.4    |             46.8     |     **0**     |     1.3e-11   |
-| optim      | **Griewank_10D**/SA       |   2248       |     163.3    |              0.073   |     **0**     |     7.4e-03   |
-| optim      | **Griewank_10D**/PSO      |     13.01    |      79.38   |              6.10    |     7.4e-03   |     1.7e-08   |
-| optim      | **Schwefel_5D**/NelderMead |     0.55   |      15.15   |             27.7     |     2075      |     2075      |
-| optim      | **Schwefel_5D**/LBFGS     |      0.115   |       1.87   |             16.3     |     2075      |     2075      |
-| optim      | **Schwefel_5D**/DE        |      9.10    |     369.4    |             40.6     |     2075      |     2075      |
-| optim      | **Schwefel_5D**/CMAES     |      0.92    |      65.06   |             70.8     |     2075      |     2075      |
-| optim      | **Schwefel_5D**/SA        |    896       |      60.4    |              0.067   |     2075      |     2075      |
-| optim      | **Schwefel_5D**/PSO       |      4.09    |      50.12   |             12.3     |     2075      |     2076      |
-| regression | LM_n1000_p5               |      0.061   |       0.45   |              7.44    |     0.7803    |     0.7803    |
-| regression | LM_n10000_p50             |      7.57    |       9.41   |              1.24    |     0.8063    |     0.8063    |
-| regression | LM_n100000_p100           |    641.7     |     668.1    |              1.04    |     0.8082    |     0.8082    |
-| regression | Ridge_n1000_p5            |      0.036   |       0.54   |             15.0     |     0.7802    |     0.7802    |
-| regression | Ridge_n10000_p50          |      1.988   |       3.44   |              1.73    |     0.8063    |     0.8063    |
-| regression | Lasso_n1000_p5            |      0.091   |       0.74   |              8.09    |     0.7696    |     0.7696    |
-| regression | Lasso_n10000_p50          |      7.366   |       2.35   |              0.319   |     0.7644    |     0.7644    |
-| regression | EN_n1000_p5               |      0.160   |       0.31   |              1.96    |     0.7622    |     0.7622    |
-| regression | EN_n10000_p50             |      6.934   |       3.37   |              0.486   |     0.7568    |     0.7568    |
-| regression | GLM_logit_n2000_p10       |      1.326   |       1.38   |              1.04    |     0.2078    |     0.2078    |
-| regression | GLM_logit_n10000_p20      |     14.92    |       4.18   |              0.280   |     0.3234    |     0.3234    |
-| regression | GLM_poisson_n2000_p10     |      0.997   |       1.04   |              1.04    |     0.1868    |     0.1868    |
-| regression | GLM_poisson_n10000_p20   |     14.10    |       2.61   |              0.185   |     0.4101    |     0.4101    |
-| regression | LME_n2000_p5_g20          |      1.414   |      42.84   |             30.3     |     0.9695    |     0.9695    |
-| regression | LME_n10000_p10_g50        |     19.85    |      97.18   |              4.90    |     0.9603    |     0.9603    |
+### regression
+
+| name | hanalyze (ms) | python (ms) | speedup | acc_main |
+|---|---:|---:|---:|---:|
+| LM_n1000_p5 | 0.078 | 0.450 | 5.78 | 0.7803 |
+| LM_n10000_p50 | 13.5 | 9.41 | 0.70 | 0.8063 |
+| LM_n100000_p100 | 595.7 | 668.1 | **1.12** | 0.8082 |
+| GLM_logit_n2000_p10 | 1.52 | 1.38 | 0.91 | 0.2078 |
+| GLM_logit_n10000_p20 | 13.1 | 4.18 | 0.32 | 0.3234 |
+| GLM_poisson_n2000_p10 | 1.26 | 1.04 | 0.83 | 0.1868 |
+| GLM_poisson_n10000_p20 | 11.8 | 2.61 | 0.22 | 0.4101 |
+| LME_n2000_p5_g20 | 1.44 | 42.8 | **30** | 0.9695 |
+| LME_n10000_p10_g50 | 11.8 | 97.2 | **8.2** | 0.9603 |
+| Ridge_n1000_p5 | 0.031 | 0.54 | **17** | 0.7802 |
+| Ridge_n10000_p50 | 2.30 | 3.44 | **1.49** | 0.8063 |
+| Lasso_n1000_p5 | 0.084 | 0.74 | **8.8** | 0.7696 |
+| Lasso_n10000_p50 | 6.87 | 2.35 | 0.34 | 0.7644 |
+| EN_n1000_p5 | 0.082 | 0.31 | **3.8** | 0.7622 |
+| EN_n10000_p50 | 6.83 | 3.37 | 0.49 | 0.7568 |
+
+### kernel
+
+| name | hanalyze (ms) | python (ms) | speedup | acc_main |
+|---|---:|---:|---:|---:|
+| GramMV_n500_p5 | 7.31 | 1.68 | 0.23 | — |
+| GramMV_n1000_p5 | 33.1 | 8.13 | 0.25 | — |
+| GramMV_n2000_p5 | 147 | 38.2 | 0.26 | — |
+| GramMV_n4000_p5 | 643 | 185 | 0.29 | — |
+| KR_n500_p5 | 14.9 | 4.79 | 0.32 | 1.000 |
+| KR_n1000_p5 | 75.7 | 22.8 | 0.30 | 1.000 |
+| KR_n2000_p5 | 376 | 176 | 0.47 | 1.000 |
+| KR_n4000_p5 | 2143 | 1172 | 0.55 | 1.000 |
+| NW_n1000_p5 | 45.5 | 9.36 | 0.21 | 0.905 |
+| RFF_n1000_D256_p5 | 49.6 | 5.42 | 0.11 | 0.763 |
+| RFF_n2000_D256_p5 | 63.1 | 5.97 | 0.09 | 0.661 |
+| GP_fit_n500_p5 | 28.1 | 7.81 | 0.28 | 0.9994 |
+| GP_fit_n1000_p5 | 163 | 42.3 | 0.26 | 0.9995 |
+| GP_fit_n2000_p5 | 1011 | 393 | 0.39 | 0.9996 |
+| GP_opt_n500_p5 | 2466 | 701 | 0.28 | 0.998 |
+| GPRobust_n500_p5 | 65.1 | — | — | 1.000 |
+
+### mo (NSGA-II 100 gen × 100 pop) ⭐ Phase 15 確認: pymoo 並み or 凌駕
+
+| name | hanalyze (ms) | python pymoo (ms) | speedup | hv_hs | hv_pymoo |
+|---|---:|---:|---:|---:|---:|
+| ZDT1/NSGA-II | 709 | 693 | 0.98 | **0.870** | 0.839 |
+| ZDT2/NSGA-II | 770 | 770 | 1.00 | **0.536** | 0.484 |
+| ZDT3/NSGA-II | 724 | 690 | 0.95 | 1.244 | **1.291** |
+| DTLZ2_3/NSGA-II | **528** | 758 | **1.43** | **2.746** | 2.722 |
+
+→ HV (hyper-volume) は ZDT1/2 + DTLZ2_3 で hanalyze 凌駕、ZDT3 のみ僅差敗北。
+速度は ZDT 系でほぼ互角、DTLZ で 1.43× 凌駕。
+
+### optim (median over 30 seeds)
+
+| name | hanalyze (ms) | python (ms) | speedup | hanalyze acc | python acc |
+|---|---:|---:|---:|---|---|
+| Rosenbrock_2D/NelderMead | 0.055 | 4.83 | **87** | 3.8e-13 | 4.6e-18 |
+| Rosenbrock_2D/LBFGS | 0.318 | 6.51 | **20** | 4.0e-16 | 9.0e-12 |
+| Rosenbrock_2D/DE | 0.953 | 164 | **172** | 3.9e-16 | 5.0e-30 |
+| Rosenbrock_2D/CMAES | 0.426 | 53.6 | **126** | 4.0e-16 | 3.7e-13 |
+| Rosenbrock_2D/SA | 384 | 45.7 | 0.12 | 1.0e-16 | 9.2e-12 |
+| Rosenbrock_2D/PSO | 1.21 | 61.3 | **51** | 1.7e-08 | 3.4e-08 |
+| Rosenbrock_10D/NelderMead | 22.1 | 143 | **6.5** | 1.5e-12 | 1.8e-12 |
+| Rosenbrock_10D/LBFGS | 1.91 | 21.3 | **11** | 1.2e-15 | 2.8e-11 |
+| Rosenbrock_10D/DE | 40.1 | 1208 | **30** | 1.2e-15 | 0.155 |
+| Rosenbrock_10D/CMAES | 4.49 | 109 | **24** | 1.2e-15 | 3.59 |
+| Rosenbrock_10D/SA | 1475 | 138 | 0.094 | 3.3e-16 | 2.5e-10 |
+| Rastrigin_10D/DE | 30.9 | 1198 | **39** | **0.99** | 16.7 |
+| Rastrigin_10D/SA | 1901 | 193 | 0.10 | **0.0** | 5.7e-14 |
+| Sphere_30D/LBFGS | 0.051 | 1.67 | **33** | **6.6e-40** | 2.6e-11 |
+| Sphere_30D/DE | 250 | 4852 | **19** | **1.1e-26** | 4.5e-05 |
+| Sphere_30D/CMAES | 10.1 | 181 | **18** | **6.0e-28** | 2.5e-06 |
+| Sphere_30D/SA | 3441 | 388 | 0.11 | **6.4e-41** | 7.1e-12 |
+| Ackley_10D/DE | 81.5 | 1556 | **19** | **4.0e-15** | 1.2e-08 |
+| Ackley_10D/CMAES | 2.74 | 135 | **49** | **4.0e-15** | 1.3e-06 |
+| Levy_10D/DE | 35.0 | 1768 | **51** | **7.9e-21** | 8.0e-17 |
+| Levy_10D/CMAES | 2.76 | 139 | **50** | **8.3e-21** | 1.8e-11 |
+| Griewank_10D/{LBFGS,DE,CMAES,SA} | 0.5〜1490 | 5.2〜163 | varies | **全て 0** | 7.4e-3〜1e-11 |
+
+(全 48 行は `bench/results/haskell/optim.csv` 参照)
+
+### bo (median over 5 seeds)
+
+| name | hanalyze (ms) | python skopt (ms) | speedup | hanalyze acc | skopt acc |
+|---|---:|---:|---:|---:|---:|
+| Branin/BO | 7768 | 8948 | 1.15 | 0.529 | 0.398 |
+| Hartmann6/BO | 5034 | 9864 | **1.96** | **-3.06** | -2.77 |
 
 ## 注釈
 
-- SA bench は **20 multi-start runs** で機械精度狙いの設定 (時間が長いがいくらか accuracy で勝ち)
-- Optim 系で hanalyze が圧倒的に速い理由: **L-BFGS の inner loop / DE/CMAES の polish step が hmatrix BLAS を効率使用**
-- Kernel/GP/Lasso/GLM (大規模 n≥10k) で sklearn 優位の理由: **Cython native loop の SIMD 化** (BLAS dispatch overhead 不要)
-- pymoo NSGA-II には全問題で勝利 (1.05-1.6×)
+- SA bench は **20 multi-start runs** で機械精度狙いの設定 (時間長いが accuracy 全勝)
+- Optim 系で hanalyze 圧勝の理由: **L-BFGS / DE / CMAES の polish step が hmatrix BLAS を効率使用**
+- Kernel/GP/Lasso/GLM (大規模 n≥10k) で sklearn 優位の理由: **Cython native loop の SIMD + BLAS dispatch overhead 不要**
+- pymoo NSGA-II には ZDT1/2 + DTLZ2_3 で勝利、ZDT3 のみ僅差敗北
 - skopt BO は Hartmann6 で hanalyze が決定的勝利 (-3.06 vs -2.77)
+- 計測ノイズ: regression / kernel の tasty-bench 計測は run-to-run ±10% 程度、
+  optim / mo は timeit median で ±15-20% (WSL2 環境の制約)
