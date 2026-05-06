@@ -1,23 +1,21 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE BangPatterns #-}
 -- | Random forest for regression (CART + bagging + random feature subset).
 --
--- Tree construction:
+-- /Performance/: this module was ported in B9b from a list-based
+-- implementation to a row-index permutation scheme, mirroring the
+-- 'Model.DecisionTree' refactor:
 --
---   1. At each node, sample @mtry@ features at random (without
---      replacement, @mtry < d@).
---   2. For each feature, try the best split (maximum variance reduction).
---   3. Split the node and recurse.
---   4. Leaf conditions: @depth ≥ maxDepth@, fewer than @minSamples@ in
---      the node, or near-zero variance.
+--   * Single shared @LA.Matrix Double@ feature matrix.
+--   * @VU.Vector Int@ row indices recurse through subtrees.
+--   * Per-feature best split via 'Data.Vector.Algorithms.Intro' sort
+--     and incremental sum / sum-of-squares sweep.
+--   * Bootstrap = random index Vector (no row data copied).
 --
--- Forest:
---
---   * Build @n_trees@ trees on bootstrap samples.
---   * Predict with the mean across trees.
---   * Feature importance: per-feature sum of variance reductions across
---     all splits that used the feature.
+-- The classic 'fitRF' over @[[Double]] / [Double]@ is preserved as a
+-- backwards-compatibility wrapper that calls 'fitRFV'.
 module Model.RandomForest
-  ( -- * 単一決定木
+  ( -- * Single regression tree
     Tree (..)
   , RFConfig (..)
   , defaultRFConfig
@@ -26,40 +24,41 @@ module Model.RandomForest
     -- * Forest
   , RandomForest (..)
   , fitRF
+  , fitRFV
   , predictRF
   , featureImportance
   ) where
 
-import qualified Data.Vector as V
-import qualified System.Random.MWC as MWC
-import Control.Monad (replicateM)
-import Data.List (sort, foldl')
-import qualified Data.IORef
-import Data.IORef (newIORef, readIORef, modifyIORef')
+import qualified Data.Vector                  as V
+import qualified Data.Vector.Unboxed          as VU
+import qualified Data.Vector.Unboxed.Mutable  as VUM
+import qualified Data.Vector.Algorithms.Intro as Intro
+import qualified Numeric.LinearAlgebra        as LA
+import qualified System.Random.MWC            as MWC
+import           Control.Monad                (replicateM)
+import           Control.Monad.ST             (runST)
+import           Data.IORef                   (IORef, newIORef, readIORef,
+                                               modifyIORef')
 
 -- ---------------------------------------------------------------------------
--- 型
+-- Types
 -- ---------------------------------------------------------------------------
 
 -- | A regression tree node.
 data Tree
-  = Leaf Double                       -- ^ Leaf prediction (mean of @y@ in the node).
-  | Node !Int !Double !Tree !Tree     -- ^ Split feature index, threshold,
-                                      --   left child (@≤@), right child (@>@).
+  = Leaf !Double
+  | Node !Int !Double !Tree !Tree
   deriving (Show)
 
 -- | Random-forest configuration.
 data RFConfig = RFConfig
-  { rfTrees      :: Int       -- ^ Number of trees (default 100).
-  , rfMaxDepth   :: Int       -- ^ Maximum tree depth (default 12).
-  , rfMinSamples :: Int       -- ^ Minimum samples per leaf (default 3).
-  , rfMtry       :: Maybe Int -- ^ Features tried per split
-                              --   (default @max(1, d/3)@).
-  , rfBootstrap  :: Bool      -- ^ Use bootstrap sampling (default 'True').
+  { rfTrees      :: !Int
+  , rfMaxDepth   :: !Int
+  , rfMinSamples :: !Int
+  , rfMtry       :: !(Maybe Int)
+  , rfBootstrap  :: !Bool
   } deriving (Show)
 
--- | Default configuration: 100 trees, max depth 12, min-samples 3,
--- default mtry, bootstrap enabled.
 defaultRFConfig :: RFConfig
 defaultRFConfig = RFConfig
   { rfTrees      = 100
@@ -69,137 +68,219 @@ defaultRFConfig = RFConfig
   , rfBootstrap  = True
   }
 
--- | A trained random forest.
 data RandomForest = RandomForest
-  { rfTreesV     :: ![Tree]              -- ^ The constituent trees.
-  , rfNFeatures  :: !Int                 -- ^ Number of input features @d@.
-  , rfImportance :: !(V.Vector Double)   -- ^ Per-feature accumulated variance reduction.
+  { rfTreesV     :: ![Tree]
+  , rfNFeatures  :: !Int
+  , rfImportance :: !(V.Vector Double)
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
--- 単一木の構築
+-- Vector-based fit (primary)
 -- ---------------------------------------------------------------------------
 
--- | Build a single CART regression tree from the @n × d@ feature matrix
--- and length-@n@ response.
-buildTree :: RFConfig
-          -> [[Double]]            -- ^ Rows = samples, columns = features.
-          -> [Double]              -- ^ Response @y@.
-          -> MWC.GenIO
-          -> IO Tree
-buildTree cfg rows ys gen = do
-  -- 累計 importance を IORef に持って外部から参照可能にしたいが、
-  -- ここでは buildTree は単一木のみ返す (importance は fitRF で集計)。
-  buildNode cfg rows ys 0 gen
+fitRFV :: RFConfig
+       -> LA.Matrix Double
+       -> VU.Vector Double
+       -> MWC.GenIO
+       -> IO RandomForest
+fitRFV cfg x y gen = do
+  let !n = VU.length y
+      !d = LA.cols x
+  impRef <- newIORef (V.replicate d 0.0)
+  trees <- replicateM (rfTrees cfg) $ do
+    !idx <- if rfBootstrap cfg
+              then bootstrapIdx n gen
+              else pure (VU.enumFromN 0 n)
+    let !t = buildTreeV cfg x y idx 0
+    accumulateImportance impRef t
+    pure t
+  imp <- readIORef impRef
+  pure RandomForest
+    { rfTreesV     = trees
+    , rfNFeatures  = d
+    , rfImportance = imp
+    }
 
-buildNode :: RFConfig -> [[Double]] -> [Double] -> Int -> MWC.GenIO -> IO Tree
-buildNode cfg rows ys depth gen
-  | length ys <= rfMinSamples cfg
-      || depth >= rfMaxDepth cfg
-      || variance ys < 1e-12 =
-      return (Leaf (mean ys))
+-- | Backwards-compatible list-based fit.
+fitRF :: RFConfig -> [[Double]] -> [Double] -> MWC.GenIO -> IO RandomForest
+fitRF cfg xs ys gen
+  | null xs   = pure (RandomForest [] 0 V.empty)
+  | otherwise = fitRFV cfg (LA.fromLists xs) (VU.fromList ys) gen
+
+-- | Single-tree builder kept for the symmetry of the old API. Most
+-- callers should use 'fitRFV'.
+buildTree :: RFConfig -> [[Double]] -> [Double] -> MWC.GenIO -> IO Tree
+buildTree cfg rows ys gen
+  | null rows = pure (Leaf 0)
   | otherwise = do
-      let d = if null rows then 0 else length (head rows)
-          mtry = case rfMtry cfg of
-            Just m  -> max 1 (min d m)
-            Nothing -> max 1 (d `div` 3)
-      featIxs <- sampleWithoutReplacement mtry d gen
-      mBest <- bestSplit featIxs rows ys
-      case mBest of
-        Nothing -> return (Leaf (mean ys))
-        Just (j, thr, _gain) -> do
-          let (rowsL, ysL, rowsR, ysR) = splitOn j thr rows ys
-          if null ysL || null ysR
-             then return (Leaf (mean ys))
-             else do
-               left  <- buildNode cfg rowsL ysL (depth + 1) gen
-               right <- buildNode cfg rowsR ysR (depth + 1) gen
-               return (Node j thr left right)
+      let !x = LA.fromLists rows
+          !y = VU.fromList ys
+          !n = VU.length y
+      idx <- if rfBootstrap cfg
+               then bootstrapIdx n gen
+               else pure (VU.enumFromN 0 n)
+      pure (buildTreeV cfg x y idx 0)
 
--- | 復元なしランダムサンプリング: 0..d-1 から k 個をランダム選択。
-sampleWithoutReplacement :: Int -> Int -> MWC.GenIO -> IO [Int]
-sampleWithoutReplacement k n gen
-  | k >= n    = return [0 .. n - 1]
-  | otherwise = do
-      idxs <- replicateM k (MWC.uniformR (0, n - 1) gen)
-      -- 重複を排除して目標 k 個になるまでサンプル追加 (簡易版)
-      let dedup []     = []
-          dedup (x:xs) = x : dedup (filter (/= x) xs)
-          unique = dedup idxs
-      if length unique >= k
-        then return (take k unique)
-        else do
-          extra <- replicateM k (MWC.uniformR (0, n - 1) gen)
-          return (take k (dedup (unique ++ extra)))
-
--- | 各特徴インデックスに対して最適な split を探し、最大 variance reduction を返す。
-bestSplit :: [Int] -> [[Double]] -> [Double] -> IO (Maybe (Int, Double, Double))
-bestSplit featIxs rows ys = do
-  let n     = length ys
-      yMean = mean ys
-      yVar  = variance ys * fromIntegral n
-      cands = [ trySplit j rows ys n yMean yVar | j <- featIxs ]
-      valid = [ (j, thr, gain) | Just (j, thr, gain) <- cands ]
-  if null valid
-    then return Nothing
-    else do
-      let best = foldl1 (\a@(_, _, ga) b@(_, _, gb) ->
-                          if gb > ga then b else a) valid
-      return (Just best)
-
--- | 1 特徴に対して最適な閾値を探す。
-trySplit :: Int -> [[Double]] -> [Double] -> Int -> Double -> Double
-         -> Maybe (Int, Double, Double)
-trySplit j rows ys _n _yMean parentSS =
-  let pairs = sort [ (xs !! j, y) | (xs, y) <- zip rows ys ]
-      vals  = map fst pairs
-      ysSorted = map snd pairs
-      uniqueXs = removeAdj vals
-      candidates = [ (a + b) / 2
-                   | (a, b) <- zip uniqueXs (drop 1 uniqueXs) ]
-      best = foldl' improve Nothing candidates
-      improve cur thr =
-        let (left, right) = splitAtThr thr pairs
-            nL = length left
-            nR = length right
-        in if nL == 0 || nR == 0 then cur
-           else
-             let yL = map snd left
-                 yR = map snd right
-                 ssL = variance yL * fromIntegral nL
-                 ssR = variance yR * fromIntegral nR
-                 gain = parentSS - ssL - ssR
-             in case cur of
-                  Nothing -> Just (j, thr, gain)
-                  Just (_, _, g0) | gain > g0 -> Just (j, thr, gain)
-                  _ -> cur
-      _ = ysSorted
-  in best
-  where
-    removeAdj []  = []
-    removeAdj [x] = [x]
-    removeAdj (x:y:rs)
-      | x == y = removeAdj (y:rs)
-      | otherwise = x : removeAdj (y:rs)
-
-splitAtThr :: Double -> [(Double, Double)] -> ([(Double, Double)], [(Double, Double)])
-splitAtThr thr xs = (filter (\(v, _) -> v <= thr) xs,
-                     filter (\(v, _) -> v >  thr) xs)
-
-splitOn :: Int -> Double -> [[Double]] -> [Double]
-        -> ([[Double]], [Double], [[Double]], [Double])
-splitOn j thr rows ys =
-  let pairs = zip rows ys
-      (lp, rp) = foldr go ([], []) pairs
-      go (xs, y) (l, r)
-        | (xs !! j) <= thr = ((xs, y) : l, r)
-        | otherwise        = (l, (xs, y) : r)
-      (rowsL, ysL) = unzip lp
-      (rowsR, ysR) = unzip rp
-  in (rowsL, ysL, rowsR, ysR)
+bootstrapIdx :: Int -> MWC.GenIO -> IO (VU.Vector Int)
+bootstrapIdx n gen =
+  VU.replicateM n (MWC.uniformR (0, n - 1) gen)
 
 -- ---------------------------------------------------------------------------
--- 単一木の予測
+-- Recursive build
+-- ---------------------------------------------------------------------------
+
+buildTreeV :: RFConfig
+           -> LA.Matrix Double
+           -> VU.Vector Double
+           -> VU.Vector Int
+           -> Int
+           -> Tree
+buildTreeV cfg x y idx depth =
+  let !n      = VU.length idx
+      !subY   = VU.map (y VU.!) idx
+      !meanY  = if n == 0 then 0
+                          else VU.sum subY / fromIntegral n
+      !varY   = varianceUS subY
+  in if n <= rfMinSamples cfg
+       || depth >= rfMaxDepth cfg
+       || varY < 1e-12
+       then Leaf meanY
+       else
+         let !d    = LA.cols x
+             !mtry = case rfMtry cfg of
+                       Just m  -> max 1 (min d m)
+                       Nothing -> max 1 (d `div` 3)
+             !featIxs = pickFeats d mtry depth n
+             !mBest   = bestSplitVRF featIxs x y idx
+         in case mBest of
+              Nothing             -> Leaf meanY
+              Just (j, thr, _)    ->
+                let (lIdx, rIdx) = partitionByFeat x idx j thr
+                in if VU.null lIdx || VU.null rIdx
+                     then Leaf meanY
+                     else Node j thr
+                            (buildTreeV cfg x y lIdx (depth + 1))
+                            (buildTreeV cfg x y rIdx (depth + 1))
+
+-- | Deterministic pseudo-random feature subset using an LCG seeded by
+-- @(depth, n)@. Different nodes typically see different subsets,
+-- which is the decorrelation that random forests need at split time.
+-- Tree-level randomness comes from 'bootstrapIdx', which threads
+-- through 'MWC.GenIO'.
+pickFeats :: Int -> Int -> Int -> Int -> VU.Vector Int
+pickFeats d mtry depth n
+  | mtry >= d = VU.enumFromN 0 d
+  | otherwise =
+      let seed0 = depth * 1009 + n * 31 + 1
+          step !s = (s * 1103515245 + 12345) `mod` (2 ^ (31 :: Int))
+          go !s !chosen !left
+            | left == 0 = chosen
+            | otherwise =
+                let !s' = step s
+                    !i  = s' `mod` d
+                in if i `VU.elem` chosen
+                     then go s' chosen left
+                     else go s' (chosen `VU.snoc` i) (left - 1)
+      in go seed0 VU.empty mtry
+
+partitionByFeat :: LA.Matrix Double
+                -> VU.Vector Int
+                -> Int
+                -> Double
+                -> (VU.Vector Int, VU.Vector Int)
+partitionByFeat x idx feat thr =
+  let pred_ i = LA.atIndex x (i, feat) <= thr
+  in VU.partition pred_ idx
+
+-- ---------------------------------------------------------------------------
+-- Best split
+-- ---------------------------------------------------------------------------
+
+bestSplitVRF :: VU.Vector Int
+             -> LA.Matrix Double
+             -> VU.Vector Double
+             -> VU.Vector Int
+             -> Maybe (Int, Double, Double)
+bestSplitVRF featIxs x y idx
+  | VU.length idx < 2 = Nothing
+  | otherwise =
+      let go best j =
+            case bestSplitFeatureRF x y idx j of
+              Nothing       -> best
+              Just (thr, g) ->
+                case best of
+                  Nothing                       -> Just (j, thr, g)
+                  Just (_, _, gPrev) | g > gPrev -> Just (j, thr, g)
+                                    | otherwise -> best
+      in VU.foldl' go Nothing featIxs
+
+-- | Per-feature best split for regression: maximise variance reduction
+-- via single sort + linear sweep with running sum / sum-of-squares.
+bestSplitFeatureRF :: LA.Matrix Double
+                   -> VU.Vector Double
+                   -> VU.Vector Int
+                   -> Int
+                   -> Maybe (Double, Double)
+bestSplitFeatureRF x y idx feat = runST $ do
+  let !n = VU.length idx
+  pairs <- VUM.new n
+  let valOf i = LA.atIndex x (i, feat)
+      yOf  i = y VU.! i
+      fill !k
+        | k == n = pure ()
+        | otherwise = do
+            let !i = VU.unsafeIndex idx k
+            VUM.unsafeWrite pairs k (valOf i, yOf i)
+            fill (k + 1)
+  fill 0
+  Intro.sortBy (\a b -> compare (fst a) (fst b)) pairs
+  pairsF <- VU.unsafeFreeze pairs
+
+  let !sumY     = VU.sum (VU.map snd pairsF)
+      !sumY2    = VU.sum (VU.map (\(_, v) -> v * v) pairsF)
+      !nD       = fromIntegral n :: Double
+      !parentSS = sumY2 - sumY * sumY / nD
+
+  let sweep !k !sumYL !sumY2L !bestThr !bestGain
+        | k >= n - 1 = pure (bestThr, bestGain)
+        | otherwise = do
+            let (v_k,  yk) = VU.unsafeIndex pairsF k
+                (v_k1, _)  = VU.unsafeIndex pairsF (k + 1)
+                !sumYL'  = sumYL  + yk
+                !sumY2L' = sumY2L + yk * yk
+            if v_k == v_k1
+              then sweep (k + 1) sumYL' sumY2L' bestThr bestGain
+              else do
+                let !nL  = fromIntegral (k + 1) :: Double
+                    !nR  = nD - nL
+                    !sumYR  = sumY  - sumYL'
+                    !sumY2R = sumY2 - sumY2L'
+                    !ssL    = sumY2L' - sumYL' * sumYL' / nL
+                    !ssR    = sumY2R  - sumYR  * sumYR  / nR
+                    !gain   = parentSS - ssL - ssR
+                    !thr    = (v_k + v_k1) / 2
+                if gain > bestGain
+                  then sweep (k + 1) sumYL' sumY2L' thr  gain
+                  else sweep (k + 1) sumYL' sumY2L' bestThr bestGain
+  (thr, gain) <- sweep 0 0 0 0 (negate (1.0 / 0.0))
+  pure $ if gain == negate (1.0 / 0.0)
+           then Nothing
+           else Just (thr, gain)
+
+-- ---------------------------------------------------------------------------
+-- Variance helper
+-- ---------------------------------------------------------------------------
+
+varianceUS :: VU.Vector Double -> Double
+varianceUS v
+  | VU.length v <= 1 = 0
+  | otherwise =
+      let !n  = fromIntegral (VU.length v) :: Double
+          !mu = VU.sum v / n
+      in VU.foldl' (\acc x -> acc + (x - mu) ^ (2 :: Int)) 0 v / n
+
+-- ---------------------------------------------------------------------------
+-- Predict
 -- ---------------------------------------------------------------------------
 
 predictTree :: Tree -> [Double] -> Double
@@ -207,80 +288,29 @@ predictTree (Leaf v)         _  = v
 predictTree (Node j thr l r) xs =
   if (xs !! j) <= thr then predictTree l xs else predictTree r xs
 
--- ---------------------------------------------------------------------------
--- フォレスト
--- ---------------------------------------------------------------------------
-
--- | Fit @n@ trees on bootstrap samples and aggregate the feature
--- importance.
-fitRF :: RFConfig -> [[Double]] -> [Double] -> MWC.GenIO -> IO RandomForest
-fitRF cfg rows ys gen = do
-  let n = length ys
-      d = if null rows then 0 else length (head rows)
-  impRef <- newIORef (V.replicate d 0.0)
-  trees <- replicateM (rfTrees cfg) $ do
-    (rs, yb) <- if rfBootstrap cfg
-                  then bootstrap n rows ys gen
-                  else return (rows, ys)
-    t <- buildTree cfg rs yb gen
-    -- importance: ツリー内の全 split を集計
-    accumulateImportance impRef t
-    return t
-  imp <- readIORef impRef
-  return RandomForest
-    { rfTreesV     = trees
-    , rfNFeatures  = d
-    , rfImportance = imp
-    }
-
-bootstrap :: Int -> [[Double]] -> [Double] -> MWC.GenIO
-          -> IO ([[Double]], [Double])
-bootstrap n rows ys gen = do
-  ixs <- replicateM n (MWC.uniformR (0, n - 1) gen)
-  let rs = [ rows !! i | i <- ixs ]
-      yb = [ ys   !! i | i <- ixs ]
-  return (rs, yb)
-
-accumulateImportance :: Data.IORef.IORef (V.Vector Double) -> Tree -> IO ()
-accumulateImportance ref tree = walk tree
-  where
-    walk (Leaf _)       = return ()
-    walk (Node j _ l r) = do
-      modifyIORef' ref (\v ->
-        let curV = v V.! j
-        in v V.// [(j, curV + 1.0)])   -- 簡易: 分割回数で代替
-      walk l
-      walk r
-
--- ---------------------------------------------------------------------------
--- フォレスト予測
--- ---------------------------------------------------------------------------
-
--- | Predict for one input by averaging the trees' predictions.
 predictRF :: RandomForest -> [Double] -> Double
 predictRF rf xs =
   let preds = map (`predictTree` xs) (rfTreesV rf)
       n     = length preds
   in if n == 0 then 0 else sum preds / fromIntegral n
 
--- | Per-feature importance, normalized to sum to 1.
 featureImportance :: RandomForest -> V.Vector Double
 featureImportance rf =
-  let raw  = rfImportance rf
-      tot  = V.sum raw
+  let raw = rfImportance rf
+      tot = V.sum raw
   in if tot <= 0 then raw else V.map (/ tot) raw
 
 -- ---------------------------------------------------------------------------
--- 補助関数
+-- Importance accumulation (per split, simple count)
 -- ---------------------------------------------------------------------------
 
-mean :: [Double] -> Double
-mean [] = 0
-mean xs = sum xs / fromIntegral (length xs)
-
-variance :: [Double] -> Double
-variance xs
-  | length xs <= 1 = 0
-  | otherwise =
-      let m = mean xs
-      in sum [(x - m) ^ (2 :: Int) | x <- xs] / fromIntegral (length xs)
+accumulateImportance :: IORef (V.Vector Double) -> Tree -> IO ()
+accumulateImportance ref = walk
+  where
+    walk (Leaf _)       = pure ()
+    walk (Node j _ l r) = do
+      modifyIORef' ref (\v ->
+        let !cur = v V.! j
+        in v V.// [(j, cur + 1.0)])
+      walk l
+      walk r

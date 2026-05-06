@@ -1,5 +1,5 @@
 system,suite,name,time_ms,acc_main,acc_aux,extra
-haskell,ml,PCA_n10000_p50_k5,15.753395,0.111298,527.457925,Model.PCA k=5 standardized
-haskell,ml,KMeans_n2000_p5_k5,258.270527,18515.737128,44.000000,Model.Cluster.kMeans k=5
-haskell,ml,DT_n2000_p10,17.778774,1.000000,0.000000,Model.DecisionTree.fitDT default config
-haskell,ml,RF_n2000_p10_t20,12740.872705,0.979000,0.000000,Model.RandomForest.fitRF (20 trees)
+haskell,ml,PCA_n10000_p50_k5,16.424452,0.111298,527.457925,Model.PCA k=5 standardized
+haskell,ml,KMeans_n2000_p5_k5,254.102950,18530.628465,52.000000,Model.Cluster.kMeans k=5
+haskell,ml,DT_n2000_p10,17.290625,1.000000,0.000000,Model.DecisionTree.fitDT default config
+haskell,ml,RF_n2000_p10_t20,57.639545,0.975500,0.000000,Model.RandomForest.fitRF (20 trees)
