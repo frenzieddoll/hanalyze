@@ -1171,6 +1171,25 @@ executable bench-mcmc-extras
     , tasty-bench          >= 0.3  && < 0.5
     , tasty                >= 1.4  && < 1.6
 
+-- B13 Regrid: regridLong on a jagged long-form fixture.
+executable bench-regrid
+  import:           warnings, opt
+  main-is:          BenchRegrid.hs
+  other-modules:    BenchUtil
+  hs-source-dirs:   bench/haskell
+  default-language: GHC2021
+  build-depends:
+      base                 >= 4.14 && < 5
+    , bytestring           >= 0.11 && < 0.13
+    , cassava              >= 0.5  && < 0.6
+    , dataframe            >= 0.4
+    , hanalyze
+    , hmatrix              >= 0.20 && < 0.22
+    , time                 >= 1.9  && < 1.13
+    , vector               >= 0.12 && < 0.14
+    , tasty-bench          >= 0.3  && < 0.5
+    , tasty                >= 1.4  && < 1.6
+
 -- B12 Multi-output: MultiLM / MultiGP.
 executable bench-multi-output
   import:           warnings, opt
