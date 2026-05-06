@@ -1108,6 +1108,27 @@ executable bench-survts
     , tasty-bench          >= 0.3  && < 0.5
     , tasty                >= 1.4  && < 1.6
 
+-- MCMC diagnostic (B10b): explore why hanalyze NUTS ESS is poor.
+executable bench-mcmc-diag
+  import:           warnings, opt
+  main-is:          BenchMCMCDiag.hs
+  other-modules:    BenchUtil
+  hs-source-dirs:   bench/haskell
+  default-language: GHC2021
+  build-depends:
+      base                 >= 4.14 && < 5
+    , bytestring           >= 0.11 && < 0.13
+    , cassava              >= 0.5  && < 0.6
+    , containers           >= 0.6  && < 0.8
+    , hanalyze
+    , hmatrix              >= 0.20 && < 0.22
+    , mwc-random           >= 0.15 && < 0.16
+    , text                 >= 1.2  && < 2.2
+    , time                 >= 1.9  && < 1.13
+    , vector               >= 0.12 && < 0.14
+    , tasty-bench          >= 0.3  && < 0.5
+    , tasty                >= 1.4  && < 1.6
+
 -- MCMC bench (B7): HMC / NUTS on hierarchical normal model.
 executable bench-mcmc-b7
   import:           warnings, opt
