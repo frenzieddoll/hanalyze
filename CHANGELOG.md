@@ -7,6 +7,10 @@ and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
 
 ## [Unreleased]
 
+## [0.1.0.0] - 2026-05-06
+
+Initial Hackage release.
+
 ### Performance (Phase 1-13)
 - Build flags: added `-O2 -funbox-strict-fields` to all 75 stanzas (library +
   executables + tests) via the new `common opt` block.
@@ -60,10 +64,6 @@ and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
   cabal upload --documentation dist-newstyle/hanalyze-0.1.0.0-docs.tar.gz   # candidate docs
   cabal upload --publish dist-newstyle/sdist/hanalyze-0.1.0.0.tar.gz       # final
   ```
-
-## [0.1.0.0] - 2026-05-04
-
-Initial Hackage release.
 
 ### Models
 - Linear models: `Model.LM`, `Model.GLM` (Gaussian / Binomial / Poisson + IRLS),
