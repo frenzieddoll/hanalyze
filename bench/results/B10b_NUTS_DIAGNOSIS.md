@@ -1,6 +1,23 @@
-# B10b — NUTS ESS 効率調査 (診断結果)
+# B10b — NUTS ESS 効率調査 (診断結果) → B11 で解決
 
-最終更新: 2026-05-06
+最終更新: 2026-05-07 (B11 で resolved)
+
+## TL;DR (B11 解決後)
+
+B10b で特定した root cause (mass matrix 非実装) を B11 で解決。
+
+| | time | ess(mu) | ess(tau) | ess/sec(min) |
+|---|---|---|---|---|
+| 旧 (mass=I) | 1757 ms | 42 | 53 | 24 |
+| **新 (B11 mass adapt)** | **1492 ms** | **839** | **571** | **383** |
+| blackjax 参考 | 530 ms | 810 | 626 | 1180 |
+| PyMC 参考 | 11018 ms | 856 | 546 | 50 |
+
+ESS は blackjax を超え (839 vs 810)、PyMC を 7.4× 上回る速度に到達。
+詳細は本ドキュメント末尾の「B11 実装後追記」を参照。
+
+---
+
 
 ## 目的
 
@@ -127,3 +144,70 @@ long-range drift の遅さの正体。
 B10b の profile + diagnose phase は完了。**root cause は mass matrix
 非実装**。修正は B11 (mass matrix adaptation 実装) として別 phase で
 ユーザー判断を仰ぐ。
+
+---
+
+## B11 実装後追記 (2026-05-07)
+
+### 実装内容 (`src/MCMC/NUTS.hs`)
+
+Stan-style multi-window adaptation を実装:
+
+1. **`MCMC.HMC.kineticM` / `leapfrogWithM`**: 対角 M⁻¹ を取る版を追加
+   (既存の `kinetic` / `leapfrogWith` は不変、後方互換)
+2. **`NUTSConfig.nutsAdaptMass :: Bool`** フラグ (デフォルト False、opt-in)
+3. **3 phase schedule** (`stanWindows :: Int -> ([Int], Int, Int)`):
+   - init buffer (15% / 最低 75 iter): step-size のみ adapt、M=I
+   - window phase: 25 → 50 → 100 → 200 ... と倍々で拡大、各 window 末尾で
+     - その window 内の Welford diagonal variance から M⁻¹ 更新
+     - dual averaging を **再起動** (新しい M に対して ε を再 adapt)
+   - term buffer (10% / 最低 50 iter): M 凍結、step-size 継続
+4. **Welford online accumulator**: `data Welford = Welford !Int ![Double] ![Double]`、
+   per-window でリセット (drift bias を避ける)
+5. **Stan 式 shrinkage**: `σ̂² = (n/(n+5))·sample_var + 1e-3·(5/(n+5))`
+
+### Convention の bug と修正
+
+最初の prototype は **M⁻¹ = 1/sample_var (= M = posterior_var)** と設定して
+しまっており、ESS が悪化 (51 vs 42) + time が 9× 化していた。
+
+正しい Stan/blackjax convention は **M⁻¹ ≈ posterior_covariance** 直接保持
+(つまり `M⁻¹_ii = sample_var_i`):
+
+- kinetic: `½ rᵀ M⁻¹ r` で M⁻¹ が posterior var を持つ
+- 運動量 `r ~ N(0, M = 1/posterior_var)` → `|r_i|` は小さい
+- 位置 step `ε · M⁻¹ · r` は absolute units で `ε · posterior_sd` 規模
+  = posterior-sd units で `ε` → NUTS の理想動作 (depth ~ 1/ε)
+
+逆だと位置 step が `ε / posterior_sd²` ≈ 0.0005 sd unit となり、tree depth
+が maxDepth=10 まで張り付く。修正は `welfordMInv` の最後の `1 / ...` を
+削除する 1 行。
+
+### 結果
+
+`bench-mcmc-diag` (warmup=500, samples=1000):
+
+| | time | ess(mu) | ess(tau) |
+|---|---|---|---|
+| mass=OFF | 3.22 s | 42.0 | 53.1 |
+| mass=ON | 1.37 s | 838.7 | 570.9 |
+
+`bench-mcmc-b7` で Python 比較を更新 (`bench/results/haskell/mcmc.csv`):
+
+| system | time | ess(mu) | ess(tau) |
+|---|---|---|---|
+| hanalyze NUTS (mass) | 1492 ms | 839 | 571 |
+| blackjax NUTS | 530 ms | 810 | 626 |
+| PyMC NUTS | 11018 ms | 856 | 546 |
+
+ESS は blackjax を超え (839 > 810)、time は PyMC を 7.4× 上回る。
+blackjax との時間差 (2.8×) は JAX JIT 差で構造的天井の側だが、
+ESS 品質は対等以上に到達。
+
+### 残課題
+
+- `nutsAdaptMass` のデフォルトを `True` に切り替えるかは別判断
+  (API 変更を伴うため、当面は opt-in にして B7 ベンチで使用)
+- 多次元の dense mass matrix は未実装 (Stan の dense option 相当)
+  (8-schools 級では diagonal で十分。Cov 構造が強い funnel 系でのみ
+  必要になる)

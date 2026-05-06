@@ -18,6 +18,7 @@ module Main where
 import qualified Data.Map.Strict      as Map
 import qualified Data.Text            as T
 import qualified System.Random.MWC    as MWC
+import qualified Data.Time.Clock      as Time
 import           System.IO            (hSetBuffering, stdout, BufferMode (..))
 import           Text.Printf          (printf)
 
@@ -63,11 +64,14 @@ initParams = Map.fromList
 runOne :: String -> NUTSConfig -> IO ()
 runOne label cfg = do
   g <- MWC.create
+  t0 <- Time.getCurrentTime
   ch <- nuts schoolModel cfg initParams g
-  reportChain label ch
+  t1 <- Time.getCurrentTime
+  let dt = realToFrac (Time.diffUTCTime t1 t0) :: Double
+  reportChain label dt ch
 
-reportChain :: String -> Chain -> IO ()
-reportChain label ch = do
+reportChain :: String -> Double -> Chain -> IO ()
+reportChain label dt ch = do
   let muV    = chainVals "mu"  ch
       tauV   = chainVals "tau" ch
       muEss  = ess muV
@@ -85,6 +89,7 @@ reportChain label ch = do
                 | x `elem` acc' = go xs' acc'
                 | otherwise     = go xs' (x:acc')
   printf "=== %s ===\n" label
+  printf "  time         %.2f s\n" dt
   printf "  accept       %.3f\n" acc
   printf "  mu  mean=%.3f sd=%.3f ess=%.1f distinct=%d\n"
     muMean muSD muEss muDistinct
@@ -129,6 +134,15 @@ main = do
   runOne "shallow-tree (maxDepth=5)"
     cfg { nutsMaxDepth = 5 }
 
-  -- 5. baseline at full 1000-sample size for comparison with B7
-  runOne "full-size (1000 samples, baseline)" baseCfg
-    { nutsIterations = 1000, nutsBurnIn = 500 }
+  -- 5. full-size 1000 samples WITH diagonal mass-matrix adaptation (B11)
+  runOne "full-size (1000 samples, mass adapt ON)" baseCfg
+    { nutsIterations = 1000, nutsBurnIn = 500, nutsAdaptMass = True }
+
+  -- 6. full-size with mass adapt OFF (baseline for comparison)
+  runOne "full-size (1000 samples, mass adapt OFF)" baseCfg
+    { nutsIterations = 1000, nutsBurnIn = 500, nutsAdaptMass = False }
+
+  -- 7. mass adapt ON, longer warmup (2000) — does multi-window
+  -- adaptation eventually converge given enough budget?
+  runOne "long-warmup (1000 samples, warmup=2000, mass ON)" baseCfg
+    { nutsIterations = 1000, nutsBurnIn = 2000, nutsAdaptMass = True }

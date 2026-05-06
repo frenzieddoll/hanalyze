@@ -28,8 +28,10 @@ module MCMC.HMC
   , fromUnconstrainedParams
   , logJointU
   , leapfrogWith
+  , leapfrogWithM
     -- * Basic utilities
   , kinetic
+  , kineticM
   , paramsToVec
   , vecToParams
     -- * Sampler
@@ -117,6 +119,14 @@ logJointU model transforms paramsU =
 kinetic :: [Double] -> Double
 kinetic r = 0.5 * sum (map (^ (2 :: Int)) r)
 
+-- | Kinetic energy with a diagonal mass matrix:
+-- @½ rᵀ M⁻¹ r = ½ Σ M⁻¹_ii · r_i²@.
+--
+-- Used by NUTS (B11) when running with diagonal mass-matrix adaptation.
+-- @kinetic = kineticM (repeat 1)@ recovers the identity-mass case.
+kineticM :: [Double] -> [Double] -> Double
+kineticM mInv r = 0.5 * sum (zipWith (\m_inv ri -> m_inv * ri * ri) mInv r)
+
 -- | Leapfrog integrator with a user-supplied gradient function. Takes
 -- the gradient function, parameter names, step size @ε@, number of
 -- steps, initial @θ@ and momentum @r@, and returns the updated pair.
@@ -135,6 +145,37 @@ leapfrogWith gradFn names eps steps theta0 r0 = go steps theta0 r0
       let g      = gradFn names theta
           rHalf  = zipWith (\ri gi -> ri - (eps / 2) * gi) r g
           tVec'  = zipWith (\ti ri -> ti + eps * ri) (paramsToVec names theta) rHalf
+          theta' = vecToParams names tVec'
+          g'     = gradFn names theta'
+          r'     = zipWith (\ri gi -> ri - (eps / 2) * gi) rHalf g'
+      in go (n - 1) theta' r'
+
+-- | Leapfrog integrator with a diagonal mass matrix.
+--
+--   * Position update: @θ' = θ + ε · M⁻¹ · r@ (so smaller @M_ii@
+--     ⇒ slower per-step move along that coordinate, matching the
+--     intent that posterior-narrow directions get smaller steps).
+--   * Momentum update: @r' = r − (ε/2) · ∇U(θ)@ (unchanged).
+--
+-- @leapfrogWith = leapfrogWithM (repeat 1)@.
+leapfrogWithM
+  :: ([Text] -> Params -> [Double])
+  -> [Text]
+  -> [Double]                      -- ^ Diagonal @M⁻¹@ (length = number of params).
+  -> Double                        -- ^ Step size @ε@.
+  -> Int                           -- ^ Number of leapfrog steps.
+  -> Params
+  -> [Double]
+  -> (Params, [Double])
+leapfrogWithM gradFn names mInv eps steps theta0 r0 = go steps theta0 r0
+  where
+    go 0 theta r = (theta, r)
+    go n theta r =
+      let g      = gradFn names theta
+          rHalf  = zipWith (\ri gi -> ri - (eps / 2) * gi) r g
+          -- θ' = θ + ε · M⁻¹ · r
+          tVec'  = zipWith3 (\ti m_inv ri -> ti + eps * m_inv * ri)
+                            (paramsToVec names theta) mInv rHalf
           theta' = vecToParams names tVec'
           g'     = gradFn names theta'
           r'     = zipWith (\ri gi -> ri - (eps / 2) * gi) rHalf g'

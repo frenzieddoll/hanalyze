@@ -130,6 +130,7 @@ benchNUTS name = do
               , nutsBurnIn        = 500
               , nutsStepSize      = 0.08
               , nutsAdaptStepSize = True
+              , nutsAdaptMass     = True   -- B11: Stan-style multi-window
               }
       run :: Int -> IO Chain
       run _ = do
@@ -141,6 +142,6 @@ benchNUTS name = do
       muMean = maybe 0 id (posteriorMean "mu" ch)
       acc    = acceptRate ch
   return [ BenchRow "haskell" "mcmc" name ms muMean muEss
-            ("NUTS eps=0.08 dual-averaging accept=" ++ show acc
+            ("NUTS eps=0.08 dual-averaging mass-adapt accept=" ++ show acc
              ++ " ess(mu)=" ++ show muEss
              ++ " ess(tau)=" ++ show tauEss) ]

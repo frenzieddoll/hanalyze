@@ -79,7 +79,7 @@ Phase 1-12 の改善で gap は縮まったが、最終的に **BLAS dispatch ov
 | survts | Quantile n=10k p=20 | 17562 ms | 232 ms | **76× 遅** ⚠ | (B8 新規、interior-point overhead) |
 | survts | CoxPH n=2k p=2 | 328 ms | 130 ms | 2.5× 遅 | (B8 新規) |
 | survts | KM n=2k | 32.9 ms | 6.8 ms | 4.8× 遅 | (B8 新規、list-based grouping) |
-| mcmc | NUTS 8-schools n=1000 | 1757 ms | 530 ms (blackjax) | **3.3× 遅、ESS/sec 64× 劣** | (B7 新規、step-size 適応に課題) |
+| mcmc | NUTS 8-schools n=1000 | **1492 ms** | 530 ms (blackjax) | **2.8× 遅、ESS 839 vs 810 (mu)** | (B11 mass adapt で 64× 効率改善、PyMC 7.4× 凌駕) |
 
 → Phase 1-12 (`-O2`, StrictData, INLINE, runST+MVector など) で **多くの項目で
 gap が縮小** (例: GLM_logit 3.6× → 3.14×、GP_fit 4.7× → 3.86×)。
@@ -229,15 +229,21 @@ git log の `perf(...)` commit。
 
 | name | time (ms) | mu_mean | ess(mu) | ess(tau) | ess(mu)/sec |
 |---|---:|---:|---:|---:|---:|
-| haskell HMC | 1809 | 73.0 | 8.4 | 138 | 4.6 |
-| haskell NUTS | 1757 | 70.7 | 42.0 | 53 | 23.9 |
+| haskell HMC | 3409 | 73.0 | 8.4 | 138 | 2.5 |
+| **haskell NUTS (B11 mass)** | **1492** | 71.8 | **839** | 571 | **562** |
 | python PyMC NUTS | 11018 | 72.1 | 856 | 546 | 77.7 |
-| **python blackjax NUTS** | **530** | 72.4 | **810** | 626 | **1528** |
+| **python blackjax NUTS** | **530** | 72.4 | 810 | 626 | **1528** |
 
-> **観測**: hanalyze NUTS は wall-time で PyMC を 6× 凌駕するが、ESS
-> 効率は blackjax の 1/64 程度。**step-size 適応 / mass matrix 行列化に
-> 改善余地**あり。HMC/NUTS の native 実装を維持しつつ ESS/sec を上げる
-> リファクタが今後の課題。
+> **B11 (2026-05-07)** で Stan-style multi-window diagonal mass-matrix
+> adaptation を実装。`nutsAdaptMass = True` で有効化:
+>
+> - **ESS は blackjax を超えた** (mu: 839 vs 810)
+> - PyMC 比 **時間 7.4× 速く ESS 同等**
+> - blackjax 比は時間 2.8× 遅 (JAX JIT 構造差) だが ESS 品質は対等
+> - 旧 (mass=I) → 新 (B11) で ess(mu)/sec が **24 → 562** (23×)
+>
+> 詳細: `bench/results/B10b_NUTS_DIAGNOSIS.md`。default は opt-in
+> (`nutsAdaptMass = False`); diagonal だけ実装、dense は未対応。
 
 ### survts (B8, statsmodels / lifelines / pygam / scipy 比較)
 
