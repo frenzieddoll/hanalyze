@@ -98,7 +98,62 @@ def regrid_long(df: pd.DataFrame, id_col: str, z_col: str, y_col: str,
     return pd.DataFrame(out_rows)
 
 
-def bench_regrid() -> Row:
+def regrid_long_numpy(arr: np.ndarray, n: int = 30) -> np.ndarray:
+    """Numpy-only synthesis (no pandas) for a fairer comparison.
+
+    Input: ``arr`` of shape ``(N, 3)`` with columns ``[id_int, z, y]``;
+    ids must be integer-encoded. Output: shape ``(n_ids · n, 3)`` in
+    the same column convention. Avoids pandas' Python-loop groupby.
+    """
+    ids = arr[:, 0].astype(np.int64)
+    z   = arr[:, 1]
+    y   = arr[:, 2]
+    uniq_ids = np.unique(ids)
+
+    # Common z range: intersection across ids.
+    per_id_min = np.array([z[ids == i].min() for i in uniq_ids])
+    per_id_max = np.array([z[ids == i].max() for i in uniq_ids])
+    z_lo = float(per_id_min.max())
+    z_hi = float(per_id_max.min())
+
+    # Adaptive grid from the densest id (most points) within [z_lo, z_hi].
+    counts = np.array([(ids == i).sum() for i in uniq_ids])
+    rep    = int(uniq_ids[np.argmax(counts)])
+    rep_mask = ids == rep
+    rep_z = z[rep_mask]
+    rep_y = y[rep_mask]
+    order = np.argsort(rep_z)
+    rep_z = rep_z[order]
+    rep_y = rep_y[order]
+    # Drop duplicate z (PCHIP requires strictly increasing).
+    keep = np.r_[True, np.diff(rep_z) > 0]
+    rep_z = rep_z[keep]
+    rep_y = rep_y[keep]
+    in_range = (rep_z >= z_lo) & (rep_z <= z_hi)
+    grid = adaptive_grid(rep_z[in_range], rep_y[in_range], n)
+
+    # Per-id PCHIP, evaluate on common grid.
+    out_blocks = []
+    for i in uniq_ids:
+        mask = ids == i
+        zi = z[mask]
+        yi = y[mask]
+        order_i = np.argsort(zi)
+        zi = zi[order_i]
+        yi = yi[order_i]
+        keep_i = np.r_[True, np.diff(zi) > 0]
+        zi = zi[keep_i]
+        yi = yi[keep_i]
+        if len(zi) < 2:
+            continue
+        f = PchipInterpolator(zi, yi, extrapolate=False)
+        ys_grid = f(grid)
+        block = np.column_stack([np.full(n, i, dtype=np.float64), grid, ys_grid])
+        out_blocks.append(block)
+    return np.vstack(out_blocks) if out_blocks else np.empty((0, 3))
+
+
+def bench_regrid_pandas() -> Row:
     csv_path = REPO / "data" / "io" / "potential_long_jagged.csv"
     df = pd.read_csv(csv_path)
 
@@ -113,18 +168,45 @@ def bench_regrid() -> Row:
     )
 
 
+def bench_regrid_numpy() -> Row:
+    """Numpy-only path: avoids pandas groupby/Python-loop overhead.
+    Shows the structural ceiling of the operation when comparing
+    Python-vectorised work against hanalyze."""
+    csv_path = REPO / "data" / "io" / "potential_long_jagged.csv"
+    df = pd.read_csv(csv_path)
+    # Encode `name` as integer once (this is data prep, not bench scope).
+    ids_str   = df["name"].to_numpy()
+    uniq, inv = np.unique(ids_str, return_inverse=True)
+    arr = np.column_stack([
+        inv.astype(np.float64), df["z"].to_numpy(), df["y"].to_numpy()
+    ])
+    _ = uniq
+
+    def run():
+        out = regrid_long_numpy(arr, n=30)
+        return len(out)
+
+    ms, n_rows = median_time(run, n_iter=10)
+    return Row(
+        "Regrid_long_jagged_PCHIP_N30_numpy", ms, 0.0, 0.0,
+        f"numpy + scipy PCHIP+adaptive (no pandas); rows={n_rows}",
+    )
+
+
 def main():
-    r = bench_regrid()
-    print(f"  {r.name:<32} {r.time_ms:>10.3f} ms  {r.extra}")
-    out = OUT / "regrid.csv"
-    with out.open("w", newline="") as f:
+    rows = [bench_regrid_pandas(), bench_regrid_numpy()]
+    for r in rows:
+        print(f"  {r.name:<42} {r.time_ms:>10.3f} ms  {r.extra}")
+    out_path = OUT / "regrid.csv"
+    with out_path.open("w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["system", "suite", "name", "time_ms",
                     "acc_main", "acc_aux", "extra"])
-        w.writerow(["python", "regrid", r.name,
-                    f"{r.time_ms:.6g}", f"{r.acc_main:.6g}",
-                    f"{r.acc_aux:.6g}", r.extra])
-    print(f"wrote 1 row → {out}")
+        for r in rows:
+            w.writerow(["python", "regrid", r.name,
+                        f"{r.time_ms:.6g}", f"{r.acc_main:.6g}",
+                        f"{r.acc_aux:.6g}", r.extra])
+    print(f"wrote {len(rows)} rows → {out_path}")
 
 
 if __name__ == "__main__":

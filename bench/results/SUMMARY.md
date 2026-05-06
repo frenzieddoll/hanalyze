@@ -92,9 +92,9 @@ Phase 1-12 の改善で gap は縮まったが、最終的に **BLAS dispatch ov
 | kernel | GramMV_n2000 | 147 ms | 38.2 ms | 3.85× 遅 | 3.7× |
 | kernel | KR_n2000 | 376 ms | 176 ms | 2.14× 遅 | 2.2× |
 | kernel | GP_fit_n1000 | 163 ms | 42.3 ms | 3.86× 遅 | 4.7× |
-| kernel | GP_opt_n500 | 2466 ms | 701 ms | 3.52× 遅 | 4.3× |
+| kernel | GP_opt_n500 | **1403 ms** (P1 後) | 701 ms | **2.0× 遅** | 4.3× → 2.0× |
 | kernel | RFF_n1000_D256 | 49.6 ms | 5.42 ms | 9.1× 遅 | 12× |
-| regression | GLM_logit_n10k | 13.1 ms | 4.18 ms | 3.14× 遅 | 3.6× |
+| regression | GLM_logit_n10k | **2.94 ms** (P1 後) | 4.18 ms | **0.7× = sklearn 逆転** ⭐ | 3.6× → 0.7× |
 | regression | GLM_poisson_n10k | 11.8 ms | 2.61 ms | 4.53× 遅 | 5.97× |
 | regression | Lasso_n10k×p50 | 6.87 ms | 2.35 ms | 2.92× 遅 | 3.1× |
 | optim | SA (Rastrigin_10D) | 1901 ms | 193 ms | 9.84× 遅 | 12× |
@@ -277,7 +277,7 @@ git log の `perf(...)` commit。
 | **ADVI_logistic_n60_iter500** | **169** | 511 (numpyro SVI) | **3.0×** | β1≈ 5/5.6 (ADVI 過学習で両側似) |
 | **LOO_PSIS_S1000_N200** | **15** | 44 (arviz) | **2.9×** | elpd=-208.5/-208.5 ✅ |
 | Gibbs_BetaBinomial_n10000 | 1.4 | 0.32 (numpy) | 0.23× | mean=0.583/0.583 vs analytic 0.583 ✅ |
-| WAIC_S1000_N200 | 19.3 | 6.3 (arviz) | 0.33× | waic=417/417 ✅ |
+| WAIC_S1000_N200 | **12.2** (P2 後) | 6.3 (arviz) | **0.52×** | waic=417/417 ✅ (P2 で 19.3→12.2 ms = 1.6× 改善) |
 
 > **観測**: ADVI は JAX JIT compile overhead で numpyro が小規模問題に弱く
 > hanalyze 逆転。LOO は arviz の overhead で hanalyze 優位。WAIC は値完全一致。
@@ -292,29 +292,30 @@ git log の `perf(...)` commit。
 | Interp1D_Linear_knots1000_eval5000 | 0.19 | 0.046 | 0.25× | scipy SIMD |
 | Interp1D_NatSpline_knots1000_eval5000 | 1.21 | 0.18 | 0.15× | scipy SIMD |
 
-### optim_plus (B9, 2026-05-07 追加)
+### optim_plus (B9, 2026-05-07 追加 / P3 で公平化)
 
 | name | hanalyze (ms) | python (ms) | speedup | 注 |
 |---|---:|---:|---:|---|
-| **Constrained_Quad2D_eq** | **0.062** | 0.69 (scipy SLSQP) | **11×** ⭐ | err 5.7e-8 vs 4.2e-9 (両側 ε精度) |
+| Constrained_Quad2D_eq | 0.062 | 0.69 (scipy SLSQP) | 11× | small-problem regime: Python overhead 支配、注記参照 |
 | **Adam_quad50D_iter1000** | **5.5** | 8.3 (numpy) | **1.5×** | 両側 1.5e-44 (機械精度) |
-| **CMAESFull_Rosenbrock5D_iter200** | **4.3** | 78 (cma) | **18×** ⭐ | f=0.031 vs 5e-7 (cma の方が精度高) |
+| **CMAESFull_Rosenbrock5D_converge** | **5.95** | 97 (cma) | **16×** ⭐ | 両者 tolfun=1e-10 まで converge: hanalyze f=1.4e-10、cma f=3.7e-13 (両者 ε精度) |
 
-> CMAESFull は速度で 18× 勝るが精度で cma の boundary-aware sampling +
-> restart 系に劣る。トレードオフ判断。
+> P3 (2026-05-07) で CMAESFull の比較を「両側収束まで」に揃えた。旧の
+> maxiter=200 打切り版では精度差 (cma 7 桁勝ち) があったが、収束させると
+> hanalyze は 16× 速で精度同等。
 
-### stat_util (B10, 2026-05-07 追加)
+### stat_util (B10, 2026-05-07 追加 / P2 で BH 27× 改善 + P3 で KS 公平化)
 
 | name | hanalyze (ms) | python (ms) | speedup | acc match |
 |---|---:|---:|---:|---|
-| **Welch_ttest_n500x500** | **0.016** | 0.62 (scipy) | **39×** ⭐ | t=-6.228/-6.228 ✅ |
-| **KS_normal_n1000** | **0.073** | 0.83 (scipy) | **11×** ⭐ | D=0.081/0.070 (実装差) |
+| **Welch_ttest_n500x500** | **0.016** | 0.62 (scipy) | **39×** ⭐ | t=-6.228/-6.228 ✅ (small-problem regime) |
+| **KS_normal_n1000** | **0.073** | 0.21 (statsmodels lilliefors) | **2.9×** | D=0.081/0.070 (Lilliefors 実装差) |
 | **MannWhitneyU_n500x500** | **0.29** | 0.43 (scipy) | **1.5×** | U=98226/98226 ✅ |
 | **KFold_5_n1000** | **0.080** | 0.18 (sklearn) | **2.2×** | |
 | Bootstrap_mean_n1000_B1000 | 17.6 | 9.5 (scipy) | 0.54× | (Storable Vector 化で 90× 改善後) |
 | AUC_LogLoss_n10000 | 5.1 | 3.6 (sklearn) | 0.71× | AUC=1.0/1.0 ✅ |
-| Halton_n10000_d5 | 2.8 | 0.9 (scipy.qmc) | 0.32× | |
-| BH_pAdjust_n1000 | 2.2 | 0.033 (statsmodels) | 0.015× ⚠ | (要 perf 改善) |
+| Halton_n10000_d5 | 3.05 | 0.9 (scipy.qmc) | 0.30× | (list-API 構造的制約) |
+| **BH_pAdjust_n1000** | **0.080** | 0.033 (statsmodels) | **0.42×** | (P2 で 2.20→0.080 ms = 27× 改善) |
 
 ### multi_output (B12, 2026-05-07 追加)
 
@@ -323,11 +324,35 @@ git log の `perf(...)` commit。
 | **MultiLM_n2000_p10_q5** | **0.36** | 0.82 (sklearn) | **2.3×** ⭐ | RMSE 0.035/0.035 ✅ |
 | MultiGP_n200_p3_q3 | 1866 | 257 (sklearn GPR) | 0.14× | GP HP opt × 3 outputs (構造的天井) |
 
-### regrid (B13, 2026-05-07 追加)
+### regrid (B13, 2026-05-07 追加 / P4 で numpy 直書版を追加)
 
 | name | hanalyze (ms) | python (ms) | speedup | 注 |
 |---|---:|---:|---:|---|
-| **Regrid_long_jagged_PCHIP_N30** | **0.99** | 19.4 (pandas+scipy 合成) | **20×** ⭐ | 21 dose × ~80 z 点 → 30 点 grid |
+| **Regrid_long_jagged_PCHIP_N30** | **0.99** | **3.15 (numpy 直書)** | **3.2×** ⭐ | 21 dose × ~80 z 点 → 30 点 grid (公平比較) |
+| Regrid_long_jagged_PCHIP_N30 | 0.99 | 18.7 (pandas+scipy) | 19× | 参考: pandas groupby 経由の典型実装 |
+
+> P4 (2026-05-07) で **numpy 直書版**を追加。pandas groupby の Python loop
+> overhead を除いた公平な比較は **3.2×**。pandas 経由の典型コードでは
+> 19× で、ユーザーがどちらを書くかで実運用の体感は変わる。
+
+### small-problem regime の注記 (P4)
+
+以下は **問題サイズが小さく Python 側の interpreter / wrapper overhead
+が支配的**な項目。speedup の絶対値は大きいが、**アルゴリズム本体の
+効率差**ではなく Python overhead を測っている部分が大きい。**hanalyze
+が圧倒的に優れているという主張には使わない**。
+
+| 項目 | 規模 | hanalyze | Python | speedup | 注 |
+|---|---|---:|---:|---:|---|
+| Welch_ttest_n500x500 | n=500+500 | 0.016 ms | 0.62 ms (scipy) | 39× | scipy.stats のフレーム overhead が支配 |
+| Constrained_Quad2D_eq | 2D quad eq | 0.062 ms | 0.69 ms (scipy SLSQP) | 11× | scipy.optimize.minimize の wrapper overhead |
+| DE Rosenbrock_2D | 2D | ~1 ms | ~164 ms (scipy.differential_evolution) | 134× | scipy の Python loop |
+| NM Rosenbrock_2D | 2D | ~0.06 ms | ~4.83 ms (scipy.optimize.minimize) | 87× | 同上 |
+| KFold_5_n1000 | n=1000 | 0.080 ms | 0.18 ms (sklearn) | 2.2× | sklearn の generator overhead |
+
+これらは **「hanalyze が小さい問題で fast-path を持つ」**という事実を反映
+する有用な情報だが、**「hanalyze が algorithmically X 倍速い」とは読めない**。
+Hackage 公開時の README/docs では「on this benchmark」スコープを必ず付記。
 
 ### survts (B8, statsmodels / lifelines / pygam / scipy 比較)
 
