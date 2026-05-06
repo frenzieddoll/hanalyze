@@ -54,15 +54,14 @@ module Model.GP
 
 import Data.Text (Text)
 import qualified Numeric.LinearAlgebra as LA
-import qualified Optim.GradAscent
-import qualified Optim.Numeric
 import qualified Optim.LBFGS as LBFGS
 import qualified Optim.Common as OC
 import qualified Stat.KernelDist as KD
 import qualified Stat.Cholesky   as Chol
-import qualified Data.Massiv.Array as MA
-import Control.Exception (SomeException, try, evaluate)
-import System.IO.Unsafe (unsafePerformIO)
+import qualified Data.Vector.Storable         as VS
+import qualified Data.Vector.Storable.Mutable as VSM
+import           Control.Monad.ST             (runST)
+import           System.IO.Unsafe             (unsafePerformIO)
 
 -- ---------------------------------------------------------------------------
 -- Types
@@ -317,8 +316,13 @@ gpPredData model trainX trainY =
       n      = length trainX
       k      = buildKernelMatrix ker params trainX trainX
       jitter = max (gpNoiseVar params) 1e-6
-      ky     = k `LA.add` LA.scale jitter (LA.ident n)
-      kyInv  = LA.inv ky
+      ky     = addToDiag jitter k
+      -- SPD: solve via Cholesky rather than 'LA.inv'. Equivalent to
+      -- 'kyInv = Ky⁻¹' (used to project the JS-side prediction
+      -- formula); the explicit inverse is fine here because @n@ is
+      -- typically small for the interactive viewer and the inverse is
+      -- consumed downstream. Cholesky is more accurate than LU.
+      kyInv  = Chol.cholSolveJitter ky (LA.ident n)
       alpha  = LA.toList (kyInv LA.#> LA.fromList trainY)
   in GPPredData trainX alpha (map LA.toList (LA.toRows kyInv))
 
@@ -409,14 +413,82 @@ buildKernelMatrixMV ker p x x' =
   let (xs, ys, p') = ardScaleXY ker p x x'
   in applyKernel ker p' (KD.pairwiseSqDistXY xs ys)
 
+-- | Add a scalar @c@ to the diagonal of a square matrix in one pass.
+--
+-- Replaces the @M + c·I@ pattern (which allocates a fresh @n × n@
+-- identity scaled by @c@). With @runST@ + flat-index update, this
+-- is one allocation of the result and an in-place fill — significant
+-- in 'noiseKernelMV', which is on every log-marginal-likelihood
+-- evaluation.
+addToDiag :: Double -> LA.Matrix Double -> LA.Matrix Double
+addToDiag c m =
+  let n    = LA.rows m
+      flat = LA.flatten m
+      out = runST $ do
+        v <- VSM.new (n * n)
+        let go i
+              | i >= n * n = pure ()
+              | otherwise  = do
+                  VSM.unsafeWrite v i (flat `VS.unsafeIndex` i)
+                  go (i + 1)
+        go 0
+        let goDiag i
+              | i >= n    = pure ()
+              | otherwise = do
+                  let !idx = i * n + i
+                  d <- VSM.unsafeRead v idx
+                  VSM.unsafeWrite v idx (d + c)
+                  goDiag (i + 1)
+        goDiag 0
+        VS.unsafeFreeze v
+  in LA.reshape n out
+
 -- | Multi-input @K + σ_n² I@.
 noiseKernelMV :: Kernel -> GPParams -> LA.Matrix Double -> LA.Matrix Double
 noiseKernelMV ker p x =
-  let n            = LA.rows x
-      (xs, _, p')  = ardScaleXY ker p x x
-      k            = applyKernel ker p' (KD.pairwiseSqDist xs)
-      jitter       = max (gpNoiseVar p) 1e-6
-  in k `LA.add` LA.scale jitter (LA.ident n)
+  let (xs, _, p') = ardScaleXY ker p x x
+      k           = applyKernel ker p' (KD.pairwiseSqDist xs)
+      jitter      = max (gpNoiseVar p) 1e-6
+  in addToDiag jitter k
+
+-- | Like 'noiseKernelMV' but reuses a pre-computed pairwise squared
+-- distance matrix @D = pairwiseSqDist trainX@. Valid only when no ARD
+-- scaling is applied (isotropic kernel) — the kernel is then a
+-- function of @D@ alone, independent of length scale.
+noiseKernelMVCached
+  :: Kernel -> GPParams -> LA.Matrix Double -> LA.Matrix Double
+noiseKernelMVCached ker p d2 =
+  let k      = applyKernel ker p d2
+      jitter = max (gpNoiseVar p) 1e-6
+  in addToDiag jitter k
+
+-- | D-cached version of 'logMarginalLikelihoodMV' — accepts a
+-- pre-computed @D = pairwiseSqDist trainX@ instead of recomputing it
+-- each call. Used by 'optimizeGPMV' in the isotropic case where @D@
+-- is independent of the optimization variables.
+logMarginalLikelihoodMVCached
+  :: LA.Matrix Double  -- ^ Pre-computed @D@ (@n × n@).
+  -> LA.Vector Double  -- ^ Training @y@ (length @n@).
+  -> Kernel -> GPParams -> Double
+logMarginalLikelihoodMVCached d2 y ker params =
+  let n   = LA.rows d2
+      ky  = noiseKernelMVCached ker params d2
+      mR = case Chol.cholFactor ky of
+             Just r  -> Just (r, ky)
+             Nothing ->
+               let kyJ = addToDiag 1e-4 ky
+               in case Chol.cholFactor kyJ of
+                    Just r  -> Just (r, kyJ)
+                    Nothing -> Nothing
+  in case mR of
+       Nothing -> -1e30
+       Just (r, _kyUsed) ->
+         let logDet  = 2 * VS.sum (VS.map log (LA.takeDiag r))
+             alpha   = LA.flatten
+                       (Chol.cholSolveWithFactor r (LA.asColumn y))
+             dataFit = LA.dot y alpha
+         in -0.5 * dataFit - 0.5 * logDet
+            - fromIntegral n / 2 * log (2 * pi)
 
 -- | Multi-input log marginal likelihood.
 logMarginalLikelihoodMV
@@ -429,14 +501,14 @@ logMarginalLikelihoodMV trainX y ker params =
       mR = case Chol.cholFactor ky of
              Just r  -> Just (r, ky)
              Nothing ->
-               let kyJ = ky `LA.add` LA.scale 1e-4 (LA.ident n)
+               let kyJ = addToDiag 1e-4 ky
                in case Chol.cholFactor kyJ of
                     Just r  -> Just (r, kyJ)
                     Nothing -> Nothing
   in case mR of
        Nothing -> -1e30
        Just (r, _kyUsed) ->
-         let logDet  = 2 * sum (map log (LA.toList (LA.takeDiag r)))
+         let logDet  = 2 * VS.sum (VS.map log (LA.takeDiag r))
              alpha   = LA.flatten
                        (Chol.cholSolveWithFactor r (LA.asColumn y))
              dataFit = LA.dot y alpha
@@ -502,23 +574,12 @@ fitGPMVMulti model trainX trainY testX =
 optimizeGPMV
   :: Kernel -> LA.Matrix Double -> LA.Vector Double -> GPParams -> GPParams
 optimizeGPMV ker trainX y p0 =
-  let p     = LA.cols trainX
-      isARD = case gpLengthScales p0 of
-                Just v | LA.size v == p && p > 0 -> True
-                _                                -> False
-      u0
-        | isARD     = let Just v = gpLengthScales p0
-                          ls     = LA.toList v
-                      in map log ls
-                         ++ [log (gpSignalVar p0), log (gpNoiseVar p0)]
-        | otherwise = [ log (gpLengthScale p0)
-                      , log (gpSignalVar  p0)
-                      , log (gpNoiseVar   p0) ]
-      cfg  = LBFGS.defaultLBFGSConfig
+  let cfg  = LBFGS.defaultLBFGSConfig
                { LBFGS.lbDir   = OC.Maximize
                , LBFGS.lbStop  = OC.defaultStopCriteria
                                    { OC.stMaxIter = 200, OC.stTolFun = 1e-8 }
                }
+      u0     = initU
       result = unsafePerformIO $ LBFGS.runLBFGSNumeric cfg obj u0
       uOpt   = OC.orBest result
   in toParams uOpt
@@ -527,6 +588,33 @@ optimizeGPMV ker trainX y p0 =
     isARD  = case gpLengthScales p0 of
                Just v | LA.size v == p && p > 0 -> True
                _                                -> False
+    -- Pre-compute the pairwise squared distance matrix for the
+    -- isotropic case. The kernel of every supported family is a
+    -- function of @D@ alone (length scale enters via @applyKernel@),
+    -- so the LBFGS log-marginal-likelihood loop reuses @D@ instead of
+    -- recomputing 'pairwiseSqDist' on every evaluation. Profile
+    -- (see bench/results/) showed 'pairwiseSqDist' was 26.8% of
+    -- 'optimizeGPMV' wall time before this cache.
+    -- For ARD, the per-dim length scales rescale columns of @X@, so
+    -- @D@ depends on the optimization variables and cannot be cached.
+    cachedD :: Maybe (LA.Matrix Double)
+    cachedD
+      | isARD     = Nothing
+      | otherwise = Just (KD.pairwiseSqDist trainX)
+    initU
+      | isARD     = case gpLengthScales p0 of
+                      Just v ->
+                        let ls = LA.toList v
+                        in map log ls
+                           ++ [log (gpSignalVar p0), log (gpNoiseVar p0)]
+                      Nothing ->
+                        -- Cannot happen: isARD already requires Just.
+                        [ log (gpLengthScale p0)
+                        , log (gpSignalVar  p0)
+                        , log (gpNoiseVar   p0) ]
+      | otherwise = [ log (gpLengthScale p0)
+                    , log (gpSignalVar  p0)
+                    , log (gpNoiseVar   p0) ]
     toParams u
       | isARD     =
           let lsV = LA.fromList (map exp (take p u))
@@ -548,11 +636,19 @@ optimizeGPMV ker trainX y p0 =
     -- magnitude of the init while still letting individual dims relax.
     obj u
       | isARD     =
-          let lml      = logMarginalLikelihoodMV trainX y ker (toParams u)
-              Just v0  = gpLengthScales p0
-              logL0    = map log (LA.toList v0)
-              sig2     = 1.5 * 1.5
-              prior    = sum [ -0.5 * (l - l0) ^ (2 :: Int) / sig2
-                             | (l, l0) <- zip (take p u) logL0 ]
-          in lml + prior
-      | otherwise = logMarginalLikelihoodMV trainX y ker (toParams u)
+          case gpLengthScales p0 of
+            Just v0 ->
+              let lml   = logMarginalLikelihoodMV trainX y ker (toParams u)
+                  logL0 = map log (LA.toList v0)
+                  sig2  = 1.5 * 1.5
+                  prior = sum [ -0.5 * (l - l0) ^ (2 :: Int) / sig2
+                              | (l, l0) <- zip (take p u) logL0 ]
+              in lml + prior
+            Nothing ->
+              -- Cannot happen by isARD construction; fall back to
+              -- the un-prior-ed ARD likelihood.
+              logMarginalLikelihoodMV trainX y ker (toParams u)
+      | otherwise =
+          case cachedD of
+            Just d2 -> logMarginalLikelihoodMVCached d2 y ker (toParams u)
+            Nothing -> logMarginalLikelihoodMV trainX y ker (toParams u)

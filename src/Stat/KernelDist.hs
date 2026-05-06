@@ -22,33 +22,9 @@ module Stat.KernelDist
   ) where
 
 import qualified Numeric.LinearAlgebra        as LA
-import qualified Data.Massiv.Array            as A
-import           Data.Massiv.Array            (Array, Comp (..), Ix2 (..), Sz (..))
 import qualified Data.Vector.Storable         as VS
 import qualified Data.Vector.Storable.Mutable as VSM
-import           Control.Monad                (when)
 import           Control.Monad.ST             (runST)
-
--- | Choose massiv 'Comp' mode based on workload size.
---
--- Default: 'Seq'. Tested 'Par' at thresholds 250 K, 4 M elements but
--- both regressed real-world benchmarks because:
---
--- 1. Iterative algorithms (GP HP loop, Lasso CD) call kernel/elementwise
---    helpers many times per fit. Per-call Par-scheduler setup overhead
---    accumulates over the iterations.
--- 2. Even with @-threaded@ off (single capability), 'Par' adds
---    bookkeeping cost that 'Seq' avoids.
--- 3. Standalone bench (bench-massiv) shows ~1.7× speedup on a single
---    large call, but in algorithms the calls are smaller and more
---    frequent.
---
--- For users who need parallelism on a single huge kernel matrix
--- (e.g. GP fit with n > 5000 in one shot), the underlying massiv
--- API can be invoked directly with @setComp Par@. Inside the
--- iterative paths used here, 'Seq' is the right default.
-compFor :: Int -> Comp
-compFor _ = Seq
 
 -- | Diagonal of the matrix product @A · B@ where @A@ is @m × n@ and
 -- @B@ is @n × m@, computed without forming the full @m × m@ product.
@@ -165,46 +141,27 @@ pairwiseSqDistXY x y =
   in LA.reshape n out
 
 -- ---------------------------------------------------------------------------
--- hmatrix ↔ massiv conversion (safe API, no unsafe / no raw pointers)
+-- Element-wise helpers
 -- ---------------------------------------------------------------------------
 
--- | hmatrix 'LA.Matrix' → massiv @Array S Ix2 Double@. Round-trips
--- through the row-major flat 'LA.Vector' (Storable) and resizes via
--- massiv's 'A.resize''.
-hmatrixToMassiv :: LA.Matrix Double -> Array A.S Ix2 Double
-hmatrixToMassiv m =
-  let rs      = LA.rows m
-      cs      = LA.cols m
-      arrFlat = A.fromStorableVector Seq (LA.flatten m)
-  in A.resize' (Sz (rs :. cs)) arrFlat
-
--- | massiv @Array S Ix2 Double@ → hmatrix 'LA.Matrix'. Uses
--- 'A.toStorableVector' (no copy) and reshapes.
-massivToHmatrix :: Array A.S Ix2 Double -> LA.Matrix Double
-massivToHmatrix a =
-  let Sz (_ :. cs) = A.size a
-  in LA.reshape cs (A.toStorableVector (A.flatten a))
-
--- | Element-wise map over a hmatrix Matrix using massiv. ~1.7×
--- faster than 'LA.cmap' on 2000×2000 matrices (bench-massiv).
+-- | Element-wise map over a hmatrix Matrix.
+--
+-- Implementation: flatten + 'VS.map' + reshape. The earlier massiv
+-- ('A.map' with @Comp = Seq@) version was ~1.7× faster than 'LA.cmap'
+-- on a single 2000×2000 call, but iterative paths (GP HP loop, GLM
+-- IRLS) call this many times per fit and the per-call
+-- 'trivialScheduler_' overhead dominated — profile attributed
+-- 10–16% of GP fit time and 4% of GLM IRLS time to scheduler
+-- bookkeeping. Direct 'VS.map' has zero scheduling overhead and is
+-- the right default here.
 {-# INLINE mapMatrix #-}
 mapMatrix :: (Double -> Double) -> LA.Matrix Double -> LA.Matrix Double
 mapMatrix f m =
-  let rs      = LA.rows m
-      cs      = LA.cols m
-      comp    = compFor (rs * cs)
-      flat    = LA.flatten m
-      arrFlat = A.fromStorableVector comp flat
-      arr     = A.resize' (Sz (rs :. cs)) arrFlat
-      out     = A.computeAs A.S (A.map f arr)
-  in LA.reshape cs (A.toStorableVector (A.flatten out))
+  let cs = LA.cols m
+  in LA.reshape cs (VS.map f (LA.flatten m))
 
--- | Element-wise map over a hmatrix Vector using massiv. ~1.6× faster
--- than 'LA.cmap' on length-10000 vectors. Useful in IRLS / weighting
--- inner loops where 'cmap' runs many times per fit.
+-- | Element-wise map over a hmatrix Vector. Direct 'VS.map'; see
+-- 'mapMatrix' for why we no longer route through massiv.
 {-# INLINE mapVector #-}
 mapVector :: (Double -> Double) -> LA.Vector Double -> LA.Vector Double
-mapVector f v =
-  let comp = compFor (LA.size v)
-      arr  = A.fromStorableVector comp v
-  in A.toStorableVector (A.computeAs A.S (A.map f arr))
+mapVector = VS.map

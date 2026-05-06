@@ -12,7 +12,6 @@ import qualified Model.Kernel            as Kn
 import qualified Model.GP                as GP
 import qualified Model.RFF               as RFF
 import qualified Model.GPRobust          as GPR
-import qualified Stat.KernelDist         as KD
 
 import           BenchUtil
 
