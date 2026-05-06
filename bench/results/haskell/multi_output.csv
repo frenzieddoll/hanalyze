@@ -1,0 +1,3 @@
+system,suite,name,time_ms,acc_main,acc_aux,extra
+haskell,multi_output,MultiLM_n2000_p10_q5,0.363527,3.535149e-2,0.000000,MultiLM n=2000 p=10 q=5; RMSE=3.5351494735078474e-2
+haskell,multi_output,MultiGP_n200_p3_q3,1866.489984,0.000000,0.000000,"MultiGP RBF n=200 p=3 q=3 (independent GPs, MV API)"

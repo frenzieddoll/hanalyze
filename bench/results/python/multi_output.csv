@@ -1,0 +1,3 @@
+system,suite,name,time_ms,acc_main,acc_aux,extra
+python,multi_output,MultiLM_n2000_p10_q5,0.81504,0.0353544,0,sklearn LinearRegression multi-Y; RMSE=0.035354
+python,multi_output,MultiGP_n200_p3_q3,256.908,0,0,sklearn GaussianProcessRegressor RBF q=3 outputs (independent GPs)
