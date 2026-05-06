@@ -1,0 +1,3 @@
+system,suite,name,time_ms,acc_main,acc_aux,extra
+haskell,mcmc,HMC_8schools_warm500_n1000,1808.883833,73.008748,8.376203,HMC eps=0.05 L=30 accept=0.9993333333333333 ess(mu)=8.376202676265613 ess(tau)=138.27716493310115
+haskell,mcmc,NUTS_8schools_warm500_n1000,1756.587490,70.696649,41.994023,NUTS eps=0.08 dual-averaging accept=0.9066666666666666 ess(mu)=41.994023056423906 ess(tau)=53.138104343653296
