@@ -96,3 +96,45 @@ Lasso プロファイルで `endOfInput` (CSV パーサ) が 13.8% を占めて
 は固定 (1 回パース → 200 回 fit) になっている。これは多分 `200 *
 fit_alloc` < `1 * read_alloc` の関係で alloc 比が CSV 寄りになって
 いるだけで、time は fit が支配的のはず。
+
+## Phase 9 (Strategies / 並列化) — 結果: 不採用
+
+実施日: 2026-05-06
+試行: `Stat.Bootstrap.bootstrap` / `permutationTest` を
+`Control.Parallel.Strategies.parListChunk rdeepseq` で並列化。
+
+### 計測 (n=2000, reps=2000, sampleVar、3-run median)
+
+| 設定 | median time |
+|---|---|
+| `-N1` (sequential) | 480 ms |
+| `-N4 -A256m` | 665 ms (**38% slower**) |
+| `-N4 -A256m` 単発 | 317 ms (1 度だけ観測、再現せず) |
+
+### 結論: parallel 化は逆効果
+
+理由 (推測):
+1. **Storable Vector allocation contention** — `LA.fromList` が
+   foreign C heap 経由でアロケーションするため、複数スレッドからの
+   同時 alloc がシリアル化する
+2. **GC pressure across threads** — n=2000 × reps=2000 = 4M Double
+   分の Storable garbage を 4 スレッドで生成し、parallel GC 同期で
+   overhead が拡大
+3. **Memory bandwidth saturation** — sampleVar の inner loop は
+   メモリ帯域律速で、コア追加の効果が小さい
+
+### 状況により有効になる可能性
+
+- 単発で `-A256m` 指定時に 1.81× speedup を観測したが、再現せず
+- spark 単位の作業量 > ~ms オーダーで、Storable allocation を
+  伴わないワークロードでは効く可能性あり (e.g. permutationTest を
+  純数値だけで完結させた場合)
+- MCMC chain 並列化 (`mapConcurrently`) は機能している (各 chain が
+  数秒の長尺ワーク + 独立 GenIO) — Strategies と異なるパターン
+
+### 行動
+
+bootstrap / permutationTest への並列化は実装せず revert。
+本コードベースで parMap/parListChunk が広く有効でないことが確認できたので、
+今後の並列化候補は `mapConcurrently` ベース (long-running independent
+chains) に限定する方針。
