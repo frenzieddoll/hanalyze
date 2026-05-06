@@ -61,33 +61,35 @@ fitQuantile :: Double             -- ^ Quantile level @τ ∈ (0, 1)@.
 fitQuantile tau x y
   | tau <= 0 || tau >= 1 = error "fitQuantile: tau must be in (0, 1)"
   | otherwise =
-      let beta0       = x LA.<\> y         -- OLS 初期値
-          eps         = 1e-6
-          maxIter     = 100 :: Int
-          tol         = 1e-7
+      let !beta0      = x LA.<\> y         -- OLS 初期値
+          !eps        = 1e-6
+          !maxIter    = 100 :: Int
+          !tol        = 1e-7
+          !p          = LA.cols x
+          !onesP      = LA.konst 1 p :: LA.Vector Double
           (betaF, k)  = loop beta0 0
           loop b iter
             | iter >= maxIter = (b, iter)
             | otherwise =
-                let r    = y - x LA.#> b
+                let !r    = y - x LA.#> b
                     -- w_i = 1 / (2 max(|r_i|, eps))
-                    wVec = LA.cmap (\v -> 1 / (2 * max eps (abs v))) r
+                    !wVec = LA.cmap (\v -> 1 / (2 * max eps (abs v))) r
                     -- y' = y + (tau - 0.5) / w
-                    yp   = y + LA.cmap (\wi -> (tau - 0.5) / wi) wVec
-                    -- WLS: β = (Xᵀ W X)⁻¹ Xᵀ W y'  (W は対角)
-                    -- 効率: W^{1/2} を両側に掛けて hmatrix の <\> を使う
-                    sqW    = LA.cmap sqrt wVec
-                    xW     = LA.scale 1 x LA.<> LA.diag sqW    -- 行ごとに sqrt(w) 倍したい
-                    -- 注: hmatrix の対角行列乗算は遅いので cmap で行スケール
-                    xScaled = LA.fromRows
-                                [ LA.scale (sqW LA.! i) (LA.toRows x !! i)
-                                | i <- [0 .. LA.rows x - 1] ]
-                    yScaled = LA.fromList
-                                [ (sqW LA.! i) * (yp LA.! i)
-                                | i <- [0 .. LA.size yp - 1] ]
-                    bNew   = xScaled LA.<\> yScaled
-                    delta  = LA.norm_2 (bNew - b)
-                    _ = xW
+                    !yp   = y + LA.cmap (\wi -> (tau - 0.5) / wi) wVec
+                    -- W^{1/2}.
+                    !sqW  = LA.cmap sqrt wVec
+                    -- B10a (2026-05-06): row-scaling of X via outer
+                    -- product (broadcast sqW across columns) instead
+                    -- of the previous "@LA.toRows x !! i@" + "@diag@"
+                    -- combination, which was @O(n² p)@ per iteration
+                    -- (76× slower than statsmodels on n=10k p=20).
+                    -- Now @O(n p)@ per iteration — single elementwise
+                    -- multiply with a fully-allocated outer product.
+                    !sqWBcast = LA.outer sqW onesP   -- n × p
+                    !xScaled  = sqWBcast * x         -- n × p
+                    !yScaled  = sqW * yp             -- length n
+                    !bNew     = xScaled LA.<\> yScaled
+                    !delta    = LA.norm_2 (bNew - b)
                 in if delta < tol then (bNew, iter + 1)
                                   else loop bNew (iter + 1)
           yhat = x LA.#> betaF

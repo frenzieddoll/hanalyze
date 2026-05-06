@@ -1,7 +1,7 @@
 system,suite,name,time_ms,acc_main,acc_aux,extra
-haskell,survts,ARIMA_n1000_pdq111,1.204905,0.000000,0.000000,Model.TimeSeries.fitARIMA p=1 d=1 q=1 n=1000
-haskell,survts,CoxPH_n2000_p2_30pct_censor,19.294365,0.573137,-0.328833,Model.Survival.coxPH n=2000 p=2 (Newton-Raphson)
-haskell,survts,KM_n2000,0.484069,9.185845,0.000000,Model.Survival.kaplanMeier n=2000
-haskell,survts,Quantile_n10000_p20_tau0.5,15162.709052,0.000000,0.000000,Model.Quantile.fitQuantile tau=0.5 n=10000 p=20
-haskell,survts,GAM_n2000_p2_d3_k5,10.723888,0.000000,0.000000,Model.GAM.fitGAM degree=3 knots=5 lambda=1.0 n=2000 p=2
-haskell,survts,Spline_PCHIP_n1000,0.148955,3337.745216,0.000000,"Stat.Interpolate.interp1d PCHIP, build n=1000 + eval @5000 pts"
+haskell,survts,ARIMA_n1000_pdq111,1.249339,0.000000,0.000000,Model.TimeSeries.fitARIMA p=1 d=1 q=1 n=1000
+haskell,survts,CoxPH_n2000_p2_30pct_censor,18.954992,0.573137,-0.328833,Model.Survival.coxPH n=2000 p=2 (Newton-Raphson)
+haskell,survts,KM_n2000,0.454369,9.185845,0.000000,Model.Survival.kaplanMeier n=2000
+haskell,survts,Quantile_n10000_p20_tau0.5,251.425315,0.000000,0.000000,Model.Quantile.fitQuantile tau=0.5 n=10000 p=20
+haskell,survts,GAM_n2000_p2_d3_k5,9.699832,0.000000,0.000000,Model.GAM.fitGAM degree=3 knots=5 lambda=1.0 n=2000 p=2
+haskell,survts,Spline_PCHIP_n1000,0.143158,3337.745216,0.000000,"Stat.Interpolate.interp1d PCHIP, build n=1000 + eval @5000 pts"
