@@ -157,23 +157,19 @@ irlsStep :: Link -> (Double -> Double)
           -> Family -> LA.Matrix Double -> LA.Vector Double -> LA.Vector Double
           -> LA.Vector Double
 irlsStep (_, gInv, gDeriv) varFn clamp family x y beta =
-  -- F2: replace per-element list comprehensions (which allocated an
-  -- n-element Haskell list per IRLS step) with massiv's fused 'A.map'
-  -- and 'A.zipWith3'. The element-wise weight (ws) and working
-  -- response (zs) are computed in-place from Storable buffers without
-  -- any list intermediate.
+  -- Phase 12a (2026-05-06): replaced massiv-based map/zipWith3 with
+  -- pure VS.{map,zipWith3}. Profile (Phase 11) showed
+  -- @trivialScheduler_@ (massiv) consumed 9.8% of GLM IRLS time —
+  -- pure overhead since 'compFor' was always 'Seq'. The replacement
+  -- is single-pass, allocation-equivalent, and avoids the
+  -- hmatrix↔massiv round trip.
   let eta   = x LA.#> beta
       mu    = clamp family (KD.mapVector gInv eta)
-      etaA  = MA.fromStorableVector MA.Seq eta
-      muA   = MA.fromStorableVector MA.Seq mu
-      yA    = MA.fromStorableVector MA.Seq y
-      ws    = MA.toStorableVector $ MA.computeAs MA.S $
-                MA.map (\m -> max 1e-10
-                                (1.0 / (gDeriv m ^ (2 :: Int) * varFn m)))
-                       muA
-      zs    = MA.toStorableVector $ MA.computeAs MA.S $
-                MA.zipWith3 (\ei yi mi -> ei + (yi - mi) * gDeriv mi)
-                            etaA yA muA
+      ws    = VS.map (\m -> max 1e-10
+                              (1.0 / (gDeriv m ^ (2 :: Int) * varFn m)))
+                     mu
+      zs    = VS.zipWith3 (\ei yi mi -> ei + (yi - mi) * gDeriv mi)
+                          eta y mu
       -- Normal-equations form: solve (Xᵀ W X) β = Xᵀ W z via SPD Cholesky.
       -- Faster than solving (√W X) β = (√W z) with the general LSQ
       -- (dgels) when n ≫ p, which is the common GLM regime.
