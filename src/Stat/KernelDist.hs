@@ -60,6 +60,7 @@ diagAB a b =
   let n    = LA.cols a
       ones = LA.konst 1 n :: LA.Vector Double
   in (a * LA.tr b) LA.#> ones
+{-# INLINE diagAB #-}
 
 -- | Per-row dot products of two same-shape matrices.
 --
@@ -71,6 +72,7 @@ rowDotsAB a b =
   let n    = LA.cols a
       ones = LA.konst 1 n :: LA.Vector Double
   in (a * b) LA.#> ones
+{-# INLINE rowDotsAB #-}
 
 -- | Squared Euclidean norm of every row of @X@. Length-@n@ vector.
 --
@@ -83,6 +85,7 @@ rowSqNorms x =
   let p    = LA.cols x
       ones = LA.konst 1 p :: LA.Vector Double
   in (x * x) LA.#> ones
+{-# INLINE rowSqNorms #-}
 
 -- | Pairwise squared distance among rows of one matrix.
 --

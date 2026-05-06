@@ -39,6 +39,7 @@ defaultJitters = [0, 1e-10, 1e-8, 1e-6, 1e-4]
 -- typically 'LA.\<\\\>').
 cholSolve :: LA.Matrix Double -> LA.Matrix Double -> Maybe (LA.Matrix Double)
 cholSolve = cholSolveJitterWith defaultJitters
+{-# INLINE cholSolve #-}
 
 -- | Like 'cholSolve' but always returns a result by falling back to
 -- @LA.\<\\\>@ (the general LSQ solver) if the Cholesky path fails for
@@ -76,6 +77,7 @@ cholSolveJitterWith jitters a b
 -- (raised as a Haskell exception) when the matrix is not SPD.
 cholFactor :: LA.Matrix Double -> Maybe (LA.Matrix Double)
 cholFactor = tryChol
+{-# INLINE cholFactor #-}
 
 -- | Solve @A X = B@ given an /already-computed/ Cholesky factor @R@
 -- (from 'cholFactor', upper-triangular with @A = Rᵀ R@). Cheaper when
@@ -85,6 +87,7 @@ cholFactor = tryChol
 cholSolveWithFactor :: LA.Matrix Double -> LA.Matrix Double -> LA.Matrix Double
 cholSolveWithFactor r b =
   LA.triSolve LA.Upper r (LA.triSolve LA.Lower (LA.tr r) b)
+{-# INLINE cholSolveWithFactor #-}
 
 tryChol :: LA.Matrix Double -> Maybe (LA.Matrix Double)
 tryChol a =

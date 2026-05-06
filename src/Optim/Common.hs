@@ -72,6 +72,7 @@ data OptimResult = OptimResult
 flipFor :: Direction -> ([Double] -> Double) -> ([Double] -> Double)
 flipFor Minimize f = f
 flipFor Maximize f = negate . f
+{-# INLINE flipFor #-}
 
 -- ---------------------------------------------------------------------------
 -- Box constraints (各次元の上下限)
