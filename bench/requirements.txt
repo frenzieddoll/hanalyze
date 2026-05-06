@@ -35,3 +35,17 @@ pymoo
 jax
 jaxlib
 numpyro
+
+# --- MCMC comparison (HMC/NUTS, planned B7) ---
+# pymc: most popular Python PPL with NUTS. May not have wheels for the
+#       newest Python versions; in that case fall back to blackjax / numpyro.
+# blackjax: lightweight JAX-based HMC/NUTS, robust install.
+# arviz: WAIC / PSIS-LOO / ESS / R-hat. Also doubles as a sanity-check
+#        for our own Stat.MCMC and Stat.ModelSelect outputs.
+pymc
+blackjax
+arviz
+
+# --- survival analysis comparison (planned B8) ---
+# lifelines: Kaplan-Meier, Nelson-Aalen, Cox PH, log-rank.
+lifelines
