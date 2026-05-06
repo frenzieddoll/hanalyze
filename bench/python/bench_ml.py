@@ -121,7 +121,7 @@ def bench_dt(path: Path, name: str, n_iter: int = 5) -> Row:
 # ---------------------------------------------------------------------------
 
 def bench_rf(path: Path, name: str, n_trees: int = 50,
-             n_iter: int = 3) -> Row:
+             n_iter: int = 5) -> Row:
     x, y = load_xy(path)
     yi = y.astype(int)
 
@@ -154,8 +154,8 @@ def main() -> None:
     rows: list[Row] = [
         bench_pca(DATA / "lm_n10000_p50.csv",       "PCA_n10000_p50_k5",  5),
         bench_kmeans(DATA / "kernel_n2000_p5.csv",  "KMeans_n2000_p5_k5", 5),
-        bench_dt(DATA / "logistic_n10000_p20.csv",  "DT_n10000_p20"),
-        bench_rf(DATA / "logistic_n10000_p20.csv",  "RF_n10000_p20_t50", 50),
+        bench_dt(DATA / "logistic_n2000_p10.csv",  "DT_n2000_p10"),
+        bench_rf(DATA / "logistic_n2000_p10.csv",  "RF_n2000_p10_t20", 20),
     ]
     out = OUT / "ml.csv"
     write_rows(out, rows)

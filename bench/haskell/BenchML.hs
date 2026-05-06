@@ -41,17 +41,21 @@ dtPhantom _ xs ys = DT.fitDT DT.defaultDTConfig xs ys
 
 {-# NOINLINE rfPhantom #-}
 rfPhantom :: Int -> [[Double]] -> [Double] -> MWC.GenIO -> IO RF.RandomForest
-rfPhantom _ xs ys gen = RF.fitRF RF.defaultRFConfig xs ys gen
+rfPhantom _ xs ys gen =
+  RF.fitRF RF.defaultRFConfig { RF.rfTrees = 20 } xs ys gen
 
 -- ---------------------------------------------------------------------------
 
 main :: IO ()
 main = do
   rows <- mconcat <$> sequence
-    [ benchPCA      "bench/data/lm_n10000_p50.csv"        "PCA_n10000_p50_k5"  5
-    , benchKMeans   "bench/data/kernel_n2000_p5.csv"      "KMeans_n2000_p5_k5" 5
-    , benchDT       "bench/data/logistic_n10000_p20.csv"  "DT_n10000_p20"
-    , benchRF       "bench/data/logistic_n10000_p20.csv"  "RF_n10000_p20_t50"
+    [ benchPCA      "bench/data/lm_n10000_p50.csv"       "PCA_n10000_p50_k5"  5
+    , benchKMeans   "bench/data/kernel_n2000_p5.csv"     "KMeans_n2000_p5_k5" 5
+    -- DT/RF use list-based [[Double]] APIs internally; we cap at
+    -- n=2000 p=10 so the bench finishes in reasonable time. The Python
+    -- side uses the same fixture for fairness.
+    , benchDT       "bench/data/logistic_n2000_p10.csv"  "DT_n2000_p10"
+    , benchRF       "bench/data/logistic_n2000_p10.csv"  "RF_n2000_p10_t20"
     ]
   writeRows "bench/results/haskell/ml.csv" rows
   putStrLn $ "wrote " ++ show (length rows)
@@ -131,7 +135,7 @@ benchRF path name = do
       hits  = length (filter id (zipWith (==) pi' yi))
       acc   = fromIntegral hits / fromIntegral (length ys) :: Double
   return [ BenchRow "haskell" "ml" name ms acc 0
-            "Model.RandomForest.fitRF default (50 trees)" ]
+            "Model.RandomForest.fitRF (20 trees)" ]
   where
     probe forest = case xs of
       (row:_) -> RF.predictRF forest row
