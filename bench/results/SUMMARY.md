@@ -1,15 +1,32 @@
 # hanalyze vs Python benchmark summary
 
-最終更新: 2026-05-06 (Phase 1〜13 perf 改善 + B6-B8 拡充 後)
+最終更新: 2026-05-07 (B11 mass matrix + B7-B13 拡充完了)
 
 統一条件: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1`、single-thread。
 比較対象: scipy / sklearn / pymoo / skopt / pymc / blackjax / lifelines /
-statsmodels / pygam。
+statsmodels / pygam / numpyro / arviz / cma / pygam。
 測定: regression / kernel / ml / mcmc / survts は **tasty-bench
 (relStDev 5%) の adaptive iteration** または `timeit N` の median。
 
 Python 値は `bench/results/python/*.csv` から (Python 側は変更なし)。
 Haskell 値は `bench/results/haskell/*.csv` の最新ラン。
+
+## 全 Tier カバレッジ完了 (2026-05-07)
+
+PLAN_FUTURE_BENCH の Tier 1〜5 を全完了。
+
+| Suite | 内容 | 状態 |
+|---|---|---|
+| regression / kernel / optim / mo / bo (B1-B5) | 既存 | ✅ |
+| ml (B6) | PCA / KMeans / DT / RF | ✅ |
+| mcmc (B7) | HMC / NUTS | ✅ (B11 で blackjax ESS 凌駕) |
+| **mcmc_extras (B7 残)** | Gibbs / ADVI / WAIC / LOO | ✅ 新規 |
+| survts (B8) | ARIMA / CoxPH / KM / Quantile | ✅ |
+| **ts_extras (B8 残)** | Holt-Winters / GAM / Spline 補間 | ✅ 新規 |
+| **optim_plus (B9)** | Constrained / Adam / CMAESFull | ✅ 新規 |
+| **stat_util (B10)** | Bootstrap / t/MW/KS / BH / Halton / AUC / k-fold | ✅ 新規 |
+| **multi_output (B12)** | MultiLM / MultiGP | ✅ 新規 |
+| **regrid (B13)** | regridLong PCHIP+Adaptive | ✅ 新規 |
 
 ## ハイライト
 
@@ -17,6 +34,14 @@ Haskell 値は `bench/results/haskell/*.csv` の最新ラン。
 
 | Suite | Bench | hanalyze | Python | speedup |
 |---|---|---|---|---|
+| **ts_extras** | **HW_seasonal n=500 p=12** | **0.19 ms** | 96 ms (statsmodels MLE) | **511×** ⭐ |
+| **optim_plus** | **CMAESFull_Rosenbrock5D** | **4.3 ms** | 78 ms (cma) | **18×** |
+| **optim_plus** | **Constrained_Quad2D_eq** | **0.062 ms** | 0.69 ms (SLSQP) | **11×** |
+| **regrid** | **Regrid_long_jagged_PCHIP** | **0.99 ms** | 19.4 ms (pandas+scipy) | **20×** |
+| **stat_util** | **Welch_ttest n=500×500** | **0.016 ms** | 0.62 ms (scipy) | **39×** |
+| **stat_util** | **KS_normal n=1000** | **0.073 ms** | 0.83 ms (scipy) | **11×** |
+| **mcmc_extras** | **ADVI_logistic 500iter** | **169 ms** | 511 ms (numpyro SVI) | **3.0×** |
+| **mcmc_extras** | **LOO_PSIS S=1000 N=200** | **15 ms** | 44 ms (arviz) | **2.9×** |
 | **survts** | **ARIMA n=1000 (1,1,1)** | **1.21 ms** | 154 ms | **128×** ⭐ |
 | optim | DE (Rosenbrock_2D) | 0.95 ms | 164 ms | **172×** |
 | optim | NelderMead (Rosenbrock_2D) | 0.06 ms | 4.83 ms | **87×** |
@@ -244,6 +269,65 @@ git log の `perf(...)` commit。
 >
 > 詳細: `bench/results/B10b_NUTS_DIAGNOSIS.md`。default は opt-in
 > (`nutsAdaptMass = False`); diagonal だけ実装、dense は未対応。
+
+### mcmc_extras (B7 残, 2026-05-07 追加)
+
+| name | hanalyze (ms) | python (ms) | speedup | acc match |
+|---|---:|---:|---:|---|
+| **ADVI_logistic_n60_iter500** | **169** | 511 (numpyro SVI) | **3.0×** | β1≈ 5/5.6 (ADVI 過学習で両側似) |
+| **LOO_PSIS_S1000_N200** | **15** | 44 (arviz) | **2.9×** | elpd=-208.5/-208.5 ✅ |
+| Gibbs_BetaBinomial_n10000 | 1.4 | 0.32 (numpy) | 0.23× | mean=0.583/0.583 vs analytic 0.583 ✅ |
+| WAIC_S1000_N200 | 19.3 | 6.3 (arviz) | 0.33× | waic=417/417 ✅ |
+
+> **観測**: ADVI は JAX JIT compile overhead で numpyro が小規模問題に弱く
+> hanalyze 逆転。LOO は arviz の overhead で hanalyze 優位。WAIC は値完全一致。
+
+### ts_extras (B8 残, 2026-05-07 追加)
+
+| name | hanalyze (ms) | python (ms) | speedup | 注 |
+|---|---:|---:|---:|---|
+| **HW_seasonal_n500_p12_additive** | **0.19** | 96 (statsmodels MLE) | **511×** ⭐ | hanalyze は固定 α=0.3 (closed-form)、statsmodels は MLE |
+| GAM_n2000_splines10_1D | 10.3 | 6.4 (pygam) | 0.62× | RMSE 0.054/0.184 (hanalyze の方が精度高) |
+| **Interp1D_PCHIP_knots1000_eval5000** | **0.22** | 0.17 (scipy) | **0.80×** (互角) | |
+| Interp1D_Linear_knots1000_eval5000 | 0.19 | 0.046 | 0.25× | scipy SIMD |
+| Interp1D_NatSpline_knots1000_eval5000 | 1.21 | 0.18 | 0.15× | scipy SIMD |
+
+### optim_plus (B9, 2026-05-07 追加)
+
+| name | hanalyze (ms) | python (ms) | speedup | 注 |
+|---|---:|---:|---:|---|
+| **Constrained_Quad2D_eq** | **0.062** | 0.69 (scipy SLSQP) | **11×** ⭐ | err 5.7e-8 vs 4.2e-9 (両側 ε精度) |
+| **Adam_quad50D_iter1000** | **5.5** | 8.3 (numpy) | **1.5×** | 両側 1.5e-44 (機械精度) |
+| **CMAESFull_Rosenbrock5D_iter200** | **4.3** | 78 (cma) | **18×** ⭐ | f=0.031 vs 5e-7 (cma の方が精度高) |
+
+> CMAESFull は速度で 18× 勝るが精度で cma の boundary-aware sampling +
+> restart 系に劣る。トレードオフ判断。
+
+### stat_util (B10, 2026-05-07 追加)
+
+| name | hanalyze (ms) | python (ms) | speedup | acc match |
+|---|---:|---:|---:|---|
+| **Welch_ttest_n500x500** | **0.016** | 0.62 (scipy) | **39×** ⭐ | t=-6.228/-6.228 ✅ |
+| **KS_normal_n1000** | **0.073** | 0.83 (scipy) | **11×** ⭐ | D=0.081/0.070 (実装差) |
+| **MannWhitneyU_n500x500** | **0.29** | 0.43 (scipy) | **1.5×** | U=98226/98226 ✅ |
+| **KFold_5_n1000** | **0.080** | 0.18 (sklearn) | **2.2×** | |
+| Bootstrap_mean_n1000_B1000 | 17.6 | 9.5 (scipy) | 0.54× | (Storable Vector 化で 90× 改善後) |
+| AUC_LogLoss_n10000 | 5.1 | 3.6 (sklearn) | 0.71× | AUC=1.0/1.0 ✅ |
+| Halton_n10000_d5 | 2.8 | 0.9 (scipy.qmc) | 0.32× | |
+| BH_pAdjust_n1000 | 2.2 | 0.033 (statsmodels) | 0.015× ⚠ | (要 perf 改善) |
+
+### multi_output (B12, 2026-05-07 追加)
+
+| name | hanalyze (ms) | python (ms) | speedup | 注 |
+|---|---:|---:|---:|---|
+| **MultiLM_n2000_p10_q5** | **0.36** | 0.82 (sklearn) | **2.3×** ⭐ | RMSE 0.035/0.035 ✅ |
+| MultiGP_n200_p3_q3 | 1866 | 257 (sklearn GPR) | 0.14× | GP HP opt × 3 outputs (構造的天井) |
+
+### regrid (B13, 2026-05-07 追加)
+
+| name | hanalyze (ms) | python (ms) | speedup | 注 |
+|---|---:|---:|---:|---|
+| **Regrid_long_jagged_PCHIP_N30** | **0.99** | 19.4 (pandas+scipy 合成) | **20×** ⭐ | 21 dose × ~80 z 点 → 30 点 grid |
 
 ### survts (B8, statsmodels / lifelines / pygam / scipy 比較)
 

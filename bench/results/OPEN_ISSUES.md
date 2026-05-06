@@ -1,6 +1,22 @@
 # Open issues — hanalyze vs Python ベンチで未達成の項目
 
-最終更新: 2026-05-06 (Phase 1〜13 perf 改善後)
+最終更新: 2026-05-07 (B7-B13 全 Tier 拡充 + B11 mass matrix 完了後)
+
+## 2026-05-07 拡充で見つかった新規課題
+
+| 項目 | hanalyze | Python | gap | 備考 |
+|---|---:|---:|---:|---|
+| BH_pAdjust n=1000 | 2.2 ms | 0.033 ms (statsmodels) | **67×** | List + sort で O(n log n) は OK だが定数倍が遅い。Vector 化候補 |
+| MultiGP n=200 p=3 q=3 | 1866 ms | 257 ms (sklearn GPR) | 7.3× | GP HP opt × 出力数。GP_opt と同じ構造的天井 |
+| Halton n=10000 d=5 | 2.8 ms | 0.9 ms (scipy.qmc) | 3.1× | scipy が C 実装、hanalyze は 純粋 Haskell |
+| Bootstrap n=1000 B=1000 | 17.6 ms | 9.5 ms (scipy) | 1.85× | Storable Vector 化で 90× 改善済、残差は scipy の SIMD 差 |
+| GAM n=2000 splines=10 | 10.3 ms | 6.4 ms (pygam) | 1.6× | hanalyze の精度 (RMSE 0.054) は pygam (0.184) より高い |
+| Spline NaturalSpline 1000 knots | 1.2 ms | 0.18 ms (scipy) | 6.6× | scipy CubicSpline は SIMD 化された Cython |
+
+副次成果: B10 で **Stat.Bootstrap.bootstrap を Storable Vector 化** (1576ms → 17.6ms, 90×)。
+
+---
+
 
 凡例: 困難度 — H = 高 (FFI/C 拡張が必要、pure Haskell + hmatrix の枠
 を越える), M = 中 (200-500 行のアルゴリズム再実装), L = 低-中 (調整・

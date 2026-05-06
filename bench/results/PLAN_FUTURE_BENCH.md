@@ -1,6 +1,27 @@
 # 今後のベンチ計画 (B6+)
 
-最終更新: 2026-05-06
+最終更新: 2026-05-07 (Tier 1-5 全完了)
+
+## ✅ 完了状況 (2026-05-07)
+
+| Tier | Suite | 状態 |
+|---|---|---|
+| 1 | B6 ML Classical (PCA/KMeans/DT/RF) | ✅ 完了 |
+| 2 | B7 MCMC (HMC/NUTS) | ✅ 完了 (B11 mass matrix で blackjax ESS 凌駕) |
+| 2 | B7 残 (Gibbs/ADVI/WAIC/LOO) | ✅ 完了 (`mcmc_extras` suite) |
+| 3 | B8 TS/Survival (ARIMA/Cox/KM/Quantile) | ✅ 完了 |
+| 3 | B8 残 (Holt-Winters/GAM/Spline) | ✅ 完了 (`ts_extras` suite) |
+| 4a | B9 Optim+ (Constrained/Adam/CMAESFull) | ✅ 完了 (`optim_plus` suite) |
+| 4b | B10 Stat util (Bootstrap/tests/CV/...) | ✅ 完了 (`stat_util` suite) |
+| 5a | B12 Multi-output | ✅ 完了 (`multi_output` suite) |
+| 5b | B13 Regrid | ✅ 完了 (`regrid` suite) |
+
+詳細は [SUMMARY.md](SUMMARY.md) と [OPEN_ISSUES.md](OPEN_ISSUES.md)。
+
+---
+
+## 旧計画 (履歴用に保持)
+
 
 ## 背景
 
