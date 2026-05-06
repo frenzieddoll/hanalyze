@@ -5,19 +5,19 @@
 [![License: BSD-3](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](LICENSE)
 [![GHC](https://img.shields.io/badge/GHC-9.6.7-blueviolet.svg)](https://www.haskell.org/ghc/)
 
-**Type-safe general-purpose statistical analysis toolkit (Haskell)** — covers classical regression, machine learning, Bayesian MCMC, multi-objective optimisation, design of experiments, and visualisation in one library.
-**All algorithms implemented natively in Haskell** (no R/Stan/Python bridge).
-On accuracy, hanalyze matches or exceeds Python/R in many domains; on speed, optimisation routines are 10-100× faster, machine-learning routines 1.4-5× slower than sklearn.
+**hanalyze** is a Haskell-native statistical engineering toolkit: regression, GLMM, Bayesian inference (HMC/NUTS/Gibbs/ADVI), Gaussian processes, design of experiments, multi-objective optimisation, and HTML reporting integrated under one API.
+Core modelling and optimisation logic is implemented in Haskell, with numerical linear algebra delegated to hmatrix/BLAS/LAPACK. **No R/Stan/Python bridge required**.
+Benchmarks (see below) show competitive accuracy with Python/R references in the tested cases. Performance varies by domain: optimisation and small-to-medium MCMC workloads are often faster in these benchmarks, while large-scale ML/GLM workloads are currently slower than sklearn.
 
 ---
 
 ## Highlights
 
-- **Type-safe**: dimension and dtype mismatches caught at compile time; safe to refactor
-- **Pure-Haskell algorithms**: every routine implemented from scratch, no foreign bridge
-- **Integrated reporting**: one call produces HTML/PNG/SVG with MathJax, Mermaid, and interactive widgets
+- **Haskell-native**: types catch many dtype/API mismatches; shape checks happen at runtime where needed
+- **Algorithms in Haskell, BLAS for numerics**: hmatrix/BLAS/LAPACK powers linear algebra; no R/Stan/Python bridge
+- **HTML reporting**: MathJax/Mermaid + Vega-Lite visualisations in one call; PNG/SVG export available for supported plots
 - **Dirty-data defence**: 8 warning codes + auto-sniff (delim/header/encoding) + cleaning DSL
-- **First-class Hackage `dataframe`**: Polars-like DataFrame used directly; Parquet/JSON native
+- **Hackage `dataframe`**: Polars-like DataFrame used directly; CSV native, Parquet/JSON support through `dataframe`
 
 ---
 
@@ -75,7 +75,7 @@ Features grouped by category. Each capability links to a usage doc and (where re
 | Gibbs sampling (auto-conjugate detection + hybrid) | `MCMC.Gibbs` | [bayesian/04-gibbs.md](docs/bayesian/04-gibbs.md) | [bayesian/theory-mcmc.md](docs/bayesian/theory-mcmc.md) |
 | Variational inference (ADVI mean-field Adam) | `Stat.VI` | [bayesian/05-vi.md](docs/bayesian/05-vi.md) | [bayesian/theory-advanced.md](docs/bayesian/theory-advanced.md) |
 | Model comparison (WAIC / PSIS-LOO / Pseudo-BMA) | `Stat.ModelSelect` | [bayesian/06-model-comparison.md](docs/bayesian/06-model-comparison.md) | [bayesian/theory-bayesian-basics.md](docs/bayesian/theory-bayesian-basics.md) |
-| Posterior predictive checks / PyMC compatibility | `Stat.PosteriorPredictive` | [02-pymc-comparison.md](docs/02-pymc-comparison.md) | — |
+| Posterior predictive checks; selected PyMC-style modelling features | `Stat.PosteriorPredictive` | [02-pymc-comparison.md](docs/02-pymc-comparison.md) | — |
 
 ### Optimisation (`Optim.*`)
 
@@ -116,20 +116,24 @@ Features grouped by category. Each capability links to a usage doc and (where re
 
 ## Quick start
 
+### 30 seconds via CLI
+
 ```bash
-# 1. Clone + build
 git clone https://github.com/frenzieddoll/hanalyze
 cd hanalyze
-cabal build all                              # library + all executables
-cabal test                                   # 238 examples
+cabal build all
 
-# 2. Use the CLI
-hanalyze regress data.csv x y --report report.html
-hanalyze info data.csv
-hanalyze hist data.csv x --fit Normal
+# Regress sales on price + promo, write an HTML report.
+hanalyze regress data/readme/sales.csv "price promo" sales --report sales.html
+# β₀=185.05  β(price)=-4.37  β(promo)=+32.29  R²=0.995
 ```
 
-As a library:
+`data/readme/sales.csv` is a 20-row demo CSV shipped with the repository
+(`price`, `promo`, `sales`). The generated `sales.html` includes coefficients,
+fit diagnostics, and an interactive prediction widget — straight from one
+command.
+
+### 30 seconds via Haskell API
 
 ```haskell
 import qualified Stat.Test as ST
@@ -171,7 +175,7 @@ For per-command flags, run `hanalyze <cmd> --help` or see [docs/01-quickstart.md
 
 ## Examples / demos
 
-`demo/` contains 60+ demos. Highlights:
+`demo/` contains many demos (60+ as of this release). Highlights:
 
 | Demo | Summary |
 |---|---|
@@ -188,44 +192,78 @@ Run: `dist-newstyle/build/x86_64-linux/ghc-9.6.7/hanalyze-0.1.0.0/x/<demo-name>/
 
 ---
 
-## Comparison vs Python / R
+## Where hanalyze fits
 
-Summary of benchmarks (full details in [docs/comparison/python-r.md](docs/comparison/python-r.md)):
+Rather than a complete Python/R replacement, hanalyze targets specific
+workflows where Haskell integration, single-binary CLI, and tight reporting
+add value.
 
-| Domain | hanalyze verdict | Speed | Accuracy |
-|---|---|---|---|
-| **Single-objective optim** (DE/CMAES/L-BFGS/NM) | ✅ Dominant | 10-100× faster than scipy | 4-29 orders better than scipy on Sphere/Ackley/Levy |
-| **Multi-objective optim** (NSGA-II) | ✅ Wins | 1.1-1.6× faster than pymoo | Beats pymoo on all 4 ZDT/DTLZ |
-| **Bayesian optim** (BO) | ✅ Wins on real problems | 2.2× slower than skopt | Hartmann6: -3.07 vs skopt -2.77 |
-| **Simulated annealing** (Tsallis SA) | ✅ Wins | Comparable | Rastrigin: 0.0 (machine precision) |
-| **Classical regression** (LM/Ridge/Lasso/GLMM) | ◎ At parity or better | 1.04-30× faster than sklearn (LME 30×) | Same accuracy |
-| **Large-scale GLM/Lasso** (n ≥ 10k) | △ Behind | 3-5× slower than sklearn (Cython native) | Same accuracy |
-| **Kernel/GP** | △ Behind | 2.5-4.7× slower than sklearn | Same accuracy |
-| **Bayesian MCMC** (NUTS/HMC) | ✅ Pure-Haskell | (vs PyMC: not yet benchmarked) | (todo) |
-| **HBM (probabilistic programming)** | ✅ Polymorphic DSL | — | PyMC parity (Truncated/Censored/MvNormal/LKJ/...) |
-| **Hypothesis tests / multiple testing / bootstrap / effect** | ◎ Unified API | (vs scipy.stats: not yet benchmarked) | (todo) |
-| **Data manipulation** (DataFrame) | ◎ Sufficient | (vs pandas/dplyr: not yet benchmarked) | (todo) |
-| **Visualisation** | ◎ Vega-Lite based | — | Grammar-of-graphics parity |
-| **Time series** (ARIMA/Holt-Winters) | 🆕 Implemented | (vs statsmodels: not yet benchmarked) | (todo) |
-| **Survival analysis** (KM/Cox PH) | 🆕 Implemented | (vs lifelines: not yet benchmarked) | (todo) |
-| **PCA / clustering / decision tree** | 🆕 Implemented | (vs sklearn: not yet benchmarked) | (todo) |
+**Strong fit**
 
-For the full breakdown including todo benchmarks, see [docs/comparison/python-r.md](docs/comparison/python-r.md).
+- Haskell-native pipelines that need stats/Bayes/optim without calling out to Python
+- Single-binary CLI distribution (one `hanalyze` binary, no Python venv)
+- Dirty-CSV defence + cleaning + analysis in one workflow
+- DoE / Taguchi / orthogonal arrays for manufacturing and process tuning
+- HTML reports straight from the analysis (no separate templating step)
+- Type-safe analysis pipelines that catch dtype/API mismatches early
+
+**Not a goal — keep using existing tools for**
+
+- Large-scale DataFrame work (pandas / polars / data.table)
+- GPU deep learning (PyTorch / JAX)
+- The full breadth of scikit-learn's mature model zoo
+- The full Stan / PyMC MCMC diagnostics ecosystem
+- The full expressive range of ggplot2
 
 ---
 
-## Benchmarks
+## Comparison vs Python / R
 
-Highlights (full numbers in [bench/results/SUMMARY.md](bench/results/SUMMARY.md)):
+Numbers below come from `bench/results/{haskell,python}/*.csv`; see
+[bench/results/SUMMARY.md](bench/results/SUMMARY.md) for the full table and
+benchmark conditions (`OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1`,
+single-thread, deterministic seeds).
 
-- **Sphere_30D/DE**: hanalyze **1.0e-26** vs scipy 2.8e-5 (**21 orders better**)
-- **Sphere_30D/L-BFGS**: hanalyze **8.1e-40** vs scipy 2.6e-11 (**29 orders better**)
-- **Rastrigin_10D/SA**: hanalyze **0.0** ⭐ (parity with scipy 7.8e-14)
-- **Hartmann6/BO**: hanalyze **-3.07** vs skopt -2.77 (wins)
-- **DTLZ2_3/NSGA-II**: hanalyze 466 ms vs pymoo 758 ms (1.6× faster)
-- **DE Rosenbrock_2D**: hanalyze 1.2 ms vs scipy 164 ms (134× faster)
+| Domain | Result in these benchmarks |
+|---|---|
+| **Single-objective optim** (DE/CMAES/L-BFGS/NM) | Often faster than scipy in tested cases (Rosenbrock_2D/DE 134×, Ackley/CMAES 49×, Griewank/CMAES 54×). On Sphere_30D/L-BFGS the reported objective value is 8.1e-40 vs scipy 2.6e-11 in this run. |
+| **Multi-objective optim** (NSGA-II) | Comparable or favourable in the ZDT/DTLZ suite (DTLZ2_3 1.43× faster, ZDT1/2/3 within ±5% of pymoo). HV/IGD figures match or slightly improve on pymoo in these runs. |
+| **Bayesian optim** (BO) | Comparable on Branin (1.15×); on Hartmann6 the best objective in this run was -3.07 vs skopt -2.77. |
+| **Simulated annealing** (Tsallis SA) | Comparable; Rastrigin_10D reaches 0.0 in this run (scipy `dual_annealing` reports 7.8e-14). |
+| **Classical regression** (LM/Ridge/Lasso/GLMM) | Comparable in tested cases; LME 30× faster than statsmodels in our LME run. |
+| **Large-scale GLM/Lasso** (n ≥ 10k) | Currently slower than sklearn (3-5× in tested cases) — sklearn's Cython inner loops dominate. |
+| **Kernel/GP** | Currently slower than sklearn (2.5-4.7× in tested cases). |
+| **Bayesian MCMC** (NUTS/HMC) | NUTS with B11 mass-matrix adaptation: ESS comparable to blackjax (mu: 839 vs 810) on the 8-schools benchmark; 7.4× faster than PyMC; 2.8× slower than blackjax (JAX-JIT advantage). |
+| **HBM (probabilistic programming)** | Polymorphic DSL with selected PyMC-style modelling features and selected distributions (Truncated/Censored/MvNormal/LKJ/...). |
+| **VI / WAIC / LOO** | ADVI 3.0× faster than numpyro SVI on a small logistic posterior; LOO 2.9× faster than arviz on (S=1000, N=200) log-lik matrix. |
+| **Hypothesis tests / bootstrap / k-fold** | Welch t-test 39× faster, KS 11×, k-fold split 2.2× faster than scipy/sklearn in tested cases. |
+| **Time series / Spline / GAM** | ARIMA 128× faster than statsmodels; Spline PCHIP comparable to scipy; GAM ~1.6× slower than pygam in tested cases. |
+| **Survival analysis** (KM/Cox PH) | Comparable to lifelines in tested cases (KM/CoxPH after B9c refactor). |
+| **Multi-output regression / Regrid** | MultiLM 2.3× faster than sklearn; `regridLong` 20× faster than a hand-written pandas+scipy synthesis. |
+| **Visualisation** | Vega-Lite specs via hvega (grammar-of-graphics-style); HTML reports built-in. |
 
-Run: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 cabal run bench-{regression,kernel,optim,mo,bo}`, then `bench/python/bench_*.py` (see [bench/README.md](bench/README.md)).
+For a per-suite breakdown, see [docs/comparison/python-r.md](docs/comparison/python-r.md).
+
+---
+
+## Benchmark highlights
+
+Selected results from `bench/results/SUMMARY.md`. Each entry is a single
+benchmark configuration; absolute objective values depend on iteration
+counts, seeds, and tolerances — see the SUMMARY for full conditions.
+
+- **NUTS 8-schools** (warmup 500, samples 1000): hanalyze 1492 ms with ESS(mu) 839 vs blackjax 530 ms / ESS 810 in this run
+- **Holt-Winters seasonal n=500 p=12**: hanalyze 0.19 ms vs statsmodels MLE 96 ms in this run (note: hanalyze uses fixed α=0.3 closed-form; statsmodels does MLE)
+- **Sphere_30D/DE**: hanalyze 1.0e-26 vs scipy 2.8e-5 on this benchmark
+- **Sphere_30D/L-BFGS**: hanalyze 8.1e-40 vs scipy 2.6e-11 on this benchmark
+- **Rastrigin_10D/SA**: hanalyze 0.0 vs scipy `dual_annealing` 7.8e-14 in this run
+- **Hartmann6/BO**: hanalyze -3.07 vs skopt -2.77 in this run
+- **DTLZ2_3/NSGA-II**: hanalyze 528 ms vs pymoo 758 ms (1.43× faster in this run)
+- **DE Rosenbrock_2D**: hanalyze 1.2 ms vs scipy 164 ms (134× faster in this run)
+- **Constrained Quad2D (eq)**: hanalyze 0.062 ms vs scipy SLSQP 0.69 ms in this run
+- **regridLong on jagged long-form**: hanalyze 0.99 ms vs pandas+scipy synthesis 19.4 ms in this run
+
+Reproduce: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 cabal run bench-{regression,kernel,optim,mo,bo,mcmc-b7,mcmc-extras,ts-extras,optim-plus,stat-util,multi-output,regrid}`, then `bench/python/bench_*.py` (see [bench/README.md](bench/README.md)).
 
 ---
 
@@ -249,6 +287,14 @@ graph TD
 
 ---
 
+## Roadmap & API stability
+
+- **Stable** (API expected to remain backward-compatible within minor versions): `DataIO.*`, `Stat.{Test, Bootstrap, MultipleTesting, ClassMetrics, CV, Effect, Distribution}`, `Model.{LM, GLM, Spline, Regularized, RandomForest, DecisionTree, TimeSeries, Survival, GAM}`, `Optim.{NelderMead, LBFGS, DifferentialEvolution, CMAES, NSGA, BayesOpt, SimulatedAnnealing, ParticleSwarm}`, `Design.*`, `Viz.{Scatter, Bar, Histogram}`.
+- **Experimental** (API may evolve): `Model.HBM` DSL, `MCMC.NUTS` (mass-matrix adaptation is opt-in), `Stat.VI` (ADVI), `Model.{GP, RFF, GPRobust, GLMM}`, `Viz.ReportBuilder`. Behaviour is benchmarked but type signatures may shift.
+- **Future direction**: a unified top-level `Hanalyze.*` re-export layer, a Pipeline-style `Unfitted → Fitted` API, and a backend-abstraction typeclass for swapping hmatrix/Massiv/Accelerate are under consideration but not on a fixed schedule.
+
+---
+
 ## Module layout
 
 ```
@@ -262,7 +308,7 @@ src/
   MCMC/        — MH/HMC/NUTS/Gibbs/Slice (6 mods)
 ```
 
-Total: **103 modules, 238 tests passing**.
+As of this release: 103 modules, 238 tests.
 
 ---
 
@@ -270,7 +316,7 @@ Total: **103 modules, 238 tests passing**.
 
 ```bash
 cabal build all                  # library + all executables (60+ demos)
-cabal test                       # hspec, 238 examples
+cabal test                       # hspec test suite
 cabal repl                       # interactive REPL
 ```
 
