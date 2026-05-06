@@ -34,6 +34,8 @@ import qualified Statistics.Distribution.Normal   as Normal
 import qualified System.Random.MWC                as MWC
 import qualified Data.Vector                      as V
 import qualified Data.Vector.Mutable              as VM
+import qualified Data.Vector.Storable             as VS
+import qualified Data.Vector.Storable.Mutable     as MVS
 import           Control.Monad                    (replicateM, forM)
 import           Data.List                        (sort)
 
@@ -50,12 +52,22 @@ bootstrap
   -> MWC.GenIO
   -> IO [Double]
 bootstrap nReps stat xs gen = do
+  -- LA.Vector Double = Storable.Vector Double under the hood, so we can
+  -- fill a Storable.Mutable buffer and freeze it directly to an
+  -- LA.Vector. The previous implementation used [Double] + (!!), giving
+  -- O(n) per index → O(n²·B) total; this is O(n·B).
   let n = LA.size xs
-      xsList = LA.toList xs
   forM [1 .. nReps] $ \_ -> do
-    indices <- replicateM n (MWC.uniformR (0, n - 1) gen)
-    let resample = LA.fromList [xsList !! i | i <- indices]
-    pure (stat resample)
+    mv <- MVS.unsafeNew n
+    let go i
+          | i >= n    = pure ()
+          | otherwise = do
+              j <- MWC.uniformR (0, n - 1) gen
+              MVS.unsafeWrite mv i (xs `LA.atIndex` j)
+              go (i + 1)
+    go 0
+    frozen <- VS.unsafeFreeze mv
+    pure (stat frozen)
 
 -- | Percentile bootstrap CI: @[(α/2)-quantile, (1-α/2)-quantile]@ of
 -- the resampled statistic distribution.
