@@ -35,8 +35,6 @@ import qualified Data.Vector as V
 import qualified Data.Vector.Storable as VS
 import qualified Numeric.LinearAlgebra as LA
 import qualified Stat.Cholesky        as Chol
-import qualified Stat.KernelDist      as KD
-import qualified Data.Massiv.Array    as MA
 import qualified Optim.LBFGS          as LBFGS
 import qualified Optim.Common         as OC
 import           System.IO.Unsafe     (unsafePerformIO)
@@ -152,10 +150,16 @@ initBeta family linkFn y p =
              Gaussian -> yMean
   in LA.fromList (g yC : replicate (p - 1) 0.0)
 
+-- | One IRLS step. Returns the updated @β@ together with the
+-- corresponding @μ@ and the log-likelihood at the /input/ @β@.
+--
+-- Returning @μ_old@ and @ll_old@ here lets the convergence loop in
+-- 'runIRLS' avoid an extra @x #> beta@ + @gInv μ@ + 'glmLogLik' pass
+-- per iteration that the old API forced (see glmbench §1).
 irlsStep :: Link -> (Double -> Double)
           -> (Family -> LA.Vector Double -> LA.Vector Double)
           -> Family -> LA.Matrix Double -> LA.Vector Double -> LA.Vector Double
-          -> LA.Vector Double
+          -> (LA.Vector Double, LA.Vector Double, Double)
 irlsStep (_, gInv, gDeriv) varFn clamp family x y beta =
   -- Phase 12a (2026-05-06): replaced massiv-based map/zipWith3 with
   -- pure VS.{map,zipWith3}. Profile (Phase 11) showed
@@ -163,20 +167,22 @@ irlsStep (_, gInv, gDeriv) varFn clamp family x y beta =
   -- pure overhead since 'compFor' was always 'Seq'. The replacement
   -- is single-pass, allocation-equivalent, and avoids the
   -- hmatrix↔massiv round trip.
-  let eta   = x LA.#> beta
-      mu    = clamp family (KD.mapVector gInv eta)
-      ws    = VS.map (\m -> max 1e-10
-                              (1.0 / (gDeriv m ^ (2 :: Int) * varFn m)))
-                     mu
-      zs    = VS.zipWith3 (\ei yi mi -> ei + (yi - mi) * gDeriv mi)
-                          eta y mu
+  let eta    = x LA.#> beta
+      mu     = clamp family (VS.map gInv eta)
+      llHere = glmLogLik family y mu
+      ws     = VS.map (\m -> max 1e-10
+                               (1.0 / (gDeriv m ^ (2 :: Int) * varFn m)))
+                      mu
+      zs     = VS.zipWith3 (\ei yi mi -> ei + (yi - mi) * gDeriv mi)
+                           eta y mu
       -- Normal-equations form: solve (Xᵀ W X) β = Xᵀ W z via SPD Cholesky.
       -- Faster than solving (√W X) β = (√W z) with the general LSQ
       -- (dgels) when n ≫ p, which is the common GLM regime.
-      wxT   = LA.tr x * LA.asRow ws            -- p × n with column scaling
-      gMat  = wxT LA.<> x                       -- p × p (SPD)
-      bRhs  = LA.asColumn (wxT LA.#> zs)        -- p × 1
-  in LA.flatten (Chol.cholSolveJitter gMat bRhs)
+      wxT     = LA.tr x * LA.asRow ws            -- p × n with column scaling
+      gMat    = wxT LA.<> x                       -- p × p (SPD)
+      bRhs    = LA.asColumn (wxT LA.#> zs)        -- p × 1
+      betaNew = LA.flatten (Chol.cholSolveJitter gMat bRhs)
+  in (betaNew, mu, llHere)
 
 -- ---------------------------------------------------------------------------
 -- Solver selection
@@ -281,10 +287,9 @@ runLBFGS_GLM family x y =
                          (LA.asColumn resid)
                          (LA.fromList [r2])
       -- Fisher information at convergence (same path as IRLS).
-      muL    = LA.toList mu
-      ws     = LA.fromList [ max 1e-10 (1.0 / (gDeriv m ^ (2::Int)
-                                              * varOf family m))
-                           | m <- muL ]
+      ws     = VS.map (\m -> max 1e-10 (1.0 / (gDeriv m ^ (2::Int)
+                                                * varOf family m)))
+                      mu
       wxT    = LA.tr x * LA.asRow ws
       gMat   = wxT LA.<> x
       fisher = Chol.cholSolveJitter gMat (LA.ident p)
@@ -299,53 +304,57 @@ runLBFGS_GLM family x y =
 -- errors and credible/predictive intervals.
 runIRLS :: Family -> LinkFn -> LA.Matrix Double -> LA.Vector Double
         -> (FitResult, LA.Matrix Double)
-runIRLS family linkFn x y = (mkResult betaFinal, fisherInv betaFinal)
+runIRLS family linkFn x y = (mkResult betaFinal muFinal, fisherInvFromMu muFinal)
   where
     link@(_, gInv, _) = linkFnOf linkFn
     step  = irlsStep link (varOf family) safeMu family x y
     beta0 = initBeta family linkFn y (LA.cols x)
 
-    -- 'converge' tracks both β and the previous log-likelihood. We stop
-    -- when |Δβ|₂ < tol (the original criterion) **or** when the relative
-    -- log-likelihood change drops below 'tol'. The latter typically
-    -- triggers several iterations earlier than the β-norm criterion on
-    -- ill-scaled problems and is the standard sklearn / statsmodels rule.
-    llOf beta =
-      let mu = safeMu family (LA.cmap gInv (x LA.#> beta))
-      in glmLogLik family y mu
+    -- Mu computation (used at the end of convergence and on divergence
+    -- fallback). One @x #> β@ + @gInv μ@ pass.
+    muOf beta = safeMu family (VS.map gInv (x LA.#> beta))
 
-    betaFinal = converge maxIter beta0 (llOf beta0)
+    -- 'converge' tracks β and the /previous/ iteration's log-likelihood.
+    -- 'irlsStep' returns @(β_{k+1}, μ_at_β_k, ll_at_β_k)@: the updated β
+    -- plus the current iter's μ + ll, all free side-products of the
+    -- IRLS step itself. We pass @ll_at_β_k@ forward as the next iter's
+    -- @llP@, eliminating the dedicated O(np) @llOf β@ pass per iter
+    -- that the previous code performed (glmbench §1).
+    --
+    -- Convergence is checked on β-norm or relative ll change. The ll
+    -- comparison is between ll(β_k) and ll(β_{k-1}) — one iteration
+    -- lagged from the standard ll(β_{k+1}) vs ll(β_k) form, which is
+    -- equivalent in steady state and avoids any extra μ pass in the
+    -- inner loop.
+    (betaFinal, muFinal) = converge maxIter beta0 (glmLogLik family y (muOf beta0))
 
-    converge 0 beta _   = beta
+    converge 0 beta _  = (beta, muOf beta)
     converge n beta llP =
-      let betaNew = step beta
+      let (betaNew, _muHere, llHere) = step beta
       in if any notFinite (LA.toList betaNew)
-         then beta                       -- divergence; keep last good β
+         then (beta, muOf beta)          -- divergence; keep last good β
          else
-           let llN  = llOf betaNew
-               dLL  = abs (llN - llP) / max (abs llP) 1
-               dB   = LA.norm_2 (betaNew - beta)
+           let dB  = LA.norm_2 (betaNew - beta)
+               dLL = abs (llHere - llP) / max (abs llP) 1
            in if dB < tol || dLL < tol
-                then betaNew
-                else converge (n - 1) betaNew llN
+                then (betaNew, muOf betaNew)   -- final μ pass once
+                else converge (n - 1) betaNew llHere
 
     notFinite b = isNaN b || isInfinite b
 
-    mkResult beta =
-      let (_, gInv, _) = link
-          mu    = safeMu family (LA.cmap gInv (x LA.#> beta))
-          resid = y - mu
+    mkResult beta mu =
+      let resid = y - mu
           r2    = pseudoR2 family y mu
       in FitResult (LA.asColumn beta)
                    (LA.asColumn mu)
                    (LA.asColumn resid)
                    (LA.fromList [r2])
 
-    fisherInv beta =
-      let (_, gInv, gDeriv) = link
-          mu   = safeMu family (LA.cmap gInv (x LA.#> beta))
-          muL  = LA.toList mu
-          ws   = LA.fromList [ max 1e-10 (1.0 / (gDeriv m ^ (2::Int) * varOf family m)) | m <- muL ]
+    fisherInvFromMu mu =
+      let (_, _, gDeriv) = link
+          ws   = VS.map (\m -> max 1e-10
+                                 (1.0 / (gDeriv m ^ (2::Int) * varOf family m)))
+                        mu
           wxT  = LA.tr x * LA.asRow ws    -- p × n
           gMat = wxT LA.<> x               -- p × p (SPD)
           p    = LA.cols x
@@ -487,14 +496,17 @@ glmDeviance Gaussian y mu =
   let r = y - mu in r `LA.dot` r
 glmDeviance Binomial y mu =
   let muC  = LA.cmap (max 1e-15 . min (1 - 1e-15)) mu
-      term = zipWith (\yi mui -> xlogy yi (yi / mui) + xlogy (1 - yi) ((1 - yi) / (1 - mui)))
-               (LA.toList y) (LA.toList muC)
-  in 2 * sum term
+      term = VS.zipWith
+               (\yi mui -> xlogy yi (yi / mui)
+                         + xlogy (1 - yi) ((1 - yi) / (1 - mui)))
+               y muC
+  in 2 * VS.sum term
 glmDeviance Poisson y mu =
   let muC  = LA.cmap (max 1e-15) mu
-      term = zipWith (\yi mui -> xlogy yi (yi / mui) - (yi - mui))
-               (LA.toList y) (LA.toList muC)
-  in 2 * sum term
+      term = VS.zipWith
+               (\yi mui -> xlogy yi (yi / mui) - (yi - mui))
+               y muC
+  in 2 * VS.sum term
 
 xlogy :: Double -> Double -> Double
 xlogy 0 _ = 0
