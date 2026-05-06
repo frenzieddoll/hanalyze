@@ -32,6 +32,7 @@ import Model.LM (multiPolyDesignMatrix, linspace, SmoothFit (..))
 
 import Data.Text (Text)
 import qualified Data.Vector as V
+import qualified Data.Vector.Storable as VS
 import qualified Numeric.LinearAlgebra as LA
 import qualified Stat.Cholesky        as Chol
 import qualified Stat.KernelDist      as KD
@@ -123,18 +124,23 @@ tol = 1e-8
 --     ratio-based stopping rule).
 --   * Binomial: @y log μ + (1 − y) log (1 − μ)@.
 --   * Poisson : @y log μ − μ@ (Stirling term dropped).
+-- Phase 11c: list-based zipWith/sum was 11.3% time + 8.3% alloc on
+-- the n=10k logit profile. Replaced with vector-native zipVectorWith
+-- + sumElements (no list materialization, single BLAS-friendly pass).
+-- The family is dispatched once at the top-level let-binding so the
+-- inner zipVectorWith sees a fully monomorphic Double -> Double ->
+-- Double closure that GHC can specialize.
 glmLogLik :: Family -> LA.Vector Double -> LA.Vector Double -> Double
-glmLogLik family y mu =
-  let yL = LA.toList y
-      mL = LA.toList mu
-      f Gaussian yi mi = -0.5 * (yi - mi) ** 2
-      f Binomial yi mi =
+glmLogLik family y mu = VS.sum (VS.zipWith f y mu)
+  where
+    f = case family of
+      Gaussian -> \yi mi -> -0.5 * (yi - mi) ** 2
+      Binomial -> \yi mi ->
         let m' = max 1e-12 (min (1 - 1e-12) mi)
         in yi * log m' + (1 - yi) * log (1 - m')
-      f Poisson  yi mi =
+      Poisson  -> \yi mi ->
         let m' = max 1e-12 mi
         in yi * log m' - m'
-  in sum (zipWith (f family) yL mL)
 
 initBeta :: Family -> LinkFn -> LA.Vector Double -> Int -> LA.Vector Double
 initBeta family linkFn y p =
