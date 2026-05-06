@@ -1,3 +1,4 @@
+{-# LANGUAGE StrictData #-}
 -- | Particle Swarm Optimization (PSO).
 --
 -- Kennedy & Eberhart (1995). A metaheuristic in which a swarm of particles

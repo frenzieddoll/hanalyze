@@ -1,3 +1,4 @@
+{-# LANGUAGE StrictData #-}
 -- | L-BFGS (Limited-memory BFGS) quasi-Newton method.
 --
 -- Liu & Nocedal (1989). The standard for local optimization of large,

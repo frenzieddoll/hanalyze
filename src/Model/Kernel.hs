@@ -1,3 +1,4 @@
+{-# LANGUAGE StrictData #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | Kernel regression — Nadaraya-Watson and kernel ridge regression.
 --

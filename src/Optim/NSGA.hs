@@ -1,3 +1,4 @@
+{-# LANGUAGE StrictData #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | NSGA-II (Non-dominated Sorting Genetic Algorithm II) — Deb et al. 2002.
 --

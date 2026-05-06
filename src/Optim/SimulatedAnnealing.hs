@@ -1,3 +1,4 @@
+{-# LANGUAGE StrictData #-}
 -- | Simulated Annealing.
 --
 -- Kirkpatrick, Gelatt, Vecchi (1983). A physical analogy (cooling solids):

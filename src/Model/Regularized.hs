@@ -1,3 +1,4 @@
+{-# LANGUAGE StrictData #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | Regularized regression (Ridge / Lasso / Elastic Net) in one module.
 --

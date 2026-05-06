@@ -1,3 +1,4 @@
+{-# LANGUAGE StrictData #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | Pareto-front utilities for evaluating multi-objective results.
 --

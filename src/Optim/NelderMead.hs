@@ -1,3 +1,4 @@
+{-# LANGUAGE StrictData #-}
 -- | Nelder-Mead simplex method (downhill simplex).
 --
 -- Nelder & Mead (1965). Gradient-free, easy to implement at low dimension

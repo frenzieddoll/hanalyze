@@ -1,3 +1,4 @@
+{-# LANGUAGE StrictData #-}
 -- | Differential Evolution (DE/rand/1/bin) — Storn & Price 1997.
 --
 -- A gradient-free, global, simple-to-implement and empirically robust

@@ -1,3 +1,4 @@
+{-# LANGUAGE StrictData #-}
 -- | CMA-ES (Covariance Matrix Adaptation Evolution Strategy) — Hansen 2001.
 --
 -- The de-facto state of the art for non-convex continuous optimization.

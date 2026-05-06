@@ -1,3 +1,4 @@
+{-# LANGUAGE StrictData #-}
 -- | BLAS-backed pairwise distance helpers.
 --
 -- Computes the @n × n@ (or @m × n@) matrix of squared Euclidean

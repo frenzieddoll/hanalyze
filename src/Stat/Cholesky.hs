@@ -1,3 +1,4 @@
+{-# LANGUAGE StrictData #-}
 -- | Cholesky-based linear solver for symmetric positive-definite (SPD)
 -- systems.
 --

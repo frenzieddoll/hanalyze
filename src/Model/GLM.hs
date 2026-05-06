@@ -1,3 +1,4 @@
+{-# LANGUAGE StrictData #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | Generalized Linear Models fit by Iteratively Reweighted Least Squares.
 --

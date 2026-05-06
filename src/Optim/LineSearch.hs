@@ -1,3 +1,4 @@
+{-# LANGUAGE StrictData #-}
 -- | One-dimensional optimization: Brent's method + golden-section search.
 --
 -- Both find a local minimum on a unimodal interval @[a, b]@ to high

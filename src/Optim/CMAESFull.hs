@@ -1,3 +1,4 @@
+{-# LANGUAGE StrictData #-}
 -- | Full-rank CMA-ES (Hansen 2016 tutorial, complete edition).
 --
 -- The companion module @Optim.CMAES@ is a simplified diagonal variant.

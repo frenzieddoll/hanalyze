@@ -1,3 +1,4 @@
+{-# LANGUAGE StrictData #-}
 -- | Common foundation for the single-objective optimization algorithms.
 --
 -- Provides the shared types and defaults used by every single-objective
