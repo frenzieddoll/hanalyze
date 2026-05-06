@@ -41,6 +41,7 @@ module Stat.ModelSelect
 import Control.Monad (replicateM)
 import Data.List (sort, transpose)
 import qualified Numeric.LinearAlgebra as LA
+import qualified Data.Vector.Storable as VS
 import System.Random.MWC (GenIO)
 import System.Random.MWC.Distributions (normal)
 
@@ -231,9 +232,12 @@ lmPosteriorLogLiks x y fr s gen = do
         sigma = sqrt (rss / chi2)
     zVec <- fmap LA.fromList (replicateM p (normal 0 1 gen))
     let betaSamp = beta0 + LA.scale sigma (lChol LA.#> zVec)
-        yHat     = LA.toList (x LA.#> betaSamp)
-        ys       = LA.toList y
-    return [ logNormDensity yi yhi sigma | (yi, yhi) <- zip ys yHat ]
+        yHat     = x LA.#> betaSamp
+    -- Phase 12c: VS.zipWith fuses on Storable Vectors and avoids the
+    -- two LA.toList allocations + Haskell list zip (cf. Phase 11c
+    -- glmLogLik change).
+    return (VS.toList (VS.zipWith (\yi yhi -> logNormDensity yi yhi sigma)
+                                  y yHat))
 
 -- | Generate an @S × N@ log-likelihood matrix from a Laplace-approximate
 -- GLM posterior. For Gaussian-family models prefer 'lmPosteriorLogLiks'.
@@ -260,9 +264,10 @@ glmPosteriorLogLiks family linkFn x y fisherInv fr s gen = do
   replicateM s $ do
     zVec <- fmap LA.fromList (replicateM p (normal 0 1 gen))
     let betaSamp = beta0 + lChol LA.#> zVec
-        eta      = LA.toList (x LA.#> betaSamp)
-        ys       = LA.toList y
-    return [ glmLogDensity family linkFn yi ei | (yi, ei) <- zip ys eta ]
+        eta      = x LA.#> betaSamp
+    -- Phase 12c: same VS.zipWith / no toList pattern as
+    -- 'lmPosteriorLogLiks'.
+    return (VS.toList (VS.zipWith (glmLogDensity family linkFn) y eta))
 
 -- | Log-likelihood matrix for the **conditional** WAIC of a Gaussian
 -- LME (random intercepts).
