@@ -39,8 +39,11 @@ source-repository head
 common warnings
   ghc-options: -Wall -Wcompat -Widentities -Wredundant-constraints
 
+common opt
+  ghc-options: -O2 -funbox-strict-fields
+
 library
-  import:           warnings
+  import:           warnings, opt
   hs-source-dirs:   src
   default-language: GHC2021
   exposed-modules:
@@ -172,7 +175,7 @@ library
     , parallel             >= 3.2  && < 3.3
 
 executable hanalyze
-  import:           warnings
+  import:           warnings, opt
   main-is:          Main.hs
   hs-source-dirs:   app
   default-language: GHC2021
@@ -190,7 +193,7 @@ executable hanalyze
     , time       >= 1.11 && < 1.13
 
 executable glmm-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          Demo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -203,7 +206,7 @@ executable glmm-demo
     , dataframe  >= 0.3  && < 2
 
 executable hbm-example
-  import:           warnings
+  import:           warnings, opt
   main-is:          HBMExample.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -215,7 +218,7 @@ executable hbm-example
     , mwc-random >= 0.15 && < 0.16
 
 executable test-hmc-nuts
-  import:           warnings
+  import:           warnings, opt
   main-is:          TestHMCNUTS.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -227,7 +230,7 @@ executable test-hmc-nuts
     , mwc-random >= 0.15 && < 0.16
 
 executable bench-mcmc
-  import:           warnings
+  import:           warnings, opt
   main-is:          BenchMCMC.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -240,7 +243,7 @@ executable bench-mcmc
     , time       >= 1.9  && < 1.15
 
 executable vi-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          VIDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -253,7 +256,7 @@ executable vi-demo
     , time       >= 1.9  && < 1.15
 
 executable gibbs-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          GibbsDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -266,7 +269,7 @@ executable gibbs-demo
     , time       >= 1.9  && < 1.15
 
 executable potential-gen
-  import:           warnings
+  import:           warnings, opt
   main-is:          PotentialGen.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -276,7 +279,7 @@ executable potential-gen
     , mwc-random >= 0.15 && < 0.16
 
 executable regrid-bench-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          RegridBenchDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -288,7 +291,7 @@ executable regrid-bench-demo
     , text       >= 1.2  && < 2.2
 
 executable bar-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          BarDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -298,7 +301,7 @@ executable bar-demo
     , text       >= 1.2  && < 2.2
 
 executable clinical-trial
-  import:           warnings
+  import:           warnings, opt
   main-is:          ClinicalTrial.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -310,7 +313,7 @@ executable clinical-trial
     , mwc-random >= 0.15 && < 0.16
 
 executable gp-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          GPDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -319,7 +322,7 @@ executable gp-demo
     , hanalyze
 
 executable preprocess-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          PreprocessDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -332,7 +335,7 @@ executable preprocess-demo
     , dataframe  >= 0.3  && < 2
 
 executable dirty-data-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          DirtyDataDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -343,7 +346,7 @@ executable dirty-data-demo
     , dataframe  >= 0.3  && < 2
 
 executable external-io-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          ExternalIODemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -355,7 +358,7 @@ executable external-io-demo
     , dataframe  >= 0.3  && < 2
 
 executable analysis-compare-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          AnalysisCompareDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -370,7 +373,7 @@ executable analysis-compare-demo
     , dataframe  >= 0.3  && < 2
 
 executable new-sections-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          NewSectionsDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -383,7 +386,7 @@ executable new-sections-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable robust-gp-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          RobustGPDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -392,7 +395,7 @@ executable robust-gp-demo
     , hanalyze
 
 executable rff-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          RFFDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -405,7 +408,7 @@ executable rff-demo
     , time       >= 1.9  && < 1.13
 
 executable gibbs-hbm-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          GibbsHBMDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -417,7 +420,7 @@ executable gibbs-hbm-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable newdistribs-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          NewDistribsDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -429,7 +432,7 @@ executable newdistribs-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable regularized-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          RegularizedDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -441,7 +444,7 @@ executable regularized-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable optimaldoe-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          OptimalDOEDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -451,7 +454,7 @@ executable optimaldoe-demo
     , text       >= 1.2  && < 2.2
 
 executable pareto-smoke
-  import:           warnings
+  import:           warnings, opt
   main-is:          ParetoSmokeDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -460,7 +463,7 @@ executable pareto-smoke
     , hanalyze
 
 executable materials-moo-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          MaterialsMOODemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -472,7 +475,7 @@ executable materials-moo-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable bayesopt-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          BayesOptDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -482,7 +485,7 @@ executable bayesopt-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable multirsm-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          MultiRSMDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -492,7 +495,7 @@ executable multirsm-demo
     , hmatrix    >= 0.20 && < 0.22
 
 executable multivariate-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          MultivariateDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -503,7 +506,7 @@ executable multivariate-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable multilm-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          MultiLMDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -514,7 +517,7 @@ executable multilm-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable nsga-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          NSGADemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -524,7 +527,7 @@ executable nsga-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable nsga-smoke
-  import:           warnings
+  import:           warnings, opt
   main-is:          NSGASmokeDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -534,7 +537,7 @@ executable nsga-smoke
     , mwc-random >= 0.15 && < 0.16
 
 executable rsm-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          RSMDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -546,7 +549,7 @@ executable rsm-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable doe-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          DOEDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -556,7 +559,7 @@ executable doe-demo
     , text       >= 1.2  && < 2.2
 
 executable kernel-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          KernelDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -568,7 +571,7 @@ executable kernel-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable spline-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          SplineDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -581,7 +584,7 @@ executable spline-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable integrated-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          IntegratedDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -593,7 +596,7 @@ executable integrated-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable slice-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          SliceDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -605,7 +608,7 @@ executable slice-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable ar1-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          AR1Demo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -617,7 +620,7 @@ executable ar1-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable lkj3d-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          LKJ3DDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -629,7 +632,7 @@ executable lkj3d-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable lkj-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          LKJDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -641,7 +644,7 @@ executable lkj-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable zeroinflated-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          ZeroInflatedDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -653,7 +656,7 @@ executable zeroinflated-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable multinomial-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          MultinomialDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -665,7 +668,7 @@ executable multinomial-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable negbinom-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          NegBinomDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -677,7 +680,7 @@ executable negbinom-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable mvnormal-latent-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          MvNormalLatentDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -689,7 +692,7 @@ executable mvnormal-latent-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable setdata-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          SetDataDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -701,7 +704,7 @@ executable setdata-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable dirichlet-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          DirichletDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -713,7 +716,7 @@ executable dirichlet-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable noncentered-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          NonCenteredDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -725,7 +728,7 @@ executable noncentered-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable deterministic-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          DeterministicDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -737,7 +740,7 @@ executable deterministic-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable summary-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          SummaryDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -749,7 +752,7 @@ executable summary-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable pymc-status-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          PyMCStatusDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -759,7 +762,7 @@ executable pymc-status-demo
     , text       >= 1.2  && < 2.2
 
 executable energy-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          EnergyDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -771,7 +774,7 @@ executable energy-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable mvnormal-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          MvNormalDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -783,7 +786,7 @@ executable mvnormal-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable cdf-test
-  import:           warnings
+  import:           warnings, opt
   main-is:          CDFTestDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -792,7 +795,7 @@ executable cdf-test
     , hanalyze
 
 executable trunc-censor-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          TruncCensorDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -804,7 +807,7 @@ executable trunc-censor-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable mixture-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          MixtureDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -816,7 +819,7 @@ executable mixture-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable potential-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          PotentialDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -828,7 +831,7 @@ executable potential-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable potential-multiout-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          PotentialMultiOut.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -840,7 +843,7 @@ executable potential-multiout-demo
     , hmatrix    >= 0.20 && < 0.22
 
 executable potential-multikr-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          PotentialMultiKR.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -852,7 +855,7 @@ executable potential-multikr-demo
     , hmatrix    >= 0.20 && < 0.22
 
 executable single-opt-bench-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          SingleOptBench.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -864,7 +867,7 @@ executable single-opt-bench-demo
     , hvega      >= 0.12 && < 0.13
 
 executable forest-compare
-  import:           warnings
+  import:           warnings, opt
   main-is:          ForestCompareDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -876,7 +879,7 @@ executable forest-compare
     , mwc-random >= 0.15 && < 0.16
 
 executable ppc-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          PPCDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -888,7 +891,7 @@ executable ppc-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable discrete-obs-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          DiscreteObsDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -900,7 +903,7 @@ executable discrete-obs-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable new-distrib-demo
-  import:           warnings
+  import:           warnings, opt
   main-is:          NewDistribDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -912,7 +915,7 @@ executable new-distrib-demo
     , mwc-random >= 0.15 && < 0.16
 
 executable hbm-random-slope
-  import:           warnings
+  import:           warnings, opt
   main-is:          HBMRandomSlopeDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -926,7 +929,7 @@ executable hbm-random-slope
     , dataframe  >= 0.3  && < 2
 
 executable simpson-paradox
-  import:           warnings
+  import:           warnings, opt
   main-is:          SimpsonParadoxDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -941,7 +944,7 @@ executable simpson-paradox
     , dataframe  >= 0.3  && < 2
 
 executable hbm-regression
-  import:           warnings
+  import:           warnings, opt
   main-is:          HBMRegressionDemo.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
@@ -957,7 +960,7 @@ executable hbm-regression
 -- Bench data generator: produces deterministic CSVs that both the Haskell
 -- benchmarks and the Python comparison scripts read. (See bench/README.md.)
 executable bench-data-gen
-  import:           warnings
+  import:           warnings, opt
   main-is:          BenchDataGen.hs
   hs-source-dirs:   bench/haskell
   default-language: GHC2021
@@ -970,7 +973,7 @@ executable bench-data-gen
 
 -- Bayesian optimization bench (B5): Branin / Hartmann6.
 executable bench-bo
-  import:           warnings
+  import:           warnings, opt
   main-is:          BenchBO.hs
   other-modules:    BenchUtil
   hs-source-dirs:   bench/haskell
@@ -989,7 +992,7 @@ executable bench-bo
 -- Standalone bench: hmatrix vs massiv on pairwise squared distance
 -- (F4 evaluation, F5 multi-core Par evaluation).
 executable bench-massiv
-  import:           warnings
+  import:           warnings, opt
   main-is:          BenchMassiv.hs
   hs-source-dirs:   bench/haskell
   default-language: GHC2021
@@ -1004,7 +1007,7 @@ executable bench-massiv
 
 -- Multi-objective optimization bench (B4): NSGA-II on ZDT/DTLZ.
 executable bench-mo
-  import:           warnings
+  import:           warnings, opt
   main-is:          BenchMO.hs
   other-modules:    BenchUtil
   hs-source-dirs:   bench/haskell
@@ -1022,7 +1025,7 @@ executable bench-mo
 
 -- Single-objective optimization bench (B3).
 executable bench-optim
-  import:           warnings
+  import:           warnings, opt
   main-is:          BenchOptim.hs
   other-modules:    BenchUtil
   hs-source-dirs:   bench/haskell
@@ -1040,7 +1043,7 @@ executable bench-optim
 
 -- Kernel / GP bench (B2): KR / NW / RFF / GP / GPRobust.
 executable bench-kernel
-  import:           warnings
+  import:           warnings, opt
   main-is:          BenchKernel.hs
   other-modules:    BenchUtil
   hs-source-dirs:   bench/haskell
@@ -1058,7 +1061,7 @@ executable bench-kernel
 
 -- Regression bench (B1): LM / GLM / GLMM / Ridge / Lasso / ElasticNet.
 executable bench-regression
-  import:           warnings
+  import:           warnings, opt
   main-is:          BenchRegression.hs
   other-modules:    BenchUtil
   hs-source-dirs:   bench/haskell
@@ -1074,7 +1077,7 @@ executable bench-regression
     , vector               >= 0.12 && < 0.14
 
 test-suite hanalyze-test
-  import:           warnings
+  import:           warnings, opt
   type:             exitcode-stdio-1.0
   main-is:          Spec.hs
   hs-source-dirs:   test
