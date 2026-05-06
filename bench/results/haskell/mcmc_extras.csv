@@ -1,0 +1,5 @@
+system,suite,name,time_ms,acc_main,acc_aux,extra
+haskell,mcmc_extras,Gibbs_BetaBinomial_n10000,1.375130,0.583447,0.000000,"Beta(2,2) | Binom(20,12); analytic E[p]=0.5833333333333334"
+haskell,mcmc_extras,ADVI_logistic_n60_iter500,168.668182,4.916468,-2.253631,ADVI mean-field 500 iter; ELBO=-7.580660512864061 beta0=-2.2536312976222734 beta1=4.916467893733798
+haskell,mcmc_extras,WAIC_S1000_N200,19.327197,416.957999,1.056851,lppd=-208.18871196364836 p_waic=0.2902873408431987
+haskell,mcmc_extras,LOO_PSIS_S1000_N200,14.722794,416.957338,0.000000,elpd=-208.47866896541308 bad_k(>0.7)=0
