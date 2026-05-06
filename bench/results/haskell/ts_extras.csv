@@ -1,0 +1,6 @@
+system,suite,name,time_ms,acc_main,acc_aux,extra
+haskell,ts_extras,HW_seasonal_n500_p12_additive,0.187826,0.118595,0.000000,Holt-Winters additive period=12 RMSE=0.11859530186665235
+haskell,ts_extras,GAM_n2000_splines10_1D,10.337568,5.403216e-2,0.000000,GAM degree=3 nKnots=10 λ=1e-3 RMSE=5.4032163884298566e-2
+haskell,ts_extras,Interp1D_Linear_knots1000_eval5000,0.188173,0.000000,0.000000,Linear interpolation knots=1000 eval=5000
+haskell,ts_extras,Interp1D_NatSpline_knots1000_eval5000,1.209016,0.000000,0.000000,NatSpline interpolation knots=1000 eval=5000
+haskell,ts_extras,Interp1D_PCHIP_knots1000_eval5000,0.217265,0.000000,0.000000,PCHIP interpolation knots=1000 eval=5000

@@ -1171,6 +1171,24 @@ executable bench-mcmc-extras
     , tasty-bench          >= 0.3  && < 0.5
     , tasty                >= 1.4  && < 1.6
 
+-- B8 残: Holt-Winters / GAM / Spline 補間.
+executable bench-ts-extras
+  import:           warnings, opt
+  main-is:          BenchTSExtras.hs
+  other-modules:    BenchUtil
+  hs-source-dirs:   bench/haskell
+  default-language: GHC2021
+  build-depends:
+      base                 >= 4.14 && < 5
+    , bytestring           >= 0.11 && < 0.13
+    , cassava              >= 0.5  && < 0.6
+    , hanalyze
+    , hmatrix              >= 0.20 && < 0.22
+    , time                 >= 1.9  && < 1.13
+    , vector               >= 0.12 && < 0.14
+    , tasty-bench          >= 0.3  && < 0.5
+    , tasty                >= 1.4  && < 1.6
+
 -- Regression bench (B1): LM / GLM / GLMM / Ridge / Lasso / ElasticNet.
 executable bench-regression
   import:           warnings, opt
