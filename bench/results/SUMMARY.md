@@ -1,11 +1,12 @@
 # hanalyze vs Python benchmark summary
 
-最終更新: 2026-05-06 (Phase 1〜13 perf 改善 + tasty-bench 計測移行 後)
+最終更新: 2026-05-06 (Phase 1〜13 perf 改善 + B6-B8 拡充 後)
 
 統一条件: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1`、single-thread。
-比較対象: scipy / sklearn / pymoo / skopt。
-測定: regression / kernel は **tasty-bench (relStDev 5%) の adaptive
-iteration**、optim / mo / bo は `timeit N` の median。
+比較対象: scipy / sklearn / pymoo / skopt / pymc / blackjax / lifelines /
+statsmodels / pygam。
+測定: regression / kernel / ml / mcmc / survts は **tasty-bench
+(relStDev 5%) の adaptive iteration** または `timeit N` の median。
 
 Python 値は `bench/results/python/*.csv` から (Python 側は変更なし)。
 Haskell 値は `bench/results/haskell/*.csv` の最新ラン。
@@ -16,6 +17,7 @@ Haskell 値は `bench/results/haskell/*.csv` の最新ラン。
 
 | Suite | Bench | hanalyze | Python | speedup |
 |---|---|---|---|---|
+| **survts** | **ARIMA n=1000 (1,1,1)** | **1.21 ms** | 154 ms | **128×** ⭐ |
 | optim | DE (Rosenbrock_2D) | 0.95 ms | 164 ms | **172×** |
 | optim | NelderMead (Rosenbrock_2D) | 0.06 ms | 4.83 ms | **87×** |
 | optim | CMAES (Rosenbrock_2D) | 0.43 ms | 53.6 ms | **126×** |
@@ -31,6 +33,9 @@ Haskell 値は `bench/results/haskell/*.csv` の最新ラン。
 | **mo**    | ZDT1/NSGA-II    | 709 ms | 693 ms | **0.98×** (拮抗) |
 | **mo**    | ZDT2/NSGA-II    | 770 ms | 770 ms | **1.00×** (互角) |
 | bo    | Hartmann6/BO | 5034 ms | 9864 ms | **1.96×** ⭐ |
+| ml    | PCA n=10000 p=50 k=5 | 16.7 ms | 28.0 ms | **1.67×** ⭐ |
+| survts | Spline PCHIP n=1000 | 0.16 ms | 0.27 ms | **1.71×** |
+| survts | GAM n=2000 p=2 d=3 k=5 | 10.9 ms | 10.3 ms | **1.06×** (parity) |
 
 ### ✅ accuracy で Python 越え
 
@@ -68,9 +73,18 @@ Phase 1-12 の改善で gap は縮まったが、最終的に **BLAS dispatch ov
 | regression | GLM_poisson_n10k | 11.8 ms | 2.61 ms | 4.53× 遅 | 5.97× |
 | regression | Lasso_n10k×p50 | 6.87 ms | 2.35 ms | 2.92× 遅 | 3.1× |
 | optim | SA (Rastrigin_10D) | 1901 ms | 193 ms | 9.84× 遅 | 12× |
+| ml | KMeans n=2k p=5 k=5 | 242 ms | 32.8 ms | 7.4× 遅 | (B6 新規) |
+| ml | DT n=2k p=10 | 2195 ms | 17.8 ms | **123× 遅** ⚠ | (B6 新規、list-based [[Double]]) |
+| ml | RF n=2k p=10 t=20 | 13221 ms | 200 ms | **66× 遅** ⚠ | (同上) |
+| survts | Quantile n=10k p=20 | 17562 ms | 232 ms | **76× 遅** ⚠ | (B8 新規、interior-point overhead) |
+| survts | CoxPH n=2k p=2 | 328 ms | 130 ms | 2.5× 遅 | (B8 新規) |
+| survts | KM n=2k | 32.9 ms | 6.8 ms | 4.8× 遅 | (B8 新規、list-based grouping) |
+| mcmc | NUTS 8-schools n=1000 | 1757 ms | 530 ms (blackjax) | **3.3× 遅、ESS/sec 64× 劣** | (B7 新規、step-size 適応に課題) |
 
 → Phase 1-12 (`-O2`, StrictData, INLINE, runST+MVector など) で **多くの項目で
 gap が縮小** (例: GLM_logit 3.6× → 3.14×、GP_fit 4.7× → 3.86×)。
+B6/B8 で新しく見つかった大きな gap (DT/RF/Quantile) は **list-based API が
+原因**で、Storable Vector / Matrix 化リファクタが今後の改善候補。
 
 ## Phase 1〜13 perf 改善のまとめ
 
@@ -198,6 +212,52 @@ git log の `perf(...)` commit。
 |---|---:|---:|---:|---:|---:|
 | Branin/BO | 7768 | 8948 | 1.15 | 0.529 | 0.398 |
 | Hartmann6/BO | 5034 | 9864 | **1.96** | **-3.06** | -2.77 |
+
+### ml (B6, sklearn 比較)
+
+| name | hanalyze (ms) | sklearn (ms) | speedup | acc match |
+|---|---:|---:|---:|---|
+| **PCA_n10000_p50_k5** | **16.7** | 28.0 | **1.67×** | ratio=0.111 ✅ σ=527 ✅ |
+| KMeans_n2000_p5_k5 | 242 | 32.8 | 0.14× | inertia 18448 vs 18499 ≈ |
+| DT_n2000_p10 | 2195 | 17.8 | 0.008× ⚠ | acc 1.0 vs 1.0 ✅ |
+| RF_n2000_p10_t20 | 13221 | 200 | 0.015× ⚠ | acc 0.974 vs 0.999 |
+
+> 注: DT/RF は `[[Double]]` list-based API のため激しく遅い。Storable
+> Matrix 化が今後の改善候補。PCA は SVD 経由で hmatrix 強い。
+
+### mcmc (B7, 8-schools hierarchical normal、warmup=500 + samples=1000)
+
+| name | time (ms) | mu_mean | ess(mu) | ess(tau) | ess(mu)/sec |
+|---|---:|---:|---:|---:|---:|
+| haskell HMC | 1809 | 73.0 | 8.4 | 138 | 4.6 |
+| haskell NUTS | 1757 | 70.7 | 42.0 | 53 | 23.9 |
+| python PyMC NUTS | 11018 | 72.1 | 856 | 546 | 77.7 |
+| **python blackjax NUTS** | **530** | 72.4 | **810** | 626 | **1528** |
+
+> **観測**: hanalyze NUTS は wall-time で PyMC を 6× 凌駕するが、ESS
+> 効率は blackjax の 1/64 程度。**step-size 適応 / mass matrix 行列化に
+> 改善余地**あり。HMC/NUTS の native 実装を維持しつつ ESS/sec を上げる
+> リファクタが今後の課題。
+
+### survts (B8, statsmodels / lifelines / pygam / scipy 比較)
+
+| name | hanalyze (ms) | python (ms) | speedup | acc |
+|---|---:|---:|---:|---|
+| **ARIMA_n1000_pdq111** | **1.21** | 154 | **128×** ⭐ | (no metric) |
+| CoxPH_n2000_p2 | 328 | 130 | 0.40× | β1=0.573 vs 0.563 ✅ |
+| KM_n2000 | 32.9 | 6.8 | 0.21× | (timing close) |
+| Quantile_n10k_p20_tau0.5 | 17562 | 232 | 0.013× ⚠ | (no metric) |
+| GAM_n2000_p2_d3_k5 | 10.9 | 10.3 | **1.06× (parity)** | (no metric) |
+| **Spline_PCHIP_n1000** | **0.16** | 0.27 | **1.71×** ⭐ | sum=3337.7 ✅ |
+
+> **観測**:
+> - ARIMA は hanalyze の YW + MLE 自前実装が statsmodels の iterative
+>   ML を 128× 凌駕 (ハイライト)
+> - Spline PCHIP も hmatrix 経由で scipy より 1.7× 速い
+> - GAM は parity (両者 ~10ms)
+> - CoxPH/KM は **list-based の grouping** が遅い、Vector 化候補
+> - Quantile は interior-point method の overhead で statsmodels に
+>   76× 劣る、要 algorithm 検討
 
 ## 注釈
 

@@ -1,0 +1,7 @@
+system,suite,name,time_ms,acc_main,acc_aux,extra
+python,survts,ARIMA_n1000_pdq111,154.124,0,0,statsmodels.tsa.arima.ARIMA p=1 d=1 q=1 n=1000
+python,survts,CoxPH_n2000_p2_30pct_censor,129.516,0.563208,-0.367428,lifelines.CoxPHFitter n=2000 p=2 30% censor
+python,survts,KM_n2000,6.81484,7.20788,0.00519043,lifelines.KaplanMeierFitter n=2000
+python,survts,Quantile_n10000_p20_tau0.5,231.693,0,0,statsmodels QuantReg tau=0.5 n=10000 p=20
+python,survts,GAM_n2000_p2_d3_k5,10.3053,0,0,pygam.LinearGAM n_splines=8 n=2000 p=2
+python,survts,Spline_PCHIP_n1000,0.272808,3337.75,0,scipy.interpolate.PchipInterpolator build n=1000 + eval @5000
