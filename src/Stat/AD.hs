@@ -78,6 +78,7 @@ logNormalF mu0 sig0 x =
   let mu  = realToFrac mu0
       sig = realToFrac sig0
   in negate (0.5 * log (2 * pi)) - log sig - 0.5 * ((x - mu) / sig) ^ (2::Int)
+{-# INLINE logNormalF #-}
 
 -- | @log N(y_obs; μ, σ)@ where @y_obs@ is a fixed observation and @μ@,
 -- @σ@ are differentiable.
@@ -85,12 +86,14 @@ logNormalObsF :: Floating a => Double -> a -> a -> a
 logNormalObsF y_obs mu sig =
   let y = realToFrac y_obs
   in negate (0.5 * log (2 * pi)) - log sig - 0.5 * ((y - mu) / sig) ^ (2::Int)
+{-# INLINE logNormalObsF #-}
 
 -- | @log Exp(x; rate)@ with fixed rate.
 logExpF :: Floating a => Double -> a -> a
 logExpF rate0 x =
   let r = realToFrac rate0
   in log r - r * x
+{-# INLINE logExpF #-}
 
 -- | @log Gamma(x; shape, rate)@ with fixed shape and rate.
 --
@@ -102,6 +105,7 @@ logGammaF shape0 rate0 x =
       b   = realToFrac rate0
       lgA = realToFrac (stirlingLogGamma shape0)
   in (a - 1) * log x - b * x + a * log b - lgA
+{-# INLINE logGammaF #-}
 
 -- | @log Beta(x; α, β)@ with fixed shape parameters.
 -- @log p(x) = (α-1) log x + (β-1) log(1-x) − log B(α,β)@.
@@ -112,6 +116,7 @@ logBetaF alpha0 beta0 x =
       lbB = realToFrac (stirlingLogGamma alpha0 + stirlingLogGamma beta0
                         - stirlingLogGamma (alpha0 + beta0))
   in (a - 1) * log x + (b - 1) * log (1 - x) - lbB
+{-# INLINE logBetaF #-}
 
 -- | @log Poisson(k | λ)@ with @k@ a fixed (rounded) observation and @λ@
 -- differentiable.
@@ -120,6 +125,7 @@ logPoissonObsF y_obs lam =
   let k  = fromIntegral (round y_obs :: Int) :: Double
       lf = realToFrac (logFactorial (round y_obs :: Int))
   in realToFrac k * log lam - lam - lf
+{-# INLINE logPoissonObsF #-}
 
 -- | @log Bernoulli(y | p)@ with @y ∈ {0, 1}@ a fixed observation and @p@
 -- differentiable.
@@ -127,6 +133,7 @@ logBernoulliObsF :: Floating a => Double -> a -> a
 logBernoulliObsF y_obs p
   | y_obs > 0.5 = log p
   | otherwise   = log (1 - p)
+{-# INLINE logBernoulliObsF #-}
 
 -- ---------------------------------------------------------------------------
 -- AD 勾配計算
@@ -156,6 +163,7 @@ invTransformF :: Floating a => Transform -> a -> a
 invTransformF UnconstrainedT u = u
 invTransformF PositiveT      u = exp u
 invTransformF UnitIntervalT  u = 1 / (1 + exp (-u))  -- sigmoid
+{-# INLINE invTransformF #-}
 
 -- | Log-Jacobian @log |∂θ/∂u|@ for one parameter (Floating-polymorphic).
 logJacF :: Floating a => Transform -> a -> a
@@ -164,6 +172,7 @@ logJacF PositiveT      u = u                     -- log(exp u) = u
 logJacF UnitIntervalT  u =
   let p = 1 / (1 + exp (-u))
   in log p + log (1 - p)                         -- log σ(u)(1−σ(u))
+{-# INLINE logJacF #-}
 
 -- | Log-joint in unconstrained space, including constraint transforms
 -- and the Jacobian correction.
