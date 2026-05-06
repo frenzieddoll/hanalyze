@@ -21,9 +21,13 @@ module Stat.KernelDist
   , mapVector
   ) where
 
-import qualified Numeric.LinearAlgebra as LA
-import qualified Data.Massiv.Array     as A
-import           Data.Massiv.Array     (Array, Comp (..), Ix2 (..), Sz (..))
+import qualified Numeric.LinearAlgebra        as LA
+import qualified Data.Massiv.Array            as A
+import           Data.Massiv.Array            (Array, Comp (..), Ix2 (..), Sz (..))
+import qualified Data.Vector.Storable         as VS
+import qualified Data.Vector.Storable.Mutable as VSM
+import           Control.Monad                (when)
+import           Control.Monad.ST             (runST)
 
 -- | Choose massiv 'Comp' mode based on workload size.
 --
@@ -92,52 +96,73 @@ rowSqNorms x =
 -- @D[i, j] = ‖X[i,:] − X[j,:]‖²@ for @X@ of shape @n × p@; result is
 -- @n × n@ with zeros on the diagonal (exactly).
 --
--- F4: implemented via massiv's index-based 'A.makeArrayR' so the
--- cross term @X · Xᵀ@ comes from BLAS GEMM (hmatrix) and the
--- elementwise @sq[i] + sq[j] − 2·cross[i,j]@ (with diagonal zero and
--- max-0 clamp) is fused into a single sweep. Avoids the two
--- intermediate @n × n@ outer-product matrices used by the previous
--- hmatrix-only version. Measured 3.7× speedup at @n = 2000@.
+-- Phase 11a (2026-05-06): rewritten with @runST@ + @MVector@. Profile
+-- showed the previous massiv-fused version spent 75% of its time in
+-- @trivialScheduler_@ overhead. A pure @LA.outer@-based replacement
+-- was 6× /slower/ because the two @n × n@ broadcast intermediates
+-- dominated allocation. The current version computes the cross term
+-- with BLAS GEMM (one alloc) and fills the result @n²@ matrix with
+-- a tight @runST + MVector@ loop using flat indices — single alloc,
+-- no scheduler dispatch, no per-element function call. Mutable use
+-- is justified: immutable was bottleneck (profile evidence) and
+-- in-place fill with flat indexing is the algorithmically correct
+-- representation.
 pairwiseSqDist :: LA.Matrix Double -> LA.Matrix Double
 pairwiseSqDist x =
   let n     = LA.rows x
       sq    = rowSqNorms x                              -- length n
       cross = x LA.<> LA.tr x                           -- n × n, BLAS GEMM
-      comp  = compFor (n * n)
-      sqA   = A.fromStorableVector comp sq              -- Array S Ix1 Double
-      crA   = A.setComp comp (hmatrixToMassiv cross)
-      raw   = A.computeAs A.S $
-                A.makeArrayR A.D comp (Sz (n :. n)) $ \(i :. j) ->
-                  if i == j
-                    then 0
-                    else max 0 ( A.index' sqA i
-                               + A.index' sqA j
-                               - 2 * A.index' crA (i :. j) )
-  in massivToHmatrix raw
+      crossF = LA.flatten cross                          -- length n²
+      out = runST $ do
+        v <- VSM.new (n * n)
+        let go i j
+              | i == n = pure ()
+              | j == n = go (i + 1) 0
+              | otherwise = do
+                  let sqi = sq    `VS.unsafeIndex` i
+                      sqj = sq    `VS.unsafeIndex` j
+                      cij = crossF `VS.unsafeIndex` (i * n + j)
+                      d   = if i == j
+                              then 0
+                              else let !s = sqi + sqj - 2 * cij
+                                   in if s < 0 then 0 else s
+                  VSM.unsafeWrite v (i * n + j) d
+                  go i (j + 1)
+        go 0 0
+        VS.unsafeFreeze v
+  in LA.reshape n out
 
 -- | Pairwise squared distance between rows of two matrices.
 --
 -- @D[i, j] = ‖X[i,:] − Y[j,:]‖²@ for @X@ of shape @m × p@ and @Y@ of
 -- shape @n × p@; result is @m × n@.
 --
--- F4: same fusion strategy as 'pairwiseSqDist'.
+-- Phase 11a: same @runST + MVector@ rewrite as 'pairwiseSqDist'. No
+-- diagonal special-case (matrices are different sources).
 pairwiseSqDistXY :: LA.Matrix Double -> LA.Matrix Double -> LA.Matrix Double
 pairwiseSqDistXY x y =
-  let m     = LA.rows x
-      n     = LA.rows y
-      sx    = rowSqNorms x
-      sy    = rowSqNorms y
-      cross = x LA.<> LA.tr y                           -- m × n, BLAS GEMM
-      comp  = compFor (m * n)
-      sxA   = A.fromStorableVector comp sx
-      syA   = A.fromStorableVector comp sy
-      crA   = A.setComp comp (hmatrixToMassiv cross)
-      raw   = A.computeAs A.S $
-                A.makeArrayR A.D comp (Sz (m :. n)) $ \(i :. j) ->
-                  max 0 ( A.index' sxA i
-                        + A.index' syA j
-                        - 2 * A.index' crA (i :. j) )
-  in massivToHmatrix raw
+  let m      = LA.rows x
+      n      = LA.rows y
+      sx     = rowSqNorms x
+      sy     = rowSqNorms y
+      cross  = x LA.<> LA.tr y                          -- m × n, BLAS GEMM
+      crossF = LA.flatten cross                          -- length m·n
+      out = runST $ do
+        v <- VSM.new (m * n)
+        let go i j
+              | i == m = pure ()
+              | j == n = go (i + 1) 0
+              | otherwise = do
+                  let sxi = sx     `VS.unsafeIndex` i
+                      syj = sy     `VS.unsafeIndex` j
+                      cij = crossF `VS.unsafeIndex` (i * n + j)
+                      !s  = sxi + syj - 2 * cij
+                      d   = if s < 0 then 0 else s
+                  VSM.unsafeWrite v (i * n + j) d
+                  go i (j + 1)
+        go 0 0
+        VS.unsafeFreeze v
+  in LA.reshape n out
 
 -- ---------------------------------------------------------------------------
 -- hmatrix ↔ massiv conversion (safe API, no unsafe / no raw pointers)
