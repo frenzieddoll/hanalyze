@@ -81,29 +81,50 @@ data LOOResult = LOOResult
 --
 -- @logLikMat !! s !! i = log p(y_i | θ^s)@: rows are @S@ posterior
 -- samples, columns are @N@ observations.
+--
+-- Internally builds an @S × N@ hmatrix matrix once and computes the
+-- per-column @logSumExp@ and sample variance via Storable-Vector
+-- folds. Replaces the previous @transpose [[Double]] + map@
+-- formulation, which allocated @S × N@ list cells just to flip the
+-- shape.
 waic :: [[Double]] -> WAICResult
 waic [] = WAICResult 0 0 0 0
 waic logLikMat =
-  let s     = fromIntegral (length logLikMat) :: Double
-      cols  = transpose logLikMat   -- N 列それぞれに S 個の値
-      n     = length cols
+  let mat  = LA.fromLists logLikMat       -- S × N
+      sN   = LA.rows mat
+      s    = fromIntegral sN :: Double
+      cols = LA.toColumns mat              -- N storable vectors of length S
+      n    = length cols
 
-      -- lppd_i = log(1/S × Σ_s p(y_i|θ^s))
-      --        = logSumExp(ll_{i,1..S}) − log S
-      lppd_i  = map (\col -> logSumExp col - log s) cols
+      lppd_i  = map (\c -> logSumExpVS c - log s) cols
       lppd    = sum lppd_i
-
-      -- p_waic_i = Var_s[log p(y_i|θ^s)]  (標本分散)
-      pwaic_i = map sampleVar cols
+      pwaic_i = map sampleVarVS cols
       pwaic   = sum pwaic_i
-
       waicVal = -2 * (lppd - pwaic)
 
-      -- 観測値ごとの WAIC 寄与から SE を推定
       contrib = zipWith (\l p -> -2 * (l - p)) lppd_i pwaic_i
       se      = sqrt (fromIntegral n * sampleVar contrib)
 
   in WAICResult waicVal lppd pwaic se
+
+-- | logSumExp over a Storable Vector. @m + log Σ exp(x - m)@ for
+-- numerical stability.
+logSumExpVS :: LA.Vector Double -> Double
+logSumExpVS v
+  | VS.null v = -1/0
+  | otherwise =
+      let m = VS.maximum v
+      in m + log (VS.sum (VS.map (\x -> exp (x - m)) v))
+
+-- | Sample variance (divisor @n - 1@) over a Storable Vector.
+sampleVarVS :: LA.Vector Double -> Double
+sampleVarVS v
+  | VS.length v < 2 = 0
+  | otherwise =
+      let nD = fromIntegral (VS.length v) :: Double
+          mu = VS.sum v / nD
+          ss = VS.sum (VS.map (\x -> (x - mu) * (x - mu)) v)
+      in ss / (nD - 1)
 
 -- ---------------------------------------------------------------------------
 -- LOO-CV (PSIS)

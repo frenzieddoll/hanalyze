@@ -20,7 +20,7 @@ module Stat.QuasiRandom
   , lhsSamplesIn
   ) where
 
-import           Control.Monad         (forM, replicateM)
+import           Control.Monad         (forM)
 import qualified Data.Vector.Mutable   as MV
 import qualified Data.Vector           as V
 import           System.Random.MWC     (GenIO, uniformR)
@@ -54,7 +54,12 @@ haltonPoint d i = take d [ radicalInverse p i | p <- primes ]
 haltonSequence :: Int        -- ^ Number of points @n@.
                -> Int        -- ^ Dimension @d@.
                -> [[Double]]
-haltonSequence n d = [haltonPoint d i | i <- [1 .. n]]
+haltonSequence n d =
+  -- Pre-extract the @d@ basis primes once instead of re-traversing
+  -- the lazy 'primes' generator on every point. Per-point body is a
+  -- direct @map@ over this strict list, no further list overhead.
+  let bases = take d primes
+  in [ map (\b -> radicalInverse b i) bases | i <- [1 .. n] ]
 
 -- | Halton sequence rescaled into a per-dimension box
 -- @[lo_k, hi_k)@. @bounds@ must have length @d@.
