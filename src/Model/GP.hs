@@ -646,9 +646,10 @@ optimizeGPMV ker trainX y p0 =
       -- Saves the list conversion that 'runLBFGSNumeric' / 'runLBFGSWith'
       -- do on every objective and gradient call.
       objV uv = obj (LA.toList uv)
-      -- Central-difference gradient on the Vector representation. For
-      -- p ≤ 5 this is two evaluations per parameter; we never need the
-      -- analytic gradient path here.
+      -- Central-difference gradient on the Vector representation. We
+      -- experimented with forward differences (half the evaluations
+      -- per gradient) but L-BFGS needed more iterations to converge
+      -- under the looser O(h) error, giving a net wall-time regression.
       h    = 1e-5 :: Double
       gradV uv =
         let n = LA.size uv
