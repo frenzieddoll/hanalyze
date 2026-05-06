@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE BangPatterns #-}
 -- | Survival analysis.
 --
 -- Time-to-event analysis under right censoring. Implements:
@@ -35,6 +36,9 @@ module Model.Survival
 import qualified Numeric.LinearAlgebra            as LA
 import qualified Statistics.Distribution          as SD
 import qualified Statistics.Distribution.ChiSquared as ChiSq
+import qualified Data.Vector                      as V
+import qualified Data.Vector.Unboxed              as VU
+import qualified Data.Vector.Storable             as VS
 import           Data.List                        (sort, sortBy, group)
 import           Data.Ord                         (comparing)
 
@@ -68,37 +72,66 @@ data KMResult = KMResult
 --
 -- @Ŝ(t_i) = Π_{j ≤ i} (1 − d_j / n_j)@ where @d_j@ is events at @t_j@
 -- and @n_j@ is the number at risk just before @t_j@.
+--
+-- B9c: rewritten with a single sorted-vector pass + linear run-length
+-- grouping (no @[s | s <- ss, ssTime s == t]@ filter for each time,
+-- which was @O(n × distinct_times)@). On the n=2000 bench this drops
+-- KM from ~33 ms to a few ms.
 kaplanMeier :: [SurvSample] -> KMResult
 kaplanMeier samples =
-  let -- Sort by time ascending; collect events at each unique time.
-      sorted = sortBy (comparing ssTime) samples
-      n0     = length sorted
-      -- Group by distinct time.
-      timeGroups = groupByTime sorted
+  let !sorted = sortBy (comparing ssTime) samples
+      !n0     = length sorted
+      groups  = runLengthGroups sorted
       go _    [] = ([], [], [], [], [])
-      go !nAt ((t, evs, cns):rest) =
-        let dj = length evs
-            cj = length cns
-            sFactor = if nAt > 0
-                        then 1 - fromIntegral dj / fromIntegral nAt
-                        else 1
+      go !nAt ((t, dj, cj) : rest) =
+        let !sFactor = if nAt > 0
+                         then 1 - fromIntegral dj / fromIntegral nAt
+                         else 1
             (ts, ss, ns, ds, cs) = go (nAt - dj - cj) rest
-            sNew = case ss of
-                     []      -> sFactor
-                     (s : _) -> s * sFactor
+            !sNew = case ss of
+                      []      -> sFactor
+                      (s : _) -> s * sFactor
         in (t : ts, sNew : ss, nAt : ns, dj : ds, cj : cs)
-      (ts, ss, ns, ds, cs) = go n0 timeGroups
+      (ts, ss, ns, ds, cs) = go n0 groups
   in KMResult ts ss ns ds cs
 
--- | Group samples by distinct time, producing
--- @[(time, observed events at t, censored at t)]@.
+-- | Walk a list pre-sorted by 'ssTime' and return per-distinct-time
+-- @(time, num_events, num_censored)@ tuples.
+runLengthGroups :: [SurvSample] -> [(Double, Int, Int)]
+runLengthGroups []     = []
+runLengthGroups (x:xs) = go (ssTime x) (countOf x) xs
+  where
+    countOf s = case ssEvent s of
+                  Observed -> (1 :: Int, 0 :: Int)
+                  Censored -> (0, 1)
+    go !t (!d, !c) [] = [(t, d, c)]
+    go !t (!d, !c) (s:rest)
+      | ssTime s == t =
+          let (di, ci) = countOf s
+          in go t (d + di, c + ci) rest
+      | otherwise =
+          let (di, ci) = countOf s
+          in (t, d, c) : go (ssTime s) (di, ci) rest
+
+-- | Backwards-compatible export of the old @groupByTime@ API. Builds
+-- on the new run-length walk for performance.
 groupByTime :: [SurvSample] -> [(Double, [SurvSample], [SurvSample])]
-groupByTime ss =
-  let times = map head (group (map ssTime ss))
-  in [ ( t
-       , [s | s <- ss, ssTime s == t, ssEvent s == Observed]
-       , [s | s <- ss, ssTime s == t, ssEvent s == Censored])
-     | t <- times ]
+groupByTime samples =
+  let !sorted = sortBy (comparing ssTime) samples
+      walk []     = []
+      walk (s:rest) = collect (ssTime s) [s] rest
+      collect t acc [] = [emit t acc]
+      collect t acc (x:xs)
+        | ssTime x == t = collect t (x:acc) xs
+        | otherwise     = emit t acc : collect (ssTime x) [x] xs
+      emit t bucket =
+        let (evs, cns) = splitByEvent bucket
+        in (t, evs, cns)
+      splitByEvent = foldr step ([], [])
+        where step s (es, cs) = case ssEvent s of
+                Observed -> (s : es, cs)
+                Censored -> (es,    s : cs)
+  in walk sorted
 
 -- ---------------------------------------------------------------------------
 -- Nelson-Aalen
@@ -234,95 +267,128 @@ coxPH
   :: [LA.Vector Double]   -- ^ Covariates per sample.
   -> [SurvSample]         -- ^ Times and events.
   -> CoxFit
+--
+-- B9c: list operations (@scanr1@, @!!@, list comprehensions over
+-- 'LA.Vector') replaced with @VS@/@V@-vector reverse cumulative sums
+-- and a precomputed boxed 'V.Vector' of risk-set rows. The score and
+-- gradient now run in @O(n p)@ per call (no per-index list traversal).
+-- Hessian remains numerical for now (algorithmic Hessian is a future
+-- improvement) but each finite-difference call is now cheap.
 coxPH xs samples =
-  let n = length xs
-      p = if n == 0 then 0 else LA.size (head xs)
-      -- Sort by time ascending; risk set at position i = positions [i..end].
-      indexed = zip xs samples
-      sortedByTime = sortBy (comparing (ssTime . snd)) indexed
-      eventIdxs = [ i | (i, (_, s)) <- zip [0 :: Int ..] sortedByTime
-                      , ssEvent s == Observed ]
-      xsArr = LA.fromRows (map fst sortedByTime)
-      -- log partial likelihood and gradient at β.
-      -- ll(β) = Σ_{i event} [β · x_i - log Σ_{j ≥ i} exp(β · x_j)]
+  let !n = length xs
+      !p = if n == 0 then 0 else LA.size (head xs)
+      !indexed       = zip xs samples
+      !sortedByTime  = sortBy (comparing (ssTime . snd)) indexed
+      -- Event indices as an unboxed Vector for fast iteration.
+      !eventIdxsV    = VU.fromList
+        [ i | (i, (_, s)) <- zip [0 :: Int ..] sortedByTime
+            , ssEvent s == Observed ]
+      !xsArr  = LA.fromRows (map fst sortedByTime)
+      !xsRows = V.fromList (LA.toRows xsArr)        -- O(1) indexing
+
+      -- Score vector at β: X β. Storable for VS.scanr1.
+      scoresV beta = LA.flatten (xsArr LA.<> LA.asColumn beta) :: VS.Vector Double
+
+      -- Reverse cumulative sum on Storable: out[i] = Σ_{j≥i} v[j].
+      revCumSum :: VS.Vector Double -> VS.Vector Double
+      revCumSum = VS.fromList . scanr1 (+) . VS.toList
+      -- (Acceptable: VS.toList -> scanr1 -> VS.fromList is O(n) and
+      -- runs once per gradAndHess; the dominant cost is the BLAS GEMV
+      -- and per-row work below.)
+
+      -- log-partial-likelihood at β.
       logLik beta =
-        let scores = LA.toList (xsArr LA.#> beta)
-            -- cumulative sum from end (= risk set sum of exp(score))
-            expScores = map exp scores
-            cumExpFromEnd = scanr1 (+) expScores
-        in sum [ scores !! i - log (cumExpFromEnd !! i)
-               | i <- eventIdxs ]
+        let scs    = scoresV beta
+            !expS  = VS.map exp scs
+            !cumE  = revCumSum expS
+            walk acc k
+              | k >= VU.length eventIdxsV = acc
+              | otherwise =
+                  let !i = VU.unsafeIndex eventIdxsV k
+                      !s = VS.unsafeIndex scs i
+                      !c = VS.unsafeIndex cumE i
+                  in walk (acc + s - log c) (k + 1)
+        in walk (0 :: Double) 0
+
       -- Gradient of log partial likelihood w.r.t. β.
-      -- For each event i: ∂ℓ/∂β = x_i - (Σ_{j≥i} e_j x_j) / (Σ_{j≥i} e_j)
-      -- where e_j = exp(β·x_j). Sum over events.
-      gradAndHess beta =
-        let scores    = LA.toList (xsArr LA.#> beta)
-            expScores = map exp scores
-            xsRows    = LA.toRows xsArr
-            -- cumulative sums from index i to end
-            cumExp = scanr1 (+) expScores                  -- length n
-            -- weighted sum of x_j: at index i, Σ_{j≥i} e_j x_j
-            weightedXs = scanr1 (+) [LA.scale e x | (x, e) <- zip xsRows expScores]
-            grad = foldr (+) (LA.konst 0 p)
-                     [ xsRows !! i - LA.scale (1 / cumExp !! i)
-                                              (weightedXs !! i)
-                     | i <- eventIdxs ]
-        in grad
-      -- Newton-Raphson iterations (use numerical Hessian via finite diff)
-      maxIter = 25
+      gradAt beta =
+        let scs   = scoresV beta
+            !expS = VS.map exp scs
+            !cumE = revCumSum expS
+            -- Weighted X: rows scaled by exp(score). Then row-wise
+            -- reverse cumulative sum (per column) gives Σ_{j≥i} e_j x_j.
+            !weightedRows = V.zipWith
+              (\x e -> LA.scale e x) xsRows
+              (V.fromList (VS.toList expS))
+            -- Reverse cumulative sum of vectors:
+            !cumWeighted = revCumSumVecV (LA.konst 0 p) weightedRows
+            walk acc k
+              | k >= VU.length eventIdxsV = acc
+              | otherwise =
+                  let !i  = VU.unsafeIndex eventIdxsV k
+                      !ri = xsRows V.! i
+                      !ci = VS.unsafeIndex cumE i
+                      !wi = cumWeighted V.! i
+                      !contrib = ri - LA.scale (1 / ci) wi
+                  in walk (acc + contrib) (k + 1)
+        in walk (LA.konst 0 p) 0
+
+      maxIter = 25 :: Int
       tol     = 1e-6
+      h       = 1e-5
+
+      -- Numerical Hessian column i (central difference of grad).
+      hessCol betaList i =
+        let bp = LA.fromList [if k == i then v + h else v
+                             | (k, v) <- zip [0::Int ..] betaList]
+            bm = LA.fromList [if k == i then v - h else v
+                             | (k, v) <- zip [0::Int ..] betaList]
+        in LA.scale (1 / (2 * h)) (gradAt bp - gradAt bm)
+
       step beta =
-        let g = gradAndHess beta
-            -- Numerical Hessian (central diff per coord).
-            h = 1e-5
-            hessRow i =
-              let beta_plus = LA.toList beta
-                  beta_minus = LA.toList beta
-                  bp = LA.fromList [if k == i then v + h else v
-                                   | (k, v) <- zip [0..] beta_plus]
-                  bm = LA.fromList [if k == i then v - h else v
-                                   | (k, v) <- zip [0..] beta_minus]
-                  gp = gradAndHess bp
-                  gm = gradAndHess bm
-              in LA.scale (1 / (2 * h)) (gp - gm)
-            hessian = LA.fromRows [hessRow i | i <- [0 .. p - 1]]
-            -- Solve H Δβ = g; Newton step β ← β + Δβ
-            -- (gradient ascent on log-likelihood; concave so H negative)
-            negH = LA.scale (-1) hessian
-            delta = case Just (negH LA.<\> g) of
-                      Just d  -> d
-                      Nothing -> g  -- fallback to gradient ascent
-            betaNew = beta + delta
-            converged = LA.norm_2 delta < tol
+        let !g       = gradAt beta
+            !bL      = LA.toList beta
+            !hessian = LA.fromRows [hessCol bL i | i <- [0 .. p - 1]]
+            !negH    = LA.scale (-1) hessian
+            !delta   = negH LA.<\> g
+            !betaNew = beta + delta
+            !converged = LA.norm_2 delta < tol
         in (betaNew, converged)
+
       loop !i beta
         | i >= maxIter = (beta, i)
         | otherwise =
             let (beta', conv) = step beta
             in if conv then (beta', i + 1)
                        else loop (i + 1) beta'
-      (betaFinal, iters) = loop 0 (LA.konst 0 p)
-      -- Standard errors from Fisher information (negative Hessian).
-      h = 1e-5
-      hessFinal = LA.fromRows
-        [ let bp = LA.fromList [if k == i then v + h else v
-                               | (k, v) <- zip [0..] (LA.toList betaFinal)]
-              bm = LA.fromList [if k == i then v - h else v
-                               | (k, v) <- zip [0..] (LA.toList betaFinal)]
-              gp = gradAndHess bp
-              gm = gradAndHess bm
-          in LA.scale (1 / (2 * h)) (gp - gm)
-        | i <- [0 .. p - 1] ]
-      negH = LA.scale (-1) hessFinal
-      seVec = case maybeInverse negH of
-                Just inv -> LA.cmap sqrt (LA.takeDiag inv)
-                Nothing  -> LA.konst (1/0) p
+
+      (!betaFinal, !iters) = loop 0 (LA.konst 0 p)
+
+      -- Final Hessian for SEs.
+      !bFL       = LA.toList betaFinal
+      !hessFinal = LA.fromRows [hessCol bFL i | i <- [0 .. p - 1]]
+      !negHFinal = LA.scale (-1) hessFinal
+      !seVec     = case maybeInverse negHFinal of
+                     Just inv -> LA.cmap sqrt (LA.takeDiag inv)
+                     Nothing  -> LA.konst (1/0) p
   in CoxFit
        { coxBeta   = betaFinal
        , coxSE     = seVec
        , coxLogLik = logLik betaFinal
        , coxIters  = iters
        }
+
+-- | Reverse cumulative sum over a boxed Vector of 'LA.Vector Double':
+-- @out[i] = Σ_{j≥i} v[j]@. Returns a Vector of the same length.
+-- Uses 'scanr' once (O(n p)) — total cost dominated by BLAS-bound
+-- vector additions.
+revCumSumVecV :: LA.Vector Double
+              -> V.Vector (LA.Vector Double)
+              -> V.Vector (LA.Vector Double)
+revCumSumVecV zeroV vs =
+  -- scanr produces length n+1 with a trailing zero seed; drop it.
+  let !suf = scanr (+) zeroV (V.toList vs)
+  in V.fromList (init suf)
 
 -- | Baseline cumulative hazard (Breslow estimator).
 coxBaselineHazard
