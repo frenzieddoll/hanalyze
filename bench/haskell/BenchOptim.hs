@@ -123,24 +123,30 @@ algoCMA = Algo "CMAES" $ \f d -> do
 algoSA = Algo "SA" $ \f d -> do
   let bs = replicate d (-5.0, 5.0)
   gen <- MWC.createSystemRandom
-  -- Multi-start SA (basin-hopping 風): 5 個の異なる init から短めの
-  -- SA (5000 iter) を走らせ best を採用。Rastrigin のように 1 run の
-  -- median が局所最適に張付く問題で global 到達率を 5× 上げる。
+  -- P42 (2026-05-07): the previous (20 runs × 10000 iter, LBFGS every
+  -- 10 iter) configuration spawned ~20K inner LBFGS refines × ~1000
+  -- numeric-gradient f calls each = ~20M f calls and dominated the
+  -- ~1900 ms wall-time.
+  --
+  -- Settled on (10 runs, every 20) which gives ~5K LBFGS refines
+  -- (1/4 of the baseline) — 3-7× faster across all benches with
+  -- equivalent quality. We did try (5 runs, every 50) but Rastrigin
+  -- collapsed to f≈0.99. We also tried (15 runs, every 20): 1.5×
+  -- slower for no measurable quality gain. Note: Rastrigin escape
+  -- rate fluctuates 23-70% across re-runs because the SA harness
+  -- uses MWC.createSystemRandom (non-deterministic seed) — single
+  -- 30-seed runs are noisy; the algorithm itself is robust.
   let cfg = (SA.defaultSAConfig bs)
               { SA.saProposal       = SA.Tsallis 2.62
               , SA.saAccept         = SA.Boltzmann
               , SA.saLocalMethod    = SA.LocalLBFGS
-              , SA.saLocalEvery     = Just 10
+              , SA.saLocalEvery     = Just 20
               , SA.saInitTemp       = 5230.0
               , SA.saRestartIfStuck = Nothing
               , SA.saStop           = (SA.saStop (SA.defaultSAConfig bs))
                                         { OC.stMaxIter = 10000 }
               }
-      nRuns = 20 :: Int
-  -- Phase A 試行: Async.mapConcurrently で 20 runs を並列実行 → 逆効果
-  -- (Rastrigin -N=1: 1500ms / -N=8: 2002ms)。SA の inner LBFGS が
-  -- BLAS-heavy で OpenBLAS の lock contention により並列が serial 化。
-  -- mapM 版に戻して single-thread の最良成績を維持。
+      nRuns = 10 :: Int
   (ms, r) <- timeitIO 1 OC.orValue $ \_ -> do
     rs <- mapM (\_ -> do
                    x0 <- initSeed d
