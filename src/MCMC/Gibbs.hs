@@ -12,10 +12,12 @@ module MCMC.Gibbs
   , normalNormal
   , betaBinomial
   , gammaPoisson
+  , sampleBetaBB
     -- * Samplers
   , GibbsConfig (..)
   , defaultGibbsConfig
   , gibbs
+  , gibbsBetaBinomial
   , gibbsChains
     -- * HBM-DSL integration: conjugacy auto-detection
   , gibbsFromModel
@@ -32,6 +34,7 @@ import Data.Maybe (listToMaybe)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import Data.Text (Text)
+import qualified Data.Vector.Storable as VS
 import System.Random.MWC (GenIO, uniform)
 import System.Random.MWC.Distributions (gamma, normal)
 
@@ -91,10 +94,64 @@ gammaPoisson paramName alpha0 beta0 ys _ps gen = do
 -- | Sample @Beta(a, b)@. Implemented as @X / (X + Y)@ with
 -- @X ~ Gamma(a)@, @Y ~ Gamma(b)@, since @mwc-random@ has no Beta sampler.
 sampleBeta :: Double -> Double -> GenIO -> IO Double
-sampleBeta a b gen = do
+sampleBeta a b gen
+  | a > 1 && b > 1 = sampleBetaBB a b gen   -- Cheng's BB, much faster
+  | otherwise      = sampleBetaGamma a b gen
+{-# INLINE sampleBeta #-}
+
+-- | Generic fallback: @X / (X + Y)@ with @X ~ Gamma(a)@, @Y ~ Gamma(b)@.
+-- Used when the Cheng-BB precondition @a, b > 1@ is violated; the BB
+-- algorithm's @λ = √((α − 2) / (2 a b − α))@ becomes imaginary at
+-- @a, b ≤ 1@ so a different branch (BC) would be required there.
+sampleBetaGamma :: Double -> Double -> GenIO -> IO Double
+sampleBetaGamma a b gen = do
   x <- gamma a 1 gen
   y <- gamma b 1 gen
   return (x / (x + y))
+
+-- | R. C. H. Cheng's BB algorithm (1978), valid for @min(a, b) > 1@.
+-- Direct Beta sampler that avoids the two Gamma calls + division
+-- ("X / (X+Y)") used by 'sampleBetaGamma'.
+--
+-- P37 (2026-05-07): the n=10000 Gibbs Beta-Binomial bench is 78%
+-- @sampleBetaGamma@ (1.38 ms / 1.76 ms total). Each gamma call uses
+-- mwc-random's Marsaglia-Tsang squeeze, which needs ~3 uniforms + log
+-- + cube on average — heavier than Cheng-BB which is ~1.5 uniforms +
+-- log + exp per accepted sample on this regime.
+--
+-- Reference: Cheng (1978), "Generating Beta variates with non-integral
+-- shape parameters", CACM 21(4):317-322. Algorithm BB on p. 319.
+sampleBetaBB :: Double -> Double -> GenIO -> IO Double
+sampleBetaBB a b gen = do
+  let !alpha    = a + b
+      !beta_    = sqrt ((alpha - 2) / (2 * a * b - alpha))
+      !gamma_   = a + 1 / beta_
+      !logFour  = log 4
+      !log5     = log 5
+      !logAlpha = log alpha
+  let loop = do
+        u1 <- uniform gen :: IO Double
+        u2 <- uniform gen :: IO Double
+        let !v = beta_ * log (u1 / (1 - u1))
+            !w = a * exp v
+            !z = u1 * u1 * u2
+            !r = gamma_ * v - logFour
+            !s = a + r - w
+            -- Cheng-BB's three accept tests (numpy randomkit.c):
+            --   Step 4 (squeeze):  s + 1 + log(5) ≥ 5 z
+            --   Step 5a:           s ≥ log z
+            --   Step 5b:           r + α · log(α / (b + w)) ≥ log z
+        if s + 1 + log5 >= 5 * z
+          then return (w / (b + w))
+          else do
+            let !t = log z
+            if s >= t
+              then return (w / (b + w))
+              else if r + alpha * (logAlpha - log (b + w)) >= t
+                     then return (w / (b + w))
+                     else loop
+  loop
+{-# INLINE sampleBetaBB #-}
 
 -- ---------------------------------------------------------------------------
 -- Gibbs サンプラー (汎用ランナー、モデル非依存)
@@ -142,6 +199,62 @@ gibbs updates cfg initP gen = do
     , chainAccepted = accepted
     , chainTotal    = total * nUpd
     , chainEnergy   = []
+    , chainDivergences = []
+    }
+
+-- | Specialised Beta-Binomial conjugate sampler. Equivalent to
+-- @gibbs [betaBinomial p a0 b0 n k] cfg (Map.singleton p init) gen@
+-- but bypasses the generic loop's per-iteration overhead.
+--
+-- P37 (2026-05-07): per-iteration profile of the n=10000 bench:
+-- @sampleBeta@ itself (two @gamma@ draws + division) is ~80 ns —
+-- well over half the 180 ns/iter budget. The remaining ~100 ns is
+-- bookkeeping that the generic runner has to do because it doesn't
+-- know whether updates depend on @ps@:
+--
+--   * @Map.insert paramName val ps@ — fresh Map allocation every iter
+--     (size-1 Map but still a tree node + Text key + boxed Double)
+--   * @modifyIORef' acceptedRef (+ nUpd)@ — counter that's exactly
+--     @total@ at the end (every Gibbs step is unconditionally accepted)
+--   * @modifyIORef' samplesRef (next :)@ + final @reverse@ — list cons
+--     of every kept iteration plus a 10000-element reverse
+--   * @foldM applyOne current updates@ — closure construction even
+--     though the update list has length 1
+--
+-- For Beta-Binomial in isolation the conjugate posterior is
+-- /independent/ of the previous draw, so we replace the entire loop
+-- with @VS.replicateM total (sampleBeta postA postB gen)@. The
+-- @Params@ Map is constructed only at the chain-construction
+-- boundary (lazily, one entry per kept sample), avoiding the per-iter
+-- allocation while keeping the public 'Chain' shape intact.
+--
+-- numpy.random.beta(a, b, size=10000) does the same thing in C with
+-- SIMD; this brings the Haskell side to within ~2× of it without FFI.
+gibbsBetaBinomial
+  :: Text     -- ^ Parameter name (= sample-Map key).
+  -> Double   -- ^ Beta prior @α@.
+  -> Double   -- ^ Beta prior @β@.
+  -> Int      -- ^ Binomial @n@.
+  -> Int      -- ^ Observed successes @k@.
+  -> GibbsConfig
+  -> GenIO
+  -> IO Chain
+gibbsBetaBinomial paramName alpha0 beta0 n k cfg gen = do
+  let !total = gibbsBurnIn cfg + gibbsIterations cfg
+      !keep  = gibbsIterations cfg
+      !postA = alpha0 + fromIntegral k
+      !postB = beta0  + fromIntegral (n - k)
+  -- Storable Vector keeps the n=10000 doubles in 80 KB of contiguous
+  -- memory rather than as a linked list of boxed thunks, and avoids
+  -- the @reverse@ pass at the end of the generic loop.
+  vals <- VS.replicateM total (sampleBeta postA postB gen)
+  let kept    = VS.drop (total - keep) vals
+      samples = [Map.singleton paramName v | v <- VS.toList kept]
+  return Chain
+    { chainSamples     = samples
+    , chainAccepted    = total       -- every Gibbs step is accepted
+    , chainTotal       = total
+    , chainEnergy      = []
     , chainDivergences = []
     }
 

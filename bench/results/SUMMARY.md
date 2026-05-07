@@ -243,7 +243,7 @@ warmup 中の per-iter list allocation (4 × p セル) を消去。
 
 | name | hanalyze (ms) | python (ms) | speedup | acc_hs | acc_py | 真値 / 注 |
 |---|---:|---:|---:|---:|---:|---|
-| Gibbs_BetaBinomial_n10000 | 1.80 | **0.39** | 0.21× | 0.583 | 0.583 | analytic E[p] = 14/24 = **0.5833** ✅ |
+| **Gibbs_BetaBinomial_n10000** | **1.36** | **0.39** | 0.29× | 0.583 | 0.583 | analytic E[p] = 14/24 = **0.5833** ✅ (**P37: Cheng-BB + 専用 runner で 1.32×**) |
 | **ADVI_logistic_n60_iter500** | **256.8** | 698.9 | **2.72×** ⭐ | 4.92 | 5.58 | (separable data; ADVI converge せず) |
 | WAIC_S1000_N200 | 13.0 | **6.29** | 0.48× | 417.0 | 417.0 | 完全一致 ✅ (P2 で 19.3→12.6 ms 改善) |
 | **LOO_PSIS_S1000_N200** | **16.6** | 38.8 | **2.34×** ⭐ | 417.0 | 417.0 | 完全一致 ✅ (P10 で 22.4→16.6 ms 改善) |
