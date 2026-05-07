@@ -236,7 +236,7 @@ MH は次元 $D$ が大きいと非効率:
 
 ---
 
-## 7. Slice sampler (Phase J3)
+## 7. Slice sampler
 
 調整不要のオルタナ:
 

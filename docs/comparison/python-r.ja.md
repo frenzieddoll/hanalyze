@@ -92,70 +92,70 @@ LME (混合効果モデル) で特に優位。EM exact 推定が高速。
 | GP_fit_n1000 | 200 ms | 42 ms | 0.21× (= 4.7× 遅) |
 
 **原因**: BLAS dispatch overhead と sklearn の Cython inline SIMD の差。
-massiv 等で 1.4-3× の改善は達成 (F1+F2+F4)、完全 sklearn 並みには C/FFI 必要。
+完全 sklearn 並みには C/FFI 必要 (Cython の inline SIMD 差)。
 
 ## 3. 未ベンチ領域 (🟡) - 比較 todo
 
 以下は**機能実装は完了しているが、Python/R との実測比較が未実施**。
 実装精度が同等であることは hspec test で確認済。
 
-### 3.1 ベイズ MCMC (Phase BENCH-MCMC、推奨優先度 ★★)
+### 3.1 ベイズ MCMC
 - 比較相手: PyMC (Python)、rstan (R)
 - 比較項目: NUTS warmup + サンプリング時間、有効サンプル数 (ESS)/秒、R-hat
 - 想定モデル: 8-schools (centered/non-centered)、線形回帰、階層 logistic
 - 期待: hanalyze の純 Haskell NUTS が PyMC の C++ コア (Stan) と
   どこまで戦えるか。並列 4-chain で fairness 確保
 
-### 3.2 仮説検定 (Phase BENCH-TEST、推奨優先度 ★)
+### 3.2 仮説検定
 - 比較相手: scipy.stats、rstatix (R)
 - 比較項目: t-test/χ²/ANOVA/Mann-Whitney/Wilcoxon の数値一致 + 速度
 - 期待: 数値一致は完全一致 (同じアルゴリズム)、速度は scipy と同等
   か若干速 (Haskell の closure 起動コスト)
 
-### 3.3 PCA / クラスタリング (Phase BENCH-MLBASIC、推奨優先度 ★★)
+### 3.3 PCA / クラスタリング
 - 比較相手: sklearn.decomposition / sklearn.cluster
 - 比較項目: PCA の SVD 速度、K-means convergence、silhouette
 - データ: iris / mnist 部分集合 / 合成 blob
 
-### 3.4 決定木分類 (Phase BENCH-TREE、推奨優先度 ★)
+### 3.4 決定木分類
 - 比較相手: sklearn.tree.DecisionTreeClassifier、rpart (R)
 - 比較項目: 学習時間、予測精度、葉ノード数
 
-### 3.5 時系列 (Phase BENCH-TS、推奨優先度 ★★)
+### 3.5 時系列
 - 比較相手: statsmodels.tsa (Python)、forecast / fable (R)
 - 比較項目: ARIMA の AIC、Holt-Winters の予測 RMSE、ACF/PACF 数値一致
 - データ: AirPassengers (R 標準)、合成 AR(2)/seasonal
 
-### 3.6 生存解析 (Phase BENCH-SURV、推奨優先度 ★)
+### 3.6 生存解析
 - 比較相手: lifelines (Python)、survival (R)
 - 比較項目: KM/Cox PH の係数一致、log-rank p-value、計算時間
 - データ: lung dataset (R survival 標準)
 
-### 3.7 分類評価 + CV + 解釈 (Phase BENCH-MLEVAL、推奨優先度 ★)
+### 3.7 分類評価 + CV + 解釈
 - 比較相手: sklearn.metrics / sklearn.model_selection / sklearn.inspection
 - 数値一致が主、速度は副次的
 
-### 3.8 多重比較補正 + Bootstrap + Effect (Phase BENCH-INFER、推奨優先度 ★)
+### 3.8 多重比較補正 + Bootstrap + Effect
 - 比較相手: scipy.stats / statsmodels / R (p.adjust, boot, pwr)
 - 数値一致が主
 
-### 3.9 データ操作 (Phase BENCH-DATA、推奨優先度 ★★)
+### 3.9 データ操作
 - 比較相手: pandas (Python)、dplyr/data.table (R)
 - 比較項目: CSV 読込 / groupBy 集約 / join / pivot
 - データ: 大規模 CSV (1M 行)、複数ファイル join
 - **注**: 主要操作は Hackage `dataframe` ネイティブ。hanalyze 拡張部
   (pivot_wider/one-hot/lag/rolling) のみ独自
 
-### 3.10 実験計画 (Phase BENCH-DOE、推奨優先度 ★)
+### 3.10 実験計画
 - 比較相手: pyDOE / pyDOE2 (Python)、DoE.base / qualityTools (R)
 - 比較項目: 直交表生成、最適計画、Power 計算
 
-### 3.11 可視化 (Phase BENCH-VIZ、推奨優先度 ☆)
+### 3.11 可視化
 - 比較相手: matplotlib / ggplot2
 - 数値ベンチではなく**機能カバレッジ + 出力品質の質的比較**
 - HTML/PNG/SVG 出力、Mermaid、対話的 GUI
 
-### 3.12 HBM (Phase BENCH-HBM、推奨優先度 ★)
+### 3.12 HBM
 - 比較相手: PyMC、Stan、NumPyro
 - 比較項目: 同一モデル (例: 8-schools) の事後分布一致、サンプリング
   速度、ESS/秒

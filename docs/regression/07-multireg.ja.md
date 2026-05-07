@@ -82,7 +82,7 @@ hanalyze multireg data/io/potential_wide.csv dose 'y_z*' \
 - **出力数 q**: q=100..1000 まで実用的。q が大きくなると HTML サイズが
   α 行列 (n × q) ぶん増える。
 
-## 関連: 多出力モデル全般 (Phase M1-M8)
+## 関連: 多出力モデル全般
 
 `Model.*` の主要モデルは「多出力 = 主、1 出力 = 特殊化」のポリシで
 統一されています:

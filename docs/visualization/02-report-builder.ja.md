@@ -222,7 +222,7 @@ main = do
 | `secMCMCPair title pa pb chain`                   | 2 パラメータのペアスキャッター |
 | `secPosteriorSummary title rows`                  | mean/SD/2.5%/97.5%/ESS/R-hat テーブル |
 
-### モデル比較・診断セクション (Cycle 1 で追加)
+### モデル比較・診断セクション
 
 | 関数 | 内容 |
 |---|---|
@@ -231,7 +231,7 @@ main = do
 | `secFeatureImportance title items`               | 特徴量重要度バー — `[(label, value)]` を **降順ソート** して `secBarChart` 化。RF / GBM の importance 表示用。 |
 | `secPPC title observed reps`                     | Posterior Predictive Check — 観測 KDE (太線) + 各 replicate KDE (薄線) を重ね描き。`reps :: [[Double]]` は事後予測サンプル群。 |
 
-### 追加可視化セクション (Cycle 9 で追加)
+### 追加可視化セクション
 
 | 関数 | 内容 |
 |---|---|
@@ -255,7 +255,7 @@ main = do
 |---|---|
 | `secInteractiveLM title xc yc xs ys smooth (xMin, xMax)` | **単変数** 用。スライダーで x を変えるとグリッド線形補間で予測値 + 信頼帯を表示。GP/HBM のような非線形・MCMC 経由の予測曲線でも使える。 |
 | `secInteractiveMulti title im` | **多変量** 用。`InteractiveModel` (係数+リンク関数) を渡すと、左側に各 x_j の slider + 主軸 dropdown、右側に scatter + 予測曲線。slider 変化のたび JS で β₀ + Σβ_j x_j → invLink で y_hat 再計算 + scatter 再描画。CI は σ_hat ± 1.96 で帯描画。 |
-| `secInteractiveMultiOut title imo` | **真の多出力 (1 入力 → q 出力カーブ)** 用 (Phase M1-M8)。入力スライダ 1 本で全 q 個の予測値を JS が即時再計算 → Vega-Lite で予測曲線として描画。`InteractivePredictor = PredLinearMO | PredKernelRBF1` で線形 / RBF カーネルリッジを切替。構築は `mkInteractiveMOLinear` / `mkInteractiveMOKernelRBF`。詳細: [regression/07-multireg.ja.md](../regression/07-multireg.ja.md) |
+| `secInteractiveMultiOut title imo` | **真の多出力 (1 入力 → q 出力カーブ)** 用。入力スライダ 1 本で全 q 個の予測値を JS が即時再計算 → Vega-Lite で予測曲線として描画。`InteractivePredictor = PredLinearMO | PredKernelRBF1` で線形 / RBF カーネルリッジを切替。構築は `mkInteractiveMOLinear` / `mkInteractiveMOKernelRBF`。詳細: [regression/07-multireg.ja.md](../regression/07-multireg.ja.md) |
 
 `InteractiveModel`:
 ```haskell
@@ -385,7 +385,7 @@ renderReport "rff.html" cfg (toReport cfg df ["x"] "y" rffFit)
 
 ### Quantile / GAM / Random Forest
 
-CLI から `--report` で生成される他、ライブラリからも `Reportable` instance 経由で同等のレポートを構築可能 (Cycle 3 で追加):
+CLI から `--report` で生成される他、ライブラリからも `Reportable` instance 経由で同等のレポートを構築可能:
 
 ```bash
 hanalyze quantile data.csv x y --taus 0.1,0.5,0.9 --report
@@ -485,7 +485,7 @@ hanalyze taguchi  analyze L9 -f ... --csv ... --report
 `--report` の引数を省略すると `<subcommand>.html` (例: `ridge.html`) になる。
 明示する場合: `--report path/to/myreport.html`。
 
-**全サブコマンドが `Viz.ReportBuilder` 経路** で動作 (Phase 2 完了)。`regress` も
+**全サブコマンドが `Viz.ReportBuilder` 経路** で動作する。`regress` も
 `app/Main.hs` の `cliRegressSections` / `cliMixedSections` / `cliGPSections` /
 `cliHBMSections` を経由して `RB.renderReport` で生成される。
 `Viz.AnalysisReport` は非推奨だがレガシーとして残置。
@@ -566,18 +566,6 @@ renderReport "out.html" cfg (baseSections ++ extra)
 - 新規実装 → 必ず `ReportBuilder`
 - LM/GLM/GLMM/GP/HBM の `regress` CLI → 当面は `AnalysisReport` (将来 ReportBuilder 移行)
 - HBM の MCMC 診断のみ単独で見たい → `Viz.Report`
-
-### 移行ロードマップ
-
-1. **Phase 1 (完了)**: `Reportable` instance を LM/GLM/GLMM/GP/HBM に追加 (sum-type なしで CLI 同等のレポートを生成)
-   - ✅ `LMReport` / `GLMReport` (Cycle 2)
-   - ✅ `QRFit` / `GAMFit` / `RFReport` (Cycle 3 — 横展開)
-   - ✅ `GLMMReport` / `GPReport` / `HBMLinearReport` (Cycle 4)
-2. **Phase 2 (完了)**: CLI `regress --report` を ReportBuilder 経路に切り替え (Cycle 5)
-   - LM/GLM/GLMM/GP/HBM 全パスで `cliRegressSections` / `cliMixedSections` /
-     `cliGPSections` / `cliHBMSections` ヘルパに統一
-   - 多項式次数 (`--degree`) と WAIC/LOO 表示も保持
-3. **Phase 3 (保留)**: `Viz.AnalysisReport` の削除 — ユーザー指示によりレガシーとして残置
 
 ---
 

@@ -23,7 +23,7 @@ CPU 並列化 (多チェーン MCMC など):
 cabal run hbm-example -- +RTS -N4   # 4 スレッド
 ```
 
-## CLI サブコマンド (Phase C 以降)
+## CLI サブコマンド
 
 `hanalyze` はサブコマンド形式で呼び出せます (bare 形式 `hanalyze <file> <xcols> <ycols> ...`
 は `regress` の legacy エイリアスとして残置):
@@ -40,8 +40,8 @@ cabal run hanalyze -- regress data.csv x y LM --report    # 既存の回帰 (= b
 | `regress` / bare | ✅ | LM/GLM/GLMM/GP/HBM 回帰 |
 | `info` | ✅ | 列ごとの型・基本統計 (n / min / max / mean / median / sd / unique) |
 | `hist` | ✅ | ヒストグラム単体 (`--fit`/`--format`/`--out`) |
-| `doe` | ✅ | 直交表 Lₙ (L4/L8/L9/L12/L16/L18) (Phase E1) |
-| `taguchi` | ✅ | タグチメソッド (SN 比 + 要因効果 + 内/外配置) (Phase E2) |
+| `doe` | ✅ | 直交表 Lₙ (L4/L8/L9/L12/L16/L18) |
+| `taguchi` | ✅ | タグチメソッド (SN 比 + 要因効果 + 内/外配置) |
 | `ridge` | ✅ | Ridge / Lasso / Elastic Net (+ regularization path) |
 | `kernel` | ✅ | カーネル回帰 (Nadaraya-Watson / Kernel Ridge / RFF) |
 | `spline` | ✅ | B-spline / Natural cubic |
@@ -199,7 +199,7 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | Ridge / Lasso / Elastic Net | `Model.Regularized` | `fitRegularized` (sum-type penalty) |
 | **RFF (Random Fourier Features)** | `Model.RFF` | `sampleRFFRBF`, `rffRidge`, `rffGP` |
 | 多変量 LR / RRR / PLS / CCA | `Model.MultiLM` / `Model.Multivariate` | |
-| **多出力共通基盤 (Phase M1-M8)** | `Model.MultiOutput` | `asMultiY`, `fromMultiY`, `r2Multi`, `rmseMulti` |
+| **多出力共通基盤** | `Model.MultiOutput` | `asMultiY`, `fromMultiY`, `r2Multi`, `rmseMulti` |
 | ガウス過程 / Multi-output GP | `Model.GP` / `Model.MultiGP` | `optimizeGP`, `fitGP`, `fitGPMulti` |
 | **ロバスト GP** (StudentT/Cauchy) | `Model.GPRobust` | `fitGPRobust`, `predictGPRobust` |
 | **Quantile regression** (τ-quantile) | `Model.Quantile` | `fitQuantile`, `predictQuantile` |
@@ -215,8 +215,8 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | DataFrame → ベクタ抽出 | `DataIO.Convert` | `getDoubleVec`, `getTextVec`, `getMaybeTextVec` |
 | 構造化ログ | `DataIO.Log` | `LogEntry`, `LogReport`, `printLogReport` |
 | 健全性検査 (W001..W008) | `DataIO.Health` | `inspectDataFrame`, `inspectWithPreview` |
-| 自動推論 (delimiter / 有ヘッダ / skip) | `DataIO.Sniff` | `sniffBytes`, `sniffFile` (Phase B) |
-| 列クリーニング DSL | `DataIO.Clean` | `ColumnRule`, `applyRule`, `cleanPipeline`, `dedupeColumns`, `fillBlankNames` (Phase C) |
+| 自動推論 (delimiter / 有ヘッダ / skip) | `DataIO.Sniff` | `sniffBytes`, `sniffFile` |
+| 列クリーニング DSL | `DataIO.Clean` | `ColumnRule`, `applyRule`, `cleanPipeline`, `dedupeColumns`, `fillBlankNames` |
 | Wide → Long 変形 | `DataIO.Preprocess` | `meltLonger`, `hanalyze melt --id ... --vars ...` |
 | 多変量 RFF Ridge | `Model.RFF` | `RFFFeaturesMV`, `rffRidgeMV`, `predictRFFRidgeMV` (CLI: `hanalyze kernel "x1 t" y --method rff`) |
 | 入力標準化 (z-score) | `Stat.Standardize` | `Standardizer`, `fitStandardizer`, `applyStandardizer`, `unapplyStandardizer` (CLI: `--standardize`) |
@@ -263,4 +263,4 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | 多モデル比較レポート | `Viz.ReportBuilder` (★ 標準) / `Viz.AnalysisReport` (非推奨) | `renderReport` / `writeAnalysisReport` |
 | 対話的予測 (1 入力 → q 出力) | `Viz.ReportBuilder` | `secInteractiveMultiOut`, `mkInteractiveMOLinear`, `mkInteractiveMOKernelRBF` |
 
-> **Phase M1-M8 (多出力統一)**: 全主要モデル (Regularized / Spline / Kernel / RFF / GP / GPRobust / GLM / GLMM / HBM) で **多出力 (Y :: Matrix n×q) を主 API、1 出力は 1 列行列化して委譲する薄いラッパ** という統一ポリシ。各モジュールに `fitXMulti` / `XFitMulti` 系列があり、Reportable / CLI 両方から利用可能。詳細は [regression/07-multireg.ja.md](regression/07-multireg.ja.md)。
+> **多出力統一**: 全主要モデル (Regularized / Spline / Kernel / RFF / GP / GPRobust / GLM / GLMM / HBM) で **多出力 (Y :: Matrix n×q) を主 API、1 出力は 1 列行列化して委譲する薄いラッパ** という統一ポリシ。各モジュールに `fitXMulti` / `XFitMulti` 系列があり、Reportable / CLI 両方から利用可能。詳細は [regression/07-multireg.ja.md](regression/07-multireg.ja.md)。

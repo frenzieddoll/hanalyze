@@ -6,7 +6,7 @@
 > This document covers the **theory of mixture distributions** (e.g. how the
 > negative binomial arises as a Gamma-Poisson mixture) and the **computational
 > approaches** (EM, Laplace approximation, MCMC).
-> **Multi-output** (Phase M1-M8): `fitLMEMulti` / `fitGLMMMulti` (per-column EM/Laplace,
+> **Multi-output**: `fitLMEMulti` / `fitGLMMMulti` (per-column EM/Laplace,
 > shared grouping information) — see [05-multivariate.md](05-multivariate.md).
 
 ## Contents

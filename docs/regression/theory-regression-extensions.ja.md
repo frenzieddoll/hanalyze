@@ -244,7 +244,7 @@ $$ \lambda |\beta_j| = \lambda \cdot \beta_j^* \cdot \sigma_j $$
 | L1 (Lasso) | $\beta_j \sim \text{Laplace}(0, b)$, $\lambda = 1/b$ |
 | Elastic Net | Laplace × Normal の積 |
 
-→ `Model.HBM` の `potential` プリミティブでカスタム罰則を表現可能 (Phase A)。
+→ `Model.HBM` の `potential` プリミティブでカスタム罰則を表現可能。
 
 ---
 

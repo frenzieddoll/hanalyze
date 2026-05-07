@@ -211,7 +211,7 @@ let f xs = (head xs)^2 + (xs !! 1)^2
 `cabal run single-opt-bench-demo` produces an HTML report comparing convergence histories
 of all 5 algorithms × 3 benchmarks (Sphere / Rosenbrock / Rastrigin).
 
-## Integration with RFF HP tuning (`Model.RFF`) (Phase O9)
+## Integration with RFF HP tuning (`Model.RFF`)
 
 DE-based variants for RFF hyperparameter auto-tuning:
 
@@ -227,7 +227,7 @@ containing the optimum). Evaluation cost is comparable to the grid versions.
 
 ## Integration with Bayesian Optimization (`Optim.BayesOpt`)
 
-`Optim.BayesOpt`'s acquisition maximisation has been swapped to the new optimisers (Phase O8):
+`Optim.BayesOpt`'s acquisition maximisation has been swapped to the new optimisers:
 
 | Function | Inner optimiser |
 |---|---|

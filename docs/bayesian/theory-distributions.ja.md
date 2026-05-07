@@ -98,7 +98,7 @@ $$ p(x) = \frac{\beta^\alpha}{\Gamma(\alpha)} x^{\alpha-1} e^{-\beta x}, \quad x
   $\alpha = 1$ で Exponential、$\alpha = k/2, \beta = 1/2$ で $\chi^2(k)$。
 - **用途**: 待ち時間の和、形状パラメタ事前、Poisson の rate 共役事前。
 
-### 1.9 InverseGamma — `InverseGamma α β` (Phase I)
+### 1.9 InverseGamma — `InverseGamma α β`
 
 $$ p(x) = \frac{\beta^\alpha}{\Gamma(\alpha)} x^{-\alpha-1} e^{-\beta/x}, \quad x > 0 $$
 
@@ -123,7 +123,7 @@ $$ p(x) = \frac{1}{b-a}, \quad x \in [a, b] $$
 - HMC の transform は `UnconstrainedT` だが、本来は logit-on-(a,b) 変換が望ましい。
   hanalyze では暗黙の制約が `logDensity` 内で扱われる。
 
-### 1.12 Weibull — `Weibull k λ` (Phase I)
+### 1.12 Weibull — `Weibull k λ`
 
 $$ p(x) = \frac{k}{\lambda}\!\left(\frac{x}{\lambda}\right)^{k-1} \exp\!\left(-(x/\lambda)^k\right) $$
 
@@ -135,7 +135,7 @@ $$ p(x) = \frac{k}{\lambda}\!\left(\frac{x}{\lambda}\right)^{k-1} \exp\!\left(-(
   - $k > 1$: 老朽化 (浴槽カーブ右)
 - **用途**: 工学的な信頼性、生存解析の典型分布。
 
-### 1.13 Pareto — `Pareto α x_m` (Phase I)
+### 1.13 Pareto — `Pareto α x_m`
 
 $$ p(x) = \frac{\alpha x_m^\alpha}{x^{\alpha+1}}, \quad x \ge x_m $$
 
@@ -143,7 +143,7 @@ $$ p(x) = \frac{\alpha x_m^\alpha}{x^{\alpha+1}}, \quad x \ge x_m $$
 - **直観**: 「80-20 の法則」。富の分布、都市人口、自然災害の規模。
 - **用途**: 重い裾現象のモデリング、極値統計。
 
-### 1.14 VonMises — `VonMises μ κ` (Phase I)
+### 1.14 VonMises — `VonMises μ κ`
 
 $$ p(x) = \frac{e^{\kappa \cos(x - \mu)}}{2\pi I_0(\kappa)}, \quad x \in (-\pi, \pi] $$
 
@@ -176,7 +176,7 @@ $$ P(X = k) = \binom{n}{k} p^k (1-p)^{n-k}, \quad k = 0, \ldots, n $$
 - $K$ カテゴリのうち 1 つを選ぶ (`probs` ベクトル)。
 - $K = 2$ で Bernoulli。
 
-### 2.4 Multinomial — `Multinomial n [p_1, ..., p_K]` (Phase H2)
+### 2.4 Multinomial — `Multinomial n [p_1, ..., p_K]`
 
 $$ P(\mathbf{k}) = \frac{n!}{k_1! \cdots k_K!} \prod p_i^{k_i} $$
 
@@ -192,7 +192,7 @@ $$ P(X = k) = \frac{\lambda^k e^{-\lambda}}{k!} $$
   ウェブサイトのアクセス件数。
 - **用途**: カウントデータの基本モデル。
 
-### 2.6 NegativeBinomial — `NegativeBinomial μ α` (Phase H1)
+### 2.6 NegativeBinomial — `NegativeBinomial μ α`
 
 $$ P(X = k) = \binom{k + \alpha - 1}{k} \!\left(\frac{\alpha}{\alpha + \mu}\right)^\alpha \!\left(\frac{\mu}{\alpha + \mu}\right)^k $$
 
@@ -200,14 +200,14 @@ $$ P(X = k) = \binom{k + \alpha - 1}{k} \!\left(\frac{\alpha}{\alpha + \mu}\righ
 - $\alpha \to \infty$ で Poisson に収束。
 - **用途**: 「観測平均 < 観測分散」のカウントデータ。Poisson より柔軟。
 
-### 2.7 ZeroInflatedPoisson / ZeroInflatedBinomial (Phase H3)
+### 2.7 ZeroInflatedPoisson / ZeroInflatedBinomial
 
 $$ P(0) = \psi + (1-\psi) P_d(0), \quad P(k>0) = (1-\psi) P_d(k) $$
 
 - $\psi$ は **構造的ゼロの確率** (= 「そもそもイベント不可能」)。
 - **用途**: 釣果 (魚を釣る人と釣らない人がいる)、保険請求 (事故なし vs ゼロ請求)。
 
-### 2.8 BetaBinomial — `BetaBinomial n α β` (Phase I)
+### 2.8 BetaBinomial — `BetaBinomial n α β`
 
 - $p \sim \text{Beta}(\alpha, \beta)$, $X \mid p \sim \text{Binomial}(n, p)$ の周辺化。
 - 過分散二項。$\alpha, \beta$ 大で Binomial に収束。
@@ -216,7 +216,7 @@ $$ P(0) = \psi + (1-\psi) P_d(0), \quad P(k>0) = (1-\psi) P_d(k) $$
 
 ## 3. 多変量と機能性分布
 
-### 3.1 MvNormal — `MvNormal μ Σ` (Phase D / G6)
+### 3.1 MvNormal — `MvNormal μ Σ`
 
 $$ p(\mathbf{x}) = \frac{1}{(2\pi)^{K/2} |\Sigma|^{1/2}} \exp\!\left(-\tfrac{1}{2}(\mathbf{x} - \boldsymbol\mu)^T \Sigma^{-1} (\mathbf{x} - \boldsymbol\mu)\right) $$
 
@@ -225,7 +225,7 @@ $$ p(\mathbf{x}) = \frac{1}{(2\pi)^{K/2} |\Sigma|^{1/2}} \exp\!\left(-\tfrac{1}{
 - hanalyze: 観測には `MvNormal` + `observeMV`、latent には `mvNormalLatent`
   (Cholesky 経由非中心化)。
 
-### 3.2 Dirichlet — `dirichlet name [α_1, ..., α_K]` (Phase G2)
+### 3.2 Dirichlet — `dirichlet name [α_1, ..., α_K]`
 
 $$ p(\boldsymbol\pi) = \frac{1}{B(\boldsymbol\alpha)} \prod \pi_i^{\alpha_i - 1}, \quad \pi_i \ge 0, \sum \pi_i = 1 $$
 
@@ -233,19 +233,19 @@ $$ p(\boldsymbol\pi) = \frac{1}{B(\boldsymbol\alpha)} \prod \pi_i^{\alpha_i - 1}
 - $\alpha_i = 1$ for all $i$ で uniform on simplex。
 - hanalyze: stick-breaking で K-1 個の Beta latent に展開。
 
-### 3.3 Mixture — `Mixture [w_k] [d_k]` (Phase B)
+### 3.3 Mixture — `Mixture [w_k] [d_k]`
 
 $$ p(x) = \sum_k w_k \, p_k(x) $$
 
 - **直観**: 隠れたサブグループ。
 - **用途**: クラスタリング、外れ値モデル ($w$ 小の wide コンポーネント)。
 
-### 3.4 Truncated / Censored (Phase C)
+### 3.4 Truncated / Censored
 
 - `Truncated d lo hi`: 範囲内の観測のみ、CDF 補正で正規化
 - `Censored d lo hi`: 範囲外もデータに含むが「しきい値以上/以下」とのみ判明
 
-### 3.5 LKJ — `lkjCorrCholesky name K η` (Phase H4)
+### 3.5 LKJ — `lkjCorrCholesky name K η`
 
 $$ p(R) \propto |R|^{\eta - 1} $$
 

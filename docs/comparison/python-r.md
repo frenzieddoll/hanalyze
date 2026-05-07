@@ -88,66 +88,66 @@ Particularly fast on mixed-effects models (exact-EM is fast).
 | KR_n2000 | 384 ms | 176 ms | 0.46× (2.2× slower) |
 | GP_fit_n1000 | 200 ms | 42 ms | 0.21× (4.7× slower) |
 
-**Cause**: BLAS dispatch overhead vs sklearn's Cython inline SIMD. Massiv brought 1.4-3× improvements (F1+F2+F4); reaching full parity needs C/FFI.
+**Cause**: BLAS dispatch overhead vs sklearn's Cython inline SIMD. Massiv brought 1.4-3× improvements (); reaching full parity needs C/FFI.
 
 ## 3. Not-yet-benched domains (🟡) — comparison todos
 
 These are **implemented and unit-tested** but not yet benchmarked against Python/R. Implementation correctness is verified via 238 hspec tests.
 
-### 3.1 Bayesian MCMC (Phase BENCH-MCMC, priority ★★)
+### 3.1 Bayesian MCMC
 - vs PyMC (Python), rstan (R)
 - Metrics: NUTS warmup + sampling time, ESS/sec, R-hat
 - Models: 8-schools (centered/non-centered), linear regression, hierarchical logistic
 - Open question: how does hanalyze's pure-Haskell NUTS compare to PyMC's C++ Stan core?
 
-### 3.2 Hypothesis tests (Phase BENCH-TEST, priority ★)
+### 3.2 Hypothesis tests
 - vs scipy.stats, rstatix (R)
 - Metrics: numerical agreement on t/χ²/ANOVA/Mann-Whitney/Wilcoxon plus speed
 - Expected: same numbers (same algorithms), comparable or slightly faster speed (Haskell closure overhead is minor)
 
-### 3.3 PCA / Clustering (Phase BENCH-MLBASIC, priority ★★)
+### 3.3 PCA / Clustering
 - vs sklearn.decomposition / sklearn.cluster
 - Metrics: SVD speed, K-means convergence, silhouette
 - Data: iris, mnist subset, synthetic blobs
 
-### 3.4 Decision tree classifier (Phase BENCH-TREE, priority ★)
+### 3.4 Decision tree classifier
 - vs sklearn.tree.DecisionTreeClassifier, rpart (R)
 - Metrics: training time, accuracy, leaf count
 
-### 3.5 Time series (Phase BENCH-TS, priority ★★)
+### 3.5 Time series
 - vs statsmodels.tsa (Python), forecast / fable (R)
 - Metrics: ARIMA AIC, Holt-Winters forecast RMSE, ACF/PACF agreement
 - Data: AirPassengers (R standard), synthetic AR(2)/seasonal
 
-### 3.6 Survival analysis (Phase BENCH-SURV, priority ★)
+### 3.6 Survival analysis
 - vs lifelines (Python), survival (R)
 - Metrics: KM/Cox PH coefficient agreement, log-rank p-value, runtime
 - Data: lung dataset (from R survival)
 
-### 3.7 Classification metrics + CV + interpretability (Phase BENCH-MLEVAL, priority ★)
+### 3.7 Classification metrics + CV + interpretability
 - vs sklearn.metrics / sklearn.model_selection / sklearn.inspection
 - Numerical agreement primary, speed secondary
 
-### 3.8 Multiple testing + bootstrap + effect size (Phase BENCH-INFER, priority ★)
+### 3.8 Multiple testing + bootstrap + effect size
 - vs scipy.stats / statsmodels / R (p.adjust, boot, pwr)
 - Numerical agreement primary
 
-### 3.9 Data manipulation (Phase BENCH-DATA, priority ★★)
+### 3.9 Data manipulation
 - vs pandas (Python), dplyr/data.table (R)
 - Metrics: CSV read, groupBy aggregate, join, pivot
 - Data: 1M-row CSVs, multi-file joins
 - **Note**: most operations are native Hackage `dataframe`; only the hanalyze extensions (pivot_wider/one-hot/lag/rolling) are unique
 
-### 3.10 DoE (Phase BENCH-DOE, priority ★)
+### 3.10 DoE
 - vs pyDOE / pyDOE2 (Python), DoE.base / qualityTools (R)
 - Metrics: orthogonal-array generation, optimal designs, power calculation
 
-### 3.11 Visualisation (Phase BENCH-VIZ, priority ☆)
+### 3.11 Visualisation
 - vs matplotlib / ggplot2
 - Not numerical — qualitative comparison of feature coverage and output quality
 - HTML/PNG/SVG output, Mermaid, interactive widgets
 
-### 3.12 HBM (Phase BENCH-HBM, priority ★)
+### 3.12 HBM
 - vs PyMC, Stan, NumPyro
 - Metrics: posterior agreement on the same model (e.g. 8-schools), sampling speed, ESS/sec
 - "PyMC compatibility" already confirmed for Truncated/Censored/MvNormal/LKJ/etc. in [docs/02-pymc-comparison.md](../02-pymc-comparison.md)

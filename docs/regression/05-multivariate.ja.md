@@ -5,7 +5,7 @@
 > 多目的最適化や複数応答の同時推定で使う多出力回帰モデル群。
 > 理論は [docs/regression/theory-multivariate.ja.md](theory-multivariate.ja.md) を参照。
 
-## 設計方針 (Phase M1-M8)
+## 設計方針
 
 hanalyze の主要回帰モデルはすべて **「多出力 (Y :: Matrix n×q) を主 API、
 1 出力は 1 列行列化して委譲する薄いラッパ」** という統一ポリシで実装されています。

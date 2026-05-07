@@ -5,7 +5,7 @@
 > hanalyze の `Model.GLM` は LM の自然な拡張で、応答変数が
 > 正規分布以外 (二項・ポアソン・負の二項…) の場合をカバーします。
 > 関連: [01-lm.ja.md](01-lm.ja.md) / [03-glmm.ja.md](03-glmm.ja.md)
-> **多出力対応** (Phase M1-M8): `fitGLMMulti` (列ごと IRLS) — 詳細は [05-multivariate.ja.md](05-multivariate.ja.md)。
+> **多出力対応**: `fitGLMMulti` (列ごと IRLS) — 詳細は [05-multivariate.ja.md](05-multivariate.ja.md)。
 
 ## 目次
 

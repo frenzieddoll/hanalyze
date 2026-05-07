@@ -243,5 +243,5 @@ graph TD
 
 ## 参考
 
-- 各分布の数式と意味は [docs/bayesian/theory-distributions.ja.md](theory-distributions.ja.md) を参照 (Phase M1 で追加)
+- 各分布の数式と意味は [docs/bayesian/theory-distributions.ja.md](theory-distributions.ja.md) を参照
 - 共役関係を活用した Gibbs サンプリングは [docs/bayesian/04-gibbs.ja.md](04-gibbs.ja.md) を参照

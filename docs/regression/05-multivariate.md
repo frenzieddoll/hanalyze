@@ -5,7 +5,7 @@
 > Multi-response models for joint estimation and multi-objective optimisation.
 > Theory: [docs/regression/theory-multivariate.md](theory-multivariate.md).
 
-## Design policy (Phase M1-M8)
+## Design policy
 
 All major regression models in hanalyze follow a single unified policy:
 **multi-output (Y :: Matrix n×q) is the primary API; single-output is a thin

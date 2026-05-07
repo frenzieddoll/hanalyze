@@ -24,7 +24,7 @@ CPU parallelism (multi-chain MCMC, etc.):
 cabal run hbm-example -- +RTS -N4   # 4 threads
 ```
 
-## CLI subcommands (Phase C onward)
+## CLI subcommands
 
 `hanalyze` can be invoked via subcommands (the bare form
 `hanalyze <file> <xcols> <ycols> ...` is preserved as a legacy alias of
@@ -42,8 +42,8 @@ cabal run hanalyze -- regress data.csv x y LM --report    # regression (= bare f
 | `regress` / bare | ✅ | LM/GLM/GLMM/GP/HBM regression |
 | `info` | ✅ | Per-column type / stats (n / min / max / mean / median / sd / unique) |
 | `hist` | ✅ | Standalone histogram (`--fit`/`--format`/`--out`) |
-| `doe` | ✅ | Orthogonal arrays Lₙ (L4/L8/L9/L12/L16/L18) (Phase E1) |
-| `taguchi` | ✅ | Taguchi method (SN ratio + factor effects + inner/outer) (Phase E2) |
+| `doe` | ✅ | Orthogonal arrays Lₙ (L4/L8/L9/L12/L16/L18) |
+| `taguchi` | ✅ | Taguchi method (SN ratio + factor effects + inner/outer) |
 | `ridge` | ✅ | Ridge / Lasso / Elastic Net (+ regularization path) |
 | `kernel` | ✅ | Kernel regression (Nadaraya-Watson / Kernel Ridge / RFF) |
 | `spline` | ✅ | B-spline / natural cubic |
@@ -201,7 +201,7 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | Ridge / Lasso / Elastic Net | `Model.Regularized` | `fitRegularized` (sum-type penalty) |
 | **RFF (Random Fourier Features)** | `Model.RFF` | `sampleRFFRBF`, `rffRidge`, `rffGP` |
 | Multivariate LR / RRR / PLS / CCA | `Model.MultiLM` / `Model.Multivariate` | |
-| **Multi-output common base (Phase M1-M8)** | `Model.MultiOutput` | `asMultiY`, `fromMultiY`, `r2Multi`, `rmseMulti` |
+| **Multi-output common base** | `Model.MultiOutput` | `asMultiY`, `fromMultiY`, `r2Multi`, `rmseMulti` |
 | Gaussian process / Multi-output GP | `Model.GP` / `Model.MultiGP` | `optimizeGP`, `fitGP`, `fitGPMulti` |
 | **Robust GP** (StudentT/Cauchy) | `Model.GPRobust` | `fitGPRobust`, `predictGPRobust` |
 | **Quantile regression** (τ-quantile) | `Model.Quantile` | `fitQuantile`, `predictQuantile` |
@@ -217,8 +217,8 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | DataFrame → vector extraction | `DataIO.Convert` | `getDoubleVec`, `getTextVec`, `getMaybeTextVec` |
 | Structured log | `DataIO.Log` | `LogEntry`, `LogReport`, `printLogReport` |
 | Health checks (W001..W008) | `DataIO.Health` | `inspectDataFrame`, `inspectWithPreview` |
-| Auto-sniff (delim / header / skip) | `DataIO.Sniff` | `sniffBytes`, `sniffFile` (Phase B) |
-| Column cleaning DSL | `DataIO.Clean` | `ColumnRule`, `applyRule`, `cleanPipeline`, `dedupeColumns`, `fillBlankNames` (Phase C) |
+| Auto-sniff (delim / header / skip) | `DataIO.Sniff` | `sniffBytes`, `sniffFile` |
+| Column cleaning DSL | `DataIO.Clean` | `ColumnRule`, `applyRule`, `cleanPipeline`, `dedupeColumns`, `fillBlankNames` |
 | Wide → long reshape | `DataIO.Preprocess` | `meltLonger`, `hanalyze melt --id ... --vars ...` |
 | Multivariate RFF Ridge | `Model.RFF` | `RFFFeaturesMV`, `rffRidgeMV`, `predictRFFRidgeMV` (CLI: `hanalyze kernel "x1 t" y --method rff`) |
 | Input standardization (z-score) | `Stat.Standardize` | `Standardizer`, `fitStandardizer`, `applyStandardizer`, `unapplyStandardizer` (CLI: `--standardize`) |
@@ -265,4 +265,4 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | Multi-model comparison report | `Viz.ReportBuilder` (★ standard) / `Viz.AnalysisReport` (deprecated) | `renderReport` / `writeAnalysisReport` |
 | Interactive prediction (1 input → q outputs) | `Viz.ReportBuilder` | `secInteractiveMultiOut`, `mkInteractiveMOLinear`, `mkInteractiveMOKernelRBF` |
 
-> **Phase M1-M8 (multi-output unification)**: All major models (Regularized / Spline / Kernel / RFF / GP / GPRobust / GLM / GLMM / HBM) follow a unified policy where **multi-output (Y :: Matrix n×q) is the primary API and single-output is a thin wrapper that lifts to a 1-column matrix**. Each module exposes a `fitXMulti` / `XFitMulti` family, callable from both Reportable and CLI layers. See [regression/07-multireg.md](regression/07-multireg.md).
+> **Multi-output unification**: All major models (Regularized / Spline / Kernel / RFF / GP / GPRobust / GLM / GLMM / HBM) follow a unified policy where **multi-output (Y :: Matrix n×q) is the primary API and single-output is a thin wrapper that lifts to a 1-column matrix**. Each module exposes a `fitXMulti` / `XFitMulti` family, callable from both Reportable and CLI layers. See [regression/07-multireg.md](regression/07-multireg.md).

@@ -5,7 +5,7 @@
 > `Model.GLM` is the natural extension of LM that covers response variables outside
 > the normal distribution (binomial, Poisson, negative binomial, …).
 > Related: [01-lm.md](01-lm.md) / [03-glmm.md](03-glmm.md)
-> **Multi-output** (Phase M1-M8): `fitGLMMulti` (per-column IRLS) — see [05-multivariate.md](05-multivariate.md).
+> **Multi-output**: `fitGLMMulti` (per-column IRLS) — see [05-multivariate.md](05-multivariate.md).
 
 ## Contents
 

@@ -85,7 +85,7 @@ data SmoothCurve = SmoothCurve
   }
 ```
 
-### Model comparison & diagnostic sections (added in Cycle 1)
+### Model comparison & diagnostic sections
 
 | Function | Purpose |
 |---|---|
@@ -128,7 +128,7 @@ auto-loadable via `secAppendixFromMd`.
 |---|---|
 | `secInteractiveLM title xc yc xs ys smooth (xMin, xMax)` | Single-variate. Sliding x re-renders predicted point with the supplied `SmoothCurve` (and band). Works for GP / HBM ribbon-style forecasts too. |
 | `secInteractiveMulti title im` | Multi-variate. `InteractiveModel` (intercept / β vector / link) → JS-evaluated `β₀ + Σ β_j x_j → invLink(.)` with sliders for each x_j and a primary-axis dropdown. CI band from σ_hat. |
-| `secInteractiveMultiOut title imo` | **True multi-output (1 input → q output curves)** (Phase M1-M8). One input slider recomputes all q predictions live in the browser and renders them as a curve via Vega-Lite. `InteractivePredictor = PredLinearMO \| PredKernelRBF1` switches between linear and RBF kernel-ridge predictors. Built with `mkInteractiveMOLinear` / `mkInteractiveMOKernelRBF`. See [regression/07-multireg.md](../regression/07-multireg.md). |
+| `secInteractiveMultiOut title imo` | **True multi-output (1 input → q output curves)**. One input slider recomputes all q predictions live in the browser and renders them as a curve via Vega-Lite. `InteractivePredictor = PredLinearMO \| PredKernelRBF1` switches between linear and RBF kernel-ridge predictors. Built with `mkInteractiveMOLinear` / `mkInteractiveMOKernelRBF`. See [regression/07-multireg.md](../regression/07-multireg.md). |
 
 ---
 
@@ -183,7 +183,7 @@ class Reportable a where
 | `GLMMReport`      | `Viz.ReportInstances` | DataOverview / ModelOverviewLink / Collapsible(R²/σ²_u/σ²/ICC + fixed effects + **BLUP table** + residuals) / InteractiveMulti |
 | `GPReport`        | `Viz.ReportInstances` | DataOverview / ModelOverviewExtras (kernel) / Collapsible(hyperparameters + LML + residuals) / InteractiveLM (with credible band) |
 | `HBMLinearReport` | `Viz.ReportInstances` | DataOverview / ModelOverviewExtras (sampler + DAG) / Collapsible(R²/accept-rate + posterior means + **MCMC diagnostics** + residuals) / InteractiveLM (with credible ribbon) |
-| `HBMReport`       | `Viz.ReportInstances` | General HBM (multi-x / non-linear). User-supplied posterior summary + ribbon function. (Cycle 7) |
+| `HBMReport`       | `Viz.ReportInstances` | General HBM (multi-x / non-linear). User-supplied posterior summary + ribbon function. |
 | `QRFit`           | `Model.Quantile`    | DataOverview / ModelOverview / Collapsible(τ + Pseudo R¹ + Pinball + coefficients + scatter + residuals) |
 | `GAMFit`          | `Model.GAM`         | DataOverview / ModelOverview / Collapsible(R²/degree/knots + **per-feature partial-effect cards** + residuals) |
 | `RFReport`        | `Viz.ReportInstances` | DataOverview / ModelOverview / Collapsible(R² + Trees/Features + **Feature importance** + residuals) |
@@ -291,7 +291,7 @@ hanalyze taguchi  analyze L9 -f ... --csv ... --report
 ```
 
 Omitting the report path uses `<subcommand>.html`. **All subcommands now
-render through `Viz.ReportBuilder`** (Phase 2 complete). `Viz.AnalysisReport`
+render through `Viz.ReportBuilder`**. `Viz.AnalysisReport`
 remains in tree as a deprecated legacy module.
 
 ---
@@ -363,17 +363,8 @@ get a GHC warning). `Viz.ReportBuilder` is the going-forward standard.
 
 **Selection guide**:
 - New code → always `ReportBuilder`.
-- Legacy `regress --report` is now switched to `ReportBuilder` (Phase 2 complete).
+- Legacy `regress --report` runs through `ReportBuilder`.
 - HBM-only MCMC diagnostics → `Viz.Report` (a focused MCMC-only report).
-
-### Migration roadmap
-
-1. **Phase 1 (done)**: Add `Reportable` instances for LM / GLM / GLMM / GP / HBM (parity with AR without sum types)
-   - ✅ `LMReport` / `GLMReport` (Cycle 2)
-   - ✅ `QRFit` / `GAMFit` / `RFReport` (Cycle 3)
-   - ✅ `GLMMReport` / `GPReport` / `HBMLinearReport` (Cycle 4)
-2. **Phase 2 (done)**: Switch CLI `regress --report` to the ReportBuilder path (Cycle 5)
-3. **Phase 3 (paused)**: Remove `Viz.AnalysisReport` — kept as legacy per user request
 
 ---
 

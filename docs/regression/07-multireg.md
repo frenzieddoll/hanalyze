@@ -81,7 +81,7 @@ A `Viz.ReportBuilder.SecInteractiveMultiOut` section is embedded:
 - **Output count q**: q=100..1000 is practical. The HTML grows by the size of the α
   matrix (n × q).
 
-## Related: multi-output across all models (Phase M1-M8)
+## Related: multi-output across all models
 
 The major models in `Model.*` follow a single unified policy: **multi-output is the
 primary API and single-output is a thin wrapper**.
