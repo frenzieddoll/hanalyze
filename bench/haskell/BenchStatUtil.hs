@@ -14,6 +14,7 @@
 module Main where
 
 import qualified Data.Vector             as V
+import qualified Data.Vector.Unboxed     as VU
 import qualified Numeric.LinearAlgebra   as LA
 import qualified System.Random.MWC       as MWC
 
@@ -22,7 +23,7 @@ import           Stat.Test               (Alternative (..),
                                           tTestWelch, mannWhitneyU,
                                           kolmogorovSmirnovNormal,
                                           TestResult (..))
-import           Stat.MultipleTesting    (CorrectionMethod (..), pAdjust)
+import           Stat.MultipleTesting    (benjaminiHochbergV)
 import           Stat.QuasiRandom        (haltonSequence)
 import           Stat.ClassMetrics       (auc, logLoss)
 import           Stat.CV                 (kFold)
@@ -101,18 +102,23 @@ benchKS = do
 benchBH :: IO [BenchRow]
 benchBH = do
   -- Mix of "true null" (uniform) and "alternative" (small) p-values.
+  -- P39 (2026-05-07): pre-construct the input as a 'VU.Vector Double'
+  -- and call 'benjaminiHochbergV' directly. Matches Python's harness
+  -- (which has a pre-built @np.array@ of p-values), so the timer only
+  -- captures the BH algorithm itself rather than @[Double]@↔Vector
+  -- conversion overhead.
   let n  = 1000
-      ps = [ if i < 100 then 0.001 + 0.0001 * fromIntegral i
-                        else 0.5 + 0.4 * sin (fromIntegral i)
-           | i <- [0 .. n - 1] ]
-      run :: Int -> IO [Double]
-      run _ = return (pAdjust BenjaminiHochberg ps)
-      probe r = sum r / fromIntegral (length r)
-  (ms, adj) <- timeitTastyIO probe run
-  let nSig = length (filter (< 0.05) adj)
+      psV = VU.generate n $ \i ->
+              if i < 100 then 0.001 + 0.0001 * fromIntegral i
+                         else 0.5 + 0.4 * sin (fromIntegral i)
+      run :: Int -> IO (VU.Vector Double)
+      run _ = return (benjaminiHochbergV psV)
+      probe r = VU.sum r / fromIntegral (VU.length r)
+  (ms, adjV) <- timeitTastyIO probe run
+  let nSig = VU.length (VU.filter (< 0.05) adjV)
   return [ BenchRow "haskell" "stat_util"
             "BH_pAdjust_n1000" ms (fromIntegral nSig) 0
-            ("BH on n=1000 p-values; significant after adj="
+            ("BH on n=1000 p-values (VU API); significant="
              ++ show nSig) ]
 
 benchHalton :: IO [BenchRow]

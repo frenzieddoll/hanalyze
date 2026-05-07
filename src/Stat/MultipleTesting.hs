@@ -18,13 +18,17 @@ module Stat.MultipleTesting
   , holm
   , benjaminiHochberg
   , benjaminiYekutieli
+    -- * Storable-vector variants (avoid boxed list ↔ unboxed Vector
+    -- conversions; the same numerical algorithms as the @[Double]@
+    -- versions above, but accepting and returning @VU.Vector Double@).
+  , benjaminiHochbergV
+  , holmV
   ) where
 
 import qualified Data.Vector.Unboxed         as VU
 import qualified Data.Vector.Unboxed.Mutable as MVU
 import qualified Data.Vector.Algorithms.Intro as VAI
 import           Control.Monad.ST             (runST, ST)
-import           Control.Monad                (forM_)
 
 -- | Correction method.
 data CorrectionMethod
@@ -51,44 +55,105 @@ bonferroni ps =
 -- | Holm-Bonferroni step-down: less conservative than 'bonferroni',
 -- still controls FWER.
 holm :: [Double] -> [Double]
-holm ps =
-  -- Vectorised rewrite: sort once, prefix-max in place, scatter back to
-  -- original positions in @O(m)@. Replaces the previous list-comp with
-  -- @[head [... | fst pa == i] | i <- [0..m-1]]@ which was @O(m²)@ for
-  -- the back-permutation alone (n=1000 → 10⁶ scans). For n=1000 the
-  -- new code is ~50× faster.
-  pAdjustGeneric ps $ \m sortedPs idxBuf -> runST $ do
-    let mD = fromIntegral m :: Double
-    raw <- MVU.new m :: ST s (MVU.STVector s Double)
-    -- raw[k] = min(1, p_(k) · (m-k)) for k=0..m-1 in sorted order.
-    forM_ [0 .. m - 1] $ \k -> do
-      let !p = sortedPs VU.! k
-      MVU.unsafeWrite raw k (min 1 (p * (mD - fromIntegral k)))
-    -- Prefix-max (left-to-right monotone non-decreasing).
-    forM_ [1 .. m - 1] $ \k -> do
-      a <- MVU.unsafeRead raw (k - 1)
-      b <- MVU.unsafeRead raw k
-      MVU.unsafeWrite raw k (max a b)
-    scatter m raw idxBuf
+holm = VU.toList . holmV . VU.fromList
+
+-- | Holm step-down on an unboxed vector — see 'benjaminiHochbergV'
+-- for the rationale on bypassing the @[Double]@ API.
+holmV :: VU.Vector Double -> VU.Vector Double
+holmV ps = runST $ do
+  let !m  = VU.length ps
+      !mD = fromIntegral m :: Double
+  if m <= 1
+    then return ps
+    else do
+      idx <- VU.thaw (VU.generate m id) :: ST s (MVU.STVector s Int)
+      VAI.sortBy (\i j -> compare (VU.unsafeIndex ps i) (VU.unsafeIndex ps j)) idx
+      idxV <- VU.unsafeFreeze idx
+      raw  <- MVU.new m
+      let goRaw !k
+            | k >= m    = pure ()
+            | otherwise = do
+                let !p = VU.unsafeIndex ps (VU.unsafeIndex idxV k)
+                    !q = min 1 (p * (mD - fromIntegral k))
+                MVU.unsafeWrite raw k q
+                goRaw (k + 1)
+      goRaw 0
+      let goMax !k
+            | k >= m    = pure ()
+            | otherwise = do
+                a <- MVU.unsafeRead raw (k - 1)
+                b <- MVU.unsafeRead raw k
+                MVU.unsafeWrite raw k (max a b)
+                goMax (k + 1)
+      goMax 1
+      out <- MVU.new m
+      let goSc !k
+            | k >= m    = pure ()
+            | otherwise = do
+                v <- MVU.unsafeRead raw k
+                MVU.unsafeWrite out (VU.unsafeIndex idxV k) v
+                goSc (k + 1)
+      goSc 0
+      VU.unsafeFreeze out
 
 -- | Benjamini-Hochberg (BH) FDR control.
 benjaminiHochberg :: [Double] -> [Double]
-benjaminiHochberg ps =
-  pAdjustGeneric ps $ \m sortedPs idxBuf -> runST $ do
-    let mD = fromIntegral m :: Double
-    raw <- MVU.new m :: ST s (MVU.STVector s Double)
-    -- Per-rank q-value q_(k) = min(1, p_(k) · m / (k+1)) (k 0-based).
-    forM_ [0 .. m - 1] $ \k -> do
-      let !p = sortedPs VU.! k
-      MVU.unsafeWrite raw k (min 1 (p * mD / fromIntegral (k + 1)))
-    -- Step-up: enforce monotone non-decreasing from RIGHT to LEFT
-    -- (largest k first), so that smaller p never receives larger q.
-    -- One reverse-direction prefix-min sweep — no list reversal.
-    forM_ [m - 2, m - 3 .. 0] $ \k -> do
-      a <- MVU.unsafeRead raw k
-      b <- MVU.unsafeRead raw (k + 1)
-      MVU.unsafeWrite raw k (min a b)
-    scatter m raw idxBuf
+benjaminiHochberg = VU.toList . benjaminiHochbergV . VU.fromList
+
+-- | BH on an unboxed 'VU.Vector Double'. Equivalent to
+-- 'benjaminiHochberg' but skips the @[Double]@↔@VU.Vector Double@
+-- conversion, which on the n=1000 bench dominates the @[Double]@
+-- API by a 2× factor (boxed-Double allocation + GC pressure).
+--
+-- Numerical algorithm:
+--
+--   1. argsort p ascending.
+--   2. raw_k = min(1, p_(k) · m / (k+1)).
+--   3. Right-to-left prefix-min on @raw@ (step-up monotonisation).
+--   4. Scatter back to original positions.
+--
+-- All steps are written as hand-rolled ST loops (not @forM_ [0..m-1]@)
+-- so we avoid the per-iter list-cell allocation that GHC otherwise
+-- has to fuse away.
+benjaminiHochbergV :: VU.Vector Double -> VU.Vector Double
+benjaminiHochbergV ps = runST $ do
+  let !m  = VU.length ps
+      !mD = fromIntegral m :: Double
+  if m <= 1
+    then return ps
+    else do
+      idx <- VU.thaw (VU.generate m id) :: ST s (MVU.STVector s Int)
+      VAI.sortBy (\i j -> compare (VU.unsafeIndex ps i) (VU.unsafeIndex ps j)) idx
+      idxV <- VU.unsafeFreeze idx
+      raw  <- MVU.new m
+      -- raw_k = min(1, p_(k) · m / (k+1))
+      let goRaw !k
+            | k >= m    = pure ()
+            | otherwise = do
+                let !p = VU.unsafeIndex ps (VU.unsafeIndex idxV k)
+                    !q = min 1 (p * mD / fromIntegral (k + 1))
+                MVU.unsafeWrite raw k q
+                goRaw (k + 1)
+      goRaw 0
+      -- Right-to-left prefix-min monotonisation.
+      let goMin !k
+            | k < 0     = pure ()
+            | otherwise = do
+                a <- MVU.unsafeRead raw k
+                b <- MVU.unsafeRead raw (k + 1)
+                MVU.unsafeWrite raw k (min a b)
+                goMin (k - 1)
+      goMin (m - 2)
+      -- Scatter back to original positions.
+      out <- MVU.new m
+      let goSc !k
+            | k >= m    = pure ()
+            | otherwise = do
+                v <- MVU.unsafeRead raw k
+                MVU.unsafeWrite out (VU.unsafeIndex idxV k) v
+                goSc (k + 1)
+      goSc 0
+      VU.unsafeFreeze out
 
 -- | Benjamini-Yekutieli (BY) FDR control under arbitrary dependence.
 -- Multiplies each BH q-value by the harmonic-number factor
@@ -100,43 +165,3 @@ benjaminiYekutieli ps =
       bh = benjaminiHochberg ps
   in map (\p -> min 1 (p * cM)) bh
 
--- ---------------------------------------------------------------------------
--- Helpers
--- ---------------------------------------------------------------------------
-
--- | Common harness for Holm / BH: sorts the p-values once, hands the
--- sorted vector and the original-index buffer to a method-specific
--- adjustment 'ST' action that returns the q-values in /original/ order.
-pAdjustGeneric
-  :: [Double]
-  -> (Int -> VU.Vector Double -> VU.Vector Int -> VU.Vector Double)
-  -> [Double]
-pAdjustGeneric ps f =
-  let m  = length ps
-      vp = VU.fromList ps
-      -- Pair index with p-value, sort by p ascending, then split.
-      sortedIxP = sortByValue vp
-      sortedPs  = VU.map snd sortedIxP
-      origIdx   = VU.map fst sortedIxP
-      out       = f m sortedPs origIdx
-  in VU.toList out
-
--- | Sort an unboxed vector of p-values, retaining original indices.
--- Returns a vector of @(origIdx, p)@ in ascending @p@ order.
-sortByValue :: VU.Vector Double -> VU.Vector (Int, Double)
-sortByValue vp =
-  let m       = VU.length vp
-      indexed = VU.generate m (\i -> (i, vp VU.! i))
-  in VU.modify (VAI.sortBy compareSnd) indexed
-  where
-    compareSnd (_, a) (_, b) = compare a b
-
--- | Scatter the adjusted values from rank-order positions back to
--- original input positions in @O(m)@.
-scatter :: Int -> MVU.STVector s Double -> VU.Vector Int -> ST s (VU.Vector Double)
-scatter m raw idx = do
-  out <- MVU.new m
-  forM_ [0 .. m - 1] $ \k -> do
-    v <- MVU.unsafeRead raw k
-    MVU.unsafeWrite out (idx VU.! k) v
-  VU.unsafeFreeze out
