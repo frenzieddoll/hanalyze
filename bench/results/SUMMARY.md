@@ -1,6 +1,6 @@
 # hanalyze vs Python benchmark summary
 
-最終更新: 2026-05-07 (P1-P6 + P7-P18 perf 改善 + B7-B13 全 Tier 拡充後)
+最終更新: 2026-05-08 (P42 SA 改善後の全 14 suite 再計測)
 
 統一条件: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1`、single-thread、固定 seed。
 

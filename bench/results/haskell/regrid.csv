@@ -1,2 +1,2 @@
 system,suite,name,time_ms,acc_main,acc_aux,extra
-haskell,regrid,Regrid_long_jagged_PCHIP_N30,1.320851,0.000000,0.000000,regridLong PCHIP+Adaptive N=30 ZIntersection on potential_long_jagged
+haskell,regrid,Regrid_long_jagged_PCHIP_N30,1.323366,0.000000,0.000000,regridLong PCHIP+Adaptive N=30 ZIntersection on potential_long_jagged

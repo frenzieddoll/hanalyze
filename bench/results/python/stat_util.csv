@@ -1,9 +1,9 @@
 system,suite,name,time_ms,acc_main,acc_aux,extra
-python,stat_util,Bootstrap_mean_n1000_B1000,11.6717,0.0985937,-0.0501248,"scipy.stats.bootstrap percentile B=1000; [-0.050125, 0.048469]"
-python,stat_util,Welch_ttest_n500x500,0.557023,-6.22783,6.95899e-10,scipy.stats.ttest_ind equal_var=False; t=-6.227826 p=6.958987e-10
-python,stat_util,MannWhitneyU_n500x500,0.531469,98226,4.54991e-09,scipy.stats.mannwhitneyu; U=98226 p=4.549912e-09
-python,stat_util,KS_normal_n1000,0.230663,0.0701412,0.001,statsmodels.stats.diagnostic.lilliefors (KS w/ estimated μ̂σ̂); D=0.070141 p=0.001000
-python,stat_util,BH_pAdjust_n1000,0.042011,0,0,statsmodels multipletests fdr_bh; n_sig=0
-python,stat_util,Halton_n10000_d5,1.11463,10000,5,scipy.stats.qmc.Halton n=10000 d=5
-python,stat_util,AUC_LogLoss_n10000,4.3718,1,0.435478,sklearn.metrics roc_auc_score + log_loss; AUC=1.000000 ll=0.435478
-python,stat_util,KFold_5_n1000,0.222329,5000,0,sklearn.model_selection.KFold(5) on n=1000
+python,stat_util,Bootstrap_mean_n1000_B1000,9.81943,0.0985937,-0.0501248,"scipy.stats.bootstrap percentile B=1000; [-0.050125, 0.048469]"
+python,stat_util,Welch_ttest_n500x500,0.470421,-6.22783,6.95899e-10,scipy.stats.ttest_ind equal_var=False; t=-6.227826 p=6.958987e-10
+python,stat_util,MannWhitneyU_n500x500,0.418352,98226,4.54991e-09,scipy.stats.mannwhitneyu; U=98226 p=4.549912e-09
+python,stat_util,KS_normal_n1000,0.193512,0.0701412,0.001,statsmodels.stats.diagnostic.lilliefors (KS w/ estimated μ̂σ̂); D=0.070141 p=0.001000
+python,stat_util,BH_pAdjust_n1000,0.035,0,0,statsmodels multipletests fdr_bh; n_sig=0
+python,stat_util,Halton_n10000_d5,1.00293,10000,5,scipy.stats.qmc.Halton n=10000 d=5
+python,stat_util,AUC_LogLoss_n10000,3.86351,1,0.435478,sklearn.metrics roc_auc_score + log_loss; AUC=1.000000 ll=0.435478
+python,stat_util,KFold_5_n1000,0.194212,5000,0,sklearn.model_selection.KFold(5) on n=1000

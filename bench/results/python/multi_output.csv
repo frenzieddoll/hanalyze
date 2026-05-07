@@ -1,4 +1,4 @@
 system,suite,name,time_ms,acc_main,acc_aux,extra
-python,multi_output,MultiLM_n2000_p10_q5,0.717804,0.0353544,0,sklearn LinearRegression multi-Y; RMSE=0.035354
-python,multi_output,MultiGP_n200_p3_q3,263.354,0,0,sklearn GaussianProcessRegressor RBF q=3 outputs (independent GPs)
-python,multi_output,MultiGP_n200_p3_q3_sharedHP,205.905,0,0,"sklearn GPR fit(X, Y::(n,q)) — single HP optimization"
+python,multi_output,MultiLM_n2000_p10_q5,0.674759,0.0353544,0,sklearn LinearRegression multi-Y; RMSE=0.035354
+python,multi_output,MultiGP_n200_p3_q3,245.178,0,0,sklearn GaussianProcessRegressor RBF q=3 outputs (independent GPs)
+python,multi_output,MultiGP_n200_p3_q3_sharedHP,199.433,0,0,"sklearn GPR fit(X, Y::(n,q)) — single HP optimization"
