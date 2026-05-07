@@ -305,7 +305,7 @@ warmup 中の per-iter list allocation (4 × p セル) を消去。
 | **KS_normal_n1000** | **0.095** | 0.231 | **2.43×** | D=0.0815 | D=0.0701 | (Lilliefors 実装差、両側 normality 棄却) |
 | **KFold_5_n1000** | **0.084** | 0.222 | **2.63×** | k=5000 | k=5000 | 完全一致 ✅ |
 | **BH_pAdjust_n1000** | **0.022** | 0.042 | **1.91×** ⭐ | n_sig=0 | n_sig=0 | 同 ✅ (**P39: VU API + 手書き ST loop で 3.9×、statsmodels 逆転**) |
-| Bootstrap_mean_n1000_B1000 | 22.6 | **11.7** | 0.52× | CI幅=0.090 | 0.099 | 同 ✅ |
+| **Bootstrap_mean_n1000_B1000** | **15.2** | **11.7** | 0.77× | CI幅=0.098 | 0.099 | 同 ✅ (**P40: uniformVector batch + GEMV row-sum で 1.49×**) |
 | **AUC_LogLoss_n10000** | **1.24** | 4.37 | **3.52×** ⭐ | AUC=1.0 | AUC=1.0 | 完全一致 ✅ (**P7 で Mann-Whitney U 化、5.60→1.24 ms = 4.5×、sklearn 逆転**) |
 | Halton_n10000_d5 | 3.57 | **1.12** | 0.31× | n=10000 | n=10000 | (両側同じ low-discrepancy) |
 

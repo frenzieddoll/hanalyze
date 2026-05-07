@@ -18,7 +18,7 @@ import qualified Data.Vector.Unboxed     as VU
 import qualified Numeric.LinearAlgebra   as LA
 import qualified System.Random.MWC       as MWC
 
-import           Stat.Bootstrap          (bootstrapCI, sampleMean)
+import           Stat.Bootstrap          (bootstrapMeanCI)
 import           Stat.Test               (Alternative (..),
                                           tTestWelch, mannWhitneyU,
                                           kolmogorovSmirnovNormal,
@@ -53,7 +53,11 @@ benchBootstrap = do
       run :: Int -> IO (Double, Double)
       run _ = do
         gen <- MWC.create
-        bootstrapCI 1000 0.95 sampleMean xs gen
+        -- P40 (2026-05-07): specialised mean-bootstrap path. Generic
+        -- bootstrapCI invokes the statistic per resample (B times)
+        -- against a freshly-frozen length-n Vector; this version
+        -- uses one (B×n) buffer and one BLAS GEMV for all B means.
+        bootstrapMeanCI 1000 0.95 xs gen
       probe (lo, hi) = hi - lo
   (ms, (lo, hi)) <- timeitTastyIO probe run
   return [ BenchRow "haskell" "stat_util"
