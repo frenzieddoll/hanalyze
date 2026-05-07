@@ -115,60 +115,91 @@ kMeansSingleRun cfg x gen = do
 -- | Forgy initialisation: pick k random rows.
 forgyInit :: Int -> LA.Matrix Double -> MWC.GenIO -> IO (LA.Matrix Double)
 forgyInit k x gen = do
-  let n = LA.rows x
+  let n     = LA.rows x
+      xRowsV = V.fromList (LA.toRows x)   -- O(1) row access
   idxs <- pickKDistinct k n gen
-  pure (LA.fromRows [LA.toRows x !! i | i <- idxs])
+  pure (LA.fromRows [xRowsV V.! i | i <- idxs])
 
 -- | k-means++ initialisation: 1st centroid uniform random, subsequent
 -- centroids weighted by squared distance to nearest existing centroid.
 --
--- Vector-incremental implementation. Maintain a Storable vector
--- @bestDist@ of length @n@ holding @min_c ‖x_i − c‖²@ across the
--- centroids picked so far. Adding a new centroid is one pass over
--- @n@ rows updating @bestDist@ and one weighted draw — no list of
--- centroids and no all-vs-all recomputation per iteration.
+-- /Implementation/. Maintain @bestDist[i] = min_c ‖x_i − c‖²@ across
+-- the centroids picked so far. Adding a new centroid is __one BLAS
+-- GEMV__ + element-wise min, not a per-row Vector subtract / dot.
+--
+-- The previous version paid @n@ separate @LA.Vector@ allocations and
+-- @n@ BLAS @ddot@ dispatches per centroid update (e.g. for
+-- @n = 2000, k = 5@ that was ~10 000 length-@p@ allocations and
+-- ~10 000 BLAS calls per kMeans run, ×10 restarts ≈ 100 000 allocs).
+-- The fused-BLAS form below uses pre-computed row sq-norms and a
+-- single matrix-vector multiply per centroid — O(np) work for the
+-- whole sweep instead of O(n) per row.
 kmppInit :: Int -> LA.Matrix Double -> MWC.GenIO -> IO (LA.Matrix Double)
 kmppInit k x gen = do
-  let n     = LA.rows x
-      xRows = LA.toRows x
-      asArr = V.fromList xRows  -- O(1) row access
+  let n        = LA.rows x
+      -- Pre-compute row squared norms once: ‖x_i‖² for all rows
+      -- (length-n vector via @(X ⊙ X) · 1@).
+      normsX   = KD.rowSqNorms x
+
   -- Pick the first centroid.
   i0 <- MWC.uniformR (0, n - 1) gen
-  let firstC = asArr V.! i0
-      -- bestDist[i] = ‖x_i − firstC‖² for every row.
-      initBest = VU.generate n
-                   (\i -> let d = (asArr V.! i) - firstC
-                          in LA.dot d d)
+  -- Row index list of chosen centroids (kept as Int indices, not row
+  -- vectors, to avoid forming a boxed list of slices).
+  centroidIdx <- newIORef [i0]
+  -- bestDist[i] = ‖x_i − x_{i0}‖²  in BLAS form:
+  --   = ‖x_i‖² + ‖x_{i0}‖² − 2 x_iᵀ x_{i0}
+  -- via @cross = X · x_{i0}@ (one GEMV), reusing 'normsX'.
+  let initBest = sqDistsToRow x normsX i0
   bestRef <- newIORef initBest
-  centroidsRef <- newIORef [firstC]
+
   let pickWeighted total bdv =
         if total <= 0
           then pure 0
           else do
             u <- MWC.uniformR (0, total) gen
-            -- Linear scan of the cumulative weights via VU.unsafeIndex.
+            -- Linear scan of the cumulative weights via VS.unsafeIndex.
             let go !acc !i
                   | i >= n - 1 = pure i
                   | otherwise  = do
-                      let nxt = acc + bdv VU.! i
+                      let !nxt = acc + bdv `VS.unsafeIndex` i
                       if u <= nxt
                         then pure i
                         else go nxt (i + 1)
             go 0 0
+
   forM_ [2 .. k] $ \_ -> do
     bd <- readIORef bestRef
-    let total = VU.sum bd
+    let !total = VS.sum bd
     pickIdx <- pickWeighted total bd
-    let newC = asArr V.! pickIdx
-    -- Update bestDist by taking min with squared distance to newC.
-    let updated = VU.generate n
-                    (\i -> let d  = (asArr V.! i) - newC
-                               d2 = LA.dot d d
-                           in min (bd VU.! i) d2)
+    -- One GEMV → length-n @sq dist to new centroid@; element-wise
+    -- min with @bestDist@ in a single Storable Vector pass.
+    let !newDist = sqDistsToRow x normsX pickIdx
+        !updated = VS.zipWith min bd newDist
     writeIORef bestRef updated
-    modifyIORef' centroidsRef (newC :)
-  cs <- readIORef centroidsRef
-  pure (LA.fromRows (reverse cs))
+    modifyIORef' centroidIdx (pickIdx :)
+
+  idxs <- readIORef centroidIdx
+  -- Build the @k × p@ centroid matrix from row indices in one shot.
+  let xRowsV = V.fromList (LA.toRows x)
+  pure (LA.fromRows [xRowsV V.! i | i <- reverse idxs])
+
+-- | Squared distance from every row of @X@ (n × p) to @X[i, :]@,
+-- via the BLAS identity
+-- @‖x_a − x_i‖² = ‖x_a‖² + ‖x_i‖² − 2 x_aᵀ x_i@.
+--
+-- Cost: 1 GEMV (@O(np)@) plus one length-@n@ element-wise pass.
+-- Used by 'kmppInit' to avoid per-row Vector subtract/dot.
+sqDistsToRow
+  :: LA.Matrix Double      -- ^ Data matrix @X@ (@n × p@).
+  -> LA.Vector Double      -- ^ Pre-computed row squared norms.
+  -> Int                   -- ^ Reference row index @i@.
+  -> LA.Vector Double      -- ^ Length-@n@ squared distances.
+sqDistsToRow xMat normsX i =
+  let xi    = LA.flatten (xMat LA.?? (LA.Pos (LA.idxs [i]), LA.All))
+      ni    = normsX `LA.atIndex` i
+      cross = xMat LA.#> xi                          -- length n, GEMV
+      d     = normsX + LA.scalar ni - LA.scale 2 cross
+  in LA.cmap (max 0) d   -- numerical-noise floor at 0
 
 -- | Pick k distinct indices in [0, n) via Fisher-Yates partial.
 pickKDistinct :: Int -> Int -> MWC.GenIO -> IO [Int]
@@ -189,31 +220,46 @@ assignLabels x cs = VU.toList (assignLabelsV x cs)
 -- | Vector version of 'assignLabels'. Internal hot path; the public
 -- @assignLabels@ wraps with @VU.toList@ at the boundary.
 --
--- Implementation: BLAS-based @n × k@ distance matrix, then a single
--- 'runST' pass that takes the row-wise @argmin@ via @VS.unsafeIndex@
--- updates. Replaces the previous @[LA.toList r → minimumBy on a list@
--- per row], which paid one @k@-list allocation per row.
+-- /Implementation/. The full @n × k@ squared-distance matrix is
+-- /not/ materialised. Instead we use the BLAS identity
+--
+-- @‖x_i − c_j‖² = ‖x_i‖² + ‖c_j‖² − 2 x_iᵀ c_j@
+--
+-- of which only the cross term @cross = X · Cᵀ@ depends on @j@
+-- per-row, so the row-wise argmin is equivalent to
+--
+-- @argmin_j (‖c_j‖² − 2 cross[i, j])@
+--
+-- (the @‖x_i‖²@ term is constant across @j@). Replaces the previous
+-- @KD.pairwiseSqDistXY x cs@ + scan pipeline, which built a full
+-- @n × k@ Storable matrix only to read every cell once. Now: one
+-- BLAS GEMM (@O(npk)@) plus a length-@nk@ argmin scan with a small
+-- per-row constant — half the writes, lower cache pressure.
 assignLabelsV :: LA.Matrix Double -> LA.Matrix Double -> VU.Vector Int
 assignLabelsV x cs =
-  let d2    = KD.pairwiseSqDistXY x cs   -- n × k
-      n     = LA.rows d2
-      k     = LA.cols d2
-      flat  = LA.flatten d2
+  let n        = LA.rows x
+      k        = LA.rows cs
+      normsC   = KD.rowSqNorms cs               -- length k
+      cross    = x LA.<> LA.tr cs               -- n × k, single GEMM
+      flatXC   = LA.flatten cross
   in runST $ do
        lab <- MVU.new n
        let scanRow !i
              | i >= n    = pure ()
              | otherwise = do
                  let !base = i * k
-                     -- inner argmin over the k-row of d2
+                     -- argmin_j of (‖c_j‖² − 2 X·Cᵀ[i, j]).
                      pickArg !j !bestJ !bestVal
                        | j >= k    = bestJ
                        | otherwise =
-                           let !v = flat `VS.unsafeIndex` (base + j)
+                           let !v = (normsC `VS.unsafeIndex` j)
+                                  - 2 * (flatXC `VS.unsafeIndex` (base + j))
                            in if v < bestVal
                                 then pickArg (j + 1) j v
                                 else pickArg (j + 1) bestJ bestVal
-                     !bestJ0 = pickArg 1 0 (flat `VS.unsafeIndex` base)
+                     !v0      = (normsC `VS.unsafeIndex` 0)
+                              - 2 * (flatXC `VS.unsafeIndex` base)
+                     !bestJ0  = pickArg 1 0 v0
                  MVU.unsafeWrite lab i bestJ0
                  scanRow (i + 1)
        scanRow 0
@@ -238,32 +284,50 @@ updateCentroidsV x labels k =
       p    = LA.cols x
       flat = LA.flatten x          -- length n*p, row-major
       out  = runST $ do
-        sumBuf <- VSM.new (k * p)   -- per-cluster running sum
-        cntBuf <- MVU.new k :: ST s (MVU.STVector s Int)
-        -- Initialise with zeros (Storable does not auto-zero).
-        forM_ [0 .. k * p - 1] $ \i ->
-          VSM.unsafeWrite sumBuf i 0
-        forM_ [0 .. k - 1] $ \c ->
-          MVU.unsafeWrite cntBuf c 0
-        -- Single pass over all rows.
-        forM_ [0 .. n - 1] $ \i -> do
-          let l    = labels VU.! i
-              !off = i * p
-              !sof = l * p
-          forM_ [0 .. p - 1] $ \j -> do
-            old <- VSM.unsafeRead sumBuf (sof + j)
-            VSM.unsafeWrite sumBuf (sof + j)
-              (old + flat `VS.unsafeIndex` (off + j))
-          c0 <- MVU.unsafeRead cntBuf l
-          MVU.unsafeWrite cntBuf l (c0 + 1)
+        -- VSM.replicate avoids the explicit init forM_ loops.
+        sumBuf <- VSM.replicate (k * p) (0 :: Double)
+        cntBuf <- MVU.replicate k     (0 :: Int)
+            :: ST s (MVU.STVector s Int)
+        -- Single pass over all rows. Tail-recursive Int loops keep the
+        -- whole pass list-free; the previous @forM_ [0..n-1]@ +
+        -- @forM_ [0..p-1]@ relied on GHC's list-fusion rewrite, which
+        -- adds Haskell-level monadic-bind overhead for very small
+        -- inner @p@.
+        let goRow !i
+              | i >= n    = pure ()
+              | otherwise = do
+                  let !l   = labels `VU.unsafeIndex` i
+                      !off = i * p
+                      !sof = l * p
+                      goCol !j
+                        | j >= p    = pure ()
+                        | otherwise = do
+                            old <- VSM.unsafeRead sumBuf (sof + j)
+                            VSM.unsafeWrite sumBuf (sof + j)
+                              (old + flat `VS.unsafeIndex` (off + j))
+                            goCol (j + 1)
+                  goCol 0
+                  c0 <- MVU.unsafeRead cntBuf l
+                  MVU.unsafeWrite cntBuf l (c0 + 1)
+                  goRow (i + 1)
+        goRow 0
         -- Divide each cluster's sum by its count.
-        forM_ [0 .. k - 1] $ \c -> do
-          cnt <- MVU.unsafeRead cntBuf c
-          let !invN = if cnt == 0 then 0 else 1 / fromIntegral cnt
-              !sof = c * p
-          forM_ [0 .. p - 1] $ \j -> do
-            v <- VSM.unsafeRead sumBuf (sof + j)
-            VSM.unsafeWrite sumBuf (sof + j) (v * invN)
+        let goNorm !c
+              | c >= k    = pure ()
+              | otherwise = do
+                  cnt <- MVU.unsafeRead cntBuf c
+                  let !invN = if cnt == 0 then 0
+                                          else 1 / fromIntegral cnt
+                      !sof  = c * p
+                      goScale !j
+                        | j >= p    = pure ()
+                        | otherwise = do
+                            v <- VSM.unsafeRead sumBuf (sof + j)
+                            VSM.unsafeWrite sumBuf (sof + j) (v * invN)
+                            goScale (j + 1)
+                  goScale 0
+                  goNorm (c + 1)
+        goNorm 0
         VS.unsafeFreeze sumBuf
   in LA.reshape p out
 
