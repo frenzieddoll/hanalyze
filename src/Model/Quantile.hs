@@ -33,6 +33,7 @@ module Model.Quantile
   ) where
 
 import qualified Numeric.LinearAlgebra as LA
+import qualified Stat.Cholesky        as Chol
 
 -- ---------------------------------------------------------------------------
 -- 型
@@ -88,7 +89,16 @@ fitQuantile tau x y
                     !sqWBcast = LA.outer sqW onesP   -- n × p
                     !xScaled  = sqWBcast * x         -- n × p
                     !yScaled  = sqW * yp             -- length n
-                    !bNew     = xScaled LA.<\> yScaled
+                    -- Solve the SPD normal equations
+                    --   (X^T W X) β = X^T W y'
+                    -- via Cholesky rather than the general LSQ path
+                    -- '@LA.<\>@' (QR/dgels). For @p ≪ n@ the @p × p@
+                    -- @aMat@ is tiny and dpotrf is faster than dgels
+                    -- on the @n × p@ @xScaled@ matrix; this is the
+                    -- same trick GLM IRLS already uses.
+                    !aMat     = LA.tr xScaled LA.<> xScaled
+                    !rhs      = LA.asColumn (LA.tr xScaled LA.#> yScaled)
+                    !bNew     = LA.flatten (Chol.cholSolveJitter aMat rhs)
                     !delta    = LA.norm_2 (bNew - b)
                 in if delta < tol then (bNew, iter + 1)
                                   else loop bNew (iter + 1)

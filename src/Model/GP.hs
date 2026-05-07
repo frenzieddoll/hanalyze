@@ -624,6 +624,10 @@ fitGPMVMulti model trainX trainY testX =
       -- F1: diagonal of (kStar · v) without forming the m×m product.
       -- 'KD.diagAB' = element-wise (kStar ⊙ vᵀ) · ones.
       varVec  = LA.cmap (max 0) (diagKss - KD.diagAB kStar v)
+      -- Tested split-solve (alpha and v separately via cholFactor +
+      -- cholSolveWithFactor, avoiding the concat allocation) but the
+      -- saving is dwarfed by the @O(n² · (q+m))@ triangular-solve
+      -- work itself. Keep the simpler concatenated form.
   in (meanMt, varVec)
 
 -- | Multi-input GP hyperparameter optimization. Mirrors 'optimizeGP' but

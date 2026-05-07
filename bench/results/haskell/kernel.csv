@@ -1,17 +1,17 @@
 system,suite,name,time_ms,acc_main,acc_aux,extra
-haskell,kernel,GramMV_n500_p5,7.158823,0.000000,0.000000,"gramMatrixMV BLAS, n=500"
-haskell,kernel,GramMV_n1000_p5,32.388143,0.000000,0.000000,"gramMatrixMV BLAS, n=1000"
-haskell,kernel,GramMV_n2000_p5,150.154949,0.000000,0.000000,"gramMatrixMV BLAS, n=2000"
-haskell,kernel,GramMV_n4000_p5,690.452141,0.000000,0.000000,"gramMatrixMV BLAS, n=4000"
-haskell,kernel,KR_n500_p5,15.620564,0.999998,1.290920e-3,kernelRidgeMV Gaussian h=1 λ=1e-3
-haskell,kernel,KR_n1000_p5,73.421702,0.999998,1.250823e-3,kernelRidgeMV Gaussian h=1 λ=1e-3
-haskell,kernel,KR_n2000_p5,379.953169,0.999997,1.818606e-3,kernelRidgeMV Gaussian h=1 λ=1e-3
-haskell,kernel,KR_n4000_p5,2070.682369,0.999983,3.920056e-3,kernelRidgeMV Gaussian h=1 λ=1e-3
-haskell,kernel,NW_n1000_p5,45.514254,0.905005,0.283540,nwRegressionMV Gaussian h=1
-haskell,kernel,RFF_n1000_D256_p5,9.341277,0.891330,0.303263,RFFFeaturesMV D=256
-haskell,kernel,RFF_n2000_D256_p5,17.541704,0.685237,0.550574,RFFFeaturesMV D=256
-haskell,kernel,GP_fit_n500_p5,22.968233,0.999400,2.362661e-2,fitGPMV RBF (HP fixed)
-haskell,kernel,GP_fit_n1000_p5,135.365979,0.999493,2.070784e-2,fitGPMV RBF (HP fixed)
-haskell,kernel,GP_fit_n2000_p5,857.296223,0.999559,2.060597e-2,fitGPMV RBF (HP fixed)
-haskell,kernel,GP_opt_n500_p5,1146.578628,0.997955,4.191445,optimizeGPMV (L-BFGS / log marginal likelihood)
-haskell,kernel,GPRobust_n500_p5,63.877864,0.999982,6.000000,"fitGPRobustMV StudentT(4, 0.1)"
+haskell,kernel,GramMV_n500_p5,7.089727,0.000000,0.000000,"gramMatrixMV BLAS, n=500"
+haskell,kernel,GramMV_n1000_p5,36.636386,0.000000,0.000000,"gramMatrixMV BLAS, n=1000"
+haskell,kernel,GramMV_n2000_p5,144.638519,0.000000,0.000000,"gramMatrixMV BLAS, n=2000"
+haskell,kernel,GramMV_n4000_p5,626.194291,0.000000,0.000000,"gramMatrixMV BLAS, n=4000"
+haskell,kernel,KR_n500_p5,15.234707,0.999998,1.290920e-3,kernelRidgeMV Gaussian h=1 λ=1e-3
+haskell,kernel,KR_n1000_p5,70.100472,0.999998,1.250823e-3,kernelRidgeMV Gaussian h=1 λ=1e-3
+haskell,kernel,KR_n2000_p5,387.579421,0.999997,1.818606e-3,kernelRidgeMV Gaussian h=1 λ=1e-3
+haskell,kernel,KR_n4000_p5,2092.711958,0.999983,3.920056e-3,kernelRidgeMV Gaussian h=1 λ=1e-3
+haskell,kernel,NW_n1000_p5,42.349603,0.905005,0.283540,nwRegressionMV Gaussian h=1
+haskell,kernel,RFF_n1000_D256_p5,8.767415,0.771606,0.439650,RFFFeaturesMV D=256
+haskell,kernel,RFF_n2000_D256_p5,17.413257,0.759195,0.481567,RFFFeaturesMV D=256
+haskell,kernel,GP_fit_n500_p5,23.498699,0.999400,2.362661e-2,fitGPMV RBF (HP fixed)
+haskell,kernel,GP_fit_n1000_p5,131.498125,0.999493,2.070784e-2,fitGPMV RBF (HP fixed)
+haskell,kernel,GP_fit_n2000_p5,897.928349,0.999559,2.060597e-2,fitGPMV RBF (HP fixed)
+haskell,kernel,GP_opt_n500_p5,1154.882940,0.997955,4.191445,optimizeGPMV (L-BFGS / log marginal likelihood)
+haskell,kernel,GPRobust_n500_p5,63.209908,0.999982,6.000000,"fitGPRobustMV StudentT(4, 0.1)"

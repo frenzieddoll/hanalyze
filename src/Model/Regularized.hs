@@ -212,7 +212,12 @@ cdLoop x y maxIter tol upd = unsafePerformIO $ do
                 then return rCur
                 else do
                   VSM.unsafeWrite bMut j bjNew
-                  -- BLAS axpy: r' = r - d * x_j
+                  -- BLAS axpy: r' = r - d * x_j. Tried fusing via
+                  -- 'VS.zipWith' (one alloc instead of two) but it
+                  -- was 1.6× slower — hmatrix's @(-)@ + @LA.scale@
+                  -- chain dispatches to BLAS @daxpy@/@dscal@ which
+                  -- are SIMD-vectorised at the C level, beating any
+                  -- pure Haskell per-element loop on n ≥ 1000.
                   return (rCur - LA.scale d xj)
         rEnd <- foldM' stepCoord r [0 .. p - 1]
         afterSnap <- VS.freeze bMut

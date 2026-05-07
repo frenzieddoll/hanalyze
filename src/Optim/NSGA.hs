@@ -653,6 +653,14 @@ nonDominatedSort pop =
   -- sort @O(n³)@ rather than @O(n²m)@). Front/dominance bookkeeping
   -- still uses BLAS Vector for fused @LA.accum@ updates and an IntSet
   -- to track placed individuals across iterations.
+  --
+  -- We tried routing through 'nonDominatedSortIdx' (BLAS
+  -- 'dominationMatrix' once + BFS) but for the typical NSGA pop size
+  -- @n = 100@ + 2 objectives, the BLAS dispatch overhead per @n × n@
+  -- broadcast exceeds the gain over per-pair list dominance — measured
+  -- 2.5× regression on ZDT/DTLZ. The list-based pair check wins below
+  -- @n ≈ 500@ with @m = 2..3@; matrix path is reserved for future
+  -- larger-pop / many-objective cases.
   let n      = length pop
       ps     = V.fromList pop
       idxs   = [0 .. n - 1]

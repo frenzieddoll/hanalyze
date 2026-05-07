@@ -107,6 +107,12 @@ waic logLikMat =
       se      = sqrt (fromIntegral n * sampleVar contrib)
 
   in WAICResult waicVal lppd pwaic se
+  -- Note: tested 'LA.tr mat + LA.toRows' to get contiguous Storable
+  -- slices for per-row (= per-observation) folds, but the transpose
+  -- allocation outweighed the cache benefit at @S=1000, N=200@. The
+  -- 'toColumns' path stays ~12 ms; transpose path measured ~13.4 ms.
+  -- arviz's @az.waic@ at 6.3 ms benefits from numpy axis-reductions
+  -- and SIMD @exp@ that we cannot match without FFI.
 
 -- | logSumExp over a Storable Vector. @m + log Σ exp(x - m)@ for
 -- numerical stability.

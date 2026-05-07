@@ -1,16 +1,16 @@
 system,suite,name,time_ms,acc_main,acc_aux,extra
-haskell,regression,LM_n1000_p5,4.343211e-2,0.780285,0.507375,fitLM (OLS)
-haskell,regression,LM_n10000_p50,9.229332,0.806338,0.503039,fitLM (OLS)
-haskell,regression,LM_n100000_p100,577.915645,0.808168,0.502570,fitLM (OLS)
-haskell,regression,GLM_logit_n2000_p10,0.374713,0.202975,0.446378,fitGLM Binomial/Logit
-haskell,regression,GLM_logit_n10000_p20,2.775264,0.307254,0.416152,fitGLM Binomial/Logit
-haskell,regression,GLM_poisson_n2000_p10,0.307567,0.180513,1.364263,fitGLM Poisson/Log
-haskell,regression,GLM_poisson_n10000_p20,2.423059,0.368995,1.423444,fitGLM Poisson/Log
-haskell,regression,LME_n2000_p5_g20,1.431898,0.969491,0.957599,fitLME exact EM
-haskell,regression,LME_n10000_p10_g50,10.679068,0.960339,0.914837,fitLME exact EM
-haskell,regression,Ridge_n1000_p5,3.020413e-2,0.780230,0.507438,fitRidge lambda=1.0
-haskell,regression,Ridge_n10000_p50,2.134493,0.806317,0.503067,fitRidge lambda=1.0
-haskell,regression,Lasso_n1000_p5,7.592796e-2,0.769581,0.519587,fitLasso lambda=5.0e-2 (CD)
-haskell,regression,Lasso_n10000_p50,6.154825,0.764406,0.554832,fitLasso lambda=5.0e-2 (CD)
-haskell,regression,EN_n1000_p5,7.804835e-2,0.762190,0.527855,fitElasticNet lam1=5.0e-2 lam2=5.0e-2
-haskell,regression,EN_n10000_p50,6.405709,0.756805,0.563712,fitElasticNet lam1=5.0e-2 lam2=5.0e-2
+haskell,regression,LM_n1000_p5,4.506233e-2,0.780285,0.507375,fitLM (OLS)
+haskell,regression,LM_n10000_p50,8.667131,0.806338,0.503039,fitLM (OLS)
+haskell,regression,LM_n100000_p100,581.462116,0.808168,0.502570,fitLM (OLS)
+haskell,regression,GLM_logit_n2000_p10,0.398131,0.202975,0.446378,fitGLM Binomial/Logit
+haskell,regression,GLM_logit_n10000_p20,2.840845,0.307254,0.416152,fitGLM Binomial/Logit
+haskell,regression,GLM_poisson_n2000_p10,0.311090,0.180513,1.364263,fitGLM Poisson/Log
+haskell,regression,GLM_poisson_n10000_p20,2.524692,0.368995,1.423444,fitGLM Poisson/Log
+haskell,regression,LME_n2000_p5_g20,1.361072,0.969491,0.957599,fitLME exact EM
+haskell,regression,LME_n10000_p10_g50,11.028888,0.960339,0.914837,fitLME exact EM
+haskell,regression,Ridge_n1000_p5,3.209221e-2,0.780230,0.507438,fitRidge lambda=1.0
+haskell,regression,Ridge_n10000_p50,2.155672,0.806317,0.503067,fitRidge lambda=1.0
+haskell,regression,Lasso_n1000_p5,0.175657,0.769581,0.519587,fitLasso lambda=5.0e-2 (CD)
+haskell,regression,Lasso_n10000_p50,9.716353,0.764406,0.554832,fitLasso lambda=5.0e-2 (CD)
+haskell,regression,EN_n1000_p5,0.172116,0.762190,0.527855,fitElasticNet lam1=5.0e-2 lam2=5.0e-2
+haskell,regression,EN_n10000_p50,9.567965,0.756805,0.563712,fitElasticNet lam1=5.0e-2 lam2=5.0e-2
