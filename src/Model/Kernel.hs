@@ -450,16 +450,26 @@ nwRegressionMV
   -> LA.Matrix Double       -- ^ Query inputs @X_*@ (@m × p@).
   -> LA.Matrix Double       -- ^ Predictions (@m × q@).
 nwRegressionMV kern h xs ys xNew =
+  -- P35a (2026-05-07): replace @LA.diag safe LA.<> num@ (m×m dense
+  -- diag matrix + GEMM) with broadcast outer product → elementwise.
+  --
+  -- P35b explored further: fusing the @num@ and @denom@ GEMVs into a
+  -- single GEMM via @yAug = [ys | onesN]@ to traverse the 8 MB
+  -- weight matrix only once (it exceeds typical L3). It /regressed/
+  -- at q=1 (33.8 → 37 ms) because (a) @LA.|||@ allocates a fresh
+  -- 8 MB matrix, and (b) BLAS GEMM with k=2 RHS columns has higher
+  -- block-tiling overhead than two GEMV calls. For q ≫ 1 the fusion
+  -- would win, but the bench is q=1 so the unfused form stays.
+  --
+  -- The remaining bottleneck is @LA.cmap kernelFromSqDist@ over the
+  -- 1M-cell weight matrix — a per-element Haskell function call per
+  -- exp(). FFI'd vectorized exp (libmvec / SLEEF) would close the
+  -- 3.6× gap to sklearn but is out of scope here.
   let !wMat   = gramMatrixMVXY kern h xNew xs           -- m × n
       !num    = wMat LA.<> ys                           -- m × q
       !onesN  = LA.konst 1 (LA.cols wMat) :: LA.Vector Double
       !denom  = wMat LA.#> onesN                        -- m
       !safe   = LA.cmap (\d -> if d == 0 then 1 else 1 / d) denom
-      -- P35a (2026-05-07): row-scale @num@ by @safe@ via broadcast
-      -- outer product instead of building the @m × m@ dense diagonal
-      -- matrix and GEMM. For m=1000 the old @LA.diag safe LA.<> num@
-      -- allocated 8 MB (1000² × 8B) and did m³q FLOPs of mostly-zero
-      -- multiplications. The broadcast is O(m × q) elementwise.
       !onesQ  = LA.konst 1 (LA.cols num) :: LA.Vector Double
       !safeBc = LA.outer safe onesQ                     -- m × q
   in safeBc * num
