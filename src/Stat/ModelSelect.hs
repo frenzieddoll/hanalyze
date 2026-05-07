@@ -42,6 +42,7 @@ import Control.Monad (replicateM)
 import Data.List (sort, transpose)
 import qualified Numeric.LinearAlgebra as LA
 import qualified Data.Vector.Storable as VS
+import qualified Data.Vector.Algorithms.Intro as VAI
 import System.Random.MWC (GenIO)
 import System.Random.MWC.Distributions (normal)
 
@@ -138,10 +139,15 @@ sampleVarVS v
 loo :: [[Double]] -> LOOResult
 loo [] = LOOResult 0 0 0 [] 0
 loo logLikMat =
-  let s       = length logLikMat
-      cols    = transpose logLikMat
+  -- Mirrors 'waic': @S × N@ hmatrix matrix once, then per-column
+  -- 'psisElpdV' on Storable Vectors. Avoids the @transpose [[Double]]@
+  -- (S × N list-cell allocation) and the per-column list ops in the
+  -- old 'psisElpd'.
+  let mat     = LA.fromLists logLikMat   -- S × N
+      s       = LA.rows mat
+      cols    = LA.toColumns mat
       n       = length cols
-      results = map (psisElpd s) cols
+      results = map (psisElpdV s) cols
       elpd_i  = map fst results
       khat_i  = map snd results
       elpd    = sum elpd_i
@@ -159,25 +165,27 @@ loo logLikMat =
 --   3. Truncate weights at @log √S@ and renormalize for stability.
 --   4. @elpd_i = logSumExp(log W_s + log p(y_i|θ^s))@.
 psisElpd :: Int -> [Double] -> (Double, Double)
-psisElpd s colLL =
-  let -- 対数重要度重み (正規化前): log r_i^s = −log p(y_i|θ^s)
-      logR = map negate colLL
+psisElpd s colLL = psisElpdV s (VS.fromList colLL)
 
-      -- Pareto k̂: 上位 M 個から推定
-      m          = max 5 (min (s `div` 5) (floor (3 * sqrt (fromIntegral s :: Double))))
-      sortedLogR = sort logR              -- 昇順
-      topM       = drop (s - m) sortedLogR   -- 最大 m 個 (昇順のまま)
-      khat       = paretoKhat topM
+-- | Storable-Vector version of 'psisElpd'. Internal hot path used by
+-- 'loo'. All steps stay on @VS.Vector Double@: no @[Double]@
+-- intermediates, sort via 'Data.Vector.Algorithms.Intro' on a
+-- mutable Storable buffer.
+psisElpdV :: Int -> VS.Vector Double -> (Double, Double)
+psisElpdV s colLL =
+  let logR = VS.map negate colLL
+      m    = max 5 (min (s `div` 5)
+                        (floor (3 * sqrt (fromIntegral s :: Double))))
+      sortedLogR = VS.modify VAI.sort logR    -- ascending
+      topM       = VS.drop (s - m) sortedLogR
+      khat       = paretoKhatV topM
 
-      -- 截頭 IS: 各対数重みを log(√S) でクリップ
       logCap  = 0.5 * log (fromIntegral s :: Double)
-      capped  = map (min logCap) logR
-      logZ    = logSumExp capped
-      logW    = map (\r -> r - logZ) capped   -- 正規化対数重み
+      capped  = VS.map (min logCap) logR
+      logZ    = logSumExpVS capped
+      logW    = VS.map (\r -> r - logZ) capped
 
-      -- elpd_i = log(Σ_s W_s × p(y_i|θ^s)) = logSumExp(logW + colLL)
-      elpdi   = logSumExp (zipWith (+) logW colLL)
-
+      elpdi   = logSumExpVS (VS.zipWith (+) logW colLL)
   in (elpdi, khat)
 
 -- | Estimate the Pareto shape @k̂@ from the top-@M@ log-weights
@@ -190,15 +198,19 @@ psisElpd s colLL =
 -- k̂      = 0.5 × (1 − μ² / s²)   where  μ = mean excess, s² = Var excess
 -- @
 paretoKhat :: [Double] -> Double
-paretoKhat topM
-  | length topM < 5 = 0
+paretoKhat topM = paretoKhatV (VS.fromList topM)
+
+-- | Storable-Vector version of 'paretoKhat'.
+paretoKhatV :: VS.Vector Double -> Double
+paretoKhatV topM
+  | VS.length topM < 5 = 0
   | otherwise =
-    let u      = head topM            -- 閾値 (最小値)
-        excess = map (\r -> exp (r - u) - 1) topM
-        mu     = mean excess
-        var    = sampleVar excess
-    in if var <= 0 || mu <= 0 then 0
-       else 0.5 * (1 - mu ^ (2::Int) / var)
+      let u      = topM VS.! 0
+          excess = VS.map (\r -> exp (r - u) - 1) topM
+          mu     = VS.sum excess / fromIntegral (VS.length excess)
+          var    = sampleVarVS excess
+      in if var <= 0 || mu <= 0 then 0
+         else 0.5 * (1 - mu ^ (2 :: Int) / var)
 
 -- ---------------------------------------------------------------------------
 -- Chain との連携
