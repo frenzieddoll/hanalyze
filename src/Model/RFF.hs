@@ -71,6 +71,9 @@ module Model.RFF
 
 import Control.Exception (SomeException, try, evaluate)
 import qualified Data.Vector as V
+import qualified Data.Vector.Storable         as VS
+import qualified Data.Vector.Storable.Mutable as VSM
+import           Control.Monad.ST             (runST)
 import qualified Numeric.LinearAlgebra as LA
 import qualified System.IO.Unsafe
 import System.IO.Unsafe (unsafePerformIO)
@@ -79,6 +82,7 @@ import System.Random.MWC (GenIO, uniformR)
 import qualified System.Random.MWC.Distributions as MWCD
 import qualified Optim.DifferentialEvolution as DEM
 import qualified Optim.Common as OCM
+import qualified Stat.Cholesky as Chol
 
 -- ---------------------------------------------------------------------------
 -- 型
@@ -150,18 +154,35 @@ sampleRFFMatern52 d ell sf gen = do
 
 -- | Feature matrix @Φ ∈ ℝ^{n×D}@.
 -- @φ(x) = σ_f √(2/D) [cos(ω_j x + b_j)]_{j=1..D}@.
+--
+-- Single-pass 'runST' implementation: avoids the @[Double]@
+-- list-comprehension @(n × D)@ + 'LA.fromList' round-trip the
+-- previous version performed.
 rffFeatures :: RFFFeatures -> [Double] -> LA.Matrix Double
 rffFeatures rff xs =
-  let d  = rffDim rff
-      sf = rffSigmaF rff
+  let d    = rffDim rff
+      sf   = rffSigmaF rff
       coef = sf * sqrt (2 / fromIntegral d)
-      ws = rffOmegas rff
-      bs = rffBs rff
-      cells =
-        [ coef * cos (ws V.! j * x + bs V.! j)
-        | x <- xs
-        , j <- [0 .. d - 1] ]
-  in LA.reshape d (LA.fromList cells)
+      -- Convert input list / boxed Vectors to Storable for fast access.
+      xsV  = VS.fromList xs
+      n    = VS.length xsV
+      ws   = VS.fromList (V.toList (rffOmegas rff))
+      bs   = VS.fromList (V.toList (rffBs     rff))
+      out  = runST $ do
+        v <- VSM.new (n * d)
+        let go i j
+              | i >= n    = pure ()
+              | j >= d    = go (i + 1) 0
+              | otherwise = do
+                  let !x_  = xsV `VS.unsafeIndex` i
+                      !w_  = ws  `VS.unsafeIndex` j
+                      !b_  = bs  `VS.unsafeIndex` j
+                      !val = coef * cos (w_ * x_ + b_)
+                  VSM.unsafeWrite v (i * d + j) val
+                  go i (j + 1)
+        go 0 0
+        VS.unsafeFreeze v
+  in LA.reshape d out
 
 -- | Kernel matrix approximated by RFF: @K[i,j] ≈ k(x_i, x_j) = φ(x_i)·φ(x_j)@.
 rffApproxKernel :: RFFFeatures -> [Double] -> LA.Matrix Double
@@ -205,15 +226,16 @@ data RFFRidgeFitMulti = RFFRidgeFitMulti
   } deriving (Show)
 
 -- | Multi-output RFF ridge regression: @W = (ΦᵀΦ + λI)⁻¹ Φᵀ Y@.
+-- SPD system; solved via Cholesky with diagonal regularizer applied
+-- in place ('addToDiagRFF').
 rffRidgeMulti :: RFFFeatures -> [Double] -> LA.Matrix Double -> Double
               -> RFFRidgeFitMulti
 rffRidgeMulti rff xs ys lam =
   let phi   = rffFeatures rff xs           -- n × D
-      d     = rffDim rff
-      gram  = LA.tr phi LA.<> phi          -- D × D
-      regK  = gram + LA.scale lam (LA.ident d)
+      gram  = LA.tr phi LA.<> phi          -- D × D (SPD)
+      regK  = addToDiagRFF lam gram
       rhs   = LA.tr phi LA.<> ys           -- D × q
-      w     = regK LA.<\> rhs
+      w     = Chol.cholSolveJitter regK rhs
   in RFFRidgeFitMulti rff w lam
 
 -- | Multi-output prediction at new inputs from a 'RFFRidgeFitMulti'.
@@ -329,18 +351,40 @@ sampleRFFMatern52MV p d ell sf gen = do
 
 -- | Multivariate feature matrix: @X (n × p) → Φ (n × D)@.
 -- @φ_j(x) = σ_f √(2/D) cos(ω_jᵀ x + b_j)@.
+--
+-- Implementation: a single fused @runST + MVector@ pass writes the
+-- @n × D@ output. The previous version went through
+-- @LA.toRows xo + list comp (r + bs) + LA.fromRows + LA.cmap cos +
+-- LA.scale coef@, allocating four @n × D@ intermediates and one list
+-- of @n@ row vectors per call. This single-pass version emits one
+-- @n × D@ allocation and computes
+-- @coef · cos(xoFlat[i,j] + bs[j])@ in place.
 rffFeaturesMV :: RFFFeaturesMV -> LA.Matrix Double -> LA.Matrix Double
 rffFeaturesMV rff x =
-  let d   = LA.cols (rffmvOmegas rff)
-      sf  = rffmvSigmaF rff
-      coef = sf * sqrt (2 / fromIntegral d)
-      -- X @ Ω → n × D
-      xo  = x LA.<> rffmvOmegas rff
-      bs  = LA.fromList (V.toList (rffmvBs rff))
-      -- broadcast b を各行に加える: 各行に同じ vector を加える
-      rows = LA.toRows xo
-      withB = LA.fromRows [ r + bs | r <- rows ]
-  in LA.scale coef (LA.cmap cos withB)
+  let d      = LA.cols (rffmvOmegas rff)
+      sf     = rffmvSigmaF rff
+      coef   = sf * sqrt (2 / fromIntegral d)
+      -- X @ Ω → n × D (BLAS GEMM, kept).
+      xo     = x LA.<> rffmvOmegas rff
+      n      = LA.rows xo
+      xoFlat = LA.flatten xo
+      -- Phases as a Storable Vector (length D) for O(1) indexing.
+      bs     = VS.fromList (V.toList (rffmvBs rff))
+      out    = runST $ do
+        v <- VSM.new (n * d)
+        let go i j
+              | i >= n    = pure ()
+              | j >= d    = go (i + 1) 0
+              | otherwise = do
+                  let !idx = i * d + j
+                      !z   = (xoFlat `VS.unsafeIndex` idx)
+                           + (bs     `VS.unsafeIndex` j)
+                      !val = coef * cos z
+                  VSM.unsafeWrite v idx val
+                  go i (j + 1)
+        go 0 0
+        VS.unsafeFreeze v
+  in LA.reshape d out
 
 -- | Multivariate RFF ridge fit.
 data RFFRidgeFitMV = RFFRidgeFitMV
@@ -375,16 +419,48 @@ data RFFRidgeFitMVMO = RFFRidgeFitMVMO
 
 -- | Multivariate-input multi-output RFF ridge regression:
 -- @W = (ΦᵀΦ + λI)⁻¹ Φᵀ Y@.
+--
+-- The system is SPD by construction, so we solve via Cholesky rather
+-- than the general LSQ path '(LA.<\>)'. The diagonal regularizer is
+-- applied via 'addToDiagRFF' (in-place runST update) instead of
+-- @gram + LA.scale lam (LA.ident d)@ which would allocate a fresh
+-- @D × D@ identity.
 rffRidgeMVMulti :: RFFFeaturesMV -> LA.Matrix Double -> LA.Matrix Double
                 -> Double -> RFFRidgeFitMVMO
 rffRidgeMVMulti rff x ys lam =
   let phi  = rffFeaturesMV rff x           -- n × D
-      d    = LA.cols (rffmvOmegas rff)
-      gram = LA.tr phi LA.<> phi
-      regK = gram + LA.scale lam (LA.ident d)
+      gram = LA.tr phi LA.<> phi           -- D × D (SPD)
+      regK = addToDiagRFF lam gram          -- D × D
       rhs  = LA.tr phi LA.<> ys            -- D × q
-      w    = regK LA.<\> rhs
+      w    = Chol.cholSolveJitter regK rhs
   in RFFRidgeFitMVMO rff w lam
+
+-- | Add a scalar to the diagonal of a square matrix in a single
+-- 'runST' pass (no fresh @D × D@ identity allocation). Mirrors
+-- 'Model.GP.addToDiag'; duplicated here to keep the modules
+-- decoupled.
+addToDiagRFF :: Double -> LA.Matrix Double -> LA.Matrix Double
+addToDiagRFF c m =
+  let d    = LA.rows m
+      flat = LA.flatten m
+      out  = runST $ do
+        v <- VSM.new (d * d)
+        let copy i
+              | i >= d * d = pure ()
+              | otherwise  = do
+                  VSM.unsafeWrite v i (flat `VS.unsafeIndex` i)
+                  copy (i + 1)
+        copy 0
+        let bumpDiag i
+              | i >= d    = pure ()
+              | otherwise = do
+                  let !idx = i * d + i
+                  d_old <- VSM.unsafeRead v idx
+                  VSM.unsafeWrite v idx (d_old + c)
+                  bumpDiag (i + 1)
+        bumpDiag 0
+        VS.unsafeFreeze v
+  in LA.reshape d out
 
 -- | Multi-output prediction at new inputs from a 'RFFRidgeFitMVMO'.
 predictRFFRidgeMVMulti :: RFFRidgeFitMVMO -> LA.Matrix Double -> LA.Matrix Double
