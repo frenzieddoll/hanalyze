@@ -1,3 +1,3 @@
 system,suite,name,time_ms,acc_main,acc_aux,extra
-haskell,mcmc,HMC_8schools_warm500_n1000,2931.185957,73.008748,8.376203,HMC eps=0.05 L=30 accept=0.9993333333333333 ess(mu)=8.376202676265613 ess(tau)=138.27716493310115
-haskell,mcmc,NUTS_8schools_warm500_n1000,1222.080817,71.782073,838.701236,NUTS eps=0.08 dual-averaging mass-adapt accept=0.9226666666666666 ess(mu)=838.7012357240137 ess(tau)=570.8639820258365
+haskell,mcmc,HMC_8schools_warm500_n1000,2500.679234,73.008748,8.376203,HMC eps=0.05 L=30 accept=0.9993333333333333 ess(mu)=8.376202676265613 ess(tau)=138.27716493310115
+haskell,mcmc,NUTS_8schools_warm500_n1000,1045.635616,71.782073,838.701236,NUTS eps=0.08 dual-averaging mass-adapt accept=0.9226666666666666 ess(mu)=838.7012357240137 ess(tau)=570.8639820258365

@@ -25,16 +25,15 @@ module MCMC.NUTS
   ) where
 
 import Control.Concurrent.Async (mapConcurrently)
-import Control.Monad (foldM, forM, replicateM, when)
+import Control.Monad (foldM, replicateM, when)
 import Data.IORef
 import qualified Data.Map.Strict as Map
-import Data.Map.Strict (Map)
-import Data.Text (Text)
+import qualified Data.Vector.Storable as VS
 import System.Random.MWC (GenIO, uniform)
 import System.Random.MWC.Distributions (standard)
 
 import MCMC.Core (Chain (..), spawnGen)
-import MCMC.HMC  (kineticM, leapfrogWithM, paramsToVec)
+import MCMC.HMC  (kineticMVS, leapfrogWithMVS)
 import Model.HBM (ModelP, Params, sampleNames, getTransforms,
                   logJointUnconstrained, gradADU)
 import Stat.Distribution (toUnconstrained, fromUnconstrained)
@@ -118,12 +117,18 @@ updateDualAvg delta alpha da =
 -- 内部ツリー
 -- ---------------------------------------------------------------------------
 
+-- | Internal NUTS tree node. All position/momentum are 'VS.Vector
+-- Double' rather than 'Params' (= 'Map') / @[Double]@: the
+-- @doubleTree@ recursion creates up to @2¹⁰@ intermediate trees per
+-- iteration, and the previous Map / list representation paid an
+-- order-of-magnitude in allocation that swamped the actual leapfrog
+-- arithmetic.
 data NUTSTree = NUTSTree
-  { ntThMinus :: Params
-  , ntRMinus  :: [Double]
-  , ntThPlus  :: Params
-  , ntRPlus   :: [Double]
-  , ntThPrime :: Params
+  { ntThMinus :: VS.Vector Double
+  , ntRMinus  :: VS.Vector Double
+  , ntThPlus  :: VS.Vector Double
+  , ntRPlus   :: VS.Vector Double
+  , ntThPrime :: VS.Vector Double
   , ntN       :: Int
   , ntS       :: Bool
   , ntDiv     :: Bool
@@ -133,33 +138,50 @@ data NUTSTree = NUTSTree
 deltaMax :: Double
 deltaMax = 1000.0
 
-uTurn :: [Text] -> Params -> [Double] -> Params -> [Double] -> Bool
-uTurn names thMinus rMinus thPlus rPlus =
-  let delta     = zipWith (-) (paramsToVec names thPlus) (paramsToVec names thMinus)
-      dot xs ys = sum (zipWith (*) xs ys)
-  in dot delta rMinus < 0 || dot delta rPlus < 0
+-- | U-turn check on Storable Vectors. @(θ⁺ − θ⁻) · r⁻ < 0@ or
+-- @(θ⁺ − θ⁻) · r⁺ < 0@ ⇒ trajectory has begun to retrace itself.
+uTurnVS
+  :: VS.Vector Double -> VS.Vector Double
+  -> VS.Vector Double -> VS.Vector Double -> Bool
+uTurnVS thMinus rMinus thPlus rPlus =
+  let delta = VS.zipWith (-) thPlus thMinus
+      d1    = VS.sum (VS.zipWith (*) delta rMinus)
+      d2    = VS.sum (VS.zipWith (*) delta rPlus)
+  in d1 < 0 || d2 < 0
+{-# INLINE uTurnVS #-}
+
+-- | Sample momentum @r ~ N(0, M)@ from the diagonal mass matrix
+-- represented as @M⁻¹@. Per coordinate: @r_i = z / sqrt(M⁻¹_i)@,
+-- @z ~ N(0,1)@. Storable-vector tight loop, no list allocation.
+sampleMomentum :: VS.Vector Double -> GenIO -> IO (VS.Vector Double)
+sampleMomentum mInv gen = do
+  let n = VS.length mInv
+  VS.generateM n $ \i -> do
+    z <- standard gen
+    return (z / sqrt (mInv `VS.unsafeIndex` i))
+{-# INLINE sampleMomentum #-}
 
 -- ---------------------------------------------------------------------------
 -- ツリービルダー
 -- ---------------------------------------------------------------------------
 
 buildTree
-  :: ([Text] -> Params -> [Double])
-  -> (Params -> Double)
-  -> [Text]
-  -> [Double]                 -- ^ Diagonal M⁻¹ (B11).
-  -> Double
-  -> Params
-  -> [Double]
-  -> Double
-  -> Int
-  -> Int
+  :: (VS.Vector Double -> VS.Vector Double)   -- ^ Gradient (negated grad of log π).
+  -> (VS.Vector Double -> Double)             -- ^ Log target density.
+  -> VS.Vector Double                         -- ^ Diagonal M⁻¹.
+  -> Double                                   -- ^ Step size @ε@.
+  -> VS.Vector Double                         -- ^ Position.
+  -> VS.Vector Double                         -- ^ Momentum.
+  -> Double                                   -- ^ @log u@ slice.
+  -> Int                                      -- ^ Direction (±1).
+  -> Int                                      -- ^ Recursion depth.
   -> GenIO
   -> IO NUTSTree
-buildTree gradFn logPiFn names mInv eps theta r logU dir depth gen
+buildTree gradFn logPiFn mInv eps theta r logU dir depth gen
   | depth == 0 = do
-      let (theta', r') = leapfrogWithM gradFn names mInv (fromIntegral dir * eps) 1 theta r
-          h'  = -(logPiFn theta') + kineticM mInv r'
+      let (theta', r') = leapfrogWithMVS gradFn mInv
+                            (fromIntegral dir * eps) 1 theta r
+          h'  = -(logPiFn theta') + kineticMVS mInv r'
           n'  = if logU <= -h' then 1 else 0
           s'  = logU < deltaMax - h'
           divergent = not s'
@@ -170,13 +192,13 @@ buildTree gradFn logPiFn names mInv eps theta r logU dir depth gen
         , ntDiv = divergent
         }
   | otherwise = do
-      t1 <- buildTree gradFn logPiFn names mInv eps theta r logU dir (depth - 1) gen
+      t1 <- buildTree gradFn logPiFn mInv eps theta r logU dir (depth - 1) gen
       if not (ntS t1) then return t1
       else do
         let (th0, r0) = if dir == -1
               then (ntThMinus t1, ntRMinus t1)
               else (ntThPlus  t1, ntRPlus  t1)
-        t2 <- buildTree gradFn logPiFn names mInv eps th0 r0 logU dir (depth - 1) gen
+        t2 <- buildTree gradFn logPiFn mInv eps th0 r0 logU dir (depth - 1) gen
         let n1 = ntN t1; n2 = ntN t2
         thPrime' <-
           if n1 == 0 then return (ntThPrime t2)
@@ -189,7 +211,7 @@ buildTree gradFn logPiFn names mInv eps theta r logU dir depth gen
         let (minus', rMinus', plus', rPlus') = if dir == -1
               then (ntThMinus t2, ntRMinus t2, ntThPlus t1, ntRPlus t1)
               else (ntThMinus t1, ntRMinus t1, ntThPlus t2, ntRPlus t2)
-            s' = ntS t2 && not (uTurn names minus' rMinus' plus' rPlus')
+            s' = ntS t2 && not (uTurnVS minus' rMinus' plus' rPlus')
         return NUTSTree
           { ntThMinus = minus', ntRMinus = rMinus'
           , ntThPlus  = plus',  ntRPlus  = rPlus'
@@ -210,25 +232,39 @@ nuts m cfg initC gen = do
       transList  = [Map.findWithDefault errT n trMap | n <- names]
       errT       = error "nuts: missing transform"
 
-      initU = Map.fromList
-        [ (n, toUnconstrained t v)
-        | (n, t) <- zip names transList
-        , Just v <- [Map.lookup n initC] ]
+      -- Initial unconstrained position as a Storable Vector. The hot
+      -- loop never touches 'Params' (= Map); we only convert at the
+      -- boundary to record samples.
+      initUV :: VS.Vector Double
+      initUV = VS.fromList
+        [ toUnconstrained t (Map.findWithDefault 0 n initC)
+        | (n, t) <- zip names transList ]
 
       total   = nutsBurnIn cfg + nutsIterations cfg
       doAdapt = nutsAdaptStepSize cfg && nutsBurnIn cfg > 0
 
-      logPiFn :: Params -> Double
-      logPiFn paramsU = logJointUnconstrained m names transList paramsU
+      -- Vector-native log target density. Builds the @Params@ map only
+      -- once per call (the upstream 'logJoint' API still wants a Map).
+      logPiFn :: VS.Vector Double -> Double
+      logPiFn uv =
+        let xs = VS.toList uv
+            paramsU = Map.fromList (zip names xs)
+        in logJointUnconstrained m names transList paramsU
 
-      gradFn :: [Text] -> Params -> [Double]
-      gradFn ns paramsU =
-        let xs = [Map.findWithDefault 0 n paramsU | n <- ns]
-        in map negate (gradADU m names transList xs)
+      -- Vector-native gradient. 'gradADU' already takes a list, so the
+      -- wrapping is essentially a Storable ↔ list pair (n_params is
+      -- small so the conversion cost is negligible — the dominant
+      -- expense is the AD pass itself).
+      gradFn :: VS.Vector Double -> VS.Vector Double
+      gradFn uv =
+        let xs = VS.toList uv
+            gs = gradADU m names transList xs
+        in VS.fromList (map negate gs)
 
-      toConstrained pu = Map.fromList
-        [ (n, fromUnconstrained t (Map.findWithDefault 0 n pu))
-        | (n, t) <- zip names transList ]
+      toConstrained :: VS.Vector Double -> Params
+      toConstrained uv = Map.fromList
+        [ (n, fromUnconstrained t (uv `VS.unsafeIndex` i))
+        | (i, (n, t)) <- zip [0..] (zip names transList) ]
 
   samplesRef    <- newIORef []
   energyRef     <- newIORef ([] :: [Double])
@@ -249,15 +285,16 @@ nuts m cfg initC gen = do
       adaptM        = nutsAdaptMass cfg && nutsBurnIn cfg > 0
       (windowEnds, initBuf, _termBuf) = stanWindows (nutsBurnIn cfg)
       windowPhaseEnd = if null windowEnds then 0 else last windowEnds
-  mInvRef     <- newIORef (replicate nParams 1.0)
+  mInvRef     <- newIORef (VS.replicate nParams 1.0)
   welfordRef  <- newIORef (emptyWelford nParams)
 
-  let step mInv eps currentU = do
+  let step :: VS.Vector Double -> Double -> VS.Vector Double
+           -> IO (VS.Vector Double, Double, Double, Bool)
+      step mInv eps currentU = do
         -- r ~ N(0, M)  ⇔  r_i = sqrt(M_ii) * z = z / sqrt(M⁻¹_ii)
-        zs <- forM names (\_ -> standard gen)
-        let r0 = zipWith (\m_inv z -> z / sqrt m_inv) mInv zs
+        r0 <- sampleMomentum mInv gen
         u0 <- uniform gen :: IO Double
-        let h0   = -(logPiFn currentU) + kineticM mInv r0
+        let h0   = -(logPiFn currentU) + kineticMVS mInv r0
             logU = log u0 - h0
         let tree0 = NUTSTree
               { ntThMinus = currentU, ntRMinus = r0
@@ -273,7 +310,7 @@ nuts m cfg initC gen = do
                     (th0, r0') = if dir == -1
                       then (ntThMinus tree, ntRMinus tree)
                       else (ntThPlus  tree, ntRPlus  tree)
-                subtree <- buildTree gradFn logPiFn names mInv eps th0 r0' logU dir j gen
+                subtree <- buildTree gradFn logPiFn mInv eps th0 r0' logU dir j gen
                 let n1 = ntN tree; n2 = ntN subtree
                 thPrime' <-
                   if not (ntS subtree) || n2 == 0
@@ -288,7 +325,7 @@ nuts m cfg initC gen = do
                             ntThPlus  tree,    ntRPlus  tree)
                       else (ntThMinus tree,    ntRMinus tree,
                             ntThPlus  subtree, ntRPlus  subtree)
-                    s' = ntS subtree && not (uTurn names minus' rMinus' plus' rPlus')
+                    s' = ntS subtree && not (uTurnVS minus' rMinus' plus' rPlus')
                 return NUTSTree
                   { ntThMinus = minus', ntRMinus = rMinus'
                   , ntThPlus  = plus',  ntRPlus  = rPlus'
@@ -296,10 +333,10 @@ nuts m cfg initC gen = do
                   , ntDiv = ntDiv tree || ntDiv subtree
                   }
         finalTree <- foldM doubleTree tree0 [0 .. nutsMaxDepth cfg - 1]
-        let proposedU       = ntThPrime finalTree
-            (thetaOne, rOne) = leapfrogWithM gradFn names mInv eps 1 currentU r0
-            hOne            = -(logPiFn thetaOne) + kineticM mInv rOne
-            alpha           = min 1.0 (exp (h0 - hOne))
+        let proposedU        = ntThPrime finalTree
+            (thetaOne, rOne) = leapfrogWithMVS gradFn mInv eps 1 currentU r0
+            hOne             = -(logPiFn thetaOne) + kineticMVS mInv rOne
+            alpha            = min 1.0 (exp (h0 - hOne))
         when (proposedU /= currentU) $ modifyIORef' acceptedRef (+1)
         return (proposedU, alpha, h0, ntDiv finalTree)
 
@@ -317,12 +354,11 @@ nuts m cfg initC gen = do
             -- This iteration ends a window: update M, restart DA.
             isWindowEnd   = adaptM && isBurnIn && iterIdx `elem` windowEnds
         when inWindowPhase $
-          modifyIORef' welfordRef
-            (\w -> welfordAdd w (paramsToVec names nextU))
+          modifyIORef' welfordRef (\w -> welfordAddVS w nextU)
         when isWindowEnd $ do
           w <- readIORef welfordRef
           when (wN w >= 5) $ do  -- need a few samples to be meaningful
-            writeIORef mInvRef (welfordMInv w)
+            writeIORef mInvRef (welfordMInvVS w)
             -- Restart dual averaging anchored at the current ε; it
             -- needs to re-converge under the new geometry.
             writeIORef daRef (initDualAvg eps)
@@ -350,7 +386,7 @@ nuts m cfg initC gen = do
           else return ()
         loop (i - 1) nextU eps'
 
-  _ <- loop total initU (nutsStepSize cfg)
+  _ <- loop total initUV (nutsStepSize cfg)
   samples  <- fmap reverse (readIORef samplesRef)
   energies <- fmap reverse (readIORef energyRef)
   divs     <- fmap reverse (readIORef divergenceRef)
@@ -375,22 +411,26 @@ nuts m cfg initC gen = do
 -- | Plain (non-record) constructor: @Welford n mean m2@. Kept positional
 -- because the @m2@ field is only ever pattern-matched, never read via a
 -- selector (record syntax would generate an unused-binding warning).
-data Welford = Welford !Int ![Double] ![Double]
+-- | Storable-Vector Welford. The previous list-based form allocated
+-- four @[Double]@ vectors per add (warmup ~500 iters × 4 cells = 10K
+-- list cells per fit) and was hot during the mass-matrix adaptation
+-- window phase.
+data Welford = Welford !Int !(VS.Vector Double) !(VS.Vector Double)
 
 wN :: Welford -> Int
 wN (Welford n _ _) = n
 
 emptyWelford :: Int -> Welford
-emptyWelford p = Welford 0 (replicate p 0) (replicate p 0)
+emptyWelford p = Welford 0 (VS.replicate p 0) (VS.replicate p 0)
 
-welfordAdd :: Welford -> [Double] -> Welford
-welfordAdd (Welford n mean m2) x =
-  let n'    = n + 1
-      nD    = fromIntegral n' :: Double
-      d     = zipWith (-) x mean
-      mean' = zipWith (\me di -> me + di / nD) mean d
-      d2    = zipWith (-) x mean'
-      m2'   = zipWith3 (\m2i d1 d22 -> m2i + d1 * d22) m2 d d2
+welfordAddVS :: Welford -> VS.Vector Double -> Welford
+welfordAddVS (Welford n mean m2) x =
+  let !n'   = n + 1
+      !nD   = fromIntegral n' :: Double
+      !d    = VS.zipWith (-) x mean
+      !mean' = VS.zipWith (\me di -> me + di / nD) mean d
+      !d2   = VS.zipWith (-) x mean'
+      !m2'  = VS.zipWith3 (\m2i d1 d22 -> m2i + d1 * d22) m2 d d2
   in Welford n' mean' m2'
 
 -- | Stan-regularised diagonal @M⁻¹@ from a Welford accumulator.
@@ -404,16 +444,17 @@ welfordAdd (Welford n mean m2) x =
 -- @½ rᵀ M⁻¹ r@ and @r ~ N(0, M)@, this gives a per-leapfrog position
 -- step @ε · σ̂_i@ in absolute units (i.e. @ε@ in posterior-sd units),
 -- which is what NUTS needs for tree depth ~ @1/ε@.
-welfordMInv :: Welford -> [Double]
-welfordMInv (Welford n _ m2)
-  | n < 2     = map (const 1.0) m2
+welfordMInvVS :: Welford -> VS.Vector Double
+welfordMInvVS (Welford n _ m2)
+  | n < 2     = VS.replicate (VS.length m2) 1.0
   | otherwise =
       let nD     = fromIntegral n :: Double
           k      = 5.0 :: Double
           weight = nD / (nD + k)
           target = 1e-3
-          rawVar = map (/ (nD - 1)) m2
-      in [ max 1e-12 (weight * v + (1 - weight) * target) | v <- rawVar ]
+      in VS.map (\v -> let raw = v / (nD - 1)
+                       in max 1e-12 (weight * raw + (1 - weight) * target))
+                m2
 
 -- | Stan-style adaptation schedule for a warmup of @W@ iterations.
 --

@@ -220,13 +220,20 @@ PCA / KMeans / DT / RF を sklearn と比較。
 
 | name | time (ms) | mu_mean | ess(mu) | ess(tau) | ess(mu)/sec | 真値 mu_mean |
 |---|---:|---:|---:|---:|---:|---:|
-| haskell HMC | 2931 | 73.0 | 8.4 | 138 | 2.9 | ~73 ✅ |
-| **haskell NUTS (B11 mass)** | **1222** | 71.8 | **839** | 571 | **687** | ~73 ✅ |
+| haskell HMC | 2501 | 73.0 | 8.4 | 138 | 3.4 | ~73 ✅ |
+| **haskell NUTS (P31 hot-path VS)** | **1046** | 71.8 | **839** | 571 | **802** | ~73 ✅ |
 | python PyMC NUTS | 1562 | 72.1 | 856 | 546 | 548 | ~73 ✅ |
 | **python blackjax NUTS** | **570** | 72.4 | 810 | 626 | **1421** | ~73 ✅ |
 
-**Python 勝ち**: blackjax (時間 2.1×、JAX JIT 構造)。
-**hanalyze 勝ち**: ESS(mu) 839 vs blackjax 810; PyMC 比は時間 1.3× / ESS 同等。
+**Python 勝ち**: blackjax (時間 1.8×、JAX JIT 構造)。
+**hanalyze 勝ち**: ESS(mu) 839 vs blackjax 810; PyMC 比は時間 1.5× 速 / ESS 同等。
+
+P31 ホットパスを `VS.Vector Double` に統一 (Params=Map → VS):
+NUTS 1222 → 1046 ms (1.17×)、HMC 2931 → 2501 ms (1.17×)。
+`leapfrogWithMVS` / `kineticMVS` / `uTurnVS` / `welfordAddVS` / `sampleMomentum`
+すべて Storable Vector 化、`logPiFn`/`gradFn`/`toConstrained` のみ
+`VS↔Map` boundary。`Welford` 内部も `VS.Vector Double` に置換し、
+warmup 中の per-iter list allocation (4 × p セル) を消去。
 
 ---
 

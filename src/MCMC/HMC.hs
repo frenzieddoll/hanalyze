@@ -29,9 +29,11 @@ module MCMC.HMC
   , logJointU
   , leapfrogWith
   , leapfrogWithM
+  , leapfrogWithMVS
     -- * Basic utilities
   , kinetic
   , kineticM
+  , kineticMVS
   , paramsToVec
   , vecToParams
     -- * Sampler
@@ -45,6 +47,7 @@ import Data.IORef
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import Data.Text (Text)
+import qualified Data.Vector.Storable         as VS
 import System.Random.MWC (GenIO, uniform)
 import System.Random.MWC.Distributions (standard)
 
@@ -127,6 +130,12 @@ kinetic r = 0.5 * sum (map (^ (2 :: Int)) r)
 kineticM :: [Double] -> [Double] -> Double
 kineticM mInv r = 0.5 * sum (zipWith (\m_inv ri -> m_inv * ri * ri) mInv r)
 
+-- | Storable-Vector variant of 'kineticM'.
+kineticMVS :: VS.Vector Double -> VS.Vector Double -> Double
+kineticMVS mInv r =
+  0.5 * VS.sum (VS.zipWith (\m_inv ri -> m_inv * ri * ri) mInv r)
+{-# INLINE kineticMVS #-}
+
 -- | Leapfrog integrator with a user-supplied gradient function. Takes
 -- the gradient function, parameter names, step size @ε@, number of
 -- steps, initial @θ@ and momentum @r@, and returns the updated pair.
@@ -180,6 +189,38 @@ leapfrogWithM gradFn names mInv eps steps theta0 r0 = go steps theta0 r0
           g'     = gradFn names theta'
           r'     = zipWith (\ri gi -> ri - (eps / 2) * gi) rHalf g'
       in go (n - 1) theta' r'
+
+-- | Storable-Vector–native variant of 'leapfrogWithM'. Position,
+-- momentum, gradient, and the diagonal @M⁻¹@ all live on
+-- @VS.Vector Double@ throughout the integration; no @Map@ or
+-- @[Double]@ traversal occurs in the inner loop.
+--
+-- Used by 'MCMC.NUTS' where each leapfrog step is invoked up to
+-- @2¹⁰@ times per iteration: the previous form went
+-- @[Double] → Map → [Double]@ at every step (per-name @Map.lookup@
+-- ×p plus list cell allocation for @zipWith3@), which dominated the
+-- profile after the algorithmic improvements were in place.
+leapfrogWithMVS
+  :: (VS.Vector Double -> VS.Vector Double)   -- ^ Gradient (Vector → Vector).
+  -> VS.Vector Double                         -- ^ Diagonal @M⁻¹@.
+  -> Double                                   -- ^ Step size @ε@.
+  -> Int                                      -- ^ Steps.
+  -> VS.Vector Double                         -- ^ Initial @θ@.
+  -> VS.Vector Double                         -- ^ Initial @r@.
+  -> (VS.Vector Double, VS.Vector Double)
+leapfrogWithMVS gradFn mInv eps steps theta0 r0 = go steps theta0 r0
+  where
+    !halfEps = eps * 0.5
+    go !n theta r
+      | n <= 0    = (theta, r)
+      | otherwise =
+          let g      = gradFn theta
+              rHalf  = VS.zipWith (\ri gi -> ri - halfEps * gi) r g
+              theta' = VS.zipWith3 (\ti m_inv ri -> ti + eps * m_inv * ri)
+                                   theta mInv rHalf
+              g'     = gradFn theta'
+              r'     = VS.zipWith (\ri gi -> ri - halfEps * gi) rHalf g'
+          in go (n - 1) theta' r'
 
 -- ---------------------------------------------------------------------------
 -- HMC サンプラー (AD 勾配版)
