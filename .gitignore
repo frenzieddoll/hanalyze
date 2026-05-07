@@ -36,3 +36,7 @@ bench/venv/
 # 再生成可能 (固定 seed)。GitHub の 100 MB 制限を超える大規模ケース
 # (lm_n100000_p100.csv = 132 MB 等) を含むため、git 管理外にする。
 bench/data/
+
+# 編集時の一時ファイル
+*.tmp
+hanalyze.cabal.tmp

@@ -1028,6 +1028,33 @@ executable bench-mo
     , tasty-bench          >= 0.3  && < 0.5
     , tasty                >= 1.4  && < 1.6
 
+-- Standalone investigation: P37 Cheng-BB Beta sampler vs 2-Gamma + division.
+executable bench-beta-isolate
+  import:           warnings, opt
+  main-is:          BenchBetaIsolate.hs
+  hs-source-dirs:   bench/haskell
+  default-language: GHC2021
+  build-depends:
+      base                 >= 4.14 && < 5
+    , hanalyze
+    , mwc-random           >= 0.15 && < 0.16
+    , time                 >= 1.9  && < 1.13
+    , vector               >= 0.12 && < 0.14
+
+-- Standalone investigation: P40 Bootstrap resampling hot-path
+-- (uniformVector batch + GEMV row-sum vs naive index-loop).
+executable bench-bootstrap-isolate
+  import:           warnings, opt
+  main-is:          BenchBootstrapIsolate.hs
+  hs-source-dirs:   bench/haskell
+  default-language: GHC2021
+  build-depends:
+      base                 >= 4.14 && < 5
+    , hmatrix              >= 0.20 && < 0.22
+    , mwc-random           >= 0.15 && < 0.16
+    , time                 >= 1.9  && < 1.13
+    , vector               >= 0.12 && < 0.14
+
 -- Single-objective optimization bench (B3).
 executable bench-optim
   import:           warnings, opt
