@@ -28,6 +28,7 @@ module Model.GP
   , GPParams (..)
   , defaultGPParams
   , initParamsFromData
+  , initParamsFromDataMV
     -- * Model and result
   , GPModel (..)
   , GPResult (..)
@@ -50,6 +51,7 @@ module Model.GP
   , fitGPMV
   , fitGPMVMulti
   , optimizeGPMV
+  , optimizeGPMVCached
   ) where
 
 import Data.Text (Text)
@@ -126,6 +128,32 @@ initParamsFromData xs ys = GPParams
     xMax  = maximum xs
     yMean = sum ys / fromIntegral (length ys)
     yVar  = sum (map (\y -> (y - yMean) ^ (2 :: Int)) ys) / fromIntegral (length ys)
+
+-- | Multi-input variant of 'initParamsFromData'. Computes the length
+-- scale from the /average/ per-dimension range of @X@ rather than
+-- collapsing the @n × p@ matrix into a flat list (which the previous
+-- @MultiGP@ call site did via @concat (toLists trainX)@ — yielding
+-- nonsensical @xMin/xMax@ statistics, a poor length-scale init, and
+-- in turn slow LBFGS convergence).
+initParamsFromDataMV :: LA.Matrix Double -> LA.Vector Double -> GPParams
+initParamsFromDataMV trainX y =
+  let p     = LA.cols trainX
+      cols  = LA.toColumns trainX            -- p column vectors
+      ranges = [ LA.maxElement c - LA.minElement c | c <- cols ]
+      avgRng = if null ranges then 1.0
+                              else sum ranges / fromIntegral (length ranges)
+      ys    = LA.toList y
+      yMean = LA.sumElements y / fromIntegral (LA.size y)
+      yVar  = sum (map (\v -> (v - yMean) ^ (2 :: Int)) ys)
+              / fromIntegral (LA.size y)
+      _     = p
+  in GPParams
+       { gpLengthScale  = max 0.01 (avgRng / 4)
+       , gpSignalVar    = max 0.01 yVar
+       , gpNoiseVar     = max 1e-4 (yVar * 0.05)
+       , gpPeriod       = max 0.01 avgRng
+       , gpLengthScales = Nothing
+       }
 
 -- | A GP model: a kernel paired with its hyperparameters.
 data GPModel = GPModel
@@ -640,6 +668,32 @@ fitGPMVMulti model trainX trainY testX =
 optimizeGPMV
   :: Kernel -> LA.Matrix Double -> LA.Vector Double -> GPParams -> GPParams
 optimizeGPMV ker trainX y p0 =
+  optimizeGPMVCached ker Nothing trainX y p0
+
+-- | Like 'optimizeGPMV' but accepts a /pre-computed/ pairwise squared
+-- distance matrix. Used by 'Model.MultiGP' to share @D = pairwiseSqDist
+-- trainX@ across all @q@ outputs (the same @trainX@ is used for every
+-- output, so re-computing @D@ inside each per-output optimisation is
+-- pure waste). For ARD the cache is ignored (the kernel depends on
+-- per-feature length scales and @D@ varies with the optimisation
+-- variables).
+optimizeGPMVCached
+  :: Kernel
+  -> Maybe (LA.Matrix Double)   -- ^ Pre-computed @D = pairwiseSqDist trainX@.
+  -> LA.Matrix Double
+  -> LA.Vector Double
+  -> GPParams
+  -> GPParams
+optimizeGPMVCached ker mPreD trainX y p0
+  -- Analytic-gradient fast path for the isotropic non-ARD case under
+  -- the RBF kernel. Replaces the central-difference numeric gradient
+  -- (which costs 6 × the Cholesky-based log-marginal-likelihood
+  -- evaluation per LBFGS step) with a closed-form formula that re-uses
+  -- a single explicit @Ky⁻¹@ for all three parameters. See
+  -- 'optimizeRBFAnalytic'.
+  | ker == RBF && not (isARDOf p0 (LA.cols trainX)) =
+      optimizeRBFAnalytic mPreD trainX y p0
+  | otherwise =
   let cfg  = LBFGS.defaultLBFGSConfig
                { LBFGS.lbDir   = OC.Maximize
                , LBFGS.lbStop  = OC.defaultStopCriteria
@@ -682,7 +736,9 @@ optimizeGPMV ker trainX y p0 =
     cachedD :: Maybe (LA.Matrix Double)
     cachedD
       | isARD     = Nothing
-      | otherwise = Just (KD.pairwiseSqDist trainX)
+      | otherwise = case mPreD of
+                      Just d  -> Just d                         -- caller-supplied
+                      Nothing -> Just (KD.pairwiseSqDist trainX) -- compute now
     initU
       | isARD     = case gpLengthScales p0 of
                       Just v ->
@@ -734,3 +790,112 @@ optimizeGPMV ker trainX y p0 =
           case cachedD of
             Just d2 -> logMarginalLikelihoodMVCached d2 y ker (toParams u)
             Nothing -> logMarginalLikelihoodMV trainX y ker (toParams u)
+
+-- | Whether the given 'GPParams' / input dimension imply ARD.
+isARDOf :: GPParams -> Int -> Bool
+isARDOf p0 p = case gpLengthScales p0 of
+  Just v | LA.size v == p && p > 0 -> True
+  _                                -> False
+
+-- | Analytic-gradient L-BFGS for the isotropic RBF GP marginal
+-- likelihood. Replaces the central-difference numeric gradient (6 extra
+-- evaluations per LBFGS step) with a closed-form formula that re-uses
+-- a single explicit @Ky⁻¹@ across all three parameters
+-- @[log ℓ, log σ_f², log σ_n²]@.
+--
+-- For RBF, @∂Ky/∂(log θ_k)@ is:
+--
+-- *   @log ℓ@:    @K ⊙ (D / ℓ²)@
+-- *   @log σ_f²@: @K@         (linear in @σ_f²@)
+-- *   @log σ_n²@: @σ_n² · I@
+--
+-- and the gradient contribution is
+-- @½ tr((α αᵀ − Ky⁻¹) ∂Ky/∂(log θ_k))@. We form @Ky⁻¹@ once per LBFGS
+-- step (@O(n³)@ via @cholSolveJitter ky I@) and assemble each
+-- coordinate of the gradient via element-wise sums (@O(n²)@). Total
+-- work per step: roughly @n³/2 + O(n²)@ vs the numeric path's
+-- @≈ n³ + O(n²)@, plus L-BFGS converges in fewer iterations when fed
+-- exact gradients.
+optimizeRBFAnalytic
+  :: Maybe (LA.Matrix Double) -> LA.Matrix Double -> LA.Vector Double
+  -> GPParams -> GPParams
+optimizeRBFAnalytic mPreD trainX y p0 =
+  let n     = LA.rows trainX
+      d2    = case mPreD of
+                Just d  -> d
+                Nothing -> KD.pairwiseSqDist trainX
+      cfg   = LBFGS.defaultLBFGSConfig
+                { LBFGS.lbDir   = OC.Maximize
+                , LBFGS.lbStop  = OC.defaultStopCriteria
+                                    { OC.stMaxIter = 200
+                                    , OC.stTolFun  = 1e-8 }
+                }
+      u0v   = LA.fromList
+                [ log (gpLengthScale p0)
+                , log (gpSignalVar  p0)
+                , log (gpNoiseVar   p0) ]
+
+      -- Build the kernel matrix and noise-augmented matrix from
+      -- params (re-using the precomputed @D@).
+      buildK uv =
+        let !ll  = exp (uv VS.! 0)        -- length scale ℓ
+            !sf2 = exp (uv VS.! 1)        -- σ_f²
+            !sn2 = exp (uv VS.! 2)        -- σ_n²
+            !inv2L2 = 1 / (2 * ll * ll)
+            !kMat = LA.cmap (\s -> sf2 * exp (- s * inv2L2)) d2
+            !ky   = addToDiag sn2 kMat
+        in (ll, sf2, sn2, kMat, ky)
+
+      -- Objective only (used by L-BFGS line search).
+      objV uv =
+        let (_, _, _, _, ky) = buildK uv
+        in case Chol.cholFactor ky of
+             Nothing -> -1e30
+             Just r  ->
+               let logDet = 2 * VS.sum (VS.map log (LA.takeDiag r))
+                   alpha  = LA.flatten
+                              (Chol.cholSolveWithFactor r (LA.asColumn y))
+                   dataFit = LA.dot y alpha
+               in -0.5 * dataFit - 0.5 * logDet
+                  - fromIntegral n / 2 * log (2 * pi)
+
+      -- Analytic gradient.
+      gradV uv =
+        let (ll, _sf2, sn2, kMat, ky) = buildK uv
+        in case Chol.cholFactor ky of
+             Nothing -> LA.fromList [0, 0, 0]   -- bail out at singular Ky
+             Just r  ->
+               let alpha  = LA.flatten
+                              (Chol.cholSolveWithFactor r (LA.asColumn y))
+                   -- Explicit @Ky⁻¹@ (n × n). 'cholSolveWithFactor'
+                   -- against the n×n identity is an @O(n³)@ pair of
+                   -- triangular solves but only happens once per LBFGS
+                   -- gradient call.
+                   kyInv  = Chol.cholSolveWithFactor r (LA.ident n)
+                   -- Q = α αᵀ − Ky⁻¹. We don't materialise this
+                   -- separately; instead each gradient component is
+                   -- computed as @α^T V α − tr(Ky⁻¹ V)@ inline.
+                   --
+                   -- ∂Ky/∂(log ℓ) = K ⊙ (D / ℓ²)
+                   !invL2 = 1 / (ll * ll)
+                   !vL    = LA.scale invL2 (kMat * d2)
+                   !aT_vL = LA.dot alpha (vL LA.#> alpha)
+                   !tr_KyInv_vL = LA.sumElements (kyInv * vL)
+                   !gLogL = 0.5 * (aT_vL - tr_KyInv_vL)
+                   -- ∂Ky/∂(log σ_f²) = K
+                   !aT_K   = LA.dot alpha (kMat LA.#> alpha)
+                   !tr_KyInv_K = LA.sumElements (kyInv * kMat)
+                   !gLogSf = 0.5 * (aT_K - tr_KyInv_K)
+                   -- ∂Ky/∂(log σ_n²) = σ_n² I
+                   !aT_a   = LA.dot alpha alpha
+                   !tr_KyInv = LA.sumElements (LA.takeDiag kyInv)
+                   !gLogSn = 0.5 * sn2 * (aT_a - tr_KyInv)
+               in LA.fromList [gLogL, gLogSf, gLogSn]
+
+      result = unsafePerformIO $ LBFGS.runLBFGSWithV cfg objV gradV u0v
+      uOpt   = OC.orBest result
+  in p0
+       { gpLengthScale = exp (uOpt !! 0)
+       , gpSignalVar   = exp (uOpt !! 1)
+       , gpNoiseVar    = exp (uOpt !! 2)
+       }

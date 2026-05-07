@@ -12,7 +12,8 @@ module Main where
 import qualified Numeric.LinearAlgebra as LA
 
 import           Model.MultiLM         (fitMultiLM, predictMultiLM)
-import           Model.MultiGP         (fitMultiGPMV, MultiGPResultMV (..))
+import           Model.MultiGP         (fitMultiGPMV, fitMultiGPMVSharedHP,
+                                        MultiGPResultMV (..))
 import           Model.GP              (Kernel (..))
 
 import           BenchUtil
@@ -88,6 +89,26 @@ benchMultiGP = do
             "MultiGP_n200_p3_q3" ms 0 0
             "MultiGP RBF n=200 p=3 q=3 (independent GPs, MV API)" ]
 
+benchMultiGPSharedHP :: IO [BenchRow]
+benchMultiGPSharedHP = do
+  let !n = 200
+      !p = 3
+      !q = 3
+      !x = designX n p
+      !y = multiY x q
+      yCols = [ LA.flatten (y LA.?? (LA.All, LA.Pos (LA.idxs [k])))
+              | k <- [0 .. q - 1] ]
+      run :: Int -> IO Double
+      run _ = do
+        let r = fitMultiGPMVSharedHP x yCols x
+            s = sum [ LA.sumElements m | m <- mgpmvMean r ]
+        return s
+      probe = id
+  (ms, _) <- timeitTastyIO probe run
+  return [ BenchRow "haskell" "multi_output"
+            "MultiGP_n200_p3_q3_sharedHP" ms 0 0
+            "MultiGP RBF n=200 p=3 q=3 (single HP optimisation)" ]
+
 -- ---------------------------------------------------------------------------
 
 main :: IO ()
@@ -95,6 +116,7 @@ main = do
   rows <- mconcat <$> sequence
     [ benchMultiLM
     , benchMultiGP
+    , benchMultiGPSharedHP
     ]
   writeRows "bench/results/haskell/multi_output.csv" rows
   putStrLn $ "wrote " ++ show (length rows)

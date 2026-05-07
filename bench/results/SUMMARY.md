@@ -205,11 +205,11 @@ PCA / KMeans / DT / RF を sklearn と比較。
 | name | hanalyze (ms) | python (ms) | speedup | acc_hs | acc_py | 真値 / 注 |
 |---|---:|---:|---:|---:|---:|---|
 | PCA_n10000_p50_k5 | **24.4** | 21.3 | **0.88×** ≈ | 0.111 | 0.111 | 累積寄与率同 ✅ |
-| KMeans_n2000_p5_k5 | **32** | **23.3** | **0.72×** | 18470 | 18496 | inertia ≈ (P8+P19-P21 で 414→32 ms = **13× 改善**、対 sklearn 0.06×→0.72×) |
+| KMeans_n2000_p5_k5 | **32** | **23.3** | **0.72×** | 18470 | 18496 | inertia ≈ (BLAS-vec init + 融合 assign + Int loop) |
 | DT_n2000_p10 | 26.3 | **14.4** | 0.55× | 1.0 | 1.0 | accuracy 同 ✅ |
 | RF_n2000_p10_t20 | **98.6** | 142.4 | **1.44×** | 0.974 | 0.999 | hanalyze accuracy 微劣 (再現可能 seed の乱数差) |
 
-**Python 勝ち**: KMeans (P8+P19-P21 で 0.06×→**0.72×** まで縮小、残り gap は sklearn の Elkan triangle-inequality + SIMD 距離計算)、DT (sklearn Cython tree split)。
+**Python 勝ち**: KMeans (gap **0.72×**、残りは sklearn の Elkan triangle-inequality + SIMD 距離計算)、DT (sklearn Cython tree split)。
 **hanalyze 勝ち**: PCA (互角)、RF (時間)。
 
 ---
@@ -312,9 +312,10 @@ PCA / KMeans / DT / RF を sklearn と比較。
 | name | hanalyze (ms) | python (ms) | speedup | acc_hs (RMSE) | acc_py (RMSE) | 真値 / 注 |
 |---|---:|---:|---:|---:|---:|---|
 | **MultiLM_n2000_p10_q5** | **0.47** | 0.758 | **1.61×** | 0.0354 | 0.0354 | 完全一致 ✅ |
-| MultiGP_n200_p3_q3 | 1271 | **283.8** | 0.22× | — | — | (sklearn GPR の C 実装、構造的天井) |
+| MultiGP_n200_p3_q3 (independent HP) | **756** | 263 (sklearn) | **0.35×** | — | — | RBF analytic gradient + init bug 修正 + D 共有 |
+| MultiGP_n200_p3_q3_sharedHP | **510** | 206 (sklearn `fit(X,Y)`) | **0.40×** | — | — | 全出力で 1 HP 最適化 + Cholesky factor 共有 |
 
-**Python 勝ち**: MultiGP (3 個独立 GP の HP 最適化、kernel/GP と同じ天井)。
+**Python 勝ち**: MultiGP (independent gap **0.35×** / sharedHP gap **0.40×**、残り gap は sklearn の analytic gradient の trace 計算最適化と SIMD)。
 
 ---
 
@@ -345,7 +346,7 @@ SIMD 等が必要、「small-prob」は Python overhead が支配的でアルゴ
 | kernel | **GP_opt_n500** | 0.65× | 同上 (P1+P5 で 3.5× → 1.5× まで縮小) |
 | kernel | RFF_n1000 | 0.56× | MKL/SVML SIMD vdCos vs scalar cos (P6 で 9.2× → 1.8×) |
 | kernel | RFF_n2000 | 0.51× | 同上 (P6 で 10.3× → 2.0×) |
-| ml | KMeans_n2000_p5_k5 | **0.72×** | sklearn k-means++ + Cython (**P8+P19-P21 で 0.06×→0.72×、計 13× 改善**、残り gap は Elkan + SIMD 距離) |
+| ml | KMeans_n2000_p5_k5 | **0.72×** | sklearn k-means++ + Cython (残り gap は Elkan + SIMD 距離) |
 | ml | DT_n2000_p10 | 0.55× | sklearn Cython tree split |
 | mcmc | NUTS (vs blackjax) | 0.47× | JAX JIT 構造差 (PyMC 比は逆転) |
 | mcmc_extras | Gibbs_BetaBinomial | 0.21× | numpy direct beta sampling (アルゴリズム差) |
@@ -358,7 +359,7 @@ SIMD 等が必要、「small-prob」は Python overhead が支配的でアルゴ
 | ts_extras | Interp1D_PCHIP | 0.80× ≈ | 同上 (互角) |
 | ts_extras | GAM | 0.67× | pygam Cython (ただし RMSE は hanalyze 3.4× 勝) |
 | survts | GAM | 0.68× | pygam Cython |
-| multi_output | MultiGP | 0.22× | GP HP 最適化 × q outputs |
+| multi_output | MultiGP_n200_p3_q3 | **0.35×** | RBF analytic gradient 実装 + init bug 修正済、残り gap は sklearn の trace 最適化 |
 | mo | NSGA-II 全 4 問題 | 0.69-0.81× | per-gen Python loop + SIMD; 内部 Matrix 化で改善余地あり |
 
 **P7-P18 で sklearn/scipy 越え達成** (旧 Python 勝ち項目):
