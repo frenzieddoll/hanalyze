@@ -24,8 +24,11 @@ module Model.Regularized
     -- * Multi-output (primary API)
   , RegFitMulti (..)
   , fitRegularizedMulti
+  , fitRegularizedMultiWith
   , predictRegularizedMulti
   , regFitFromMulti
+    -- * Convergence-controlled API
+  , fitRegularizedWith
     -- * Regularization path
   , regularizationPath
   ) where
@@ -66,12 +69,22 @@ data RegFit = RegFit
 -- メイン API
 -- ---------------------------------------------------------------------------
 
--- | Single-output regularized-regression fit. Delegates to
+-- | Single-output regularized-regression fit (sklearn-compatible
+-- defaults @maxIter = 1000@, @tol = 1e-4@). Delegates to
 -- 'fitRegularizedMulti' by promoting @y@ to a one-column matrix and
 -- returns column 0 as a 'RegFit'.
 fitRegularized :: Penalty -> LA.Matrix Double -> LA.Vector Double -> RegFit
 fitRegularized pen x y =
   regFitFromMulti 0 (fitRegularizedMulti pen x (LA.asColumn y))
+
+-- | Single-output regularized-regression fit with explicit convergence
+-- controls (only meaningful for Lasso / Elastic Net).
+fitRegularizedWith
+  :: Int -> Double -> Penalty -> LA.Matrix Double -> LA.Vector Double
+  -> RegFit
+fitRegularizedWith maxIter tol pen x y =
+  regFitFromMulti 0
+    (fitRegularizedMultiWith maxIter tol pen x (LA.asColumn y))
 
 -- | Single-output prediction.
 predictRegularized :: RegFit -> LA.Matrix Double -> LA.Vector Double
@@ -182,7 +195,20 @@ cdLoop
   -> Double                            -- tolerance on |Δβ|₂
   -> (Double -> Double -> Double)      -- (ρ, cSq) → β_j_new
   -> (LA.Vector Double, Int)
-cdLoop x y maxIter tol upd = unsafePerformIO $ do
+cdLoop x y maxIter tol upd
+  | LA.rows x >= 4 * LA.cols x =
+      cdLoopGram x y maxIter tol upd      -- n ≫ p: Gram precompute
+  | otherwise                  = cdLoopResidual x y maxIter tol upd
+
+-- | Coordinate descent maintaining the @n@-dimensional residual
+-- @r = y − Xβ@. Best when @n@ is small (the residual update is
+-- @O(n)@ per coord; the alternative 'cdLoopGram' keeps a length-@p@
+-- prediction vector and pays @O(p)@ per coord).
+cdLoopResidual
+  :: LA.Matrix Double -> LA.Vector Double -> Int -> Double
+  -> (Double -> Double -> Double)
+  -> (LA.Vector Double, Int)
+cdLoopResidual x y maxIter tol upd = unsafePerformIO $ do
   let nRows  = LA.rows x
       n      = fromIntegral nRows :: Double
       p      = LA.cols x
@@ -242,6 +268,90 @@ cdLoop x y maxIter tol upd = unsafePerformIO $ do
     foldM' f acc (z:zs) = do
       acc' <- f acc z
       acc' `seq` foldM' f acc' zs
+
+-- | Coordinate descent with /precomputed/ Gram matrix
+-- @G = XᵀX@ (p × p) and @v = Xᵀy@ (length p).
+--
+-- For @n ≫ p@ this is dramatically faster than 'cdLoopResidual'
+-- because each coordinate update touches a length-@p@ prediction
+-- vector @q = G β@ rather than the length-@n@ residual. With
+-- @n = 10000, p = 50@ the per-coord work goes from @O(n)@ to
+-- @O(p)@ — roughly 200× less arithmetic per inner step. Mirrors
+-- sklearn's @Lasso(precompute=True)@.
+--
+-- Setup cost: forming @G@ is @O(np²)@ (one BLAS GEMM /
+-- @LA.tr x \<\> x@); for the @p × p = 50 × 50@ Gram matrix at
+-- @n = 10k@ that's ~25 million flops, amortised over the inner
+-- coordinate-descent sweeps.
+cdLoopGram
+  :: LA.Matrix Double -> LA.Vector Double -> Int -> Double
+  -> (Double -> Double -> Double)
+  -> (LA.Vector Double, Int)
+cdLoopGram x y maxIter tol upd = unsafePerformIO $ do
+  let nRows = LA.rows x
+      nD    = fromIntegral nRows :: Double
+      p     = LA.cols x
+      gMat  = LA.tr x LA.<> x                -- p × p (SPD)
+      vVec  = LA.tr x LA.#> y                -- length p
+      diagG = LA.takeDiag gMat                -- length p (= ‖X_j‖²)
+      -- Per-column views of @G@ for the @q = G β@ rank-1 update.
+      gCols = V.fromList (LA.toColumns gMat)  -- O(1) column access
+
+  bMut <- VS.thaw (LA.konst 0 p :: LA.Vector Double)
+  -- @q[k] = (G β)[k]@. Maintained incrementally: a coord update
+  -- @β_j ← β_j + d@ shifts @q ← q + d · G[:, j]@.
+  qMut <- VS.thaw (LA.konst 0 p :: LA.Vector Double)
+
+  let stepCoord !maxDelta j = do
+        bjOld <- VSM.unsafeRead bMut j
+        qj    <- VSM.unsafeRead qMut j
+        let !cSq = (diagG `LA.atIndex` j) / nD
+            -- ρ_j = (X_jᵀ r) / n + β_j cSq, where
+            -- X_jᵀ r = X_jᵀ y − X_jᵀ X β = v_j − q_j (linear in β)
+            !rho   = (vVec `LA.atIndex` j - qj) / nD + bjOld * cSq
+            !bjNew = upd rho cSq
+            !d     = bjNew - bjOld
+            !ad    = abs d
+            !newMax = if ad > maxDelta then ad else maxDelta
+        if d == 0
+          then return newMax
+          else do
+            VSM.unsafeWrite bMut j bjNew
+            -- BLAS axpy on @q@: @q ← q + d · G[:, j]@ via a short
+            -- mutable loop (p elements; for typical p ≤ 100 the
+            -- BLAS dispatch overhead would dominate).
+            let gCol = gCols V.! j
+            let go !k
+                  | k >= p    = pure ()
+                  | otherwise = do
+                      qk <- VSM.unsafeRead qMut k
+                      VSM.unsafeWrite qMut k
+                        (qk + d * (gCol `VS.unsafeIndex` k))
+                      go (k + 1)
+            go 0
+            return newMax
+
+  let sweep = do
+        let go !mx !j
+              | j >= p    = pure mx
+              | otherwise = do
+                  mx' <- stepCoord mx j
+                  go mx' (j + 1)
+        go 0 0
+
+  let loop !k = do
+        if k >= maxIter
+          then return k
+          else do
+            mxDelta <- sweep
+            -- Convergence on max |Δβ_j| (sklearn's default test).
+            -- Avoids the per-sweep @before/after freeze + norm_2@ that
+            -- 'cdLoopResidual' performs.
+            if mxDelta < tol then return (k + 1) else loop (k + 1)
+
+  iters     <- loop 0
+  betaFinal <- VS.freeze bMut
+  return (betaFinal, iters)
 
 -- ---------------------------------------------------------------------------
 -- 共通ヘルパ
@@ -315,17 +425,31 @@ data RegFitMulti = RegFitMulti
   , rfmPenalty  :: Penalty
   } deriving (Show)
 
--- | Multi-output regularized regression. @Y@ has shape @n × q@.
+-- | Multi-output regularized regression with sklearn-compatible default
+-- convergence parameters (@maxIter = 1000@, @tol = 1e-4@). Use
+-- 'fitRegularizedMultiWith' to override.
 --
 -- - OLS / Ridge: 行列形式 1 回の線形求解で全 q 列を一括処理 (高速)。
 -- - Lasso / Elastic Net: 列ごと座標降下 (列間に依存なし、独立並列可)。
 fitRegularizedMulti :: Penalty -> LA.Matrix Double -> LA.Matrix Double
                     -> RegFitMulti
-fitRegularizedMulti pen x y = case pen of
+fitRegularizedMulti = fitRegularizedMultiWith 1000 1e-4
+
+-- | Multi-output regularized regression with explicit convergence
+-- controls (@maxIter@, @tol@). Affects only Lasso / Elastic Net (the
+-- iterative coordinate-descent paths). OLS / Ridge are direct solves
+-- and ignore these parameters.
+fitRegularizedMultiWith
+  :: Int                    -- ^ Maximum CD iterations (default 1000).
+  -> Double                 -- ^ Convergence tolerance @|Δβ|₂@ (default 1e-4).
+  -> Penalty
+  -> LA.Matrix Double -> LA.Matrix Double
+  -> RegFitMulti
+fitRegularizedMultiWith maxIter tol pen x y = case pen of
   NoPen        -> fitOLSMulti x y
   L2 lambda    -> fitRidgeMulti lambda x y
-  L1 lambda    -> fitColumnwise (fitLasso lambda) pen x y
-  ElasticNet l1 l2 -> fitColumnwise (fitElasticNet l1 l2) pen x y
+  L1 lambda    -> fitColumnwise (fitLasso lambda) maxIter tol pen x y
+  ElasticNet l1 l2 -> fitColumnwise (fitElasticNet l1 l2) maxIter tol pen x y
 
 -- | Multi-output prediction.
 predictRegularizedMulti :: RegFitMulti -> LA.Matrix Double -> LA.Matrix Double
@@ -353,14 +477,20 @@ fitRidgeMulti lambda x y =
   in mkRegFitMulti beta x y (L2 lambda) (replicate (LA.cols y) 0)
 
 -- | 列ごと CD (Lasso / Elastic Net 用)。
+--
+-- @maxIter@ / @tol@ は呼び元から指定する (旧版は 1000 / 1e-7 を hardcoded
+-- していたが、これは sklearn の規定値 1000 / 1e-4 より tol 側が 1000×
+-- 厳しく、bench 比較が不公平だったため明示パラメタ化)。
 fitColumnwise
   :: (LA.Matrix Double -> LA.Vector Double -> Int -> Double -> RegFit)
+  -> Int                    -- ^ @maxIter@
+  -> Double                 -- ^ @tol@
   -> Penalty
   -> LA.Matrix Double -> LA.Matrix Double
   -> RegFitMulti
-fitColumnwise fitCol pen x y =
+fitColumnwise fitCol maxIter tol pen x y =
   let q     = LA.cols y
-      fits  = [ fitCol x (LA.flatten (y LA.¿ [j])) 1000 1e-7
+      fits  = [ fitCol x (LA.flatten (y LA.¿ [j])) maxIter tol
               | j <- [0 .. q - 1] ]
       bMat  = LA.fromColumns [rfBeta f | f <- fits]
       yHat  = LA.fromColumns [rfYHat f | f <- fits]

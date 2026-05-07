@@ -47,7 +47,11 @@ fitLMEPhantom _ x y idx labels sizes = GLMM.fitLME x y idx labels sizes
 {-# NOINLINE fitRegPhantom #-}
 fitRegPhantom :: Int -> Reg.Penalty
               -> LA.Matrix Double -> LA.Vector Double -> Reg.RegFit
-fitRegPhantom _ pen x y = Reg.fitRegularized pen x y
+-- Match the Python-side bench's @max_iter=200, tol=1e-4@. The previous
+-- run used hanalyze's hardcoded @1000 / 1e-7@ which made tol 1000×
+-- stricter than sklearn's bench setting and gave an unfair speed
+-- comparison.
+fitRegPhantom _ pen x y = Reg.fitRegularizedWith 200 1e-4 pen x y
 
 main :: IO ()
 main = do
