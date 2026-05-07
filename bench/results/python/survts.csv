@@ -1,7 +1,7 @@
 system,suite,name,time_ms,acc_main,acc_aux,extra
-python,survts,ARIMA_n1000_pdq111,11.2587,0,0,"statsmodels.tsa.arima.ARIMA p=1 d=1 q=1 n=1000 (method=hannan_rissanen, comparable fit pipeline)"
-python,survts,CoxPH_n2000_p2_30pct_censor,102.946,0.563208,-0.367428,lifelines.CoxPHFitter n=2000 p=2 30% censor
-python,survts,KM_n2000,5.0873,7.20788,0.00519043,lifelines.KaplanMeierFitter n=2000
-python,survts,Quantile_n10000_p20_tau0.5,167.039,0,0,statsmodels QuantReg tau=0.5 n=10000 p=20
-python,survts,GAM_n2000_p2_d3_k5,7.39168,0,0,pygam.LinearGAM n_splines=8 n=2000 p=2
-python,survts,Spline_PCHIP_n1000,0.214018,3337.75,0,scipy.interpolate.PchipInterpolator build n=1000 + eval @5000
+python,survts,ARIMA_n1000_pdq111,13.0859,0,0,"statsmodels.tsa.arima.ARIMA p=1 d=1 q=1 n=1000 (method=hannan_rissanen, comparable fit pipeline)"
+python,survts,CoxPH_n2000_p2_30pct_censor,117.621,0.563208,-0.367428,lifelines.CoxPHFitter n=2000 p=2 30% censor
+python,survts,KM_n2000,7.18226,7.20788,0.00519043,lifelines.KaplanMeierFitter n=2000
+python,survts,Quantile_n10000_p20_tau0.5,198.551,0,0,statsmodels QuantReg tau=0.5 n=10000 p=20
+python,survts,GAM_n2000_p2_d3_k5,9.8176,0,0,pygam.LinearGAM n_splines=8 n=2000 p=2
+python,survts,Spline_PCHIP_n1000,0.235852,3337.75,0,scipy.interpolate.PchipInterpolator build n=1000 + eval @5000

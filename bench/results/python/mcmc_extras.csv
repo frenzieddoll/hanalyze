@@ -1,5 +1,5 @@
 system,suite,name,time_ms,acc_main,acc_aux,extra
-python,mcmc_extras,Gibbs_BetaBinomial_n10000,0.320296,0.582775,0,"numpy beta(14,10); analytic E[p]=0.5833333333333334"
-python,mcmc_extras,ADVI_logistic_n60_iter500,510.558,5.57589,-2.2018,numpyro SVI(AutoNormal) Adam(0.05) 500 iter num_particles=5; -ELBO=7.098742 beta0=-2.201799 beta1=5.575891
-python,mcmc_extras,WAIC_S1000_N200,6.30216,416.957,1.05421,arviz.waic scale=deviance; lppd~-208.478709 p_waic=0.289997
-python,mcmc_extras,LOO_PSIS_S1000_N200,43.9062,416.959,0,arviz.loo scale=deviance; bad_k(>0.7)=0
+python,mcmc_extras,Gibbs_BetaBinomial_n10000,0.385989,0.582775,0,"numpy beta(14,10); analytic E[p]=0.5833333333333334"
+python,mcmc_extras,ADVI_logistic_n60_iter500,698.86,5.57589,-2.2018,numpyro SVI(AutoNormal) Adam(0.05) 500 iter num_particles=5; -ELBO=7.098742 beta0=-2.201799 beta1=5.575891
+python,mcmc_extras,WAIC_S1000_N200,6.28707,416.957,1.05421,arviz.waic scale=deviance; lppd~-208.478709 p_waic=0.289997
+python,mcmc_extras,LOO_PSIS_S1000_N200,38.8267,416.959,0,arviz.loo scale=deviance; bad_k(>0.7)=0

@@ -1,4 +1,4 @@
 system,suite,name,time_ms,acc_main,acc_aux,extra
-haskell,optim_plus,Constrained_Quad2D_eq,5.653424e-2,5.746663e-8,2.000000,x=4.0640209988352496e-8 y=1.0000000406298726 f=1.999999999997933 err_to_opt=5.7466626954770463e-8
-haskell,optim_plus,Adam_quad50D_iter1000,4.692597,1.507686e-44,0.000000,‖x‖² minimization 50D from x0=1; f_final=1.5076859100845075e-44
-haskell,optim_plus,CMAESFull_Rosenbrock5D_converge,5.946997,1.363778e-10,0.000000,CMAESFull σ₀=0.5 tolfun=1e-10 maxIter=1000 from x0=-1.5; f_final=1.363778198605225e-10
+haskell,optim_plus,Constrained_Quad2D_eq,0.147349,5.746663e-8,2.000000,x=4.0640209988352496e-8 y=1.0000000406298726 f=1.999999999997933 err_to_opt=5.7466626954770463e-8
+haskell,optim_plus,Adam_quad50D_iter1000,7.139086,1.507686e-44,0.000000,‖x‖² minimization 50D from x0=1; f_final=1.5076859100845075e-44
+haskell,optim_plus,CMAESFull_Rosenbrock5D_converge,8.718683,1.363778e-10,0.000000,CMAESFull σ₀=0.5 tolfun=1e-10 maxIter=1000 from x0=-1.5; f_final=1.363778198605225e-10

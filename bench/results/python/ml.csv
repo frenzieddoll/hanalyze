@@ -1,5 +1,5 @@
 system,suite,name,time_ms,acc_main,acc_aux,extra
-python,ml,PCA_n10000_p50_k5,27.9953,0.111298,527.484,sklearn.decomposition.PCA n_components=5 (StandardScaler)
-python,ml,KMeans_n2000_p5_k5,32.7746,18499.2,46,sklearn.cluster.KMeans k=5 (k-means++)
-python,ml,DT_n2000_p10,17.8453,1,0,sklearn.tree.DecisionTreeClassifier default
-python,ml,RF_n2000_p10_t20,199.98,0.9985,0,sklearn.ensemble.RandomForestRegressor n_trees=20
+python,ml,PCA_n10000_p50_k5,21.343,0.111298,527.484,sklearn.decomposition.PCA n_components=5 (StandardScaler)
+python,ml,KMeans_n2000_p5_k5,23.2796,18499.2,46,sklearn.cluster.KMeans k=5 (k-means++)
+python,ml,DT_n2000_p10,14.4379,1,0,sklearn.tree.DecisionTreeClassifier default
+python,ml,RF_n2000_p10_t20,142.388,0.9985,0,sklearn.ensemble.RandomForestRegressor n_trees=20

@@ -1,6 +1,6 @@
 system,suite,name,time_ms,acc_main,acc_aux,extra
-python,ts_extras,HW_seasonal_n500_p12_additive,3.79724,0.110412,0,"statsmodels ExponentialSmoothing(α=0.3 β=γ=0.1 fixed, no MLE); RMSE=0.110412"
-python,ts_extras,GAM_n2000_splines10_1D,7.2746,0.183615,0,"pygam LinearGAM(s(n_splines=10,order=3,lam=1e-3)); RMSE=0.183615"
-python,ts_extras,Interp1D_Linear_knots1000_eval5000,0.060222,0,0,scipy.interpolate Linear knots=1000 eval=5000
-python,ts_extras,Interp1D_NatSpline_knots1000_eval5000,0.173552,0,0,scipy.interpolate NatSpline knots=1000 eval=5000
-python,ts_extras,Interp1D_PCHIP_knots1000_eval5000,0.172381,0,0,scipy.interpolate PCHIP knots=1000 eval=5000
+python,ts_extras,HW_seasonal_n500_p12_additive,4.11526,0.110412,0,"statsmodels ExponentialSmoothing(α=0.3 β=γ=0.1 fixed, no MLE); RMSE=0.110412"
+python,ts_extras,GAM_n2000_splines10_1D,9.07744,0.183615,0,"pygam LinearGAM(s(n_splines=10,order=3,lam=1e-3)); RMSE=0.183615"
+python,ts_extras,Interp1D_Linear_knots1000_eval5000,0.104986,0,0,scipy.interpolate Linear knots=1000 eval=5000
+python,ts_extras,Interp1D_NatSpline_knots1000_eval5000,0.284575,0,0,scipy.interpolate NatSpline knots=1000 eval=5000
+python,ts_extras,Interp1D_PCHIP_knots1000_eval5000,0.235193,0,0,scipy.interpolate PCHIP knots=1000 eval=5000

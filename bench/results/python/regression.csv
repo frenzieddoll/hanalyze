@@ -1,16 +1,16 @@
 system,suite,name,time_ms,acc_main,acc_aux,extra
-python,regression,LM_n1000_p5,0.450427,0.780285,0.507375,sklearn.LinearRegression
-python,regression,LM_n10000_p50,9.40548,0.806338,0.503039,sklearn.LinearRegression
-python,regression,LM_n100000_p100,668.119,0.808168,0.50257,sklearn.LinearRegression
-python,regression,GLM_logit_n2000_p10,1.38173,0.207811,0.445021,sklearn.LogisticRegression (lbfgs)
-python,regression,GLM_logit_n10000_p20,4.18263,0.323405,0.411273,sklearn.LogisticRegression (lbfgs)
-python,regression,GLM_poisson_n2000_p10,1.04126,0.186841,1.35899,sklearn.PoissonRegressor
-python,regression,GLM_poisson_n10000_p20,2.6134,0.410086,1.37632,sklearn.PoissonRegressor
-python,regression,LME_n2000_p5_g20,42.8393,0.969491,0.959517,statsmodels.MixedLM (lbfgs)
-python,regression,LME_n10000_p10_g50,97.1764,0.960339,0.915803,statsmodels.MixedLM (lbfgs)
-python,regression,Ridge_n1000_p5,0.536978,0.78023,0.507438,sklearn.Ridge alpha=1.0
-python,regression,Ridge_n10000_p50,3.44246,0.806317,0.503067,sklearn.Ridge alpha=1.0
-python,regression,Lasso_n1000_p5,0.737209,0.769581,0.519587,sklearn.Lasso alpha=0.05
-python,regression,Lasso_n10000_p50,2.34979,0.764406,0.554832,sklearn.Lasso alpha=0.05
-python,regression,EN_n1000_p5,0.311858,0.76219,0.527855,sklearn.ElasticNet alpha=0.1 l1_ratio=0.5
-python,regression,EN_n10000_p50,3.36839,0.756805,0.563712,sklearn.ElasticNet alpha=0.1 l1_ratio=0.5
+python,regression,LM_n1000_p5,0.823443,0.780285,0.507375,sklearn.LinearRegression
+python,regression,LM_n10000_p50,24.8134,0.806338,0.503039,sklearn.LinearRegression
+python,regression,LM_n100000_p100,857.203,0.808168,0.50257,sklearn.LinearRegression
+python,regression,GLM_logit_n2000_p10,2.68165,0.207811,0.445021,sklearn.LogisticRegression (lbfgs)
+python,regression,GLM_logit_n10000_p20,6.51063,0.323405,0.411273,sklearn.LogisticRegression (lbfgs)
+python,regression,GLM_poisson_n2000_p10,1.73265,0.186841,1.35899,sklearn.PoissonRegressor
+python,regression,GLM_poisson_n10000_p20,3.70373,0.410086,1.37632,sklearn.PoissonRegressor
+python,regression,LME_n2000_p5_g20,66.0861,0.969491,0.959517,statsmodels.MixedLM (lbfgs)
+python,regression,LME_n10000_p10_g50,165.695,0.960339,0.915803,statsmodels.MixedLM (lbfgs)
+python,regression,Ridge_n1000_p5,0.504636,0.78023,0.507438,sklearn.Ridge alpha=1.0
+python,regression,Ridge_n10000_p50,3.29623,0.806317,0.503067,sklearn.Ridge alpha=1.0
+python,regression,Lasso_n1000_p5,0.699924,0.769581,0.519587,sklearn.Lasso alpha=0.05
+python,regression,Lasso_n10000_p50,2.81541,0.764406,0.554832,sklearn.Lasso alpha=0.05
+python,regression,EN_n1000_p5,0.499921,0.76219,0.527855,sklearn.ElasticNet alpha=0.1 l1_ratio=0.5
+python,regression,EN_n10000_p50,2.85612,0.756805,0.563712,sklearn.ElasticNet alpha=0.1 l1_ratio=0.5
