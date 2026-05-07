@@ -51,13 +51,19 @@ haltonPoint d i = take d [ radicalInverse p i | p <- primes ]
 
 -- | First @n@ Halton points in @d@ dimensions, each in @[0, 1)^d@.
 -- Indexed from 1 (skipping @i = 0@, which would be at the origin).
+--
+-- We tried @runST@ + flat Storable Vector + final list-comp slicing,
+-- but the cost is dominated by the @n × d@ cons-cell allocations of
+-- the @[[Double]]@ boundary representation, not by the kernel of
+-- 'radicalInverse'. The flat-vector path benchmarked the same as or
+-- slightly slower than the direct list comprehension below — the
+-- structural ceiling here is the @[[Double]]@ API. Internal-only
+-- callers that want the table as a flat Storable can use a future
+-- 'haltonMatrix' (TODO).
 haltonSequence :: Int        -- ^ Number of points @n@.
                -> Int        -- ^ Dimension @d@.
                -> [[Double]]
 haltonSequence n d =
-  -- Pre-extract the @d@ basis primes once instead of re-traversing
-  -- the lazy 'primes' generator on every point. Per-point body is a
-  -- direct @map@ over this strict list, no further list overhead.
   let bases = take d primes
   in [ map (\b -> radicalInverse b i) bases | i <- [1 .. n] ]
 

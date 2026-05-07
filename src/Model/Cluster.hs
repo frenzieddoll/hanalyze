@@ -24,15 +24,20 @@ module Model.Cluster
   , updateCentroids
   ) where
 
-import qualified Numeric.LinearAlgebra as LA
-import qualified Stat.KernelDist       as KD
-import qualified System.Random.MWC     as MWC
-import           Control.Monad         (forM_)
-import qualified Data.Vector           as V
-import qualified Data.Vector.Mutable   as VM
+import qualified Numeric.LinearAlgebra        as LA
+import qualified Stat.KernelDist              as KD
+import qualified System.Random.MWC            as MWC
+import           Control.Monad                (forM_)
+import           Control.Monad.ST             (ST, runST)
+import qualified Data.Vector                  as V
+import qualified Data.Vector.Mutable          as VM
+import qualified Data.Vector.Unboxed          as VU
+import qualified Data.Vector.Unboxed.Mutable  as MVU
+import qualified Data.Vector.Storable         as VS
+import qualified Data.Vector.Storable.Mutable as VSM
 import           Data.IORef
-import           Data.List             (foldl', minimumBy)
-import           Data.Ord              (comparing)
+import           Data.List                    (minimumBy)
+import           Data.Ord                     (comparing)
 
 -- ---------------------------------------------------------------------------
 -- K-means
@@ -85,21 +90,24 @@ kMeansSingleRun cfg x gen = do
   initC <- case kmInit cfg of
     Forgy      -> forgyInit (kmK cfg) x gen
     KMeansPlus -> kmppInit (kmK cfg) x gen
+  -- Hot loop: keep labels as 'VU.Vector Int' to avoid the per-iteration
+  -- list↔Vector roundtrip the previous version paid via 'assignLabels'
+  -- + 'updateCentroids' on @[Int]@.
   let loop !iter !centroids
         | iter >= kmMaxIter cfg = pure (centroids, iter, False)
         | otherwise = do
-            let labels  = assignLabels x centroids
-                newC    = updateCentroids x labels (kmK cfg)
+            let labelsV = assignLabelsV x centroids
+                newC    = updateCentroidsV x labelsV (kmK cfg)
                 shift   = LA.norm_2 (LA.flatten (newC - centroids))
             if shift < kmTol cfg
               then pure (newC, iter + 1, True)
               else loop (iter + 1) newC
   (finalC, iters, conv) <- loop 0 initC
-  let labels = assignLabels x finalC
+  let labelsV = assignLabelsV x finalC
   pure KMeansResult
     { kmrCentroids = finalC
-    , kmrLabels    = labels
-    , kmrInertia   = inertia x finalC labels
+    , kmrLabels    = VU.toList labelsV
+    , kmrInertia   = inertiaV x finalC labelsV
     , kmrIters     = iters
     , kmrConverged = conv
     }
@@ -113,32 +121,54 @@ forgyInit k x gen = do
 
 -- | k-means++ initialisation: 1st centroid uniform random, subsequent
 -- centroids weighted by squared distance to nearest existing centroid.
+--
+-- Vector-incremental implementation. Maintain a Storable vector
+-- @bestDist@ of length @n@ holding @min_c ‖x_i − c‖²@ across the
+-- centroids picked so far. Adding a new centroid is one pass over
+-- @n@ rows updating @bestDist@ and one weighted draw — no list of
+-- centroids and no all-vs-all recomputation per iteration.
 kmppInit :: Int -> LA.Matrix Double -> MWC.GenIO -> IO (LA.Matrix Double)
 kmppInit k x gen = do
-  let n    = LA.rows x
-      rows = LA.toRows x
+  let n     = LA.rows x
+      xRows = LA.toRows x
+      asArr = V.fromList xRows  -- O(1) row access
+  -- Pick the first centroid.
   i0 <- MWC.uniformR (0, n - 1) gen
-  centroidsRef <- newIORef [rows !! i0]
+  let firstC = asArr V.! i0
+      -- bestDist[i] = ‖x_i − firstC‖² for every row.
+      initBest = VU.generate n
+                   (\i -> let d = (asArr V.! i) - firstC
+                          in LA.dot d d)
+  bestRef <- newIORef initBest
+  centroidsRef <- newIORef [firstC]
+  let pickWeighted total bdv =
+        if total <= 0
+          then pure 0
+          else do
+            u <- MWC.uniformR (0, total) gen
+            -- Linear scan of the cumulative weights via VU.unsafeIndex.
+            let go !acc !i
+                  | i >= n - 1 = pure i
+                  | otherwise  = do
+                      let nxt = acc + bdv VU.! i
+                      if u <= nxt
+                        then pure i
+                        else go nxt (i + 1)
+            go 0 0
   forM_ [2 .. k] $ \_ -> do
-    cs <- readIORef centroidsRef
-    let dists = [ minimum [LA.norm_2 (r - c) ^ (2 :: Int) | c <- cs]
-                | r <- rows ]
-        total = sum dists
-    if total <= 0
-      then pure ()
-      else do
-        u <- MWC.uniformR (0, total) gen
-        let pickIdx = findCum u (zip [0..] dists)
-        modifyIORef' centroidsRef (++ [rows !! pickIdx])
+    bd <- readIORef bestRef
+    let total = VU.sum bd
+    pickIdx <- pickWeighted total bd
+    let newC = asArr V.! pickIdx
+    -- Update bestDist by taking min with squared distance to newC.
+    let updated = VU.generate n
+                    (\i -> let d  = (asArr V.! i) - newC
+                               d2 = LA.dot d d
+                           in min (bd VU.! i) d2)
+    writeIORef bestRef updated
+    modifyIORef' centroidsRef (newC :)
   cs <- readIORef centroidsRef
-  pure (LA.fromRows cs)
-
--- | Cumulative pick: smallest index where prefix-sum ≥ u.
-findCum :: Double -> [(Int, Double)] -> Int
-findCum _ []          = 0
-findCum u ((i, d):rest)
-  | u <= d    = i
-  | otherwise = findCum (u - d) rest
+  pure (LA.fromRows (reverse cs))
 
 -- | Pick k distinct indices in [0, n) via Fisher-Yates partial.
 pickKDistinct :: Int -> Int -> MWC.GenIO -> IO [Int]
@@ -152,36 +182,119 @@ pickKDistinct k n gen = do
     VM.write v j a
   V.toList . V.take k <$> V.freeze v
 
--- | Assign each row to its nearest centroid (Euclidean).
+-- | Assign each row to its nearest centroid (Euclidean) — public API.
 assignLabels :: LA.Matrix Double -> LA.Matrix Double -> [Int]
-assignLabels x cs =
-  let d2 = KD.pairwiseSqDistXY x cs   -- n × k
-      go r = let xs = LA.toList r
-                 (i, _) = minimumBy (comparing snd) (zip [0..] xs)
-             in i
-  in [go r | r <- LA.toRows d2]
+assignLabels x cs = VU.toList (assignLabelsV x cs)
 
--- | Recompute centroids as mean of points per cluster. Empty clusters
--- get the zero vector (a more robust handling would pick a random
--- point; we leave this for a future improvement).
+-- | Vector version of 'assignLabels'. Internal hot path; the public
+-- @assignLabels@ wraps with @VU.toList@ at the boundary.
+--
+-- Implementation: BLAS-based @n × k@ distance matrix, then a single
+-- 'runST' pass that takes the row-wise @argmin@ via @VS.unsafeIndex@
+-- updates. Replaces the previous @[LA.toList r → minimumBy on a list@
+-- per row], which paid one @k@-list allocation per row.
+assignLabelsV :: LA.Matrix Double -> LA.Matrix Double -> VU.Vector Int
+assignLabelsV x cs =
+  let d2    = KD.pairwiseSqDistXY x cs   -- n × k
+      n     = LA.rows d2
+      k     = LA.cols d2
+      flat  = LA.flatten d2
+  in runST $ do
+       lab <- MVU.new n
+       let scanRow !i
+             | i >= n    = pure ()
+             | otherwise = do
+                 let !base = i * k
+                     -- inner argmin over the k-row of d2
+                     pickArg !j !bestJ !bestVal
+                       | j >= k    = bestJ
+                       | otherwise =
+                           let !v = flat `VS.unsafeIndex` (base + j)
+                           in if v < bestVal
+                                then pickArg (j + 1) j v
+                                else pickArg (j + 1) bestJ bestVal
+                     !bestJ0 = pickArg 1 0 (flat `VS.unsafeIndex` base)
+                 MVU.unsafeWrite lab i bestJ0
+                 scanRow (i + 1)
+       scanRow 0
+       VU.unsafeFreeze lab
+
+-- | Recompute centroids — public API. Wraps 'updateCentroidsV'.
 updateCentroids :: LA.Matrix Double -> [Int] -> Int -> LA.Matrix Double
-updateCentroids x labels k =
-  let p     = LA.cols x
-      rows  = LA.toRows x
-      grouped = [ [r | (r, l) <- zip rows labels, l == c] | c <- [0..k-1] ]
-      mean1 [] = LA.konst 0 p
-      mean1 vs = LA.scale (1 / fromIntegral (length vs))
-                          (foldl' (+) (LA.konst 0 p) vs)
-  in LA.fromRows (map mean1 grouped)
+updateCentroids x labels k = updateCentroidsV x (VU.fromList labels) k
 
--- | Sum of squared Euclidean distances of each point to its cluster
--- centroid (within-cluster SS).
+-- | Vector version of 'updateCentroids'. Internal hot path.
+--
+-- Single-pass scatter-add: traverse the @n × p@ data matrix once,
+-- accumulating each row into its assigned cluster's running sum and
+-- bumping that cluster's count. Centroids are then @sum / count@.
+-- Replaces the previous @[ [r | (r,l) ← zip rows labels, l == c]
+-- | c ← [0..k-1] ]@ which scanned the whole label list once /per/
+-- cluster — @O(n k)@ per call vs the new @O(n p)@.
+updateCentroidsV
+  :: LA.Matrix Double -> VU.Vector Int -> Int -> LA.Matrix Double
+updateCentroidsV x labels k =
+  let n    = LA.rows x
+      p    = LA.cols x
+      flat = LA.flatten x          -- length n*p, row-major
+      out  = runST $ do
+        sumBuf <- VSM.new (k * p)   -- per-cluster running sum
+        cntBuf <- MVU.new k :: ST s (MVU.STVector s Int)
+        -- Initialise with zeros (Storable does not auto-zero).
+        forM_ [0 .. k * p - 1] $ \i ->
+          VSM.unsafeWrite sumBuf i 0
+        forM_ [0 .. k - 1] $ \c ->
+          MVU.unsafeWrite cntBuf c 0
+        -- Single pass over all rows.
+        forM_ [0 .. n - 1] $ \i -> do
+          let l    = labels VU.! i
+              !off = i * p
+              !sof = l * p
+          forM_ [0 .. p - 1] $ \j -> do
+            old <- VSM.unsafeRead sumBuf (sof + j)
+            VSM.unsafeWrite sumBuf (sof + j)
+              (old + flat `VS.unsafeIndex` (off + j))
+          c0 <- MVU.unsafeRead cntBuf l
+          MVU.unsafeWrite cntBuf l (c0 + 1)
+        -- Divide each cluster's sum by its count.
+        forM_ [0 .. k - 1] $ \c -> do
+          cnt <- MVU.unsafeRead cntBuf c
+          let !invN = if cnt == 0 then 0 else 1 / fromIntegral cnt
+              !sof = c * p
+          forM_ [0 .. p - 1] $ \j -> do
+            v <- VSM.unsafeRead sumBuf (sof + j)
+            VSM.unsafeWrite sumBuf (sof + j) (v * invN)
+        VS.unsafeFreeze sumBuf
+  in LA.reshape p out
+
+-- | Sum of squared Euclidean distances — public API.
 inertia :: LA.Matrix Double -> LA.Matrix Double -> [Int] -> Double
-inertia x cs labels =
-  let rows  = LA.toRows x
-      cRows = LA.toRows cs
-  in sum [ LA.norm_2 (r - cRows !! l) ^ (2 :: Int)
-         | (r, l) <- zip rows labels ]
+inertia x cs labels = inertiaV x cs (VU.fromList labels)
+
+-- | Vector version. Single pass over the @n × p@ data matrix and the
+-- @k × p@ centroid matrix, accumulating @‖x_i − c_{l_i}‖²@ via flat
+-- indexing — no @LA.toRows@ list, no @cRows !! l@ list-index per row.
+inertiaV
+  :: LA.Matrix Double -> LA.Matrix Double -> VU.Vector Int -> Double
+inertiaV x cs labels =
+  let n     = LA.rows x
+      p     = LA.cols x
+      flatX = LA.flatten x
+      flatC = LA.flatten cs
+      go !i !acc
+        | i >= n    = acc
+        | otherwise =
+            let l    = labels VU.! i
+                !off = i * p
+                !cof = l * p
+                rowSq !j !s
+                  | j >= p    = s
+                  | otherwise =
+                      let !d = (flatX `VS.unsafeIndex` (off + j))
+                             - (flatC `VS.unsafeIndex` (cof + j))
+                      in rowSq (j + 1) (s + d * d)
+            in go (i + 1) (acc + rowSq 0 0)
+  in go 0 0
 
 -- ---------------------------------------------------------------------------
 -- Quality

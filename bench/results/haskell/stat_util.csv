@@ -1,9 +1,9 @@
 system,suite,name,time_ms,acc_main,acc_aux,extra
-haskell,stat_util,Bootstrap_mean_n1000_B1000,22.608006,9.044195e-2,-4.499049e-2,"95% CI for mean of n=1000 with B=1000; [-4.499049191962304e-2, 4.545145973142487e-2]"
-haskell,stat_util,Welch_ttest_n500x500,2.509322e-2,-6.227826,6.958987e-10,Welch's two-sample t-test n=500+500; t=-6.227825582366848 p=6.958986687373322e-10
-haskell,stat_util,MannWhitneyU_n500x500,0.426722,98226.000000,4.546912e-9,Mann-Whitney U n=500+500; U=98226.0 p=4.5469119631211485e-9
-haskell,stat_util,KS_normal_n1000,9.508594e-2,8.149174e-2,0.999997,"KS test against Normal(μ̂, σ̂); D=8.149174378212184e-2 p=0.999996849663344"
-haskell,stat_util,BH_pAdjust_n1000,8.612022e-2,0.000000,0.000000,BH on n=1000 p-values; significant after adj=0
-haskell,stat_util,Halton_n10000_d5,3.567097,10000.000000,5.000000,Halton quasi-random n=10000 d=5
-haskell,stat_util,AUC_LogLoss_n10000,5.596542,1.000000,0.435478,AUC=1.0 logLoss=0.4354780992603759
-haskell,stat_util,KFold_5_n1000,8.446640e-2,5000.000000,0.000000,k-fold split: 5 folds on n=1000
+haskell,stat_util,Bootstrap_mean_n1000_B1000,17.007298,9.044195e-2,-4.499049e-2,"95% CI for mean of n=1000 with B=1000; [-4.499049191962304e-2, 4.545145973142487e-2]"
+haskell,stat_util,Welch_ttest_n500x500,1.559758e-2,-6.227826,6.958987e-10,Welch's two-sample t-test n=500+500; t=-6.227825582366848 p=6.958986687373322e-10
+haskell,stat_util,MannWhitneyU_n500x500,0.299087,98226.000000,4.546912e-9,Mann-Whitney U n=500+500; U=98226.0 p=4.5469119631211485e-9
+haskell,stat_util,KS_normal_n1000,7.016683e-2,8.149174e-2,0.999997,"KS test against Normal(μ̂, σ̂); D=8.149174378212184e-2 p=0.999996849663344"
+haskell,stat_util,BH_pAdjust_n1000,6.671095e-2,0.000000,0.000000,BH on n=1000 p-values; significant after adj=0
+haskell,stat_util,Halton_n10000_d5,3.838349,10000.000000,5.000000,Halton quasi-random n=10000 d=5
+haskell,stat_util,AUC_LogLoss_n10000,1.178209,1.000000,0.435478,AUC=1.0 logLoss=0.4354780992603759
+haskell,stat_util,KFold_5_n1000,6.316130e-2,5000.000000,0.000000,k-fold split: 5 folds on n=1000
