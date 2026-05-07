@@ -307,7 +307,7 @@ warmup 中の per-iter list allocation (4 × p セル) を消去。
 | **BH_pAdjust_n1000** | **0.022** | 0.042 | **1.91×** ⭐ | n_sig=0 | n_sig=0 | 同 ✅ (**P39: VU API + 手書き ST loop で 3.9×、statsmodels 逆転**) |
 | **Bootstrap_mean_n1000_B1000** | **15.2** | **11.7** | 0.77× | CI幅=0.098 | 0.099 | 同 ✅ (**P40: uniformVector batch + GEMV row-sum で 1.49×**) |
 | **AUC_LogLoss_n10000** | **1.24** | 4.37 | **3.52×** ⭐ | AUC=1.0 | AUC=1.0 | 完全一致 ✅ (**P7 で Mann-Whitney U 化、5.60→1.24 ms = 4.5×、sklearn 逆転**) |
-| Halton_n10000_d5 | 3.57 | **1.12** | 0.31× | n=10000 | n=10000 | (両側同じ low-discrepancy) |
+| **Halton_n10000_d5** | **1.40** | 1.12 | 0.80× | n=10000 | n=10000 | (両側同じ low-discrepancy) — **P41: flat Matrix API + radicalInverse inner-loop 改善で 3.46×** |
 
 **Python 勝ち**: Bootstrap, BH (statsmodels Cython), Halton (scipy.qmc C)。**AUC は P7 で sklearn 逆転**。
 

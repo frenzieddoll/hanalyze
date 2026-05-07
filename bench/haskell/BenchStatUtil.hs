@@ -24,7 +24,7 @@ import           Stat.Test               (Alternative (..),
                                           kolmogorovSmirnovNormal,
                                           TestResult (..))
 import           Stat.MultipleTesting    (benjaminiHochbergV)
-import           Stat.QuasiRandom        (haltonSequence)
+import           Stat.QuasiRandom        (haltonMatrix)
 import           Stat.ClassMetrics       (auc, logLoss)
 import           Stat.CV                 (kFold)
 
@@ -127,14 +127,18 @@ benchBH = do
 
 benchHalton :: IO [BenchRow]
 benchHalton = do
-  let run :: Int -> IO [[Double]]
-      run _ = return (haltonSequence 10000 5)
-      -- Force every element of every point to avoid laziness skipping work.
-      probe pts = sum [ s | p <- pts, let s = sum p ]
-  (ms, pts) <- timeitTastyIO probe run
+  -- P41 (2026-05-07): use the flat Matrix API to match Python's
+  -- @ndarray@ baseline (scipy returns @(n, d)@ ndarray, summed via
+  -- @pts.sum()@). The legacy @[[Double]]@ form added ~1.3 ms of
+  -- @n × d@ list-cell + boxed-Double allocation.
+  let run :: Int -> IO (LA.Matrix Double)
+      run _ = return (haltonMatrix 10000 5)
+      -- Force every element via BLAS sumElements (same as np.sum).
+      probe = LA.sumElements
+  (ms, mat) <- timeitTastyIO probe run
   return [ BenchRow "haskell" "stat_util"
-            "Halton_n10000_d5" ms (fromIntegral (length pts)) 5
-            "Halton quasi-random n=10000 d=5" ]
+            "Halton_n10000_d5" ms (fromIntegral (LA.rows mat)) 5
+            "Halton quasi-random n=10000 d=5 (flat Matrix)" ]
 
 benchAUC :: IO [BenchRow]
 benchAUC = do

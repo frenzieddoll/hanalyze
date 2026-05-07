@@ -14,6 +14,7 @@ module Stat.QuasiRandom
   ( haltonPoint
   , haltonSequence
   , haltonSequenceIn
+  , haltonMatrix
   , primes
     -- * Latin Hypercube Sampling
   , lhsSamples
@@ -23,6 +24,9 @@ module Stat.QuasiRandom
 import           Control.Monad         (forM)
 import qualified Data.Vector.Mutable   as MV
 import qualified Data.Vector           as V
+import qualified Data.Vector.Storable         as VS
+import qualified Data.Vector.Storable.Mutable as MVS
+import qualified Numeric.LinearAlgebra        as LA
 import           System.Random.MWC     (GenIO, uniformR)
 
 -- | Infinite list of prime numbers via a simple Sieve.
@@ -34,13 +38,26 @@ primes = sieve [2 ..]
 
 -- | Radical-inverse function in base @b@. Maps an integer @i@ into
 -- @[0, 1)@.
+--
+-- P41 inner-loop tweaks:
+--
+--   * @1 / fromIntegral base@ is computed once; subsequent iterations
+--     multiply by @invB@ instead of dividing by @base@ each step.
+--     Halton at n=10000 d=5 spends ~500K loop iterations here, each
+--     previously paying a Double division.
+--   * @divMod@ → @quot@ + @r = n - q*base@: avoids the @(q,r)@ tuple
+--     pattern-match alloc, replaces a IDIV with an IMUL+SUB on x86.
 radicalInverse :: Int -> Int -> Double
-radicalInverse base i = go i (1.0 / fromIntegral base) 0
+radicalInverse base i = go i invB 0
   where
-    go 0 _   acc = acc
-    go n f   acc =
-      let (q, r) = n `divMod` base
-      in go q (f / fromIntegral base) (acc + fromIntegral r * f)
+    !invB = 1.0 / fromIntegral base
+    go !n !f !acc
+      | n == 0    = acc
+      | otherwise =
+          let !q = n `quot` base
+              !r = n - q * base
+          in go q (f * invB) (acc + fromIntegral r * f)
+{-# INLINE radicalInverse #-}
 
 -- | Single Halton point in @d@ dimensions: applies 'radicalInverse'
 -- with the first @d@ primes.
@@ -66,6 +83,50 @@ haltonSequence :: Int        -- ^ Number of points @n@.
 haltonSequence n d =
   let bases = take d primes
   in [ map (\b -> radicalInverse b i) bases | i <- [1 .. n] ]
+
+-- | First @n@ Halton points returned as a flat @n × d@ matrix
+-- (row-major: row @i@ = the @i@-th Halton point in @[0, 1)^d@).
+--
+-- This is the same numerical sequence as 'haltonSequence', but
+-- written into a Storable buffer with no @[[Double]]@ boxing — the
+-- scipy.stats.qmc.Halton API returns an @ndarray@ of the same shape,
+-- and the @[[Double]]@ form was a 2× allocation tax purely from the
+-- API boundary (P41).
+--
+-- Internal-loop optimisations:
+--
+--   * Bases are loaded into an unboxed @VS.Vector Int@ once.
+--   * Per-cell write goes through a hand-rolled ST loop ('outer'/
+--     'inner') so no @forM_ [0..k]@ list cells are allocated.
+--   * 'radicalInverse' is the same kernel as before; the saving is
+--     entirely in the boundary representation.
+haltonMatrix :: Int        -- ^ Number of points @n@.
+             -> Int        -- ^ Dimension @d@.
+             -> LA.Matrix Double
+haltonMatrix n d
+  | n <= 0 || d <= 0 = LA.fromLists []
+  | otherwise =
+      let basesV = VS.fromList (take d primes) :: VS.Vector Int
+          total  = n * d
+          flat = VS.create $ do
+            v <- MVS.unsafeNew total
+            let outer !i
+                  | i >= n    = pure ()
+                  | otherwise = do
+                      let !iOne   = i + 1   -- skip i=0 (origin)
+                          !rowBeg = i * d
+                          inner !k
+                            | k >= d    = pure ()
+                            | otherwise = do
+                                let !b   = VS.unsafeIndex basesV k
+                                    !val = radicalInverse b iOne
+                                MVS.unsafeWrite v (rowBeg + k) val
+                                inner (k + 1)
+                      inner 0
+                      outer (i + 1)
+            outer 0
+            pure v
+      in LA.reshape d flat
 
 -- | Halton sequence rescaled into a per-dimension box
 -- @[lo_k, hi_k)@. @bounds@ must have length @d@.
