@@ -450,10 +450,16 @@ nwRegressionMV
   -> LA.Matrix Double       -- ^ Query inputs @X_*@ (@m × p@).
   -> LA.Matrix Double       -- ^ Predictions (@m × q@).
 nwRegressionMV kern h xs ys xNew =
-  let wMat   = gramMatrixMVXY kern h xNew xs            -- m × n
-      num    = wMat LA.<> ys                             -- m × q
-      onesN  = LA.konst 1 (LA.cols wMat) :: LA.Vector Double
-      denom  = wMat LA.#> onesN                          -- m
-      safe   = LA.cmap (\d -> if d == 0 then 1 else 1 / d) denom
-      scaler = LA.diag safe                              -- m × m
-  in scaler LA.<> num
+  let !wMat   = gramMatrixMVXY kern h xNew xs           -- m × n
+      !num    = wMat LA.<> ys                           -- m × q
+      !onesN  = LA.konst 1 (LA.cols wMat) :: LA.Vector Double
+      !denom  = wMat LA.#> onesN                        -- m
+      !safe   = LA.cmap (\d -> if d == 0 then 1 else 1 / d) denom
+      -- P35a (2026-05-07): row-scale @num@ by @safe@ via broadcast
+      -- outer product instead of building the @m × m@ dense diagonal
+      -- matrix and GEMM. For m=1000 the old @LA.diag safe LA.<> num@
+      -- allocated 8 MB (1000² × 8B) and did m³q FLOPs of mostly-zero
+      -- multiplications. The broadcast is O(m × q) elementwise.
+      !onesQ  = LA.konst 1 (LA.cols num) :: LA.Vector Double
+      !safeBc = LA.outer safe onesQ                     -- m × q
+  in safeBc * num
