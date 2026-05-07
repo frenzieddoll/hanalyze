@@ -142,38 +142,56 @@ solveNatural h ys =
          in U.fromList (0 : U.toList mInner ++ [0])
 
 -- | 三重対角線形系 (Thomas algorithm)。
+--
+-- P38 (2026-05-07): the previous implementation rebuilt the @cp@ and
+-- @dp@ vectors each iteration with @U.// [(i, x)]@, which is a
+-- full-copy update. The forward sweep therefore ran in O(n²) — for
+-- n=1000 that is 1M ops on top of the algorithm's intrinsic O(n).
+-- This dominated the n=1000 NaturalSpline bench (1.72 ms vs scipy
+-- LAPACK DPTSV at 0.18 ms).
+--
+-- Now uses a mutable Storable Vector (allowed under the project's
+-- "algorithmically essential" rule for in-place updates) restoring the
+-- algorithm's true O(n) complexity. Forward and backward sweeps each
+-- carry the previous iteration's value through the recursion's
+-- accumulator instead of indexing into the partially-built array, so
+-- we only read from @a, b, c, d@ (immutable inputs) and write each
+-- output cell once.
 thomas :: U.Vector Double -> U.Vector Double -> U.Vector Double
        -> U.Vector Double -> U.Vector Double
-thomas a b c d =
-  let n = U.length b
-      -- 前進消去
-      go i cp dp
-        | i >= n = (cp, dp)
-        | otherwise =
-            let cprev = if i == 0 then 0 else cp U.! (i - 1)
-                dprev = if i == 0 then 0 else dp U.! (i - 1)
-                ai    = a U.! i
-                bi    = b U.! i
-                ci    = c U.! i
-                di    = d U.! i
-                m     = bi - ai * cprev
-                cp'   = ci / m
-                dp'   = (di - ai * dprev) / m
-            in go (i + 1) (cp U.// [(i, cp')]) (dp U.// [(i, dp')])
-      (cFinal, dFinal) = go 0 (U.replicate n 0) (U.replicate n 0)
-      -- 後退代入
-      x = U.create $ do
-            v <- U.thaw (U.replicate n 0)
-            let backward i
-                  | i < 0     = pure ()
-                  | i == n - 1 = MU.unsafeWrite v i (dFinal U.! i) >> backward (i - 1)
-                  | otherwise  = do
-                      xn <- MU.unsafeRead v (i + 1)
-                      MU.unsafeWrite v i (dFinal U.! i - cFinal U.! i * xn)
-                      backward (i - 1)
-            backward (n - 1)
-            pure v
-  in x
+thomas a b c d = U.create $ do
+  let !n = U.length b
+  cp <- MU.unsafeNew n
+  dp <- MU.unsafeNew n
+  x  <- MU.unsafeNew n
+  -- Forward sweep: cp[i] = c[i] / m_i, dp[i] = (d[i] - a[i] dp[i-1]) / m_i
+  -- where m_i = b[i] - a[i] cp[i-1]. The (cprev, dprev) accumulator
+  -- lets us avoid re-reading from the mutable vectors we just wrote.
+  let forward !i !cprev !dprev
+        | i >= n    = pure ()
+        | otherwise = do
+            let !ai  = U.unsafeIndex a i
+                !bi  = U.unsafeIndex b i
+                !ci  = U.unsafeIndex c i
+                !di  = U.unsafeIndex d i
+                !m   = bi - ai * cprev
+                !cp' = ci / m
+                !dp' = (di - ai * dprev) / m
+            MU.unsafeWrite cp i cp'
+            MU.unsafeWrite dp i dp'
+            forward (i + 1) cp' dp'
+  forward 0 0 0
+  -- Backward substitution: x[n-1] = dp[n-1]; x[i] = dp[i] - cp[i] x[i+1].
+  let backward !i !xnext
+        | i < 0     = pure ()
+        | otherwise = do
+            cpi <- MU.unsafeRead cp i
+            dpi <- MU.unsafeRead dp i
+            let !xi = if i == n - 1 then dpi else dpi - cpi * xnext
+            MU.unsafeWrite x i xi
+            backward (i - 1) xi
+  backward (n - 1) 0
+  pure x
 
 -- ---------------------------------------------------------------------------
 -- PCHIP (Fritsch-Carlson 1980; monotone cubic Hermite)

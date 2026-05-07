@@ -275,7 +275,7 @@ warmup 中の per-iter list allocation (4 × p セル) を消去。
 | **HW_seasonal_n500_p12_additive** | **0.244** | 4.12 | **16.9×** ⭐ | 0.119 | 0.110 | (P3 公平化: 両側 fixed α=0.3) |
 | GAM_n2000_splines10_1D | 14.4 | **9.08** | 0.67× | **0.054** | 0.184 | hanalyze RMSE 勝ち (3.4×) |
 | Interp1D_Linear_knots1000_eval5000 | 0.31 | **0.105** | 0.34× | — | — | scipy SIMD interp |
-| Interp1D_NatSpline_knots1000_eval5000 | 1.72 | **0.285** | 0.17× | — | — | 同上 |
+| **Interp1D_NatSpline_knots1000_eval5000** | **0.33** | **0.285** | **0.86×** ≈ | — | — | **P38: Thomas O(n²)→O(n) で 5.2×、scipy 互角に** |
 | Interp1D_PCHIP_knots1000_eval5000 | 0.30 | **0.235** | 0.80× ≈ | — | — | 互角 |
 
 **Python 勝ち**: GAM (時間 — ただし精度は hanalyze が 3.4× 高), Interp1D (Linear/NatSpline)。
