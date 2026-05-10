@@ -27,6 +27,8 @@ module Design.Orthogonal
   , standardArrays
   , lookupOA
   , listArrays
+  , OAMetadata (..)
+  , listArraysWithSize
     -- * 2-level array generation
   , mkL2k
     -- * Factor assignment
@@ -209,6 +211,25 @@ listArrays = [ (oaName a, descr a) | a <- standardArrays ]
     descr a =
       T.pack (show (oaRuns a)) <> " runs, max "
       <> T.pack (show (oaFactors a)) <> " factors"
+
+-- | Structured metadata for an orthogonal array. Suitable for UI
+-- listings that want to filter / sort by run count or level pattern.
+data OAMetadata = OAMetadata
+  { omName    :: !Text   -- ^ e.g. @\"L9(3^4)\"@.
+  , omRuns    :: !Int    -- ^ Number of runs.
+  , omFactors :: !Int    -- ^ Maximum number of factors.
+  , omLevels  :: ![Int]  -- ^ Level count per column.
+  , omDescr   :: !Text   -- ^ Free-form description (matches 'listArrays').
+  } deriving (Show, Eq)
+
+-- | Same coverage as 'listArrays' but with structured fields.
+listArraysWithSize :: [OAMetadata]
+listArraysWithSize =
+  [ OAMetadata (oaName a) (oaRuns a) (oaFactors a) (oaLevels a)
+               (T.pack (show (oaRuns a)) <> " runs, max "
+                <> T.pack (show (oaFactors a)) <> " factors")
+  | a <- standardArrays
+  ]
 
 -- ---------------------------------------------------------------------------
 -- 因子割当

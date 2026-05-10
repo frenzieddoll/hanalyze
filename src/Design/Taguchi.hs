@@ -26,11 +26,15 @@ module Design.Taguchi
   , snTypeName
   , snRatio
   , snRatioRows
+  , SNDetails (..)
+  , snRatioWithDetails
     -- * Factor effects and optimal levels
   , FactorEffect (..)
   , analyzeSN
   , optimalLevels
   , predictSN
+  , FactorEffectExt (..)
+  , factorEffectsTable
     -- * Inner/outer arrays
   , InnerOuterDesign (..)
   , makeInnerOuter
@@ -107,6 +111,27 @@ snRatio sn   ys = case sn of
 snRatioRows :: SNType -> [[Double]] -> [Double]
 snRatioRows sn = map (snRatio sn)
 
+-- | SN ratio bundled with the descriptive statistics that are usually
+-- reported alongside it (sample mean, unbiased variance, sample size).
+data SNDetails = SNDetails
+  { sdSN       :: !Double
+  , sdMean     :: !Double
+  , sdVariance :: !Double
+  , sdN        :: !Int
+  } deriving (Show, Eq)
+
+-- | 'snRatio' plus the matching @mean@ / @variance@ / @n@ so that UIs
+-- can render the trio in one row.
+snRatioWithDetails :: SNType -> [Double] -> SNDetails
+snRatioWithDetails sn ys =
+  let n  = length ys
+      mu = if n == 0 then 0 else sum ys / fromIntegral n
+      v  = if n <= 1
+             then 0
+             else sum [ (y - mu) ^ (2 :: Int) | y <- ys ]
+                    / fromIntegral (n - 1)
+  in SNDetails (snRatio sn ys) mu v n
+
 -- ---------------------------------------------------------------------------
 -- 要因効果と最適水準
 -- ---------------------------------------------------------------------------
@@ -167,6 +192,38 @@ predictSN effects allSN =
               else sum allSN / fromIntegral (length allSN)
       maxPerFactor = [ maximum (feSNByLevel fe) | fe <- effects ]
   in muAll + sum [ best - muAll | best <- maxPerFactor ]
+
+-- | 'FactorEffect' enriched with the range (@max − min@ across levels)
+-- and the relative contribution @range_j / Σ range_k@. Useful for
+-- response-table style UI that need a single struct per factor.
+data FactorEffectExt = FactorEffectExt
+  { feeFactor       :: !Text
+  , feeLevels       :: ![LevelValue]
+  , feeSNByLevel    :: ![Double]
+  , feeRange        :: !Double
+  , feeContribution :: !Double  -- ^ @0 ≤ contribution ≤ 1@.
+  } deriving (Show, Eq)
+
+-- | Factor-effect table with range + contribution. Calls 'analyzeSN'
+-- internally, so the per-level means match exactly.
+factorEffectsTable :: AssignedDesign -> [Double] -> [FactorEffectExt]
+factorEffectsTable ad sns =
+  let effects = analyzeSN ad sns
+      ranges  = [ rangeOf (feSNByLevel fe) | fe <- effects ]
+      total   = sum ranges
+  in zipWith
+       (\fe r ->
+          FactorEffectExt
+            { feeFactor       = feFactor fe
+            , feeLevels       = feLevels fe
+            , feeSNByLevel    = feSNByLevel fe
+            , feeRange        = r
+            , feeContribution = if total <= 0 then 0 else r / total
+            })
+       effects ranges
+  where
+    rangeOf [] = 0
+    rangeOf xs = maximum xs - minimum xs
 
 -- ---------------------------------------------------------------------------
 -- 内側/外側配置

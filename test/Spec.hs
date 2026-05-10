@@ -12,7 +12,10 @@ import Data.List (sort)
 
 import qualified DataFrame                    as DX
 import qualified Design.Orthogonal as OA
+import qualified Design.Quality    as Quality
 import qualified Design.Taguchi as TG
+import qualified Model.LM             as LM
+import qualified Model.LM.Diagnostics as LMD
 import qualified DataIO.Preprocess as Pp
 import qualified DataIO.Log        as Log
 import qualified DataIO.CSV        as CSV
@@ -2179,3 +2182,129 @@ main = hspec $ do
       length (Interp.iceFeatureValues ice) `shouldBe` 3
       -- iceMean should equal partial dependence
       length (Interp.iceMean ice) `shouldBe` 3
+
+  -- ─────────────────────────────────────────────────────────────────────
+  describe "Model.LM.Diagnostics (vs statsmodels OLS)" $ do
+    let xRaw = [1.0, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        yRaw = [3.7, 5.2, 6.8, 8.5, 9.9, 11.3, 13.1, 14.4, 15.8, 17.2]
+        x    = LA.fromColumns
+                 [ LA.konst 1.0 (length xRaw)
+                 , LA.fromList xRaw
+                 ]
+        y    = LA.fromList yRaw
+        fit  = LM.fitLMVec x y
+
+        approx tol a b = abs (a - b) < tol
+        approxV tol expected actual =
+          length expected == LA.size actual &&
+          and (zipWith (approx tol) expected (LA.toList actual))
+
+    it "ciTValue: 95% / df=8 ≈ 2.306" $
+      LMD.ciTValue 0.95 8 `shouldSatisfy` approx 1e-3 2.306
+
+    it "lmStdErrors matches statsmodels (intercept, slope)" $
+      LMD.lmStdErrors x fit `shouldSatisfy`
+        approxV 1e-5 [0.09602188, 0.01547533]
+
+    it "lmCoefStats t / p match statsmodels" $ do
+      let cs = LMD.lmCoefStats x fit
+      length cs `shouldBe` 2
+      LMD.csTValue (head cs)    `shouldSatisfy` approx 1e-3 23.8834
+      LMD.csTValue (cs !! 1)    `shouldSatisfy` approx 1e-3 97.4768
+      LMD.csPValue (head cs)    `shouldSatisfy` approx 1e-9 1.0062e-8
+      LMD.csPValue (cs !! 1)    `shouldSatisfy` approx 1e-13 1.3699e-13
+
+    it "lmFStatistic matches statsmodels (F, p, df1, df2)" $ do
+      let fs = head (LMD.lmFStatistic x fit)
+      LMD.fsValue fs  `shouldSatisfy` approx 1e-1 9501.7193
+      LMD.fsPValue fs `shouldSatisfy` approx 1e-13 1.3699e-13
+      LMD.fsDf1 fs `shouldBe` 1
+      LMD.fsDf2 fs `shouldBe` 8
+
+    it "lmInformationCriteria (R lm() convention, k = p + 1 with σ)" $ do
+      let ic = LMD.lmInformationCriteria fit
+      LMD.icLogLik ic `shouldSatisfy` approx 1e-5 6.547424
+      LMD.icAIC    ic `shouldSatisfy` approx 1e-5 (-7.094848)
+      LMD.icBIC    ic `shouldSatisfy` approx 1e-5 (-6.187093)
+
+    it "hatDiagonal matches statsmodels leverage" $
+      LMD.hatDiagonal x `shouldSatisfy`
+        approxV 1e-6
+          [ 0.34545455, 0.24848485, 0.17575758, 0.12727273, 0.10303030
+          , 0.10303030, 0.12727273, 0.17575758, 0.24848485, 0.34545455 ]
+
+    it "standardizedResiduals match statsmodels (resid_studentized_internal)" $
+      LMD.standardizedResiduals x fit `shouldSatisfy`
+        approxV 1e-5
+          [ -0.89534127, -0.90521501, -0.14722564,  1.31539084,  0.48257654
+          , -0.33234045,  1.88308584,  0.30394970, -0.57197652, -1.56684722 ]
+
+    it "cooksDistance matches statsmodels" $
+      LMD.cooksDistance x fit `shouldSatisfy`
+        approxV 1e-5
+          [ 0.21154283, 0.13546767, 0.00231098, 0.12616429, 0.01337487
+          , 0.00634342, 0.25856339, 0.00984992, 0.05408646, 0.64784992 ]
+
+    it "predictorStdDevs: intercept col=0, x col≈3.0277" $ do
+      let sds = LMD.predictorStdDevs x
+      LA.size sds `shouldBe` 2
+      (LA.toList sds !! 0) `shouldSatisfy` approx 1e-12 0
+      (LA.toList sds !! 1) `shouldSatisfy` approx 1e-6 3.027650
+
+  -- ─────────────────────────────────────────────────────────────────────
+  describe "Design.Orthogonal.listArraysWithSize" $ do
+    it "returns one entry per standard array" $
+      length OA.listArraysWithSize `shouldBe` length OA.standardArrays
+
+    it "L9 entry exposes runs / factors / levels" $ do
+      let l9meta = head [ m | m <- OA.listArraysWithSize
+                            , OA.omName m == OA.oaName OA.l9 ]
+      OA.omRuns l9meta    `shouldBe` 9
+      OA.omFactors l9meta `shouldBe` 4
+      OA.omLevels l9meta  `shouldBe` [3, 3, 3, 3]
+
+  -- ─────────────────────────────────────────────────────────────────────
+  describe "Design.Taguchi extras" $ do
+    it "snRatioWithDetails: SmallerBetter on [1, 2, 3]" $ do
+      let d = TG.snRatioWithDetails TG.SmallerBetter [1.0, 2.0, 3.0]
+      TG.sdN d `shouldBe` 3
+      TG.sdMean d     `shouldSatisfy` (\v -> abs (v - 2.0) < 1e-12)
+      TG.sdVariance d `shouldSatisfy` (\v -> abs (v - 1.0) < 1e-12)
+      -- η = -10 log10((1+4+9)/3) = -10 log10(14/3) ≈ -6.690
+      TG.sdSN d `shouldSatisfy` (\v -> abs (v - (-6.690)) < 1e-2)
+
+    it "factorEffectsTable: contributions sum to 1" $ do
+      let specs = [ OA.FactorSpec "A" [OA.LText "lo", OA.LText "hi"]
+                  , OA.FactorSpec "B" [OA.LNumeric 0,  OA.LNumeric 1]
+                  ]
+      case OA.assignFactors OA.l4 specs of
+        Right ad -> do
+          let sns = [10.0, 12.0, 11.0, 13.0]
+              ext = TG.factorEffectsTable ad sns
+          length ext `shouldBe` 2
+          let totalC = sum (map TG.feeContribution ext)
+          totalC `shouldSatisfy` (\v -> abs (v - 1.0) < 1e-12)
+          all ((>= 0) . TG.feeRange) ext `shouldBe` True
+        Left e -> expectationFailure (show e)
+
+  -- ─────────────────────────────────────────────────────────────────────
+  describe "Design.Quality.processCapability" $ do
+    it "centred process with σ=1, USL=6, LSL=−6 → Cp ≈ 2.0, Cpk ≈ 2.0" $ do
+      -- 11-point symmetric sample around 0 with σ=1 (population)
+      let xs = LA.fromList [-1.5, -1.0, -0.5, 0.5, 1.0, 1.5,
+                             1.5,  1.0,  0.5, -0.5, -1.0, -1.5]
+          cap = Quality.processCapability (-6) 6 xs
+      Quality.capCp  cap `shouldSatisfy` (> 0)
+      -- For a centred sample, Cp == Cpk by symmetry.
+      abs (Quality.capCp cap - Quality.capCpk cap)
+        `shouldSatisfy` (< 1e-2)
+
+    it "shifted process: Cpk < Cp" $ do
+      let xs = LA.fromList [4.0, 4.5, 4.2, 4.8, 4.3, 4.6, 4.4, 4.7]
+          cap = Quality.processCapability 0 6 xs
+      Quality.capCp cap  `shouldSatisfy` (> Quality.capCpk cap)
+
+    it "processCapabilityUpper: only USL → Cp == Cpk" $ do
+      let xs = LA.fromList [1.0, 1.2, 0.9, 1.1, 1.05, 0.95]
+          cap = Quality.processCapabilityUpper 2.0 xs
+      Quality.capCp cap `shouldBe` Quality.capCpk cap

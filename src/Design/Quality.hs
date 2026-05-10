@@ -17,6 +17,11 @@ module Design.Quality
   , dEfficiency
   , aEfficiency
   , vifList
+    -- * Process capability
+  , Capability (..)
+  , processCapability
+  , processCapabilityUpper
+  , processCapabilityLower
   ) where
 
 import qualified Numeric.LinearAlgebra as LA
@@ -115,3 +120,60 @@ vifList xs =
           ssTot = LA.sumElements ((yCol - LA.scalar mu) ^ (2 :: Int))
           r2    = if ssTot == 0 then 0 else 1 - ssRes / ssTot
       in if r2 >= 1 then 1/0 else 1 / (1 - r2)
+
+-- ---------------------------------------------------------------------------
+-- Process capability (Cp / Cpk)
+-- ---------------------------------------------------------------------------
+
+-- | Process capability summary.
+--
+--   * @capCp  = (USL − LSL) / (6 σ)@
+--   * @capCpk = min((USL − μ) / (3 σ), (μ − LSL) / (3 σ))@
+--
+-- For one-sided variants (no LSL or no USL) only the relevant half of
+-- @Cpk@ is used; @Cp@ falls back to that half (so @Cp == Cpk@).
+data Capability = Capability
+  { capCp   :: !Double
+  , capCpk  :: !Double
+  , capMean :: !Double
+  , capSd   :: !Double
+  } deriving (Show, Eq)
+
+-- | Two-sided process capability with explicit @LSL@ and @USL@.
+processCapability
+  :: Double            -- ^ LSL (lower spec limit)
+  -> Double            -- ^ USL (upper spec limit)
+  -> LA.Vector Double  -- ^ Sample observations.
+  -> Capability
+processCapability lsl usl xs =
+  let (mu, sd) = meanSd xs
+      cp       = if sd == 0 then 0 else (usl - lsl) / (6 * sd)
+      cpkUpper = if sd == 0 then 0 else (usl - mu) / (3 * sd)
+      cpkLower = if sd == 0 then 0 else (mu - lsl) / (3 * sd)
+      cpk      = min cpkUpper cpkLower
+  in Capability cp cpk mu sd
+
+-- | One-sided upper-spec process capability (only @USL@).
+processCapabilityUpper :: Double -> LA.Vector Double -> Capability
+processCapabilityUpper usl xs =
+  let (mu, sd) = meanSd xs
+      cpk      = if sd == 0 then 0 else (usl - mu) / (3 * sd)
+  in Capability cpk cpk mu sd
+
+-- | One-sided lower-spec process capability (only @LSL@).
+processCapabilityLower :: Double -> LA.Vector Double -> Capability
+processCapabilityLower lsl xs =
+  let (mu, sd) = meanSd xs
+      cpk      = if sd == 0 then 0 else (mu - lsl) / (3 * sd)
+  in Capability cpk cpk mu sd
+
+-- | Sample mean and unbiased standard deviation.
+meanSd :: LA.Vector Double -> (Double, Double)
+meanSd xs =
+  let n  = LA.size xs
+      nD = fromIntegral n :: Double
+      mu = LA.sumElements xs / nD
+      d  = LA.cmap (subtract mu) xs
+      v  = if n <= 1 then 0
+                     else (d `LA.dot` d) / (nD - 1.0)
+  in (mu, sqrt v)

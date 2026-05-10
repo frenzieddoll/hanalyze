@@ -62,6 +62,7 @@ library
     Viz.Bar
     Model.Core
     Model.LM
+    Model.LM.Diagnostics
     Model.GLM
     Model.GLMM
     Model.Spline
