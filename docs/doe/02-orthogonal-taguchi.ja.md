@@ -354,6 +354,34 @@ TIO.writeFile "cross_template.csv" csv
 `renderInnerOuterCSV` は内側 9 試行 × 外側 4 列の **空テンプレ** を出力。
 ユーザーは実際の y を測定して埋め、CSV を `taguchi analyze --csv` に渡す。
 
+### 6.4 詳細解析ヘルパ
+
+UI / レポート向けに「平均・分散込みの SN」「range と寄与率込みの要因効果」
+「Cp / Cpk」を 1 構造で取れるヘルパ。
+
+```haskell
+import qualified Design.Taguchi as TG
+import qualified Design.Quality as Quality
+
+-- 平均 / 分散 / N 込みの SN
+let det = TG.snRatioWithDetails TG.NominalBest [12.1, 12.3, 11.9, 12.0]
+-- TG.sdSN, TG.sdMean, TG.sdVariance, TG.sdN
+
+-- range + 寄与率込みの要因効果
+let ext = TG.factorEffectsTable assigned snValues
+-- ext :: [TG.FactorEffectExt]
+-- TG.feeRange     -- max - min
+-- TG.feeContribution  -- range_j / Σ range_k (要因の重要度ランキング)
+
+-- 工程能力 Cp / Cpk
+let cap = Quality.processCapability lsl usl observations
+-- Quality.capCp, Quality.capCpk, Quality.capMean, Quality.capSd
+-- 片側公差: processCapabilityUpper / processCapabilityLower
+```
+
+`OAMetadata` (`Design.Orthogonal.listArraysWithSize`) は標準直交表のメタ情報を
+構造化して返す (`omName / omRuns / omFactors / omLevels / omDescr`)。
+
 ---
 
 ## 7. CLI からの一連のワークフロー

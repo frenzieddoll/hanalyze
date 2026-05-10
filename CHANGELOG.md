@@ -7,6 +7,26 @@ and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
 
 ## [Unreleased]
 
+### Added
+- `Model.LM.Diagnostics` (new module): inference and residual diagnostics
+  for OLS — `ciTValue`, `lmStdErrors[Multi]`, `CoefStats` /
+  `lmCoefStats[Multi]` (SE / t / two-sided p), `FStat` / `lmFStatistic`
+  (whole-model F, follows R-style df1 = p − 1, df2 = n − p), `ICs` /
+  `lmInformationCriteria` (R `lm()` convention with k = p + 1, σ counted),
+  `hatDiagonal`, `standardizedResiduals`, `cooksDistance`,
+  `predictorStdDevs`. Multi-output (Matrix p × q) is the canonical form;
+  Vector wrappers cover q = 1.
+- `Design.Orthogonal.OAMetadata` + `listArraysWithSize`: structured
+  metadata (name / runs / factors / levels / description) for the
+  standard L4–L18 arrays.
+- `Design.Taguchi.SNDetails` + `snRatioWithDetails`: SN ratio bundled
+  with sample mean / variance / N.
+- `Design.Taguchi.FactorEffectExt` + `factorEffectsTable`: factor-effect
+  rows enriched with `feeRange` and `feeContribution`.
+- `Design.Quality.Capability` + `processCapability` /
+  `processCapabilityUpper` / `processCapabilityLower`: Cp / Cpk for
+  two-sided and one-sided spec limits.
+
 ## [0.1.0.0] - 2026-05-06
 
 Initial Hackage release.

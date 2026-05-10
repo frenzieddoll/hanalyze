@@ -351,6 +351,37 @@ TIO.writeFile "cross_template.csv" csv
 `renderInnerOuterCSV` writes an **empty template** of inner 9 trials × outer 4 columns.
 The user fills in measured y values and feeds the CSV to `taguchi analyze --csv`.
 
+### 6.4 Detail-rich helpers
+
+For UI / report code that wants the SN ratio together with sample mean
+and variance, the per-factor effect together with range and relative
+contribution, or the process capability indices, the following helpers
+return everything in one struct:
+
+```haskell
+import qualified Design.Taguchi as TG
+import qualified Design.Quality as Quality
+
+-- SN ratio bundled with mean / variance / N
+let det = TG.snRatioWithDetails TG.NominalBest [12.1, 12.3, 11.9, 12.0]
+-- TG.sdSN, TG.sdMean, TG.sdVariance, TG.sdN
+
+-- factor-effect table with range + relative contribution
+let ext = TG.factorEffectsTable assigned snValues
+-- ext :: [TG.FactorEffectExt]
+-- TG.feeRange         -- max - min across levels
+-- TG.feeContribution  -- range_j / Σ range_k  (importance ranking)
+
+-- process capability Cp / Cpk
+let cap = Quality.processCapability lsl usl observations
+-- Quality.capCp, Quality.capCpk, Quality.capMean, Quality.capSd
+-- One-sided variants: processCapabilityUpper / processCapabilityLower
+```
+
+`OAMetadata` (`Design.Orthogonal.listArraysWithSize`) returns structured
+metadata for each standard array (`omName / omRuns / omFactors /
+omLevels / omDescr`).
+
 ---
 
 ## 7. End-to-end CLI workflow
