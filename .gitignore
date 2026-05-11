@@ -39,4 +39,3 @@ bench/data/
 
 # 編集時の一時ファイル
 *.tmp
-hanalyze.cabal.tmp
