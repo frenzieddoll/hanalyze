@@ -7,8 +7,7 @@ A feature mapping that compares the **Bayesian portion** of hanalyze
 (classical regression, DOE, multi-objective optimization, etc.) are out of
 scope here.
 
-This page lists features that PyMC has but hanalyze does not, and serves as
-the implementation roadmap.
+This page lists features that PyMC has but hanalyze does not.
 
 ## Status legend
 
@@ -112,7 +111,7 @@ the implementation roadmap.
 | Random intercept | ✅ demo: `simpson-paradox` | |
 | Random slope | ✅ demo: `hbm-random-slope` | |
 | Non-centered parameterization | ✅ `nonCenteredNormal` | BFMI improvement demonstrated on Neal's funnel |
-| Time series (AR / GP) | ✅ `ar1Latent` + GP | |
+| Time series (AR / GP) | ✅ `ar1Latent` + GP | GP existing |
 | ODE likelihoods | ❌ | Stretch (needs ODE solver) |
 | Bayesian NN | ❌ | Stretch |
 | Custom log-density | ✅ `potential` | add arbitrary log terms |
@@ -122,7 +121,7 @@ the implementation roadmap.
 
 ## Remaining stretch items
 
-Research-level or low-priority advanced functionality, not yet implemented:
+Research-level or low-priority unimplemented features:
 
 - [ ] `Wishart` / `Multivariate-t` (LKJ recommended as substitute)
 - [ ] Full-rank ADVI / Normalizing flows / SMC
@@ -139,5 +138,3 @@ parity status:
 cabal run pymc-status-demo
 # → pymc-status.html (✅/🚧/❌ counts per category)
 ```
-
-> See [CHANGELOG.md](../CHANGELOG.md) for the implementation history.

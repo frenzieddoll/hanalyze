@@ -290,9 +290,9 @@ hanalyze rf       data.csv "x1 x2" y --trees 100   --report
 hanalyze taguchi  analyze L9 -f ... --csv ... --report
 ```
 
-Omitting the report path uses `<subcommand>.html`. **All subcommands now
-render through `Viz.ReportBuilder`**. `Viz.AnalysisReport`
-remains in tree as a deprecated legacy module.
+Omitting the report path uses `<subcommand>.html`. **All subcommands
+render through `Viz.ReportBuilder`**. `Viz.AnalysisReport` remains in
+tree as a deprecated legacy module.
 
 ---
 

@@ -215,7 +215,9 @@ Python/R を全面置換するのではなく、Haskell 統合・単一バイナ
 
 ---
 
-## Python / R との比較
+## Python との比較
+
+> R は機能対応のみ。数値ベンチは Python に対してのみ実施しています。
 
 下の数値は `bench/results/{haskell,python}/*.csv` の最新ラン。
 ベンチ条件 (`OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1`、single-thread、
@@ -230,16 +232,16 @@ Python/R を全面置換するのではなく、Haskell 統合・単一バイナ
 | **古典回帰** (LM/Ridge/Lasso/GLMM) | ベンチケースでは概ね同等。LME はこの実行で statsmodels 比 30× 速 |
 | **大規模 GLM/Lasso** (n ≥ 10k) | sklearn より現状遅い (3-5×、Cython inner loop に追従不能) |
 | **カーネル/GP** | sklearn より現状遅い (2.5-4.7×) |
-| **ベイズ MCMC** (NUTS/HMC) | B11 mass-matrix adaptation 後、8-schools で ESS 839 (blackjax 810 と同等品質)。PyMC 比 7.4× 速、blackjax 比 2.8× 遅 (JAX-JIT 構造差) |
+| **ベイズ MCMC** (NUTS/HMC) | 8-schools で ESS 839 (blackjax 810 と同等品質)。PyMC 比 7.4× 速、blackjax 比 2.8× 遅 (JAX-JIT 構造差) |
 | **HBM (確率プログラミング)** | 多相 DSL で一部の PyMC 風モデリング機能 + 一部の分布 (Truncated/Censored/MvNormal/LKJ/...) を提供 |
 | **VI / WAIC / LOO** | ADVI は小規模 logistic で numpyro SVI より 3.0× 速、LOO は arviz より 2.9× 速 (ベンチケースでは) |
 | **仮説検定 / Bootstrap / k-fold** | Welch t-test 39×、KS 11×、k-fold 2.2× 速 vs scipy/sklearn (ベンチケースでは) |
 | **時系列 / Spline / GAM** | ARIMA 128× 速、Spline PCHIP 互角、GAM はベンチケースで pygam の 1.6× 遅 |
-| **生存解析** (KM/Cox PH) | lifelines と概ね同等 (B9c のリファクタ後) |
+| **生存解析** (KM/Cox PH) | lifelines と概ね同等 |
 | **多出力回帰 / Regrid** | MultiLM 2.3× 速、`regridLong` は pandas+scipy 自前合成版より 20× 速 |
 | **可視化** | hvega 経由の Vega-Lite (grammar-of-graphics 系)。HTML レポート同梱 |
 
-suite ごとの詳細は [docs/comparison/python-r.ja.md](docs/comparison/python-r.ja.md) を参照。
+機能対応表は [docs/comparison/python-r.ja.md](docs/comparison/python-r.ja.md)、数値詳細は [bench/results/SUMMARY.md](bench/results/SUMMARY.md) を参照。
 
 ---
 
@@ -279,7 +281,7 @@ graph TD
   Optim --> Design[Design.* DOE/タグチ]
 ```
 
-**全モジュール Hackage `dataframe` を直接やり取り**。独自 DataFrame.Core は廃止済 (Phase 0-7 で完了)。
+**全モジュール Hackage `dataframe` を直接やり取り**。独自 DataFrame.Core は廃止済。
 
 ---
 

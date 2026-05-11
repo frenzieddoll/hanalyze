@@ -217,7 +217,9 @@ add value.
 
 ---
 
-## Comparison vs Python / R
+## Comparison vs Python
+
+> R is included in the feature map only — no numerical bench against R has been run.
 
 Numbers below come from `bench/results/{haskell,python}/*.csv`; see
 [bench/results/SUMMARY.md](bench/results/SUMMARY.md) for the full table and
@@ -233,16 +235,16 @@ single-thread, deterministic seeds).
 | **Classical regression** (LM/Ridge/Lasso/GLMM) | Comparable in tested cases; LME 30× faster than statsmodels in our LME run. |
 | **Large-scale GLM/Lasso** (n ≥ 10k) | Currently slower than sklearn (3-5× in tested cases) — sklearn's Cython inner loops dominate. |
 | **Kernel/GP** | Currently slower than sklearn (2.5-4.7× in tested cases). |
-| **Bayesian MCMC** (NUTS/HMC) | NUTS with B11 mass-matrix adaptation: ESS comparable to blackjax (mu: 839 vs 810) on the 8-schools benchmark; 7.4× faster than PyMC; 2.8× slower than blackjax (JAX-JIT advantage). |
+| **Bayesian MCMC** (NUTS/HMC) | NUTS with ESS comparable to blackjax (mu: 839 vs 810) on the 8-schools benchmark; 7.4× faster than PyMC; 2.8× slower than blackjax (JAX-JIT advantage). |
 | **HBM (probabilistic programming)** | Polymorphic DSL with selected PyMC-style modelling features and selected distributions (Truncated/Censored/MvNormal/LKJ/...). |
 | **VI / WAIC / LOO** | ADVI 3.0× faster than numpyro SVI on a small logistic posterior; LOO 2.9× faster than arviz on (S=1000, N=200) log-lik matrix. |
 | **Hypothesis tests / bootstrap / k-fold** | Welch t-test 39× faster, KS 11×, k-fold split 2.2× faster than scipy/sklearn in tested cases. |
 | **Time series / Spline / GAM** | ARIMA 128× faster than statsmodels; Spline PCHIP comparable to scipy; GAM ~1.6× slower than pygam in tested cases. |
-| **Survival analysis** (KM/Cox PH) | Comparable to lifelines in tested cases (KM/CoxPH after B9c refactor). |
+| **Survival analysis** (KM/Cox PH) | Comparable to lifelines in tested cases (KM/CoxPH). |
 | **Multi-output regression / Regrid** | MultiLM 2.3× faster than sklearn; `regridLong` 20× faster than a hand-written pandas+scipy synthesis. |
 | **Visualisation** | Vega-Lite specs via hvega (grammar-of-graphics-style); HTML reports built-in. |
 
-For a per-suite breakdown, see [docs/comparison/python-r.md](docs/comparison/python-r.md).
+See [docs/comparison/python-r.md](docs/comparison/python-r.md) for the feature map, and [bench/results/SUMMARY.md](bench/results/SUMMARY.md) for numbers.
 
 ---
 
@@ -283,7 +285,7 @@ graph TD
   Optim --> Design[Design.* DoE/Taguchi]
 ```
 
-**All modules talk to Hackage `dataframe` directly**. The internal `DataFrame.Core` was retired (Phase 0-7).
+**All modules talk to Hackage `dataframe` directly**. The internal `DataFrame.Core` was retired.
 
 ---
 

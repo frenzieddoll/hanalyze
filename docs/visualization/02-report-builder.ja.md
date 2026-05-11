@@ -255,7 +255,7 @@ main = do
 |---|---|
 | `secInteractiveLM title xc yc xs ys smooth (xMin, xMax)` | **単変数** 用。スライダーで x を変えるとグリッド線形補間で予測値 + 信頼帯を表示。GP/HBM のような非線形・MCMC 経由の予測曲線でも使える。 |
 | `secInteractiveMulti title im` | **多変量** 用。`InteractiveModel` (係数+リンク関数) を渡すと、左側に各 x_j の slider + 主軸 dropdown、右側に scatter + 予測曲線。slider 変化のたび JS で β₀ + Σβ_j x_j → invLink で y_hat 再計算 + scatter 再描画。CI は σ_hat ± 1.96 で帯描画。 |
-| `secInteractiveMultiOut title imo` | **真の多出力 (1 入力 → q 出力カーブ)** 用。入力スライダ 1 本で全 q 個の予測値を JS が即時再計算 → Vega-Lite で予測曲線として描画。`InteractivePredictor = PredLinearMO | PredKernelRBF1` で線形 / RBF カーネルリッジを切替。構築は `mkInteractiveMOLinear` / `mkInteractiveMOKernelRBF`。詳細: [regression/07-multireg.ja.md](../regression/07-multireg.ja.md) |
+| `secInteractiveMultiOut title imo` | **真の多出力 (1 入力 → q 出力カーブ)**。入力スライダ 1 本で全 q 個の予測値を JS が即時再計算 → Vega-Lite で予測曲線として描画。`InteractivePredictor = PredLinearMO | PredKernelRBF1` で線形 / RBF カーネルリッジを切替。構築は `mkInteractiveMOLinear` / `mkInteractiveMOKernelRBF`。詳細: [regression/07-multireg.ja.md](../regression/07-multireg.ja.md) |
 
 `InteractiveModel`:
 ```haskell
@@ -485,7 +485,7 @@ hanalyze taguchi  analyze L9 -f ... --csv ... --report
 `--report` の引数を省略すると `<subcommand>.html` (例: `ridge.html`) になる。
 明示する場合: `--report path/to/myreport.html`。
 
-**全サブコマンドが `Viz.ReportBuilder` 経路** で動作する。`regress` も
+**全サブコマンドが `Viz.ReportBuilder` 経路** で動作。`regress` も
 `app/Main.hs` の `cliRegressSections` / `cliMixedSections` / `cliGPSections` /
 `cliHBMSections` を経由して `RB.renderReport` で生成される。
 `Viz.AnalysisReport` は非推奨だがレガシーとして残置。
@@ -564,7 +564,7 @@ renderReport "out.html" cfg (baseSections ++ extra)
 
 **選択指針**:
 - 新規実装 → 必ず `ReportBuilder`
-- LM/GLM/GLMM/GP/HBM の `regress` CLI → 当面は `AnalysisReport` (将来 ReportBuilder 移行)
+- `regress` CLI も `ReportBuilder` 経路で動作する
 - HBM の MCMC 診断のみ単独で見たい → `Viz.Report`
 
 ---
