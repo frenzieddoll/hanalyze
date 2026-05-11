@@ -11,7 +11,7 @@
 --   * The caller (CLI or library user) builds a @[ReportSection]@.
 --   * 'renderReport' lays the sections out into a single self-contained
 --     HTML file (Vega-Lite assets bundled).
---   * The 'Reportable' typeclass generates default section sets from each
+--   * The @Reportable@ typeclass generates default section sets from each
 --     fit type.
 --
 -- 利用例:
@@ -564,7 +564,7 @@ secPosteriorSummary title rows =
 -- ---------------------------------------------------------------------------
 
 -- | モデル比較テーブル。'secTable' のラッパだが、
--- 'mBest' で 0-based 行 index を渡すと、その行をハイライト表示する。
+-- @mBest@ で 0-based 行 index を渡すと、その行をハイライト表示する。
 -- WAIC / LOO / RMSE などを横並びにし最良モデルを強調するのに使う。
 secComparisonTable
   :: Text         -- ^ タイトル

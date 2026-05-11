@@ -667,7 +667,7 @@ argmax xs = snd (maximum (zip xs [0..]))
 
 -- | Multi-objective BO using NSGA-II to optimize the acquisition function.
 --
--- Internally fits a 'MultiGP' to obtain per-objective @(μ, σ)@, then
+-- Internally fits a @MultiGP@ to obtain per-objective @(μ, σ)@, then
 -- runs NSGA-II to find the Pareto front in @(μ_1, μ_2, ...)@ space; one
 -- point from that front is chosen and evaluated.
 --

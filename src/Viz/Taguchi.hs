@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- | HTML report for Taguchi-method analysis.
 --
--- Bundles the results of 'Design.Taguchi.analyzeSN' / 'optimalLevels' /
--- 'predictSN' into a single self-contained HTML file:
+-- Bundles the results of 'Design.Taguchi.analyzeSN' / @optimalLevels@ /
+-- @predictSN@ into a single self-contained HTML file:
 --
 --   * Summary: array name, SN type, run count, predicted SN.
 --   * Per-run SN bar chart.

@@ -227,7 +227,7 @@ data RFFRidgeFitMulti = RFFRidgeFitMulti
 
 -- | Multi-output RFF ridge regression: @W = (ΦᵀΦ + λI)⁻¹ Φᵀ Y@.
 -- SPD system; solved via Cholesky with diagonal regularizer applied
--- in place ('addToDiagRFF').
+-- in place (@addToDiagRFF@).
 rffRidgeMulti :: RFFFeatures -> [Double] -> LA.Matrix Double -> Double
               -> RFFRidgeFitMulti
 rffRidgeMulti rff xs ys lam =
@@ -422,7 +422,7 @@ data RFFRidgeFitMVMO = RFFRidgeFitMVMO
 --
 -- The system is SPD by construction, so we solve via Cholesky rather
 -- than the general LSQ path '(LA.<\>)'. The diagonal regularizer is
--- applied via 'addToDiagRFF' (in-place runST update) instead of
+-- applied via @addToDiagRFF@ (in-place runST update) instead of
 -- @gram + LA.scale lam (LA.ident d)@ which would allocate a fresh
 -- @D × D@ identity.
 rffRidgeMVMulti :: RFFFeaturesMV -> LA.Matrix Double -> LA.Matrix Double
@@ -687,7 +687,7 @@ data LOOCVResult = LOOCVResult
 --   ŷ = H y
 --   LOOCV(λ) = (1/n) Σᵢ ((y_i - ŷ_i) / (1 - H_ii))²
 --
--- 本関数は与えられた特徴行列 'feats' (= 既に ω/b/σ_f が決まったもの) と
+-- 本関数は与えられた特徴行列 @feats@ (= 既に ω/b/σ_f が決まったもの) と
 -- Ridge λ に対して LOOCV を返す。グリッドサーチ側ではこれを多数の λ で
 -- 呼び出すが、Φ は 1 度だけ計算すれば良いので外側でキャッシュする。
 loocvRFFRidgeMV

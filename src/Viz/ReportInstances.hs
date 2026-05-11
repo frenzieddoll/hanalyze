@@ -280,9 +280,9 @@ instance Reportable RobustGPFit where
 -- LM / GLM (axis-1 C, Phase 1)
 -- ---------------------------------------------------------------------------
 
--- | Wrapper to drive a 'Reportable' instance for a linear-model fit.
+-- | Wrapper to drive a @Reportable@ instance for a linear-model fit.
 --
--- Bundles the information needed by the single-predictor LM 'Reportable'
+-- Bundles the information needed by the single-predictor LM @Reportable@
 -- instance. Passing @lmrSmooth = Just sf@ overlays a smooth curve with
 -- its confidence band on the scatter plot.
 --
@@ -294,7 +294,7 @@ data LMReport = LMReport
   , lmrSmooth :: Maybe SmoothFit
   } deriving Show
 
--- | Wrapper to drive a 'Reportable' instance for a GLM fit.
+-- | Wrapper to drive a @Reportable@ instance for a GLM fit.
 data GLMReport = GLMReport
   { glmrFit    :: FitResult
   , glmrFamily :: Family
@@ -613,7 +613,7 @@ instance Reportable GAMFit where
 -- Random Forest (axis-1 B)
 -- ---------------------------------------------------------------------------
 
--- | Wrapper to drive a 'Reportable' instance for a random-forest fit.
+-- | Wrapper to drive a @Reportable@ instance for a random-forest fit.
 --
 -- 'RandomForest' itself does not store fitted values, so the user must
 -- supply training-set predictions (and the corresponding observed

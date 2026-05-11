@@ -13,7 +13,7 @@
 -- * 'pca' fits PCA to a centred (and optionally scaled) feature matrix.
 -- * 'pcaTransform' projects new data onto the learned components.
 -- * 'pcaInverse' reconstructs from scores back to feature space.
--- * 'screePlot' / 'biplot' integration via @Viz@ (separate module).
+-- * @screePlot@ / @biplot@ integration via @Viz@ (separate module).
 module Model.PCA
   ( -- * PCA
     PCAResult (..)
@@ -51,7 +51,7 @@ data PCAResult = PCAResult
     --   'pcaStandardize' is 'NoStandardize' / 'Center'.
   , pcaStandardize :: !PCAStandardize
   , pcaComponents :: !(LA.Matrix Double)
-    -- ^ Principal axes ('loadings'), shape @k × p@. Rows are unit
+    -- ^ Principal axes (@loadings@), shape @k × p@. Rows are unit
     --   vectors; PC@i@ corresponds to row @i@.
   , pcaSingularValues :: !(LA.Vector Double)
     -- ^ Singular values @σ_i@, length @k@. Sorted descending.

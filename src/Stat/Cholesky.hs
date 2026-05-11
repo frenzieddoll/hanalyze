@@ -32,7 +32,7 @@ defaultJitters = [0, 1e-10, 1e-8, 1e-6, 1e-4]
 
 -- | Solve @A X = B@ for SPD @A@. Equivalent to @A LA.\<\\\> B@ but ~2×
 -- faster. Tries an exact Cholesky first, falling back to a jittered
--- version (see 'defaultJitters') when the matrix is numerically
+-- version (see @defaultJitters@) when the matrix is numerically
 -- non-positive-definite.
 --
 -- If every jitter fails, returns 'Nothing' (caller chooses a fallback;

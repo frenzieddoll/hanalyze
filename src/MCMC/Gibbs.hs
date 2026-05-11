@@ -111,7 +111,7 @@ sampleBetaGamma a b gen = do
 
 -- | R. C. H. Cheng's BB algorithm (1978), valid for @min(a, b) > 1@.
 -- Direct Beta sampler that avoids the two Gamma calls + division
--- ("X / (X+Y)") used by 'sampleBetaGamma'.
+-- ("X / (X+Y)") used by @sampleBetaGamma@.
 --
 -- P37 (2026-05-07): the n=10000 Gibbs Beta-Binomial bench is 78%
 -- @sampleBetaGamma@ (1.38 ms / 1.76 ms total). Each gamma call uses

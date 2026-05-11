@@ -5,9 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
 
-## [Unreleased]
+## [0.1.0.0] - 2026-05-11
 
-### Added
+Initial Hackage release.
+
+### LM diagnostics + Taguchi/Quality 拡張
 - `Model.LM.Diagnostics` (new module): inference and residual diagnostics
   for OLS — `ciTValue`, `lmStdErrors[Multi]`, `CoefStats` /
   `lmCoefStats[Multi]` (SE / t / two-sided p), `FStat` / `lmFStatistic`
@@ -26,10 +28,6 @@ and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
 - `Design.Quality.Capability` + `processCapability` /
   `processCapabilityUpper` / `processCapabilityLower`: Cp / Cpk for
   two-sided and one-sided spec limits.
-
-## [0.1.0.0] - 2026-05-06
-
-Initial Hackage release.
 
 ### Performance (Phase 1-13)
 - Build flags: added `-O2 -funbox-strict-fields` to all 75 stanzas (library +

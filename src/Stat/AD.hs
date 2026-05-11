@@ -32,6 +32,7 @@
 module Stat.AD
   ( -- * 多相対数密度関数 (log-joint 記述用)
     LogJointF
+  , Params
   , logNormalF
   , logNormalObsF
   , logExpF
@@ -196,7 +197,7 @@ hmcAD
   -> [Transform]  -- ^ Per-parameter constraint kind (same order as the
                   --   parameter-name list).
   -> HMCConfig
-  -> [Text]       -- ^ Parameter names (matches the initial-value 'Params' keys).
+  -> [Text]       -- ^ Parameter names (matches the initial-value @Params@ keys).
   -> Params       -- ^ Initial values (constrained space).
   -> GenIO
   -> IO Chain

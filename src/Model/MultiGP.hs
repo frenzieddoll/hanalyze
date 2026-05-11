@@ -112,7 +112,7 @@ data MultiGPResultMV = MultiGPResultMV
   } deriving (Show)
 
 -- | Fit a multi-output GP with multivariate input. Each output column
--- is optimized independently via 'optimizeGPMV' and predicted at
+-- is optimized independently via @optimizeGPMV@ and predicted at
 -- @testX@. Sharing the same kernel kind across outputs.
 fitMultiGPMV
   :: Kernel

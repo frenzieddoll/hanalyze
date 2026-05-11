@@ -118,7 +118,7 @@ brent cfg fUser ax bx =
 
 -- | Brent 反復。Numerical Recipes "brent" の素直な移植 (簡略版)。
 -- 状態: a, b (区間), x (現在最良), w (2 番目), v (3 番目), 対応する f 値。
--- e: 一つ前の `d` (放物線補間ステップの記憶)、d: 現ステップ幅。
+-- e: 一つ前の @d@ (放物線補間ステップの記憶)、@d@: 現ステップ幅。
 loopBrent :: BrentConfig
           -> (Double -> Double)
           -> Double -> Double                 -- a, b

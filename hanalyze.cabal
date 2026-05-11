@@ -32,6 +32,13 @@ extra-doc-files:
     README.md
     CHANGELOG.md
 
+extra-source-files:
+    data/dirty/*.csv
+    data/distributions/*.csv
+    data/io/*.csv
+    data/readme/*.csv
+    data/regression/*.csv
+
 source-repository head
   type:     git
   location: https://github.com/frenzieddoll/hanalyze.git

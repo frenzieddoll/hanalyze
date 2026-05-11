@@ -101,7 +101,7 @@ bootstrapCI nReps conf stat xs gen = do
 --     per-row 'LA.sumElements' dispatch overhead.
 --   * The bootstrap distribution is sorted in place via
 --     @vector-algorithms@ Intro sort on a Storable.Vector — no
---     @[Double]@ list materialisation, no @!!@ indexing in 'quantile'.
+--     @[Double]@ list materialisation, no @!!@ indexing in @quantile@.
 --
 -- Numerical result is identical to the generic path on the same RNG
 -- stream.
@@ -241,7 +241,7 @@ sampleMedian v =
 -- ---------------------------------------------------------------------------
 
 -- | Linear-interpolation quantile from a sorted Storable Vector.
--- Vector-native form of 'quantile'; avoids the @sorted !! lo@
+-- Vector-native form of @quantile@; avoids the @sorted !! lo@
 -- (O(n)) list indexing in the @[Double]@ version.
 quantileVS :: Double -> VS.Vector Double -> Double
 quantileVS q sorted

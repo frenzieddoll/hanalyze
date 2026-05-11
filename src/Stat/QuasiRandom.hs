@@ -59,7 +59,7 @@ radicalInverse base i = go i invB 0
           in go q (f * invB) (acc + fromIntegral r * f)
 {-# INLINE radicalInverse #-}
 
--- | Single Halton point in @d@ dimensions: applies 'radicalInverse'
+-- | Single Halton point in @d@ dimensions: applies @radicalInverse@
 -- with the first @d@ primes.
 haltonPoint :: Int          -- ^ Dimension @d@.
             -> Int          -- ^ Index @i@ (1-based; @i = 0@ would yield the origin).
@@ -72,7 +72,7 @@ haltonPoint d i = take d [ radicalInverse p i | p <- primes ]
 -- We tried @runST@ + flat Storable Vector + final list-comp slicing,
 -- but the cost is dominated by the @n × d@ cons-cell allocations of
 -- the @[[Double]]@ boundary representation, not by the kernel of
--- 'radicalInverse'. The flat-vector path benchmarked the same as or
+-- @radicalInverse@. The flat-vector path benchmarked the same as or
 -- slightly slower than the direct list comprehension below — the
 -- structural ceiling here is the @[[Double]]@ API. Internal-only
 -- callers that want the table as a flat Storable can use a future
@@ -96,9 +96,9 @@ haltonSequence n d =
 -- Internal-loop optimisations:
 --
 --   * Bases are loaded into an unboxed @VS.Vector Int@ once.
---   * Per-cell write goes through a hand-rolled ST loop ('outer'/
---     'inner') so no @forM_ [0..k]@ list cells are allocated.
---   * 'radicalInverse' is the same kernel as before; the saving is
+--   * Per-cell write goes through a hand-rolled ST loop (@outer@/
+--     @inner@) so no @forM_ [0..k]@ list cells are allocated.
+--   * @radicalInverse@ is the same kernel as before; the saving is
 --     entirely in the boundary representation.
 haltonMatrix :: Int        -- ^ Number of points @n@.
              -> Int        -- ^ Dimension @d@.

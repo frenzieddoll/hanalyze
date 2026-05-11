@@ -105,7 +105,7 @@ classifyCells key rows =
 -- 拡張子による自動振り分け
 -- ---------------------------------------------------------------------------
 
--- | Auto-dispatch by file extension: @.tsv@ → 'loadTSV', @.ssv@ →
+-- | Auto-dispatch by file extension: @.tsv@ → @loadTSV@, @.ssv@ →
 -- 'loadSSV', otherwise 'loadCSV'.
 loadAuto :: FilePath -> IO (Either ParseError DXD.DataFrame)
 loadAuto path
@@ -152,7 +152,7 @@ stripBOM bs
   , BS.index bs 2 == 0xBF = BS.drop 3 bs
   | otherwise             = bs
 
--- | Hackage 'readCsv' / 'readTsv' を例外捕捉付きで呼ぶ。
+-- | Hackage @readCsv@ / @readTsv@ を例外捕捉付きで呼ぶ。
 runHackageSafe
   :: (FilePath -> IO DXD.DataFrame)
   -> FilePath
@@ -225,7 +225,7 @@ data LoadOpts = LoadOpts
   , loComment  :: !(Maybe Char)   -- ^ Skip rows starting with this character (e.g. @\'#\'@).
   , loNoHeader :: !Bool           -- ^ Treat the file as header-less and generate @col0, col1, …@.
   , loStrict   :: !Bool           -- ^ Short-circuit to 'Left' if the
-                                  --   'LogReport' contains a 'Warn' entry.
+                                  --   @LogReport@ contains a @Warn@ entry.
   , loSniff    :: !Bool           -- ^ Enable auto-inference (default 'True').
   , loDelim    :: !(Maybe Char)   -- ^ Override the delimiter ('Nothing'
                                   --   uses the file extension and sniff result).
@@ -236,7 +236,7 @@ data LoadOpts = LoadOpts
 defaultLoadOpts :: LoadOpts
 defaultLoadOpts = LoadOpts 0 Nothing False False True Nothing
 
--- | Run 'loadAutoSafe' with the given 'LoadOpts'. When @skip@,
+-- | Run 'loadAutoSafe' with the given @LoadOpts@. When @skip@,
 -- @comment@ and @noHeader@ are all unset the file is read directly;
 -- otherwise the request is realized by writing to a temporary file
 -- 前処理結果を書き出してから読む。
@@ -296,7 +296,7 @@ loadCsvWithDelim c path = do
         Left  e  -> Left (cleanError (show e))
         Right df -> Right (df, inspectWithPreview (previewBytes rs) df)
 
--- | sniff 結果を 'LoadOpts' に反映する。ユーザ指定がある項目 (>0 / Just /
+-- | sniff 結果を @LoadOpts@ に反映する。ユーザ指定がある項目 (>0 / Just /
 -- True) は尊重し、未指定のところだけ書き換える。書き換えた項目は
 -- I013 ログに残す。
 applySniff :: LoadOpts -> Sniff.Sniff -> (LoadOpts, LogReport)

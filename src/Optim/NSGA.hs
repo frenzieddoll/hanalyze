@@ -352,7 +352,7 @@ dupEpsilon = 1e-12
 dupMaxRetries :: Int
 dupMaxRetries = 10
 
--- | 'pop' との重複を除去しつつ @needed@ 個の child を集めるまで SBX
+-- | @pop@ との重複を除去しつつ @needed@ 個の child を集めるまで SBX
 -- ペア生成を繰り返す。pymoo の InfillCriterion.do と同等の役割。
 --
 -- 親選びは **random-permutation tournament** (NF3): 各反復で 2 回の

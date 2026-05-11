@@ -4,7 +4,7 @@
 -- Provides autocorrelation, highest-density intervals (HDI), effective
 -- sample size (Geyer's initial monotone sequence estimator), split-R-hat
 -- (Vehtari et al. 2021), kernel density estimation (Silverman bandwidth)
--- and BFMI. Operates on raw 'Vector' samples or on the 'MCMC.Core.Chain'
+-- and BFMI. Operates on raw @Vector@ samples or on the 'MCMC.Core.Chain'
 -- type from the sampler layer.
 module Stat.MCMC
   ( autocorr
@@ -37,7 +37,7 @@ autocorr maxLag xs =
   in [(k, acf k) | k <- [0 .. min maxLag (n - 1)]]
 
 -- | Highest density interval: shortest contiguous interval that covers
--- `level` fraction of the (sorted) samples. Returns (lower, upper).
+-- @level@ fraction of the (sorted) samples. Returns (lower, upper).
 hdi :: Double -> [Double] -> (Double, Double)
 hdi level xs
   | null xs   = (0, 0)

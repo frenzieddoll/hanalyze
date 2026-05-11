@@ -8,7 +8,7 @@
 -- additionally estimates the residual covariance matrix @Σ@, which is
 -- used for joint multi-output predictive intervals.
 --
--- The API matches 'Model.LM', so 'fitLM' can be called directly; this
+-- The API matches 'Model.LM', so @fitLM@ can be called directly; this
 -- module merely exposes the additional multi-output information
 -- (@Σ@, correlation matrix).
 module Model.MultiLM

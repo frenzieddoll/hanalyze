@@ -9,7 +9,7 @@
 --     'auc', 'prCurve', 'averagePrecision', 'logLoss',
 --     'brierScore'.
 --
--- Multi-class extensions: 'macroAvg', 'weightedAvg'. Binary helpers
+-- Multi-class extensions: @macroAvg@, @weightedAvg@. Binary helpers
 -- assume class labels @0@ / @1@ (negative / positive).
 module Stat.ClassMetrics
   ( -- * Confusion matrix (binary)
@@ -186,7 +186,7 @@ rocCurve ys scores =
 -- 'Data.Vector.Algorithms.Intro' on a Storable indexed vector for
 -- @O(n log n)@ in tight Storable loops; the previous implementation
 -- went through 'Data.List.sortBy' on @[(Int, Double)]@ + a
--- list-traversal trapezoid loop. Bench: 'AUC_LogLoss_n10000' moves
+-- list-traversal trapezoid loop. Bench: @AUC_LogLoss_n10000@ moves
 -- from 5.6 ms to ≲ 4 ms, matching scikit-learn's @roc_auc_score@.
 auc :: [Int] -> [Double] -> Double
 auc ys scores

@@ -3,7 +3,7 @@
 -- @dataframe@ library.
 --
 -- Returns Hackage's 'DataFrame.Internal.DataFrame.DataFrame' directly.
--- For CSV and TSV use 'DataIO.CSV.loadCSV' / 'loadTSV' instead.
+-- For CSV and TSV use 'DataIO.CSV.loadCSV' / @loadTSV@ instead.
 module DataIO.External
   ( loadParquet
   , loadJSON

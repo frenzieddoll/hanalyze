@@ -8,8 +8,8 @@
 -- @Vector@ / @Double@ as before.
 --
 -- Migrating a single-output model to multi-output is just a matter of
--- calling 'fitLM' with @Matrix × Matrix@ and interpreting the result like
--- a 'MultiFitResult'.
+-- calling @fitLM@ with @Matrix × Matrix@ and interpreting the result like
+-- a @MultiFitResult@.
 module Model.Core
   ( FitResult (..)
   , Model (..)
@@ -51,17 +51,17 @@ data FitResult = FitResult
 -- Vec / Scalar アクセサ (q = 1 用)
 -- ---------------------------------------------------------------------------
 
--- | Coefficients of a single-output fit as a 'Vector'. For multi-output
+-- | Coefficients of a single-output fit as a @Vector@. For multi-output
 -- fits this returns just the first column; use 'coefficients' to access
 -- all columns.
 coefficientsV :: FitResult -> LA.Vector Double
 coefficientsV = LA.flatten . coefficients
 
--- | Fitted values @ŷ@ of a single-output fit as a 'Vector'.
+-- | Fitted values @ŷ@ of a single-output fit as a @Vector@.
 fittedV :: FitResult -> LA.Vector Double
 fittedV = LA.flatten . fitted
 
--- | Residuals of a single-output fit as a 'Vector'.
+-- | Residuals of a single-output fit as a @Vector@.
 residualsV :: FitResult -> LA.Vector Double
 residualsV = LA.flatten . residuals
 
@@ -89,15 +89,15 @@ coeffList = LA.toList . coefficientsV
 -- 列単位アクセス (多出力時)
 -- ---------------------------------------------------------------------------
 
--- | Coefficients for response @j@ as a 'Vector'.
+-- | Coefficients for response @j@ as a @Vector@.
 coefficientsCol :: Int -> FitResult -> LA.Vector Double
 coefficientsCol j r = LA.flatten (coefficients r LA.¿ [j])
 
--- | Fitted values @ŷ@ for response @j@ as a 'Vector'.
+-- | Fitted values @ŷ@ for response @j@ as a @Vector@.
 fittedCol :: Int -> FitResult -> LA.Vector Double
 fittedCol j r = LA.flatten (fitted r LA.¿ [j])
 
--- | Residuals for response @j@ as a 'Vector'.
+-- | Residuals for response @j@ as a @Vector@.
 residualsCol :: Int -> FitResult -> LA.Vector Double
 residualsCol j r = LA.flatten (residuals r LA.¿ [j])
 

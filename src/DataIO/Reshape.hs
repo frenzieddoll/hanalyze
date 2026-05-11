@@ -2,13 +2,13 @@
 -- | Data-frame reshaping helpers that are missing in Hackage
 -- @dataframe@:
 --
---   * 'pivotWider' — long → wide reshape (inverse of 'meltLonger').
+--   * 'pivotWider' — long → wide reshape (inverse of @meltLonger@).
 --   * 'oneHot' — one-hot encoding of a categorical column.
---   * 'lag' / 'lead' — shift a numeric column for time-series feature
+--   * @lag@ / @lead@ — shift a numeric column for time-series feature
 --     engineering.
 --   * 'rollingMean' / 'rollingSum' — fixed-window rolling stats.
 --
--- For 'join', 'sortBy', 'meltLonger' etc., use the upstream
+-- For @join@, @sortBy@, @meltLonger@ etc., use the upstream
 -- @DataFrame@ API directly — those are first-class there.
 module DataIO.Reshape
   ( pivotWider
@@ -33,17 +33,17 @@ import qualified Data.Set              as Set
 -- ---------------------------------------------------------------------------
 
 -- | Reshape a long-form DataFrame into wide form. Inverse of
--- 'meltLonger'.
+-- @meltLonger@.
 --
 -- Given:
 --
 --   * a DataFrame with rows like @(id, name, value)@,
---   * 'namesFrom' = the column whose distinct values become new
+--   * @namesFrom@ = the column whose distinct values become new
 --     column names,
---   * 'valuesFrom' = the column holding the values to spread,
---   * 'idCols' = identifier columns kept as the row key.
+--   * @valuesFrom@ = the column holding the values to spread,
+--   * @idCols@ = identifier columns kept as the row key.
 --
--- Produces a DataFrame where each unique value of 'namesFrom' becomes
+-- Produces a DataFrame where each unique value of @namesFrom@ becomes
 -- a new column. Missing combinations are filled with NaN (as Double).
 --
 -- Example: long-form @[(1, "x", 10), (1, "y", 20), (2, "x", 30)]@ →
@@ -51,8 +51,8 @@ import qualified Data.Set              as Set
 -- @[id, x, y]@.
 pivotWider
   :: [T.Text]            -- ^ Identifier columns.
-  -> T.Text              -- ^ Column with new column names ('namesFrom').
-  -> T.Text              -- ^ Column with values to spread ('valuesFrom').
+  -> T.Text              -- ^ Column with new column names (@namesFrom@).
+  -> T.Text              -- ^ Column with values to spread (@valuesFrom@).
   -> DXD.DataFrame
   -> DXD.DataFrame
 pivotWider idCols namesFrom valuesFrom df =

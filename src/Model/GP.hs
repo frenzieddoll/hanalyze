@@ -473,7 +473,7 @@ addToDiag c m =
 
 -- | Specialized kernel function for a fixed parameter set, returning a
 -- monomorphic @Double -> Double@ that GHC can inline tightly into
--- 'mkNoiseKernelFromD2's inner loop.
+-- @mkNoiseKernelFromD2@s inner loop.
 {-# INLINE kernelOfParams #-}
 kernelOfParams :: Kernel -> GPParams -> (Double -> Double)
 kernelOfParams RBF p =
@@ -531,7 +531,7 @@ mkNoiseKernelFromD2 ker p jitter d2 =
         VS.unsafeFreeze v
   in LA.reshape n out
 
--- | Multi-input @K + σ_n² I@. Uses the fused 'mkNoiseKernelFromD2' so
+-- | Multi-input @K + σ_n² I@. Uses the fused @mkNoiseKernelFromD2@ so
 -- that the kernel evaluation and jitter-on-diagonal write happen in a
 -- single @n²@ pass rather than two.
 noiseKernelMV :: Kernel -> GPParams -> LA.Matrix Double -> LA.Matrix Double

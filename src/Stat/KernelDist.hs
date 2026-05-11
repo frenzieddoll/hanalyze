@@ -32,7 +32,7 @@ import           Control.Monad.ST             (runST)
 -- @diag(A·B)[i] = Σ_j A[i, j] · B[j, i] = Σ_j (A ⊙ Bᵀ)[i, j]@,
 -- i.e. one element-wise multiply (@m × n@) plus one row-sum (GEMV
 -- against a length-@n@ ones vector). Replaces the naive
--- @[A[i,:] `dot` B[:,i] | i]@ which paid an m-times BLAS-dispatch
+-- @[A[i,:] @dot@ B[:,i] | i]@ which paid an m-times BLAS-dispatch
 -- overhead. Used for GP posterior variance computation
 -- (@σ² = sf − diag(K_* · K_y⁻¹ K_*ᵀ)@).
 diagAB :: LA.Matrix Double -> LA.Matrix Double -> LA.Vector Double
@@ -45,7 +45,7 @@ diagAB a b =
 -- | Per-row dot products of two same-shape matrices.
 --
 -- @rowDotsAB A B[i] = Σ_j A[i, j] · B[i, j] = (A ⊙ B)[i, :] · 1@.
--- Replaces @[A[i,:] `dot` B[i,:] | i]@ which paid an m-times BLAS
+-- Replaces @[A[i,:] @dot@ B[i,:] | i]@ which paid an m-times BLAS
 -- dispatch overhead.
 rowDotsAB :: LA.Matrix Double -> LA.Matrix Double -> LA.Vector Double
 rowDotsAB a b =
@@ -58,7 +58,7 @@ rowDotsAB a b =
 --
 -- Vectorised: @(X ⊙ X) · 1_p@ — one element-wise square (BLAS-friendly
 -- per-element multiply) plus one GEMV. Replaces the naive
--- @[row `dot` row | row <- toRows x]@ which paid an n-times BLAS
+-- @[row @dot@ row | row <- toRows x]@ which paid an n-times BLAS
 -- dispatch overhead on small rows.
 rowSqNorms :: LA.Matrix Double -> LA.Vector Double
 rowSqNorms x =
@@ -150,7 +150,7 @@ pairwiseSqDistXY x y =
 -- ('A.map' with @Comp = Seq@) version was ~1.7× faster than 'LA.cmap'
 -- on a single 2000×2000 call, but iterative paths (GP HP loop, GLM
 -- IRLS) call this many times per fit and the per-call
--- 'trivialScheduler_' overhead dominated — profile attributed
+-- @trivialScheduler_@ overhead dominated — profile attributed
 -- 10–16% of GP fit time and 4% of GLM IRLS time to scheduler
 -- bookkeeping. Direct 'VS.map' has zero scheduling overhead and is
 -- the right default here.

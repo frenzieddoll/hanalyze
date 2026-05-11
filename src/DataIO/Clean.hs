@@ -11,7 +11,7 @@
 --
 --   * Each rule has the shape "extract a Text column → transform →
 --     write back into the DataFrame", and always returns a transformation
---     log ('LogReport').
+--     log (@LogReport@).
 --   * Cells that fail to convert are stored as 'Nothing' (the null
 --     bitmap). The number of failures is recorded as I100-series Info
 --     codes in the log.
@@ -22,12 +22,12 @@
 -- 主要ルール
 --
 -- * 'StripUnits'      末尾の英字を取り除いて Double 化 (\"12.3kg\" → 12.3)
--- * 'ParseCurrency'   通貨記号 / 桁区切り (`$`/`¥`/`€`/`,`) を除去して数値化
+-- * 'ParseCurrency'   通貨記号 / 桁区切り (@$@/@¥@/@€@/@,@) を除去して数値化
 -- * 'ParseDecimalEU'  decimal separator が ',' (EU style) のセルを Double 化
 -- * 'TrimText'        前後の空白を除く
 -- * 'CoerceNumeric'   上記 3 種を順に試して最初に成功した変換を採用
--- * 'DedupeColumns'   重複列名に @_2@ などのサフィックスを付ける
--- * 'FillBlankNames'  空列名を @col0@ 等で埋める
+-- * @DedupeColumns@   重複列名に @_2@ などのサフィックスを付ける
+-- * @FillBlankNames@  空列名を @col0@ 等で埋める
 module DataIO.Clean
   ( -- * 型
     ColumnRule (..)

@@ -3,7 +3,7 @@
 -- Solves @β = (XᵀX)⁻¹ Xᵀ y@ via hmatrix's @\\\\@ (LAPACK). Provides
 -- confidence and prediction bands using
 -- @t × √(s² xᵢᵀ(XᵀX)⁻¹xᵢ)@ and convenient adapters from a
--- 'DataFrame' for use from the CLI and report builder.
+-- @DataFrame@ for use from the CLI and report builder.
 module Model.LM
   ( LinearModel (..)
   , CIBand (..)
@@ -57,7 +57,7 @@ fitLM x y =
 predictLM :: LA.Matrix Double -> LA.Matrix Double -> LA.Matrix Double
 predictLM beta xNew = xNew LA.<> beta
 
--- | 単一出力 (Vector y) の便利ラッパ。`asColumn` で 1 列行列に変換。
+-- | 単一出力 (Vector y) の便利ラッパ。@asColumn@ で 1 列行列に変換。
 fitLMVec :: LA.Matrix Double -> LA.Vector Double -> FitResult
 fitLMVec x y = fitLM x (LA.asColumn y)
 

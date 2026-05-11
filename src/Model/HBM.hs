@@ -59,6 +59,9 @@ module Model.HBM
   , logCDF
   , logSF
     -- * Polymorphic model DSL
+  , Free (..)
+  , liftF
+  , ModelF (..)
   , Model
   , ModelP
   , sample
@@ -126,7 +129,7 @@ import Stat.Distribution (Transform (..))
 import MCMC.Core (Chain (..))
 
 -- ---------------------------------------------------------------------------
--- Free monad (再実装。Model.HBM のものとは型が違うので別途定義)
+-- @Free@ monad (再実装。Model.HBM のものとは型が違うので別途定義)
 -- ---------------------------------------------------------------------------
 
 data Free f a = Pure a | Free (f (Free f a))
@@ -1102,7 +1105,7 @@ samplePoissonKnuth lam gen = do
   go 0 (1.0 :: Double)
 
 -- ---------------------------------------------------------------------------
--- 多相モデル (Free monad)
+-- 多相モデル (@Free@ monad)
 -- ---------------------------------------------------------------------------
 
 -- | DSL のプリミティブ。継続が @a -> next@ なので任意の @a@ を流せる。
@@ -1254,7 +1257,7 @@ mvNormalLatent name muVec covMatrix = do
     (\(i, x) -> deterministic (name <> "_" <> T.pack (show i)) x)
     (zip [0 :: Int ..] xs)
 
--- | LKJ 相関行列の Cholesky factor (PyMC `LKJCholeskyCov` 相当)。
+-- | LKJ 相関行列の Cholesky factor (PyMC @LKJCholeskyCov@ 相当)。
 --
 -- LKJ(η) 事前: p(R) ∝ |R|^(η-1)。η = 1 で uniform、η > 1 で I に集中。
 --
@@ -1556,7 +1559,7 @@ perObsLogLiks m params = go m []
     go (Free (Data _ ys k)) acc = go (k ys) acc
 
 -- | Evaluate every 'Deterministic' node and return the resulting
--- derived-quantity 'Map'.
+-- derived-quantity @Map@.
 --
 -- @params@ は latent 変数 (sample) の値を表す Map。Deterministic は
 -- それらから導出される量で、ここでは Double 特殊化で評価する。
@@ -1575,7 +1578,7 @@ runDeterministics m params = go m Map.empty
 
 -- | Evaluate 'runDeterministics' on every posterior sample and
 -- 結果を 'chainSamples' の Map にマージした新しい Chain を返す。
--- これにより 'chainVals' / 'posteriorSummary' などのヘルパで派生量を
+-- これにより @chainVals@ / @posteriorSummary@ などのヘルパで派生量を
 -- そのまま参照できる。
 augmentChainWithDeterministic :: ModelP r -> Chain -> Chain
 augmentChainWithDeterministic m ch =

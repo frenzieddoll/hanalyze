@@ -5,7 +5,7 @@
 -- Most tests delegate to the @statistics@ package internals
 -- (@Statistics.Test.*@) and add hanalyze-specific niceties: a single
 -- 'TestResult' record, effect sizes, confidence intervals, and a
--- consistent two-sided / one-sided 'Alternative' parameter.
+-- consistent two-sided / one-sided @Alternative@ parameter.
 --
 -- == Test categories
 --
@@ -93,7 +93,7 @@ data TestResult = TestResult
     -- ^ Free-form caveat (e.g. "small-sample asymptotic; consider exact").
   } deriving (Show)
 
--- | Convert a 'statistics' package 'Test' result into our 'TestResult'.
+-- | Convert a @statistics@ package @Test@ result into our 'TestResult'.
 fromStatTest
   :: Text              -- ^ method label
   -> Alternative       -- ^ alternative used
@@ -115,7 +115,7 @@ fromStatTest method alt df eff ci note t =
     , trNote        = note
     }
 
--- | Convert hanalyze 'Alternative' to 'statistics' 'PositionTest' for
+-- | Convert hanalyze @Alternative@ to @statistics@ @PositionTest@ for
 -- the location-shift family of tests.
 posTest :: Alternative -> TT.PositionTest
 posTest TwoSided = TT.SamplesDiffer

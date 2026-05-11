@@ -228,7 +228,7 @@ irlsStep (_, gInv, gDeriv) varFn clamp family x y beta =
 --     Newton step every iteration); each iteration is @O(np²)@.
 --   * 'LBFGS' — direct L-BFGS minimization of the negative
 --     log-likelihood with the analytic gradient @Xᵀ(μ − y)@ (canonical
---     link). Per-iteration cost is @O(np)@. This is what 'sklearn'
+--     link). Per-iteration cost is @O(np)@. This is what @sklearn@
 --     uses, and is the better choice in @n ≫ p²@ regimes once the
 --     'Optim.LBFGS' inner loop is moved off Haskell-list operations.
 --
@@ -401,7 +401,7 @@ runIRLS family linkFn x y = (mkResult betaFinal muFinal, fisherInvFromMu muFinal
 -- ---------------------------------------------------------------------------
 
 -- | Fit a GLM with the canonical link, returning just the 'FitResult'.
--- Uses 'defaultGLMSolver' (currently 'IRLS').
+-- Uses @defaultGLMSolver@ (currently 'IRLS').
 fitGLM :: Family -> LA.Matrix Double -> LA.Vector Double -> FitResult
 fitGLM family x y =
   fst (fitGLMWith defaultGLMSolver family (canonicalLink family) x y)
@@ -410,7 +410,7 @@ fitGLM family x y =
 -- (Laplace-approximate posterior covariance). Used by the WAIC / LOO-CV
 -- posterior-sampling helpers.
 --
--- Routes through 'fitGLMWith' with 'defaultGLMSolver'. When the
+-- Routes through 'fitGLMWith' with @defaultGLMSolver@. When the
 -- supplied 'LinkFn' is /not/ the canonical link of the family, the
 -- 'LBFGS' solver is unsupported and the function silently falls back
 -- to 'IRLS' so existing call sites that pass non-canonical links keep

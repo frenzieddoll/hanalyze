@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- | __DEPRECATED__ — sum-type-based HTML report dedicated to
 -- LM / GLM / GLMM / GP / HBM (~2000 lines). Superseded by
--- 'Viz.ReportBuilder' (compositional 'ReportSection' + 'Reportable'
+-- 'Viz.ReportBuilder' (compositional @ReportSection@ + @Reportable@
 -- typeclass). New models / visualizations should use the ReportBuilder
 -- side. This module is kept for backwards compatibility with the
 -- existing CLI (@hanalyze regress --report@) and will be removed in a

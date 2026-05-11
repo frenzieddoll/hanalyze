@@ -267,7 +267,7 @@ imputeMedian name df = case readMaybeDoubleColumn name df of
 --
 -- 注意: Hackage 'DX.columnAsList' は @Maybe a@ 列に対して @col @a@ を要求しても
 -- 例外を投げず、null セルを 0 などのデフォルト値で埋めて返す。そのため null は
--- 必ず 'isNullAt' (= columnElemIsNull) で別途マスクする。
+-- 必ず @isNullAt@ (= columnElemIsNull) で別途マスクする。
 readMaybeDoubleColumn :: Text -> DXD.DataFrame -> Maybe [Maybe Double]
 readMaybeDoubleColumn name df = fmap (maskNulls . zip [0..]) raw
   where

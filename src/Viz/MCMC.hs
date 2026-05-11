@@ -393,7 +393,7 @@ mkMultiTracePanel pname w h chains =
 -- | Forest plot: per-parameter posterior mean with a 95 % credible
 -- interval, stacked horizontally.
 --
--- ArviZ の `plot_forest` 相当。複数モデル/複数チェーンの比較や、
+-- ArviZ の @plot_forest@ 相当。複数モデル/複数チェーンの比較や、
 -- 階層モデルでグループ別パラメータを並べて見るのに便利。
 --
 -- 単一チェーンの場合は @[chain]@ に 1 要素入れて呼ぶ。
@@ -723,13 +723,13 @@ rankPlotFile fmt path cfg nBins names chains =
 -- ---------------------------------------------------------------------------
 
 -- | Posterior-predictive check: overlay the KDE of the observations on
--- the KDEs returned by 'posteriorPredictive'
+-- the KDEs returned by @posteriorPredictive@
 -- K 件の予測サンプル KDE をスパゲッティ式に重ね描き、平均予測 KDE を太線で
 -- 重ねる。観測 (青) と予測の中心線 (オレンジ) が一致しなければモデル誤指定。
 --
 -- 引数:
 --   * @observed@ — 元観測 y のリスト
---   * @predDraws@ — `posteriorPredictive` 出力の各サンプル (各要素は元データと
+--   * @predDraws@ — @posteriorPredictive@ 出力の各サンプル (各要素は元データと
 --                   同じ長さの y_rep)
 --   * @nOverlay@ — 描画する個別予測ドローの本数 (典型 50)
 ppcPlot :: PlotConfig -> [Double] -> [[Double]] -> Int -> VegaLite

@@ -46,7 +46,7 @@ import Model.HBM
 --      original observation count.
 --
 -- The returned list has the same length as @chainSamples@; each element
--- is a 'Map' from observe-node name to a fresh predicted-value list of
+-- is a @Map@ from observe-node name to a fresh predicted-value list of
 -- the original length.
 posteriorPredictive
   :: forall r. ModelP r

@@ -118,7 +118,7 @@ updateDualAvg delta alpha da =
 -- ---------------------------------------------------------------------------
 
 -- | Internal NUTS tree node. All position/momentum are 'VS.Vector
--- Double' rather than 'Params' (= 'Map') / @[Double]@: the
+-- Double' rather than 'Params' (= @Map@) / @[Double]@: the
 -- @doubleTree@ recursion creates up to @2¹⁰@ intermediate trees per
 -- iteration, and the previous Map / list representation paid an
 -- order-of-magnitude in allocation that swamped the actual leapfrog

@@ -3,10 +3,10 @@
 -- and preprocessing.
 --
 --   * 'LogEntry'        — a single message (severity / code / body / hint).
---   * 'LogReport'       — a 'Monoid' wrapper around @[LogEntry]@.
+--   * @LogReport@       — a 'Monoid' wrapper around @[LogEntry]@.
 --   * 'Loaded'          — the @(value, log)@ pair returned by every loader.
 --   * 'printLogReport'  — stdout pretty printer.
---   * 'logEntriesAsHtml' — adapter for 'Viz.ReportBuilder'.
+--   * @logEntriesAsHtml@ — adapter for 'Viz.ReportBuilder'.
 --
 -- 利用シナリオ:
 --
@@ -82,7 +82,7 @@ type Loaded a = (a, LogReport)
 mkInfo :: Text -> Text -> Maybe Text -> LogEntry
 mkInfo c m h = LogEntry Info c m h
 
--- | Build a 'Warn' entry.
+-- | Build a @Warn@ entry.
 mkWarn :: Text -> Text -> Maybe Text -> LogEntry
 mkWarn c m h = LogEntry Warn c m h
 
@@ -94,7 +94,7 @@ mkErr c m h = LogEntry Err c m h
 addEntry :: LogEntry -> LogReport -> LogReport
 addEntry e (LogReport xs) = LogReport (xs ++ [e])
 
--- | Make a 'LogReport' that contains a single entry.
+-- | Make a @LogReport@ that contains a single entry.
 logReport :: LogEntry -> LogReport
 logReport e = LogReport [e]
 
@@ -115,7 +115,7 @@ noLog = mempty
 hasErrors :: LogReport -> Bool
 hasErrors (LogReport xs) = any ((== Err) . lgSev) xs
 
--- | True if the report contains any 'Warn' entries.
+-- | True if the report contains any @Warn@ entries.
 hasWarnings :: LogReport -> Bool
 hasWarnings (LogReport xs) = any ((== Warn) . lgSev) xs
 

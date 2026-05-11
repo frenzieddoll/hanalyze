@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- | Auto-detect a CSV's delimiter, comment lines, presence of header,
--- and NA candidates by inspecting the first 8 KB. While 'LoadOpts' lets
+-- and NA candidates by inspecting the first 8 KB. While @LoadOpts@ lets
 -- the user state these explicitly, this module adds a layer that guesses
 -- when nothing is specified.
 --
@@ -10,7 +10,7 @@
 --     huge files).
 --   * Inference results live in a 'Sniff' record. Supporting evidence
 --     (per-delimiter scores etc.) is recorded in 'sfNotes' and emitted
---     as Info codes through 'LogReport'.
+--     as Info codes through @LogReport@.
 --   * Sniffing is best-effort and decoupled from the strict path: users
 --     can disable it entirely with @--no-sniff@, or escalate any
 --     mismatch to an error with @--strict@.
@@ -53,7 +53,7 @@ data Sniff = Sniff
   , sfCommentChar :: !(Maybe Char) -- ^ Comment-line prefix character, if
                                    --   detected.
   , sfNotes       :: ![Text]       -- ^ Human-readable notes on the
-                                   --   inference (used by 'LogReport').
+                                   --   inference (used by @LogReport@).
   } deriving (Eq, Show)
 
 -- | Default sniff result: comma-delimited, header present, no skip, no
@@ -172,8 +172,8 @@ detectHasHeader delim (l:_) =
 -- 先頭 skip / コメント文字の推論
 -- ---------------------------------------------------------------------------
 
--- | 先頭から 'コメント文字' で始まる行が連続する数を skip 候補とする。
--- 'コメント文字' は `#` / `!` / `;` / `//` のどれか。検出文字も返す。
+-- | 先頭から「コメント文字」で始まる行が連続する数を skip 候補とする。
+-- コメント文字は @#@ / @!@ / @;@ / @\/\/@ のどれか。検出文字も返す。
 detectSkip :: [BS.ByteString] -> (Int, Maybe Char)
 detectSkip ls =
   let candidates = ['#', '!']

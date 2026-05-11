@@ -265,7 +265,7 @@ assignLabelsV x cs =
        scanRow 0
        VU.unsafeFreeze lab
 
--- | Recompute centroids — public API. Wraps 'updateCentroidsV'.
+-- | Recompute centroids — public API. Wraps @updateCentroidsV@.
 updateCentroids :: LA.Matrix Double -> [Int] -> Int -> LA.Matrix Double
 updateCentroids x labels k = updateCentroidsV x (VU.fromList labels) k
 
