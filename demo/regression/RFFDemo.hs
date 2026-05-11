@@ -65,10 +65,11 @@ main = do
   -- ================================================
   putStrLn "--- Exact GP (RBF, Cholesky O(n^3)) ---"
   t0 <- getCurrentTime
-  let paramsX = GPParams { gpLengthScale = ell
-                         , gpSignalVar   = sigF2
-                         , gpNoiseVar    = noiseV
-                         , gpPeriod      = 1.0
+  let paramsX = GPParams { gpLengthScale  = ell
+                         , gpSignalVar    = sigF2
+                         , gpNoiseVar     = noiseV
+                         , gpPeriod       = 1.0
+                         , gpLengthScales = Nothing
                          }
       modelX  = GPModel RBF paramsX
       resX    = fitGP modelX trainX trainY testX

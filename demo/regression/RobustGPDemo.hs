@@ -46,10 +46,11 @@ main = do
       testY = map trueF testX
 
       -- ハイパラ (ノイズ含めて固定)
-      hp = GPParams { gpLengthScale = 0.6
-                    , gpSignalVar   = 1.0
-                    , gpNoiseVar    = 0.05
-                    , gpPeriod      = 1.0
+      hp = GPParams { gpLengthScale  = 0.6
+                    , gpSignalVar    = 1.0
+                    , gpNoiseVar     = 0.05
+                    , gpPeriod       = 1.0
+                    , gpLengthScales = Nothing
                     }
 
   printf "Training: %d points (3 outliers at index 10, 25, 40 with +4 offset)\n" n
