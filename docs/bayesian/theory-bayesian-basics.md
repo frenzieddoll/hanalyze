@@ -3,7 +3,7 @@
 > 🌐 **English** | [日本語](theory-bayesian-basics.ja.md)
 
 > A staged walkthrough from the core principles of Bayesian inference to the hierarchical
-> models supported by `Model.HBM`.
+> models supported by `Hanalyze.Model.HBM`.
 
 ## 1. Bayes' theorem
 
@@ -94,7 +94,7 @@ Combinations where **prior and posterior are in the same family** — closed for
 | Normal$(\mu, \sigma)$, σ known | Normal$(\mu_0, \sigma_0)$ | weighted-average update |
 | Normal$(\mu, \sigma)$, μ known | InverseGamma$(\alpha, \beta)$ | sum-of-squares update |
 
-`MCMC.Gibbs.gibbsMH` automatically detects conjugate structure in the model and samples
+`Hanalyze.MCMC.Gibbs.gibbsMH` automatically detects conjugate structure in the model and samples
 those parameters directly (fast).
 
 ### 3.2 Weakly informative priors
@@ -212,7 +212,7 @@ For a new observation $\tilde{y}$:
 $$ p(\tilde{y} \mid y) = \int p(\tilde{y} \mid \theta) p(\theta \mid y) d\theta $$
 
 "Draw $\tilde{y}$ from each posterior $\theta$, then mix the draws."
-Implemented in `Stat.PosteriorPredictive.posteriorPredictive`.
+Implemented in `Hanalyze.Stat.PosteriorPredictive.posteriorPredictive`.
 
 ### Prior predictive
 
@@ -243,13 +243,13 @@ graph LR
 
 | Step | Tool |
 |---|---|
-| 1. Model formulation | `Model.HBM` (DSL) |
-| 2. Prior predictive | `Stat.PosteriorPredictive.priorPredictive` |
-| 3. Inference | `MCMC.NUTS.nuts`, `MCMC.HMC.hmc`, `MCMC.MH.metropolis`, `MCMC.Gibbs`, `MCMC.Slice` |
-| 4. Convergence | `Stat.MCMC.rhat`, `ess`, `bfmi`; `Viz.MCMC.{trace,rank,energy}Plot`; `chainDivergences` |
-| 5. Posterior predictive | `Stat.PosteriorPredictive.posteriorPredictive` + `Viz.MCMC.ppcPlot` |
-| 6. Model comparison | `Stat.ModelSelect.{waic, loo, compareModels}` |
-| 7. Conclusions | `Viz.MCMC.posteriorSummary*`, `forestPlot`, `Viz.Report.renderReport` |
+| 1. Model formulation | `Hanalyze.Model.HBM` (DSL) |
+| 2. Prior predictive | `Hanalyze.Stat.PosteriorPredictive.priorPredictive` |
+| 3. Inference | `Hanalyze.MCMC.NUTS.nuts`, `Hanalyze.MCMC.HMC.hmc`, `Hanalyze.MCMC.MH.metropolis`, `Hanalyze.MCMC.Gibbs`, `Hanalyze.MCMC.Slice` |
+| 4. Convergence | `Hanalyze.Stat.MCMC.rhat`, `ess`, `bfmi`; `Hanalyze.Viz.MCMC.{trace,rank,energy}Plot`; `chainDivergences` |
+| 5. Posterior predictive | `Hanalyze.Stat.PosteriorPredictive.posteriorPredictive` + `Hanalyze.Viz.MCMC.ppcPlot` |
+| 6. Model comparison | `Hanalyze.Stat.ModelSelect.{waic, loo, compareModels}` |
+| 7. Conclusions | `Hanalyze.Viz.MCMC.posteriorSummary*`, `forestPlot`, `Hanalyze.Viz.Report.renderReport` |
 
 ---
 

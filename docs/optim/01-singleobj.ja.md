@@ -1,4 +1,4 @@
-# 単目的最適化 (`Optim.*`)
+# 単目的最適化 (`Hanalyze.Optim.*`)
 
 > 🌐 [English](01-singleobj.md) | **日本語**
 
@@ -9,7 +9,7 @@
 
 `f: ℝ^n → ℝ` の最小/最大化を行う 5 つのアルゴリズムを統一インターフェースで提供。
 
-## 共通インターフェース (`Optim.Common`)
+## 共通インターフェース (`Hanalyze.Optim.Common`)
 
 ```haskell
 import Optim.Common
@@ -37,17 +37,17 @@ data Direction = Minimize | Maximize
 
 | 状況 | 推奨 |
 |---|---|
-| 1D 単峰 | **Brent / Golden Section** (`Optim.LineSearch`) |
-| 滑らか・勾配あり (or 数値勾配 OK) | **L-BFGS** (`Optim.LBFGS`) |
-| 微分不能・低次元 (≤ 20) | **Nelder-Mead** (`Optim.NelderMead`) |
-| 非凸・大域・微分不要 (≤ 30 次元) | **Differential Evolution** (`Optim.DifferentialEvolution`) |
-| 非凸・連続・自動チューニング (10〜100 次元) | **CMA-ES** (`Optim.CMAES` / `Optim.CMAESFull`) |
-| 古典的メタヒューリスティック | **Simulated Annealing** (`Optim.SimulatedAnnealing`) |
-| 群知能ベース | **Particle Swarm** (`Optim.ParticleSwarm`) |
+| 1D 単峰 | **Brent / Golden Section** (`Hanalyze.Optim.LineSearch`) |
+| 滑らか・勾配あり (or 数値勾配 OK) | **L-BFGS** (`Hanalyze.Optim.LBFGS`) |
+| 微分不能・低次元 (≤ 20) | **Nelder-Mead** (`Hanalyze.Optim.NelderMead`) |
+| 非凸・大域・微分不要 (≤ 30 次元) | **Differential Evolution** (`Hanalyze.Optim.DifferentialEvolution`) |
+| 非凸・連続・自動チューニング (10〜100 次元) | **CMA-ES** (`Hanalyze.Optim.CMAES` / `Hanalyze.Optim.CMAESFull`) |
+| 古典的メタヒューリスティック | **Simulated Annealing** (`Hanalyze.Optim.SimulatedAnnealing`) |
+| 群知能ベース | **Particle Swarm** (`Hanalyze.Optim.ParticleSwarm`) |
 
 ---
 
-## 1. Nelder-Mead — `Optim.NelderMead`
+## 1. Nelder-Mead — `Hanalyze.Optim.NelderMead`
 
 n+1 頂点の単体 (simplex) を反射 / 拡張 / 縮小で更新。微分不要、低次元の局所最適化に強い。
 R の `optim(method="Nelder-Mead")` の標準。
@@ -70,7 +70,7 @@ let cfg = NM.defaultNMConfig
 r <- NM.runNelderMeadWith cfg rosenbrock [-1.2, 1.0]
 ```
 
-## 2. L-BFGS — `Optim.LBFGS`
+## 2. L-BFGS — `Hanalyze.Optim.LBFGS`
 
 準ニュートン法 (Liu-Nocedal 1989)。Two-loop recursion で逆 Hessian × 勾配を計算、
 履歴サイズ m=10 (典型)。**滑らかな MLE / GP HP 最適化のゴールドスタンダード**。
@@ -85,9 +85,9 @@ r <- LBFGS.runLBFGS f gradF x0
 r <- LBFGS.runLBFGSNumeric LBFGS.defaultLBFGSConfig f x0
 ```
 
-`Model.GP.optimizeGP` は内部で L-BFGS を使用 (旧 GradAscent 比 5-10 倍速)。
+`Hanalyze.Model.GP.optimizeGP` は内部で L-BFGS を使用 (旧 GradAscent 比 5-10 倍速)。
 
-## 3. Brent / Golden Section — `Optim.LineSearch`
+## 3. Brent / Golden Section — `Hanalyze.Optim.LineSearch`
 
 1D 単峰最適化:
 
@@ -101,9 +101,9 @@ let r = LS.brent LS.defaultBrentConfig (\[x] -> (x - 2.5)^2 + 1) 0 5
 -- orBest = [2.5]、orValue = 1.0
 ```
 
-`Model.Kernel.autoBandwidthBrent` は内部で Brent を使用 (グリッド列挙不要)。
+`Hanalyze.Model.Kernel.autoBandwidthBrent` は内部で Brent を使用 (グリッド列挙不要)。
 
-## 4. Differential Evolution — `Optim.DifferentialEvolution`
+## 4. Differential Evolution — `Hanalyze.Optim.DifferentialEvolution`
 
 DE/rand/1/bin (Storn-Price 1997)。微分不要、大域、実装シンプルで実用堅牢。
 連続 5〜30 次元の非凸問題に向く。
@@ -122,14 +122,14 @@ let cfg = (DE.defaultDEConfig bounds)
 r <- DE.runDEWith cfg rastrigin gen
 ```
 
-## 5. CMA-ES — `Optim.CMAES` / `Optim.CMAESFull`
+## 5. CMA-ES — `Hanalyze.Optim.CMAES` / `Hanalyze.Optim.CMAESFull`
 
 Covariance Matrix Adaptation Evolution Strategy (Hansen 2001/2016)。
 
 | モジュール | 内容 | 用途 |
 |---|---|---|
-| `Optim.CMAES`     | **簡易対角版** (rank-μ のみ、σ も 1/5 ルール風) | 軽量、低 ~ 中次元 |
-| `Optim.CMAESFull` | **フルランク版** (rank-1 + rank-μ + path cumulation + CSA + h_σ) | 標準 (Hansen 2016) |
+| `Hanalyze.Optim.CMAES`     | **簡易対角版** (rank-μ のみ、σ も 1/5 ルール風) | 軽量、低 ~ 中次元 |
+| `Hanalyze.Optim.CMAESFull` | **フルランク版** (rank-1 + rank-μ + path cumulation + CSA + h_σ) | 標準 (Hansen 2016) |
 
 フルランク版は固有分解で B, D を取得し、共分散行列を完全に更新するため、
 不変性 (rotation/scale invariance) が真に成立し、非凸問題でより堅牢。
@@ -146,7 +146,7 @@ r <- CMAES.runCMAESWith cfg sphere [3, -2, 1, 0.5, -1.5] gen
 
 ---
 
-## 6. Simulated Annealing — `Optim.SimulatedAnnealing`
+## 6. Simulated Annealing — `Hanalyze.Optim.SimulatedAnnealing`
 
 Kirkpatrick et al. 1983。物理アナロジー (固体冷却) によるランダムウォーク + Metropolis 受容。
 温度 `T_k = T_0 · α^k` で確率 `exp(-Δf/T)` で悪化を受容、全体最適に向かう。
@@ -163,7 +163,7 @@ r <- SA.runSAWith cfg sphere [2, -1.5, 1, 0.5, -0.7] gen
 
 α が大きいほど (0.99 寄り) 緩やかに冷却し局所脱出能力が高い。
 
-## 7. Particle Swarm Optimization — `Optim.ParticleSwarm`
+## 7. Particle Swarm Optimization — `Hanalyze.Optim.ParticleSwarm`
 
 Kennedy & Eberhart 1995。粒子群が個人最良 (pbest) と全体最良 (gbest) に
 引き寄せられて速度を更新:
@@ -181,7 +181,7 @@ r <- PSO.runPSOWith cfg rastrigin gen
 
 DE/CMA-ES と並ぶメタヒューリスティック。多峰問題で安定。
 
-## 8. 制約付き最適化 — `Optim.Constrained`
+## 8. 制約付き最適化 — `Hanalyze.Optim.Constrained`
 
 等式制約 `g_i(x) = 0` と不等式制約 `h_j(x) ≤ 0` を扱う:
 
@@ -207,9 +207,9 @@ let f xs = (head xs)^2 + (xs !! 1)^2
 `cabal run single-opt-bench-demo` で 5 アルゴリズム × 3 ベンチ (Sphere / Rosenbrock / Rastrigin) の
 収束履歴を HTML レポートで比較できる。
 
-## RFF HP チューニング (`Model.RFF`) との統合
+## RFF HP チューニング (`Hanalyze.Model.RFF`) との統合
 
-`Model.RFF` のハイパーパラメータ自動決定にも DE 版を追加:
+`Hanalyze.Model.RFF` のハイパーパラメータ自動決定にも DE 版を追加:
 
 | 関数 | 探索方法 |
 |---|---|
@@ -221,9 +221,9 @@ let f xs = (head xs)^2 + (xs !! 1)^2
 DE 版はグリッド離散性が問題になるケース (狭い ℓ 領域に最適がある等) で有効。
 評価コストはグリッド版と同程度。
 
-## Bayesian Optimization 内側 (`Optim.BayesOpt`) との統合
+## Bayesian Optimization 内側 (`Hanalyze.Optim.BayesOpt`) との統合
 
-`Optim.BayesOpt` の獲得関数最大化は、新オプティマイザに置換済:
+`Hanalyze.Optim.BayesOpt` の獲得関数最大化は、新オプティマイザに置換済:
 
 | 関数 | 内側 |
 |---|---|

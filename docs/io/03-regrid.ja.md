@@ -26,9 +26,9 @@ flowchart TD
 
 | 方式 | API | 特徴 | 向き |
 |---|---|---|---|
-| `Linear`         | `Stat.Interpolate.Linear`        | 区間ごと線形 | 騒がしいデータ / sanity check |
-| `NaturalSpline`  | `Stat.Interpolate.NaturalSpline` | 自然 3 次 spline (端点 y''=0) | 滑らかな物理量 |
-| `PCHIP`          | `Stat.Interpolate.PCHIP`         | Fritsch-Carlson 単調保存 | しきい値・累積特性・I-V 曲線等 |
+| `Linear`         | `Hanalyze.Stat.Interpolate.Linear`        | 区間ごと線形 | 騒がしいデータ / sanity check |
+| `NaturalSpline`  | `Hanalyze.Stat.Interpolate.NaturalSpline` | 自然 3 次 spline (端点 y''=0) | 滑らかな物理量 |
+| `PCHIP`          | `Hanalyze.Stat.Interpolate.PCHIP`         | Fritsch-Carlson 単調保存 | しきい値・累積特性・I-V 曲線等 |
 
 ---
 
@@ -146,7 +146,7 @@ adaptive 指定でも `uniform` に強制 fallback。
 
 ## 関連
 
-- ライブラリ: `Stat.Interpolate` / `Stat.AdaptiveGrid` / `DataIO.Preprocess.regridLong`
-- レポート: `Viz.ReportBuilder.secInterpolation` (`InterpReport`)
+- ライブラリ: `Hanalyze.Stat.Interpolate` / `Hanalyze.Stat.AdaptiveGrid` / `Hanalyze.DataIO.Preprocess.regridLong`
+- レポート: `Hanalyze.Viz.ReportBuilder.secInterpolation` (`InterpReport`)
 - demo: `regrid-bench-demo` / `potential-gen --jagged`
 - fixture: `data/io/potential_long_jagged.csv` (21 dose × ~80 z 点 = 1709 行)

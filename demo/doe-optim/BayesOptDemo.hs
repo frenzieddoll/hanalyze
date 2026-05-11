@@ -8,8 +8,8 @@ module Main where
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import Optim.BayesOpt
-import Model.GP (Kernel (..))
+import Hanalyze.Optim.BayesOpt
+import Hanalyze.Model.GP (Kernel (..))
 
 -- 単一目的: f(x) = sin(3x) + (x - 2)² / 5
 -- 真の最小は x ≈ 0.96 で y ≈ -0.789

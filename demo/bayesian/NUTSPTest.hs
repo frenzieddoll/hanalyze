@@ -11,13 +11,13 @@ import System.Random.MWC (initialize)
 import qualified Data.Vector as V
 import Data.Word (Word32)
 
-import MCMC.Core (Chain (..), chainVals, posteriorMean, posteriorSD, acceptanceRate)
-import MCMC.NUTS  (NUTSConfig (..), defaultNUTSConfig, nuts)
-import MCMC.NUTS (nuts)
-import qualified Model.HBM  as HBM
-import qualified Model.HBM as HBMP
-import Stat.Distribution (Distribution (..))
-import Stat.MCMC (ess)
+import Hanalyze.MCMC.Core (Chain (..), chainVals, posteriorMean, posteriorSD, acceptanceRate)
+import Hanalyze.MCMC.NUTS  (NUTSConfig (..), defaultNUTSConfig, nuts)
+import Hanalyze.MCMC.NUTS (nuts)
+import qualified Hanalyze.Model.HBM  as HBM
+import qualified Hanalyze.Model.HBM as HBMP
+import Hanalyze.Stat.Distribution (Distribution (..))
+import Hanalyze.Stat.MCMC (ess)
 
 obsData :: [Double]
 obsData = [-0.5, 0.3, 1.2, 2.0, 2.8, 3.5, 4.1, 1.7, 2.3, 0.9

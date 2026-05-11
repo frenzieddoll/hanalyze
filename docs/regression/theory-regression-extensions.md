@@ -21,10 +21,10 @@ For linear regression $y = X\beta + \varepsilon$, $\hat\beta = (X^T X)^{-1} X^T 
 
 | Limitation | Resolution | hanalyze API |
 |---|---|---|
-| Nonlinearity | Basis expansion (polynomial, spline) | `Model.Spline` |
-| Unknown functional form | Kernel methods | `Model.Kernel` |
-| High dimensionality / collinearity | Regularization | `Model.Regularized` |
-| Local structure | Kernel / GP | `Model.Kernel`, `Model.GP` |
+| Nonlinearity | Basis expansion (polynomial, spline) | `Hanalyze.Model.Spline` |
+| Unknown functional form | Kernel methods | `Hanalyze.Model.Kernel` |
+| High dimensionality / collinearity | Regularization | `Hanalyze.Model.Regularized` |
+| Local structure | Kernel / GP | `Hanalyze.Model.Kernel`, `Hanalyze.Model.GP` |
 
 ---
 
@@ -242,7 +242,7 @@ $$ \lambda |\beta_j| = \lambda \cdot \beta_j^* \cdot \sigma_j $$
 | L1 (Lasso) | $\beta_j \sim \text{Laplace}(0, b)$, $\lambda = 1/b$ |
 | Elastic Net | Product of Laplace × Normal |
 
-→ Custom penalties can be expressed via the `potential` primitive in `Model.HBM`.
+→ Custom penalties can be expressed via the `potential` primitive in `Hanalyze.Model.HBM`.
 
 ---
 

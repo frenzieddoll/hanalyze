@@ -27,9 +27,9 @@ flowchart TD
 
 | Method | API | Characteristic | Best for |
 |---|---|---|---|
-| `Linear`         | `Stat.Interpolate.Linear`        | piecewise linear | noisy data / sanity check |
-| `NaturalSpline`  | `Stat.Interpolate.NaturalSpline` | natural cubic spline (y''=0 at ends) | smooth physical quantities |
-| `PCHIP`          | `Stat.Interpolate.PCHIP`         | Fritsch-Carlson monotone-preserving | thresholds, cumulative curves, I-V |
+| `Linear`         | `Hanalyze.Stat.Interpolate.Linear`        | piecewise linear | noisy data / sanity check |
+| `NaturalSpline`  | `Hanalyze.Stat.Interpolate.NaturalSpline` | natural cubic spline (y''=0 at ends) | smooth physical quantities |
+| `PCHIP`          | `Hanalyze.Stat.Interpolate.PCHIP`         | Fritsch-Carlson monotone-preserving | thresholds, cumulative curves, I-V |
 
 ---
 
@@ -146,7 +146,7 @@ Sample result on the V(z; D) potential dummy:
 
 ## See also
 
-- Library: `Stat.Interpolate` / `Stat.AdaptiveGrid` / `DataIO.Preprocess.regridLong`
-- Report: `Viz.ReportBuilder.secInterpolation` (`InterpReport`)
+- Library: `Hanalyze.Stat.Interpolate` / `Hanalyze.Stat.AdaptiveGrid` / `Hanalyze.DataIO.Preprocess.regridLong`
+- Report: `Hanalyze.Viz.ReportBuilder.secInterpolation` (`InterpReport`)
 - Demo: `regrid-bench-demo` / `potential-gen --jagged`
 - Fixture: `data/io/potential_long_jagged.csv` (21 doses × ~80 z points = 1709 rows)

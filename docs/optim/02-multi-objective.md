@@ -10,12 +10,12 @@
 
 | Module | Purpose |
 |---|---|
-| `Optim.NSGA`         | NSGA-II + non-dominated sort + genetic operators |
-| `Optim.Pareto`       | Pareto front utilities (HV / IGD / GD) |
-| `Optim.Acquisition`  | EI / UCB / PI / ParEGO / EHVI |
-| `Optim.BayesOpt`     | Bayesian Optimization loop (single / multi-objective) |
-| `Optim.Desirability` | Derringer-Suich desirability function |
-| `Viz.Pareto`         | Pareto front visualisations (5 styles) |
+| `Hanalyze.Optim.NSGA`         | NSGA-II + non-dominated sort + genetic operators |
+| `Hanalyze.Optim.Pareto`       | Pareto front utilities (HV / IGD / GD) |
+| `Hanalyze.Optim.Acquisition`  | EI / UCB / PI / ParEGO / EHVI |
+| `Hanalyze.Optim.BayesOpt`     | Bayesian Optimization loop (single / multi-objective) |
+| `Hanalyze.Optim.Desirability` | Derringer-Suich desirability function |
+| `Hanalyze.Viz.Pareto`         | Pareto front visualisations (5 styles) |
 
 ---
 

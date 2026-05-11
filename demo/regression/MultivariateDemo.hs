@@ -7,7 +7,7 @@ import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 import qualified System.Random.MWC.Distributions as MWC
 
-import Model.Multivariate
+import Hanalyze.Model.Multivariate
 
 main :: IO ()
 main = do

@@ -25,14 +25,14 @@ import qualified Data.Text       as T
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import Model.HBM
-import MCMC.Core  (Chain (..), chainVals, acceptanceRate, posteriorMean
+import Hanalyze.Model.HBM
+import Hanalyze.MCMC.Core  (Chain (..), chainVals, acceptanceRate, posteriorMean
                   , posteriorQuantile)
-import MCMC.NUTS  (NUTSConfig (..), defaultNUTSConfig, nutsChains)
--- import Stat.Distribution (Distribution (..)) -- now from Model.HBM
-import Stat.MCMC  (ess, rhat)
-import Viz.Core   (openInBrowser)
-import Viz.Report (MCMCReport (..), defaultReport, renderReport)
+import Hanalyze.MCMC.NUTS  (NUTSConfig (..), defaultNUTSConfig, nutsChains)
+-- import Hanalyze.Stat.Distribution (Distribution (..)) -- now from Hanalyze.Model.HBM
+import Hanalyze.Stat.MCMC  (ess, rhat)
+import Hanalyze.Viz.Core   (openInBrowser)
+import Hanalyze.Viz.Report (MCMCReport (..), defaultReport, renderReport)
 
 -- ---------------------------------------------------------------------------
 -- 合成データ (架空の臨床試験)

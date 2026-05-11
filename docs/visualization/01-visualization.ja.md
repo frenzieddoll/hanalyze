@@ -3,13 +3,13 @@
 > 🌐 [English](01-visualization.md) | **日本語**
 
 > 関連デモ:
-> - [`hbm-example`](../demo/HBMExample.hs) — `Viz.Report` (KDE/トレース/DAG/ペア散布)
-> - [`hbm-regression`](../demo/HBMRegressionDemo.hs) — HBM 回帰の HTML レポート (DAG + MCMC + 信用区間付き予測。レポートビルダは `Viz.AnalysisReport` (非推奨) → `Viz.ReportBuilder` (標準) へ移行中)
+> - [`hbm-example`](../demo/HBMExample.hs) — `Hanalyze.Viz.Report` (KDE/トレース/DAG/ペア散布)
+> - [`hbm-regression`](../demo/HBMRegressionDemo.hs) — HBM 回帰の HTML レポート (DAG + MCMC + 信用区間付き予測。レポートビルダは `Hanalyze.Viz.AnalysisReport` (非推奨) → `Hanalyze.Viz.ReportBuilder` (標準) へ移行中)
 > - [`simpson-paradox`](../demo/SimpsonParadoxDemo.hs) — `writeComparisonReport` で複数モデル並列比較
-> - [`bar-demo`](../demo/BarDemo.hs) — `Viz.Bar` + PNG/SVG エクスポート
+> - [`bar-demo`](../demo/BarDemo.hs) — `Hanalyze.Viz.Bar` + PNG/SVG エクスポート
 > - [`gp-demo`](../demo/GPDemo.hs) — GP 専用レポート
 >
-> CLI: `--report` で HTML レポート生成 (`regress` は legacy `Viz.AnalysisReport`、その他は標準 `Viz.ReportBuilder`)、`--format png|svg` で個別プロットも画像化。
+> CLI: `--report` で HTML レポート生成 (`regress` は legacy `Hanalyze.Viz.AnalysisReport`、その他は標準 `Hanalyze.Viz.ReportBuilder`)、`--format png|svg` で個別プロットも画像化。
 
 ## 出力形式
 
@@ -28,7 +28,7 @@ PNG/SVG 生成に失敗した場合は自動で HTML にフォールバックし
 
 ## Viz.Report — MCMC 統合 HTML レポート (最推奨)
 
-`Viz.Report` は診断プロット・モデルグラフ・サマリー統計を
+`Hanalyze.Viz.Report` は診断プロット・モデルグラフ・サマリー統計を
 **1つの自己完結 HTML** にまとめます。
 
 ```haskell
@@ -81,7 +81,7 @@ renderReport "report_multi.html" report
 
 ## Viz.MCMC — 個別 MCMC プロット
 
-`Viz.Report` を使わずに個別のプロットを生成したい場合:
+`Hanalyze.Viz.Report` を使わずに個別のプロットを生成したい場合:
 
 ```haskell
 import Viz.MCMC

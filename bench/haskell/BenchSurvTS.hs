@@ -13,11 +13,11 @@ import qualified Data.Vector             as V
 import qualified Numeric.LinearAlgebra   as LA
 import           System.Random           (mkStdGen, randomR)
 
-import qualified Model.TimeSeries        as TS
-import qualified Model.Survival          as Surv
-import qualified Model.Quantile          as QR
-import qualified Model.GAM               as GAM
-import qualified Stat.Interpolate        as Interp
+import qualified Hanalyze.Model.TimeSeries        as TS
+import qualified Hanalyze.Model.Survival          as Surv
+import qualified Hanalyze.Model.Quantile          as QR
+import qualified Hanalyze.Model.GAM               as GAM
+import qualified Hanalyze.Stat.Interpolate        as Interp
 
 import           BenchUtil
 
@@ -77,7 +77,7 @@ benchARIMA name = do
       run _ = pure $! TS.fitARIMA 1 1 1 y
   (ms, fit) <- timeitTastyIO probe run
   return [ BenchRow "haskell" "survts" name ms 0 0
-            ("Model.TimeSeries.fitARIMA p=1 d=1 q=1 n=1000") ]
+            ("Hanalyze.Model.TimeSeries.fitARIMA p=1 d=1 q=1 n=1000") ]
   where
     probe f = LA.sumElements (TS.forecastARIMA f 10)
 
@@ -95,7 +95,7 @@ benchCoxPH name = do
       b1 = beta LA.! 0
       b2 = beta LA.! 1
   return [ BenchRow "haskell" "survts" name ms b1 b2
-            ("Model.Survival.coxPH n=2000 p=2 (Newton-Raphson)") ]
+            ("Hanalyze.Model.Survival.coxPH n=2000 p=2 (Newton-Raphson)") ]
   where
     probe f = LA.sumElements (Surv.coxBeta f)
 
@@ -114,7 +114,7 @@ benchKM name = do
       tEnd = if null ts then 0 else last ts
       sEnd = if null surv then 1 else last surv
   return [ BenchRow "haskell" "survts" name ms tEnd sEnd
-            ("Model.Survival.kaplanMeier n=2000") ]
+            ("Hanalyze.Model.Survival.kaplanMeier n=2000") ]
   where
     probe r = sum (Surv.kmrSurvival r)
 
@@ -131,7 +131,7 @@ benchQuant name = do
       run _ = pure $! QR.fitQuantile 0.5 xCut y
   (ms, fit) <- timeitTastyIO probe run
   return [ BenchRow "haskell" "survts" name ms 0 0
-            ("Model.Quantile.fitQuantile tau=0.5 n=10000 p=20") ]
+            ("Hanalyze.Model.Quantile.fitQuantile tau=0.5 n=10000 p=20") ]
   where
     probe f = LA.sumElements (QR.qfBeta f)
 
@@ -150,7 +150,7 @@ benchGAM name = do
       run _ = pure $! GAM.fitGAM 3 5 1.0 [x1, x2] yV
   (ms, fit) <- timeitTastyIO probe run
   return [ BenchRow "haskell" "survts" name ms 0 0
-            ("Model.GAM.fitGAM degree=3 knots=5 lambda=1.0 n=2000 p=2") ]
+            ("Hanalyze.Model.GAM.fitGAM degree=3 knots=5 lambda=1.0 n=2000 p=2") ]
   where
     probe f = LA.sumElements (GAM.gamYHat f)
 
@@ -171,4 +171,4 @@ benchSpline name = do
       run _ = pure $! sum [f q | q <- qs]
   (ms, total) <- timeitTastyIO id run
   return [ BenchRow "haskell" "survts" name ms total 0
-            ("Stat.Interpolate.interp1d PCHIP, build n=1000 + eval @5000 pts") ]
+            ("Hanalyze.Stat.Interpolate.interp1d PCHIP, build n=1000 + eval @5000 pts") ]

@@ -9,11 +9,11 @@
 1. [はじめに — 何のために使うか](#1-はじめに--何のために使うか)
 2. [直交表とタグチメソッドの違い](#2-直交表とタグチメソッドの違い)
 3. [直交表 Lₙ の理論](#3-直交表-lₙ-の理論)
-4. [`Design.Orthogonal` の使い方](#4-designorthogonal-の使い方)
+4. [`Hanalyze.Design.Orthogonal` の使い方](#4-designorthogonal-の使い方)
 5. [タグチメソッドの理論](#5-タグチメソッドの理論)
-6. [`Design.Taguchi` の使い方](#6-designtaguchi-の使い方)
+6. [`Hanalyze.Design.Taguchi` の使い方](#6-designtaguchi-の使い方)
 7. [CLI からの一連のワークフロー](#7-cli-からの一連のワークフロー)
-8. [HTML レポート (`Viz.Taguchi`)](#8-html-レポート-viztaguchi)
+8. [HTML レポート (`Hanalyze.Viz.Taguchi`)](#8-html-レポート-viztaguchi)
 9. [実例: 化学プロセス最適化](#9-実例-化学プロセス最適化)
 10. [よくある落とし穴](#10-よくある落とし穴)
 11. [参考文献](#11-参考文献)
@@ -114,7 +114,7 @@ $$ \text{level}_{r,j} = 1 + \big(\text{popcount}(j \,\wedge\, \text{rev}_k(r)) \
 - `popcount(x)` = x の 1-bit 数
 - `rev_k(r)` = r の k-bit 反転 (Taguchi 標準の列順に揃えるため)
 
-`Design.Orthogonal.mkL2k k` がこの生成を行う。L8 (k=3) の最初の 4 行:
+`Hanalyze.Design.Orthogonal.mkL2k k` がこの生成を行う。L8 (k=3) の最初の 4 行:
 
 ```
 Run  F1 F2 F3 F4 F5 F6 F7
@@ -126,12 +126,12 @@ Run  F1 F2 F3 F4 F5 F6 F7
 
 ### 3.5 混合水準・Plackett-Burman は手動定義
 
-L9, L12, L18 は単純な部分集合積で生成できないため、`Design.Orthogonal` では
+L9, L12, L18 は単純な部分集合積で生成できないため、`Hanalyze.Design.Orthogonal` では
 タグチ標準表をハードコード。
 
 ---
 
-## 4. `Design.Orthogonal` の使い方
+## 4. `Hanalyze.Design.Orthogonal` の使い方
 
 ### 4.1 主要 API
 
@@ -288,7 +288,7 @@ $$ \hat\eta_{\text{opt}} = \bar\eta_{\text{all}} + \sum_j (\bar\eta_{j, k^*_j} -
 
 ---
 
-## 6. `Design.Taguchi` の使い方
+## 6. `Hanalyze.Design.Taguchi` の使い方
 
 ### 6.1 SN 比
 
@@ -379,7 +379,7 @@ let cap = Quality.processCapability lsl usl observations
 -- 片側公差: processCapabilityUpper / processCapabilityLower
 ```
 
-`OAMetadata` (`Design.Orthogonal.listArraysWithSize`) は標準直交表のメタ情報を
+`OAMetadata` (`Hanalyze.Design.Orthogonal.listArraysWithSize`) は標準直交表のメタ情報を
 構造化して返す (`omName / omRuns / omFactors / omLevels / omDescr`)。
 
 ---
@@ -477,7 +477,7 @@ Predicted SN at optimum (additive model): -3.687 dB
 
 ---
 
-## 8. HTML レポート (`Viz.Taguchi`)
+## 8. HTML レポート (`Hanalyze.Viz.Taguchi`)
 
 `taguchi analyze --report FILE` で **インタラクティブな HTML レポート** が生成される。
 セクション構成:
@@ -506,7 +506,7 @@ let tr = VTG.TaguchiReport
 VTG.renderTaguchiReport "report.html" tr
 ```
 
-### `Viz.ReportBuilder` 経由で構築する場合
+### `Hanalyze.Viz.ReportBuilder` 経由で構築する場合
 
 汎用 `ReportBuilder` でも同様のレポートを作れる (より柔軟):
 
@@ -539,7 +539,7 @@ RB.renderReport "out.html" cfg sections
     levelToText (OA.LNumeric d) = T.pack (printf "%g" d)
 ```
 
-`Viz.Taguchi` の方が手軽、`Viz.ReportBuilder` の方が柔軟。
+`Hanalyze.Viz.Taguchi` の方が手軽、`Hanalyze.Viz.ReportBuilder` の方が柔軟。
 
 ---
 
@@ -693,7 +693,7 @@ y ≈ 1.5%)。
 | 〜11 (2 水準, 主効果のみ) | L12(2¹¹) (Plackett-Burman) |
 | 〜15 (2 水準)   | L16(2¹⁵) |
 | 1 因子 2 水準 + 7 因子 3 水準 | L18(2¹×3⁷) |
-| 〜13 (3 水準)   | L27(3¹³) (`Design.Orthogonal` には未実装) |
+| 〜13 (3 水準)   | L27(3¹³) (`Hanalyze.Design.Orthogonal` には未実装) |
 
 因子数より列数が多い表を選ぶのは OK (空き列ができる)。逆 (列不足) は不可。
 
@@ -704,7 +704,7 @@ y ≈ 1.5%)。
 
 ### 10.6 内側 OA は本当に直交か?
 
-`Design.Orthogonal` のテストで全標準表の **列バランス** と **ペア直交性** を
+`Hanalyze.Design.Orthogonal` のテストで全標準表の **列バランス** と **ペア直交性** を
 検証済み (test/Spec.hs)。手動定義した L9/L12/L18 も Taguchi の標準表と一致。
 
 ---
@@ -723,4 +723,4 @@ y ≈ 1.5%)。
 
 - [01-doe.ja.md](01-doe.ja.md) — 実験計画法全般 (factorial / RSM / D-optimal)
 - [theory-doe.ja.md](theory-doe.ja.md) — DOE 理論 (直交性、効率指標)
-- [../visualization/02-report-builder.ja.md](../visualization/02-report-builder.ja.md) — `Viz.ReportBuilder` でカスタムレポート
+- [../visualization/02-report-builder.ja.md](../visualization/02-report-builder.ja.md) — `Hanalyze.Viz.ReportBuilder` でカスタムレポート

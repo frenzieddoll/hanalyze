@@ -7,7 +7,7 @@
 
 module Main where
 
-import qualified Optim.BayesOpt          as BO
+import qualified Hanalyze.Optim.BayesOpt          as BO
 import qualified System.Random.MWC       as MWC
 import qualified Data.Vector             as V
 import           Data.Word               (Word32)

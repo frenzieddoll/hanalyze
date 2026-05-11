@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | DataIO.External のデモ。
+-- | Hanalyze.DataIO.External のデモ。
 --
 -- Hackage 'dataframe' ライブラリ経由で CSV を読み込み:
 -- - 列ごとの自動型推論結果
@@ -7,8 +7,8 @@
 -- - imputeMean で欠損補完
 import qualified Data.Text as T
 
-import DataIO.CSV         (loadCSV)
-import DataIO.Preprocess  (countMissing, imputeMean)
+import Hanalyze.DataIO.CSV         (loadCSV)
+import Hanalyze.DataIO.Preprocess  (countMissing, imputeMean)
 import qualified DataFrame                 as DX
 import qualified DataFrame.Internal.DataFrame as DXD
 import qualified DataFrame.Internal.Column as DXC
@@ -30,7 +30,7 @@ main = do
   writeFile path testCSV
 
   putStrLn "=================================="
-  putStrLn " DataIO.External Demo"
+  putStrLn " Hanalyze.DataIO.External Demo"
   putStrLn "=================================="
   putStrLn ""
 

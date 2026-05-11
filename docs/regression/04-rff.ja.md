@@ -3,7 +3,7 @@
 > 🌐 [English](04-rff.md) | **日本語**
 
 > **大規模 GP** を `O(nD)` で近似する Bochner の定理ベース手法。
-> Rahimi & Recht (2007)、`Model.RFF` モジュール。
+> Rahimi & Recht (2007)、`Hanalyze.Model.RFF` モジュール。
 >
 > 関連: [04-gp.ja.md](04-gp.ja.md) (厳密 GP) / [04-kernel.ja.md](04-kernel.ja.md) (カーネル回帰)
 

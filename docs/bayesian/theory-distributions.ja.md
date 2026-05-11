@@ -1,6 +1,6 @@
 # 学習資料 1 — 確率分布の基礎
 
-> hanalyze の `Model.HBM.Distribution` で実装している全分布について、
+> hanalyze の `Hanalyze.Model.HBM.Distribution` で実装している全分布について、
 > 数式・直観・典型的な用途を解説。
 > 関係図は [01-distributions.ja.md](01-distributions.ja.md) を参照。
 
@@ -292,5 +292,5 @@ graph TD
 ## 次のステップ
 
 - **共役関係を活かした推論**: [theory-bayesian-basics.ja.md](theory-bayesian-basics.ja.md) (M2)
-- **分布のサンプリング・密度評価の実装**: `Model.HBM` の `logDensity` / `sampleDist` を読む
+- **分布のサンプリング・密度評価の実装**: `Hanalyze.Model.HBM` の `logDensity` / `sampleDist` を読む
 - **可視化**: `cabal run histogram-demo` (各分布のヒストグラム + 理論密度の重ね描き)

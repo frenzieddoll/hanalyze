@@ -1,7 +1,7 @@
 # Model.DecisionTree — 分類用 CART
 
 > sklearn `DecisionTreeClassifier` 相当。
-> 回帰は既存の [`Model.RandomForest`](06-randomforest.ja.md) を参照。
+> 回帰は既存の [`Hanalyze.Model.RandomForest`](06-randomforest.ja.md) を参照。
 
 ## 1. API
 
@@ -75,7 +75,7 @@ CART (Classification And Regression Trees, Breiman et al. 1984):
 ## 5. アンサンブル
 
 複数木でバギング:
-- 既存 `Model.RandomForest` (回帰のみ) を参考に
+- 既存 `Hanalyze.Model.RandomForest` (回帰のみ) を参考に
 - 分類 RF は `fitDT` を bootstrap × random feature subset で複数構築可能 (将来実装)
 
 ## 6. 注意

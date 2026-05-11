@@ -12,10 +12,10 @@ import qualified Data.Map.Strict as Map
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
-import Model.HBM (ModelP, dirichlet, observeMV, Distribution (..),
+import Hanalyze.MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
+import Hanalyze.Model.HBM (ModelP, dirichlet, observeMV, Distribution (..),
                   augmentChainWithDeterministic, multinomialLogDensity)
-import Viz.MCMC (printPosteriorSummary, posteriorSummaryFile)
+import Hanalyze.Viz.MCMC (printPosteriorSummary, posteriorSummaryFile)
 
 cfg :: NUTSConfig
 cfg = defaultNUTSConfig

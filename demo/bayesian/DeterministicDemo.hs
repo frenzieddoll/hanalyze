@@ -10,12 +10,12 @@ module Main where
 import qualified Data.Map.Strict as Map
 import System.Random.MWC (createSystemRandom)
 
-import MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
-import Model.HBM (ModelP, sample, observe, deterministic,
+import Hanalyze.MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
+import Hanalyze.Model.HBM (ModelP, sample, observe, deterministic,
                   Distribution (..), augmentChainWithDeterministic)
-import Viz.MCMC (printPosteriorSummary, posteriorSummaryFile,
+import Hanalyze.Viz.MCMC (printPosteriorSummary, posteriorSummaryFile,
                  tracePlotHDIFile)
-import Viz.Core (defaultConfig, OutputFormat (..), PlotConfig (..))
+import Hanalyze.Viz.Core (defaultConfig, OutputFormat (..), PlotConfig (..))
 
 cfg :: NUTSConfig
 cfg = defaultNUTSConfig

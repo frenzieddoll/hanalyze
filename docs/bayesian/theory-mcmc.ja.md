@@ -156,7 +156,7 @@ for t = 1, 2, ...:
 ### 4.3 Hybrid Gibbs+MH
 
 非共役パラメタは MH ステップで更新、共役パラメタは Gibbs ステップで
-更新。`MCMC.Gibbs.gibbsMH` は事前/尤度の組合せから自動検出。
+更新。`Hanalyze.MCMC.Gibbs.gibbsMH` は事前/尤度の組合せから自動検出。
 
 ### 4.4 hanalyze の実装
 
@@ -167,7 +167,7 @@ import MCMC.Gibbs (gibbsMH, defaultGibbsConfig)
 ch <- gibbsMH model defaultGibbsConfig init0 gen
 ```
 
-`Stat.Gibbs.detectConjugate` で各 latent の完全条件が
+`Hanalyze.Stat.Gibbs.detectConjugate` で各 latent の完全条件が
 閉形式かを判定。
 
 ---
@@ -186,7 +186,7 @@ ch <- gibbsMH model defaultGibbsConfig init0 gen
 
 $$ \text{ESS} = \frac{N}{1 + 2 \sum_{k=1}^\infty \rho_k} $$
 
-$\rho_k$: ラグ $k$ の自己相関。`Stat.MCMC.ess` で計算 (Geyer's
+$\rho_k$: ラグ $k$ の自己相関。`Hanalyze.Stat.MCMC.ess` で計算 (Geyer's
 initial monotone sequence 推定量)。
 
 | ESS | 状態 |
@@ -209,15 +209,15 @@ $$ \hat{R} = \sqrt{\frac{\text{var}_+}{W}} $$
 | > 1.01 | 未収束 |
 | < 1.01 | 収束 |
 
-`Stat.MCMC.rhat` (Vehtari 2021 の split-R-hat) で計算。
-`MCMC.NUTS.nutsChains` で並列実行 → `Viz.MCMC.posteriorSummary`
+`Hanalyze.Stat.MCMC.rhat` (Vehtari 2021 の split-R-hat) で計算。
+`Hanalyze.MCMC.NUTS.nutsChains` で並列実行 → `Hanalyze.Viz.MCMC.posteriorSummary`
 で表示。
 
 ### 5.4 Trace plot / Rank plot
 
 - **Trace plot**: 反復 vs 値 (ホワイトノイズ風が理想)
 - **Rank plot**: チェーンを混ぜて順位、各チェーンで一様分布が理想
-   (Vehtari 2021、`Viz.MCMC.rankPlot`)
+   (Vehtari 2021、`Hanalyze.Viz.MCMC.rankPlot`)
 
 ---
 
@@ -247,7 +247,7 @@ MH は次元 $D$ が大きいと非効率:
 実用的には **stepping-out** で軸ごとに区間 $[L, R]$ を構築、**shrinkage**
 で uniform draw → 受容するまで縮める。
 
-`MCMC.Slice.slice` で実装。勾配不要、ステップ幅は自動調整。
+`Hanalyze.MCMC.Slice.slice` で実装。勾配不要、ステップ幅は自動調整。
 
 ---
 

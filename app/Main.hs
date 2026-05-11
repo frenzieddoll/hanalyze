@@ -2,66 +2,66 @@
 {-# LANGUAGE RankNTypes #-}
 module Main where
 
-import DataIO.CSV        (loadAutoSafeWith, LoadOpts (..), defaultLoadOpts)
-import qualified DataIO.Log     as Log
-import qualified DataIO.Clean   as Clean
-import qualified Stat.Standardize as Std
-import qualified Stat.NumberFormat as NF
+import Hanalyze.DataIO.CSV        (loadAutoSafeWith, LoadOpts (..), defaultLoadOpts)
+import qualified Hanalyze.DataIO.Log     as Log
+import qualified Hanalyze.DataIO.Clean   as Clean
+import qualified Hanalyze.Stat.Standardize as Std
+import qualified Hanalyze.Stat.NumberFormat as NF
 import Data.Time.Clock (getCurrentTime, diffUTCTime, UTCTime)
-import qualified DataIO.Preprocess as Pp
-import qualified Stat.Interpolate  as Interp
-import qualified Stat.AdaptiveGrid as AG
+import qualified Hanalyze.DataIO.Preprocess as Pp
+import qualified Hanalyze.Stat.Interpolate  as Interp
+import qualified Hanalyze.Stat.AdaptiveGrid as AG
 import Text.Read (readMaybe)
 import qualified DataFrame                    as DX
 import qualified DataFrame.Internal.Column    as DXC
 import qualified DataFrame.Internal.DataFrame as DXD
-import DataIO.Convert     (getDoubleVec, getTextVec, getMaybeTextVec)
-import Model.Core        (Band (..), FitResult, rSquared1, coeffList, fittedList, residualsV)
-import qualified Model.Core as Core
-import Model.GLM         (Family (..), parseFamily, LinkFn (..), parseLink, canonicalLink,
+import Hanalyze.DataIO.Convert     (getDoubleVec, getTextVec, getMaybeTextVec)
+import Hanalyze.Model.Core        (Band (..), FitResult, rSquared1, coeffList, fittedList, residualsV)
+import qualified Hanalyze.Model.Core as Core
+import Hanalyze.Model.GLM         (Family (..), parseFamily, LinkFn (..), parseLink, canonicalLink,
                           fitGLMWithSmooth, fitGLMFull)
-import Model.GLMM        (GLMMResult (..), fitLMEDataFrame, fitGLMMDataFrame)
-import Model.LM          (SmoothFit (..), multiPolyDesignMatrix)
-import Stat.Distribution (Distribution, parseDistribution)
-import Viz.Core          (defaultConfig, openInBrowser, OutputFormat (..), parseFormat)
-import Viz.Scatter       (scatterWithSmoothFile, scatterMultiYFile, scatterPlotFile,
+import Hanalyze.Model.GLMM        (GLMMResult (..), fitLMEDataFrame, fitGLMMDataFrame)
+import Hanalyze.Model.LM          (SmoothFit (..), multiPolyDesignMatrix)
+import Hanalyze.Stat.Distribution (Distribution, parseDistribution)
+import Hanalyze.Viz.Core          (defaultConfig, openInBrowser, OutputFormat (..), parseFormat)
+import Hanalyze.Viz.Scatter       (scatterWithSmoothFile, scatterMultiYFile, scatterPlotFile,
                           scatterWithGroupsFile, predictedVsActualFile,
                           predictedVsActual, scatterWithGroups)
-import Viz.Histogram     (histogramPlotFile, histogramWithDensityFile)
-import Viz.AnalysisReport (AnalysisReportConfig (..), ModelFit (..), NamedPlot (..),
+import Hanalyze.Viz.Histogram     (histogramPlotFile, histogramWithDensityFile)
+import Hanalyze.Viz.AnalysisReport (AnalysisReportConfig (..), ModelFit (..), NamedPlot (..),
                            SmoothData (..), GPKernelFit (..), GPFitSummary (..), FitSummary (..),
                            GLMMSummary (..), HBMRegSummary (..),
                            mkFitSummary, mkGLMMSummary,
                            writeAnalysisReport, writeAnalysisReportPlots)
-import qualified Design.Orthogonal as OA
-import qualified Design.Taguchi as TG
-import qualified Viz.Taguchi as VTG
-import qualified Viz.ReportBuilder as RB
-import qualified Viz.ReportInstances as RI
-import qualified Viz.ModelGraph
+import qualified Hanalyze.Design.Orthogonal as OA
+import qualified Hanalyze.Design.Taguchi as TG
+import qualified Hanalyze.Viz.Taguchi as VTG
+import qualified Hanalyze.Viz.ReportBuilder as RB
+import qualified Hanalyze.Viz.ReportInstances as RI
+import qualified Hanalyze.Viz.ModelGraph
 import qualified Graphics.Vega.VegaLite as VL
 import Graphics.Vega.VegaLite (VegaLite, VLProperty, VLSpec)
-import qualified Model.Kernel as Kern
-import qualified Model.MultiLM as MLM
-import qualified Model.Regularized as Reg
-import qualified Model.GAM as GAM
-import qualified Model.Quantile as QR
-import qualified Model.RandomForest as RF
-import qualified Model.RFF as RFF
-import qualified Model.Spline as Spl
-import Model.LM (SmoothFit (..))
-import qualified Model.HBM as HBMod
-import qualified MCMC.NUTS as HBMnuts
-import qualified MCMC.Core as MCMCcore
+import qualified Hanalyze.Model.Kernel as Kern
+import qualified Hanalyze.Model.MultiLM as MLM
+import qualified Hanalyze.Model.Regularized as Reg
+import qualified Hanalyze.Model.GAM as GAM
+import qualified Hanalyze.Model.Quantile as QR
+import qualified Hanalyze.Model.RandomForest as RF
+import qualified Hanalyze.Model.RFF as RFF
+import qualified Hanalyze.Model.Spline as Spl
+import Hanalyze.Model.LM (SmoothFit (..))
+import qualified Hanalyze.Model.HBM as HBMod
+import qualified Hanalyze.MCMC.NUTS as HBMnuts
+import qualified Hanalyze.MCMC.Core as MCMCcore
 import qualified Data.Map.Strict as Map
-import Viz.MCMC (mcmcDiagnostics, autocorrPlot)
-import Viz.Core (PlotConfig (..))
-import Model.GP           (Kernel (..), GPModel (..), GPParams, GPPredData,
+import Hanalyze.Viz.MCMC (mcmcDiagnostics, autocorrPlot)
+import Hanalyze.Viz.Core (PlotConfig (..))
+import Hanalyze.Model.GP           (Kernel (..), GPModel (..), GPParams, GPPredData,
                            GPResult, gpMean,
                            initParamsFromData, optimizeGP, fitGP, logMarginalLikelihood,
                            gpPredData)
 
-import Stat.ModelSelect  (lmPosteriorLogLiks, glmPosteriorLogLiks,
+import Hanalyze.Stat.ModelSelect  (lmPosteriorLogLiks, glmPosteriorLogLiks,
                           lmePosteriorLogLiks, waic, loo,
                           WAICResult (..), LOOResult (..))
 
@@ -1608,7 +1608,7 @@ runHBMRegression xs ys xCol yCol df cfg = do
             return (Just (w, l))
           else return Nothing
 
-      let mGraph = Just (Viz.ModelGraph.buildMermaid (HBMod.buildModelGraph hbmModel))
+      let mGraph = Just (Hanalyze.Viz.ModelGraph.buildMermaid (HBMod.buildModelGraph hbmModel))
           rbCfg  = RB.defaultReportConfig
                      ("HBM Linear Regression: " <> yCol <> " ~ " <> xCol)
           sections = cliHBMSections xCol yCol df xs ys chain mGraph mWaicLoo []
@@ -2597,7 +2597,7 @@ doKernel file xColStr yColStr opts lopts = do
           ++ " (unknown method)"
 
 -- | Multi-input Kernel Ridge (Phase K5) — fit and report training metrics.
--- 多次元 X (n×p) を取り、Model.Kernel.kernelRidgeMV で fit。
+-- 多次元 X (n×p) を取り、Hanalyze.Model.Kernel.kernelRidgeMV で fit。
 -- 予測図は生成しない (多次元のため)、R² と RMSE をログ出力。
 runKernelMVKR
   :: [T.Text] -> T.Text -> [V.Vector Double] -> V.Vector Double

@@ -16,14 +16,14 @@ import           Data.List               (sort, minimumBy)
 import           Data.Ord                (comparing)
 import           Control.Monad           (forM)
 
-import qualified Optim.NelderMead        as NM
-import qualified Optim.LBFGS             as LB
-import qualified Optim.LineSearch        as LS
-import qualified Optim.DifferentialEvolution as DE
-import qualified Optim.CMAES             as CM
-import qualified Optim.SimulatedAnnealing    as SA
-import qualified Optim.ParticleSwarm     as PS
-import qualified Optim.Common            as OC
+import qualified Hanalyze.Optim.NelderMead        as NM
+import qualified Hanalyze.Optim.LBFGS             as LB
+import qualified Hanalyze.Optim.LineSearch        as LS
+import qualified Hanalyze.Optim.DifferentialEvolution as DE
+import qualified Hanalyze.Optim.CMAES             as CM
+import qualified Hanalyze.Optim.SimulatedAnnealing    as SA
+import qualified Hanalyze.Optim.ParticleSwarm     as PS
+import qualified Hanalyze.Optim.Common            as OC
 
 import           BenchUtil
 

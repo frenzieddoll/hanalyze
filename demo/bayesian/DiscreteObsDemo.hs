@@ -10,10 +10,10 @@ import Data.Maybe (fromMaybe)
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import MCMC.Core (chainSamples, posteriorMean, posteriorSD,
+import Hanalyze.MCMC.Core (chainSamples, posteriorMean, posteriorSD,
                   posteriorQuantile, acceptanceRate)
-import MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
-import Model.HBM (ModelP, sample, observe, Distribution (..))
+import Hanalyze.MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
+import Hanalyze.Model.HBM (ModelP, sample, observe, Distribution (..))
 
 -- ---------------------------------------------------------------------------
 -- Bernoulli 観測 (ロジスティック回帰の単純版)

@@ -9,8 +9,8 @@ import qualified Data.Text as T
 import Data.Text (Text)
 import Text.Printf (printf)
 
-import Viz.Bar  (stackedBar)
-import Viz.Core (PlotConfig (..), defaultConfig, OutputFormat (..), writeSpec)
+import Hanalyze.Viz.Bar  (stackedBar)
+import Hanalyze.Viz.Core (PlotConfig (..), defaultConfig, OutputFormat (..), writeSpec)
 
 -- ---------------------------------------------------------------------------
 -- データ: PyMC 機能カテゴリ別の実装状況 (このブランチ完了時点)
@@ -48,7 +48,7 @@ addedThisBranch =
   , ("Phase E", "Energy plot / BFMI")
   , ("Phase F", "5 つの可視化基盤 (Summary/HDI-Trace/Rank/PPC/Divergence)")
   , ("Phase G", "6 つの主要機能 (Deterministic/Dir/non-centered/Div/set_data/MvN-latent)")
-  , ("Phase H", "6 件の補完 (NB/Multinomial/ZIP/LKJ/withData多相/Stat.Summary 切出)")
+  , ("Phase H", "6 件の補完 (NB/Multinomial/ZIP/LKJ/withData多相/Hanalyze.Stat.Summary 切出)")
   , ("Phase I", "5 つの新規分布 (InvGamma/Weibull/Pareto/BetaBin/VonMises)")
   , ("Phase J", "LKJ K=3 / AR(1) / Slice sampler")
   ]

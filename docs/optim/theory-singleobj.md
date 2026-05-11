@@ -15,7 +15,7 @@
 | Constraints | unconstrained / constrained (eq./ineq.) |
 | Determinism | deterministic / stochastic |
 
-`Optim.*` covers **continuous, unconstrained, deterministic-or-stochastic** single-objective
+`Hanalyze.Optim.*` covers **continuous, unconstrained, deterministic-or-stochastic** single-objective
 optimisation. Constraints are limited to box constraints (DE/CMA-ES boundary reflection).
 
 ---
@@ -45,7 +45,7 @@ $(\rho, \chi, \gamma, \sigma) = (1, 2, 0.5, 0.5)$.
 
 ### hanalyze implementation
 
-`Optim.NelderMead.runNelderMead`. `nmInitStep` controls initial simplex size.
+`Hanalyze.Optim.NelderMead.runNelderMead`. `nmInitStep` controls initial simplex size.
 
 ---
 
@@ -97,7 +97,7 @@ Pick $\alpha$ each iteration:
 
 ### hanalyze implementation
 
-`Optim.LBFGS.runLBFGS` (analytic gradient) / `runLBFGSNumeric` (central difference).
+`Hanalyze.Optim.LBFGS.runLBFGS` (analytic gradient) / `runLBFGSNumeric` (central difference).
 
 ---
 
@@ -130,7 +130,7 @@ parabolic step:
 
 ### hanalyze implementation
 
-`Optim.LineSearch.brent`; `goldenSection` is also provided as a pure golden-section variant.
+`Hanalyze.Optim.LineSearch.brent`; `goldenSection` is also provided as a pure golden-section variant.
 
 ---
 
@@ -154,7 +154,7 @@ Maintain a population $\{x_1, ..., x_N\}$. For each individual $i$:
 
 ### hanalyze implementation
 
-`Optim.DifferentialEvolution.runDE`. Out-of-bounds candidates are reflected (`clipBound`).
+`Hanalyze.Optim.DifferentialEvolution.runDE`. Out-of-bounds candidates are reflected (`clipBound`).
 
 ---
 
@@ -186,7 +186,7 @@ The full version (Hansen 2016) includes path cumulation + rank-1; this implement
 
 ### hanalyze implementation
 
-`Optim.CMAES.runCMAES`. The simplified version handles sphere 5D / Rastrigin 5D etc.;
+`Hanalyze.Optim.CMAES.runCMAES`. The simplified version handles sphere 5D / Rastrigin 5D etc.;
 a full-rank CMA-ES would be a separate implementation.
 
 ---

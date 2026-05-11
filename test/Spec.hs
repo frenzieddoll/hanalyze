@@ -3,79 +3,79 @@
 module Main where
 
 import Test.Hspec
-import Model.GLMM
-import Model.GLM (Family (..), LinkFn (..))
+import Hanalyze.Model.GLMM
+import Hanalyze.Model.GLM (Family (..), LinkFn (..))
 import qualified Data.Vector as V
 import qualified Data.Text   as T
 import qualified Numeric.LinearAlgebra as LA
 import Data.List (sort)
 
 import qualified DataFrame                    as DX
-import qualified Design.Orthogonal as OA
-import qualified Design.Quality    as Quality
-import qualified Design.Taguchi as TG
-import qualified Model.LM             as LM
-import qualified Model.LM.Diagnostics as LMD
-import qualified DataIO.Preprocess as Pp
-import qualified DataIO.Log        as Log
-import qualified DataIO.CSV        as CSV
-import qualified DataIO.Convert    as Conv
-import qualified DataIO.Health     as Health
-import qualified DataIO.Clean      as Clean
-import qualified DataIO.Convert    as Conv2
-import qualified Stat.Standardize  as Std
-import qualified Stat.NumberFormat as NF
-import qualified Stat.Interpolate  as Interp
-import qualified Stat.AdaptiveGrid as AG
-import qualified Stat.KernelDist   as KD
-import qualified Stat.Cholesky     as Chol
-import qualified Stat.QuasiRandom  as QR
-import qualified Stat.Test         as ST
-import qualified Stat.ClassMetrics as CM
-import qualified Stat.CV           as CV
-import qualified Stat.MultipleTesting as MT
-import qualified Stat.Bootstrap       as Boot
-import qualified Stat.Effect          as Eff
-import qualified Stat.Interpret       as Interp
-import qualified Model.PCA         as PCA
-import qualified Model.Cluster     as Cl
-import qualified Model.DecisionTree as DT
-import qualified Model.TimeSeries   as TS
-import qualified Model.Survival     as Surv
-import qualified DataIO.Reshape    as Reshape
-import qualified Optim.NSGA        as NSGA
+import qualified Hanalyze.Design.Orthogonal as OA
+import qualified Hanalyze.Design.Quality    as Quality
+import qualified Hanalyze.Design.Taguchi as TG
+import qualified Hanalyze.Model.LM             as LM
+import qualified Hanalyze.Model.LM.Diagnostics as LMD
+import qualified Hanalyze.DataIO.Preprocess as Pp
+import qualified Hanalyze.DataIO.Log        as Log
+import qualified Hanalyze.DataIO.CSV        as CSV
+import qualified Hanalyze.DataIO.Convert    as Conv
+import qualified Hanalyze.DataIO.Health     as Health
+import qualified Hanalyze.DataIO.Clean      as Clean
+import qualified Hanalyze.DataIO.Convert    as Conv2
+import qualified Hanalyze.Stat.Standardize  as Std
+import qualified Hanalyze.Stat.NumberFormat as NF
+import qualified Hanalyze.Stat.Interpolate  as Interp
+import qualified Hanalyze.Stat.AdaptiveGrid as AG
+import qualified Hanalyze.Stat.KernelDist   as KD
+import qualified Hanalyze.Stat.Cholesky     as Chol
+import qualified Hanalyze.Stat.QuasiRandom  as QR
+import qualified Hanalyze.Stat.Test         as ST
+import qualified Hanalyze.Stat.ClassMetrics as CM
+import qualified Hanalyze.Stat.CV           as CV
+import qualified Hanalyze.Stat.MultipleTesting as MT
+import qualified Hanalyze.Stat.Bootstrap       as Boot
+import qualified Hanalyze.Stat.Effect          as Eff
+import qualified Hanalyze.Stat.Interpret       as Interp
+import qualified Hanalyze.Model.PCA         as PCA
+import qualified Hanalyze.Model.Cluster     as Cl
+import qualified Hanalyze.Model.DecisionTree as DT
+import qualified Hanalyze.Model.TimeSeries   as TS
+import qualified Hanalyze.Model.Survival     as Surv
+import qualified Hanalyze.DataIO.Reshape    as Reshape
+import qualified Hanalyze.Optim.NSGA        as NSGA
 import qualified System.Random.MWC as MWC
-import qualified Model.Kernel      as Kn
-import qualified Model.GP          as GP
-import qualified Model.GPRobust    as GPR
-import qualified Viz.ReportBuilder as RB
+import qualified Hanalyze.Model.Kernel      as Kn
+import qualified Hanalyze.Model.GP          as GP
+import qualified Hanalyze.Model.GPRobust    as GPR
+import qualified Hanalyze.Viz.ReportBuilder as RB
 import qualified Data.ByteString   as BS
 import System.IO.Temp (withSystemTempFile)
 import System.IO     (hPutStr, hClose)
-import qualified Model.GP        as GP
-import qualified Model.GPRobust  as GPR
-import qualified Model.RFF       as RFF
-import qualified Model.Regularized as Reg
-import qualified Model.Spline      as Sp
-import qualified Model.Kernel      as K
-import qualified Model.Core        as Core
-import qualified Model.GLM         as GLM
-import qualified Optim.NelderMead  as NM
-import qualified Optim.LBFGS       as LBFGS
-import qualified Optim.LineSearch  as LS
-import qualified Optim.DifferentialEvolution as DE
-import qualified Optim.CMAES       as CMAES
-import qualified Optim.CMAESFull   as CMAESF
-import qualified Optim.SimulatedAnnealing as SA
-import qualified Optim.ParticleSwarm as PSO
-import qualified Optim.Constrained as Con
-import qualified Optim.BayesOpt    as BO
-import qualified Optim.Common      as OC
+import qualified Hanalyze.Model.GP        as GP
+import qualified Hanalyze.Model.GPRobust  as GPR
+import qualified Hanalyze.Model.RFF       as RFF
+import qualified Hanalyze.Model.Regularized as Reg
+import qualified Hanalyze.Model.Spline      as Sp
+import qualified Hanalyze.Model.Kernel      as K
+import qualified Hanalyze.Model.Core        as Core
+import qualified Hanalyze.Model.GLM         as GLM
+import qualified Hanalyze.Optim.NelderMead  as NM
+import qualified Hanalyze.Optim.LBFGS       as LBFGS
+import qualified Hanalyze.Optim.LineSearch  as LS
+import qualified Hanalyze.Optim.DifferentialEvolution as DE
+import qualified Hanalyze.Optim.CMAES       as CMAES
+import qualified Hanalyze.Optim.CMAESFull   as CMAESF
+import qualified Hanalyze.Optim.SimulatedAnnealing as SA
+import qualified Hanalyze.Optim.ParticleSwarm as PSO
+import qualified Hanalyze.Optim.Constrained as Con
+import qualified Hanalyze.Optim.BayesOpt    as BO
+import qualified Hanalyze.Optim.Common      as OC
 import qualified System.Random.MWC as MWC
 
 main :: IO ()
 main = hspec $ do
-  describe "Stat.KernelDist" $ do
+  describe "Hanalyze.Stat.KernelDist" $ do
     let xs = LA.fromLists [[0, 0], [3, 4], [1, 1]] :: LA.Matrix Double
         d  = KD.pairwiseSqDist xs
         -- naive reference
@@ -106,7 +106,7 @@ main = hspec $ do
                    , j <- [0 .. LA.rows ys - 1] ]
       LA.norm_Inf (dXY - ref') < 1e-9 `shouldBe` True
 
-  describe "Optim.NSGA building blocks" $ do
+  describe "Hanalyze.Optim.NSGA building blocks" $ do
     let mkSol obj = NSGA.Solution
                       { NSGA.solDecision   = obj   -- decision unused here
                       , NSGA.solObjectives = obj
@@ -165,7 +165,7 @@ main = hspec $ do
       all (\(z, (lo, hi)) -> z >= lo && z <= hi) (zip y' bs)
         `shouldBe` True
 
-  describe "Stat.QuasiRandom (Halton)" $ do
+  describe "Hanalyze.Stat.QuasiRandom (Halton)" $ do
     it "haltonSequence 10 1 lies in [0, 1) and is a permutation" $ do
       let pts = QR.haltonSequence 10 1
       length pts `shouldBe` 10
@@ -207,7 +207,7 @@ main = hspec $ do
       all (\[a, b] -> a >= -1 && a <  1
                    && b >=  5 && b < 10) pts `shouldBe` True
 
-  describe "Stat.Cholesky" $ do
+  describe "Hanalyze.Stat.Cholesky" $ do
     let aSPD = LA.fromLists [[4, 2, 1], [2, 5, 3], [1, 3, 6]]
                  :: LA.Matrix Double
         b    = LA.asColumn (LA.fromList [1.0, 2.0, 3.0])
@@ -234,7 +234,7 @@ main = hspec $ do
                   -- eigenvalues 3 and -1 → not SPD
       Chol.cholFactor aNeg `shouldBe` Nothing
 
-  describe "Model.Kernel multi-input (MV)" $ do
+  describe "Hanalyze.Model.Kernel multi-input (MV)" $ do
     -- 2D regression target: y = sin(x1) + 0.5 cos(x2)
     let n     = 60
         h     = 0.5
@@ -274,7 +274,7 @@ main = hspec $ do
                   | i <- [0 .. 2] ]
       LA.norm_Inf (gMV - ref) < 1e-12 `shouldBe` True
 
-    it "Model.GP MV: 1D input matches legacy 1D fitGP within 1e-6" $ do
+    it "Hanalyze.Model.GP MV: 1D input matches legacy 1D fitGP within 1e-6" $ do
       let xL  = [fromIntegral i / 5 | i <- [0 .. 19 :: Int]]
           yL  = map sin xL
           tL  = [0.5, 1.5, 2.5]
@@ -291,7 +291,7 @@ main = hspec $ do
       (dMu < 1e-6) `shouldBe` True
       (dVr < 1e-6) `shouldBe` True
 
-    it "Model.GP MV: 2D RBF reaches R² > 0.95 with optimized HP" $ do
+    it "Hanalyze.Model.GP MV: 2D RBF reaches R² > 0.95 with optimized HP" $ do
       let nN  = 50
           gx  = [(fromIntegral i / 10, fromIntegral (nN - i) / 10)
                 | i <- [0 .. nN - 1 :: Int]]
@@ -310,7 +310,7 @@ main = hspec $ do
           r2  = 1 - ss / st
       (r2 > 0.95) `shouldBe` True
 
-    it "Model.GPRobust MV: 1D input matches legacy fitGPRobust" $ do
+    it "Hanalyze.Model.GPRobust MV: 1D input matches legacy fitGPRobust" $ do
       let xL  = [fromIntegral i / 5 | i <- [0 .. 14 :: Int]]
           yL  = map sin xL
           tL  = [0.5, 1.5, 2.5]
@@ -340,7 +340,7 @@ main = hspec $ do
                    | i <- [0 .. 19] ]
       LA.norm_Inf (gMV2 - ref) < 1e-12 `shouldBe` True
 
-  describe "Model.GLMM" $ do
+  describe "Hanalyze.Model.GLMM" $ do
     -- Dataset: 3 groups × 4 obs, strong between-group signal, weak within-group noise.
     -- True: β₀≈5, β₁≈0, u_A≈2, u_B≈0, u_C≈-2, σ²_u≈4, σ²≈small → ICC≈high.
     let df  = DX.fromNamedColumns
@@ -381,7 +381,7 @@ main = hspec $ do
       fitLMEDataFrame [("x", 1)] "group" "missing" df
         `shouldSatisfy` (\r -> case r of { Nothing -> True; Just _ -> False })
 
-  describe "Model.GLMM (non-Gaussian)" $ do
+  describe "Hanalyze.Model.GLMM (non-Gaussian)" $ do
     -- Binomial GLMM: 3 hospitals, binary outcome (treatment success)
     -- Strong hospital effect; within each hospital, dose → higher success rate.
     -- True: u_A ≈ +1, u_B ≈ 0, u_C ≈ -1  (on logit scale)
@@ -422,7 +422,7 @@ main = hspec $ do
         glmmICC r `shouldSatisfy` (\v -> v >= 0 && v <= 1)) resPois
 
   -- ─────────────────────────────────────────────────────────────────────
-  describe "Design.Orthogonal" $ do
+  describe "Hanalyze.Design.Orthogonal" $ do
     it "L4 has 4 runs and 3 columns" $ do
       OA.oaRuns OA.l4    `shouldBe` 4
       OA.oaFactors OA.l4 `shouldBe` 3
@@ -489,7 +489,7 @@ main = hspec $ do
         \r -> case r of { Left _ -> True; Right _ -> False }
 
   -- ─────────────────────────────────────────────────────────────────────
-  describe "Design.Taguchi" $ do
+  describe "Hanalyze.Design.Taguchi" $ do
     it "smaller-the-better SN: lower y → higher η" $ do
       let etaSmall = TG.snRatio TG.SmallerBetter [0.5, 0.5, 0.5]
           etaLarge = TG.snRatio TG.SmallerBetter [5.0, 5.0, 5.0]
@@ -543,7 +543,7 @@ main = hspec $ do
       mapM_ (\(_, _, eta) -> eta `shouldSatisfy` (>= 0)) opts
 
   -- ─────────────────────────────────────────────────────────────────────
-  describe "DataIO.Preprocess" $ do
+  describe "Hanalyze.DataIO.Preprocess" $ do
     let dfNA = DX.fromNamedColumns
                  [ ("group", DX.fromList (["A","B","A","B","C"] :: [T.Text]))
                  , ("x",     DX.fromList (["1","NA","3","","5"]   :: [T.Text]))
@@ -594,7 +594,7 @@ main = hspec $ do
       xs `shouldBe` [20, 40, 60, 80, 100]
 
   -- ─────────────────────────────────────────────────────────────────────
-  describe "DataIO.Preprocess (groupBy)" $ do
+  describe "Hanalyze.DataIO.Preprocess (groupBy)" $ do
     let dfGrp = DX.fromNamedColumns
                   [ ("group", DX.fromList (["A","B","A","B","A","C"] :: [T.Text]))
                   , ("y",     DX.fromList ([1, 4, 3, 6, 5, 10]       :: [Double]))
@@ -654,7 +654,7 @@ main = hspec $ do
         Nothing -> expectationFailure "groupByMax failed"
 
   -- ─────────────────────────────────────────────────────────────────────
-  describe "Stat.NumberFormat" $ do
+  describe "Hanalyze.Stat.NumberFormat" $ do
     it "0 → '0.00'"            $ NF.fmtNum 0       `shouldBe` "0.00"
     it "中域 (0.01..999) は固定小数点 2 桁" $ do
       NF.fmtNum 0.91   `shouldBe` "0.91"
@@ -674,7 +674,7 @@ main = hspec $ do
       NF.fmtNum (1/0)        `shouldBe` "+Inf"
       NF.fmtNum (-1/0)       `shouldBe` "-Inf"
 
-  describe "Stat.Standardize" $ do
+  describe "Hanalyze.Stat.Standardize" $ do
     let xMat = LA.fromLists [[1, 100], [2, 200], [3, 300], [4, 400], [5, 500]] :: LA.Matrix Double
         s    = Std.fitStandardizer xMat
     it "fit: 各列の μ が一致" $
@@ -707,7 +707,7 @@ main = hspec $ do
           c0 = LA.toColumns x' !! 0
       abs (LA.sumElements c0) `shouldSatisfy` (< 1e-9)
 
-  describe "Stat.Interpolate" $ do
+  describe "Hanalyze.Stat.Interpolate" $ do
     let pts = [(0,0), (1,1), (2,4), (3,9), (4,16)]   -- y = x^2
     it "Linear: 観測点で原値を厳密に再現" $ do
       let f = Interp.interp1d Interp.Linear pts
@@ -733,7 +733,7 @@ main = hspec $ do
       let fp = Interp.interp1d Interp.PCHIP pts
       mapM_ (\(x, y) -> abs (fp x - y) `shouldSatisfy` (< 1e-9)) pts
 
-  describe "Stat.AdaptiveGrid" $ do
+  describe "Hanalyze.Stat.AdaptiveGrid" $ do
     it "uniformGrid: 端点を含み等間隔" $ do
       let g = AG.uniformGrid 5 0 4
       g `shouldBe` [0, 1, 2, 3, 4]
@@ -762,7 +762,7 @@ main = hspec $ do
           gU   = AG.uniformGrid 5 0 3
       g `shouldBe` gU
 
-  describe "Model.RFF (multivariate, Phase B-RFF)" $ do
+  describe "Hanalyze.Model.RFF (multivariate, Phase B-RFF)" $ do
     it "logMarginalLikRBFMV: 既知 ℓ で最大化される (合成データで)" $ do
       -- y = sin(x) (1D) で ℓ をスキャンし、データの z-score 後の長さスケールに
       -- 近い値で marg-lik が最大になることを確認。
@@ -819,7 +819,7 @@ main = hspec $ do
                        / fromIntegral (length ys))
       rmse `shouldSatisfy` (< 1.0)
 
-  describe "Model.RFF" $ do
+  describe "Hanalyze.Model.RFF" $ do
     it "feature matrix has correct shape" $ do
       gen   <- MWC.createSystemRandom
       feats <- RFF.sampleRFFRBF 50 1.0 1.0 gen
@@ -846,7 +846,7 @@ main = hspec $ do
       rmse `shouldSatisfy` (< 0.5)
 
   -- ─────────────────────────────────────────────────────────────────────
-  describe "Model.GPRobust" $ do
+  describe "Hanalyze.Model.GPRobust" $ do
     it "Cauchy GP is more accurate than Gaussian GP under outliers" $ do
       let trueF x = sin x
           xs = [0.0, 0.5 .. 6.0]
@@ -873,7 +873,7 @@ main = hspec $ do
           fit = GPR.fitGPRobust GP.RBF hp (GPR.RStudentT 4 0.5) xs ys
       GPR.rgpIters fit `shouldSatisfy` (\n -> n > 0 && n <= 50)
 
-  describe "DataIO.Log" $ do
+  describe "Hanalyze.DataIO.Log" $ do
     it "Monoid: noLog <> r == r" $ do
       let r = Log.logReport (Log.mkWarn "W001" "msg" Nothing)
       Log.entries (Log.noLog <> r) `shouldBe` Log.entries r
@@ -905,7 +905,7 @@ main = hspec $ do
       T.isInfixOf "壊れている" s `shouldBe` True
       T.isInfixOf "助言"   s   `shouldBe` True
 
-  describe "DataIO.CSV.loadAutoSafe" $ do
+  describe "Hanalyze.DataIO.CSV.loadAutoSafe" $ do
     it "Empty file → Left, no exception" $
       withSystemTempFile "ha-empty.csv" $ \fp h -> do
         hPutStr h ""
@@ -931,7 +931,7 @@ main = hspec $ do
           Left  msg      -> expectationFailure ("unexpected Left: " ++ msg)
           Right (_, lg)  -> Log.entries lg `shouldBe` []
 
-  describe "DataIO.Convert deep-eval" $ do
+  describe "Hanalyze.DataIO.Convert deep-eval" $ do
     it "getMaybeTextVec on text column with mixed NA strings returns Just" $
       withSystemTempFile "ha-na.csv" $ \fp h -> do
         -- 複数 NA 表現を混ぜると Hackage は Maybe Text 列として保持する。
@@ -953,7 +953,7 @@ main = hspec $ do
           Right (df, _) -> Conv.getDoubleVec "score" df `shouldBe` Nothing
           Left msg      -> expectationFailure ("load failed: " ++ msg)
 
-  describe "DataIO.Health" $ do
+  describe "Hanalyze.DataIO.Health" $ do
     it "W001: ヘッダ無し疑い (列名が全て数値)" $ do
       let df = DX.insertColumn "1.0" (DX.fromList ([2.0, 4.0] :: [Double]))
              $ DX.insertColumn "2.0" (DX.fromList ([4.1, 8.0] :: [Double]))
@@ -985,7 +985,7 @@ main = hspec $ do
     it "preview is non-empty for typical use" $
       BS.length "x,y\n1,2" `shouldSatisfy` (> 0)
 
-  describe "DataIO.CSV.loadAutoSafeWith" $ do
+  describe "Hanalyze.DataIO.CSV.loadAutoSafeWith" $ do
     it "--no-header: 先頭行をデータ行として扱い col0... を生成" $
       withSystemTempFile "ha-noh.csv" $ \fp h -> do
         hPutStr h "1,2\n3,4\n5,6\n"
@@ -1271,9 +1271,9 @@ main = hspec $ do
       glmmRandVar firstM `shouldSatisfy` approx 1e-9 (glmmRandVar single)
 
   -- ===========================================================================
-  -- 単目的オプティマイザ (Optim.NelderMead)
+  -- 単目的オプティマイザ (Hanalyze.Optim.NelderMead)
   -- ===========================================================================
-  describe "Optim.NelderMead" $ do
+  describe "Hanalyze.Optim.NelderMead" $ do
     let l2 :: [Double] -> [Double] -> Double
         l2 a b = sqrt (sum (zipWith (\x y -> (x-y)^(2::Int)) a b))
         sphere xs = sum [x*x | x <- xs]
@@ -1299,9 +1299,9 @@ main = hspec $ do
       l2 (OC.orBest r) [0, 0, 0] `shouldSatisfy` (< 1e-2)
 
   -- ===========================================================================
-  -- 単目的オプティマイザ (Optim.LBFGS)
+  -- 単目的オプティマイザ (Hanalyze.Optim.LBFGS)
   -- ===========================================================================
-  describe "Optim.LBFGS" $ do
+  describe "Hanalyze.Optim.LBFGS" $ do
     let l2 :: [Double] -> [Double] -> Double
         l2 a b = sqrt (sum (zipWith (\x y -> (x-y)^(2::Int)) a b))
         sphere xs = sum [x*x | x <- xs]
@@ -1328,9 +1328,9 @@ main = hspec $ do
       OC.orValue r `shouldSatisfy` (< 1e-4)
 
   -- ===========================================================================
-  -- 1D オプティマイザ (Optim.LineSearch)
+  -- 1D オプティマイザ (Hanalyze.Optim.LineSearch)
   -- ===========================================================================
-  describe "Optim.LineSearch" $ do
+  describe "Hanalyze.Optim.LineSearch" $ do
     let parabola [x] = (x - 2.5)^(2::Int) + 1.0
         parabola _   = error "1D"
         cosBowl [x] = cos x + 0.1 * x * x   -- 単峰、最小 ≈ 1.428 付近
@@ -1358,9 +1358,9 @@ main = hspec $ do
       abs (hB - hG) `shouldSatisfy` (< 1.0)   -- グリッドと近い領域
 
   -- ===========================================================================
-  -- 大域オプティマイザ (Optim.DifferentialEvolution)
+  -- 大域オプティマイザ (Hanalyze.Optim.DifferentialEvolution)
   -- ===========================================================================
-  describe "Optim.DifferentialEvolution" $ do
+  describe "Hanalyze.Optim.DifferentialEvolution" $ do
     let sphere xs = sum [x*x | x <- xs]
         rastrigin xs =
           10 * fromIntegral (length xs) +
@@ -1384,9 +1384,9 @@ main = hspec $ do
       l2 (OC.orBest r) [0, 0, 0] `shouldSatisfy` (< 0.5)
 
   -- ===========================================================================
-  -- 大域オプティマイザ (Optim.CMAES、簡易対角版)
+  -- 大域オプティマイザ (Hanalyze.Optim.CMAES、簡易対角版)
   -- ===========================================================================
-  describe "Optim.CMAES" $ do
+  describe "Hanalyze.Optim.CMAES" $ do
     let sphere xs = sum [x*x | x <- xs]
         l2 a b = sqrt (sum (zipWith (\x y -> (x-y)^(2::Int)) a b))
 
@@ -1420,7 +1420,7 @@ main = hspec $ do
   -- ===========================================================================
   -- メタヒューリスティック (Tier 2: Simulated Annealing, PSO)
   -- ===========================================================================
-  describe "Optim.SimulatedAnnealing" $ do
+  describe "Hanalyze.Optim.SimulatedAnnealing" $ do
     it "SA: sphere 5D で sufficient annealing" $ do
       gen <- MWC.create
       let bs = replicate 5 (-3, 3)
@@ -1432,7 +1432,7 @@ main = hspec $ do
       r <- SA.runSAWith cfg sphere [2, -1.5, 1, 0.5, -0.7] gen
       OC.orValue r `shouldSatisfy` (< 0.5)
 
-  describe "Optim.ParticleSwarm" $ do
+  describe "Hanalyze.Optim.ParticleSwarm" $ do
     it "PSO: sphere 5D で原点近傍 (0.5 以内)" $ do
       gen <- MWC.create
       let bs = replicate 5 (-5, 5)
@@ -1458,7 +1458,7 @@ main = hspec $ do
   -- ===========================================================================
   -- 制約付き最適化 (Augmented Lagrangian)
   -- ===========================================================================
-  describe "Optim.Constrained" $ do
+  describe "Hanalyze.Optim.Constrained" $ do
     it "Augmented Lagrangian: min x1²+x2² s.t. x1+x2=1 → (0.5, 0.5)" $ do
       let f xs = (head xs)^(2::Int) + (xs !! 1)^(2::Int)
           cs = Con.ConstraintSet
@@ -1502,9 +1502,9 @@ main = hspec $ do
       any (\h -> h [6.0] > 0) ineqs `shouldBe` True   -- 上限違反
 
   -- ===========================================================================
-  -- box 制約 (Bounds) 統一インターフェース (Optim.Common)
+  -- box 制約 (Bounds) 統一インターフェース (Hanalyze.Optim.Common)
   -- ===========================================================================
-  describe "Optim.Common box constraints" $ do
+  describe "Hanalyze.Optim.Common box constraints" $ do
     it "clipToBounds: 範囲外を反射、範囲内はそのまま" $ do
       OC.clipToBounds [(0,10)] [5]    `shouldBe` [5]
       OC.clipToBounds [(0,10)] [-2]   `shouldBe` [2]    -- 反射
@@ -1550,9 +1550,9 @@ main = hspec $ do
       all (\v -> v >= -1.05 && v <= 1.05) (OC.orBest r) `shouldBe` True
 
   -- ===========================================================================
-  -- Bayesian Optimization 内部最適化の差し替え (Optim.BayesOpt)
+  -- Bayesian Optimization 内部最適化の差し替え (Hanalyze.Optim.BayesOpt)
   -- ===========================================================================
-  describe "Optim.BayesOpt (acquisition optimizer swap)" $ do
+  describe "Hanalyze.Optim.BayesOpt (acquisition optimizer swap)" $ do
     it "bayesOpt 1D: Brent 内側で簡単な凸関数 (x-1.5)^2 を見つける" $ do
       gen <- MWC.create
       let cfg = BO.defaultBayesOptConfig
@@ -1568,7 +1568,7 @@ main = hspec $ do
   -- ===========================================================================
   -- RFF HP 自動チューニングの DE 版 (Phase O9)
   -- ===========================================================================
-  describe "Model.RFF DE-based auto-HP" $ do
+  describe "Hanalyze.Model.RFF DE-based auto-HP" $ do
     it "maximizeMarginalLikRBFMV_DE: y = sin x + noise で妥当な ℓ" $ do
       gen <- MWC.create
       let n = 30
@@ -1592,9 +1592,9 @@ main = hspec $ do
       RFF.lcEll   r `shouldSatisfy` (> 1e-3)
 
   -- ===========================================================================
-  -- Viz.ReportBuilder.secInterpolation (Phase G4)
+  -- Hanalyze.Viz.ReportBuilder.secInterpolation (Phase G4)
   -- ===========================================================================
-  describe "Viz.ReportBuilder.secInterpolation" $ do
+  describe "Hanalyze.Viz.ReportBuilder.secInterpolation" $ do
     it "defaultInterpReport で renderReport まで通る (smoke)" $
       withSystemTempFile "ha-interp.html" $ \fp h -> do
         hClose h
@@ -1624,9 +1624,9 @@ main = hspec $ do
         out `shouldContain` "PCHIP"
 
   -- ===========================================================================
-  -- Stat.Test (Phase 1: hypothesis tests)
+  -- Hanalyze.Stat.Test (Phase 1: hypothesis tests)
   -- ===========================================================================
-  describe "Stat.Test" $ do
+  describe "Hanalyze.Stat.Test" $ do
     it "tTest1Sample: μ₀=0 で同分布なら p > 0.05" $ do
       let xs = LA.fromList [0.1, -0.2, 0.3, 0.0, 0.15, -0.1, 0.05, 0.2]
           tr = ST.tTest1Sample xs 0 ST.TwoSided
@@ -1678,9 +1678,9 @@ main = hspec $ do
       ST.trPValue tr `shouldSatisfy` (< 0.05)
 
   -- ===========================================================================
-  -- Model.PCA (Phase 2)
+  -- Hanalyze.Model.PCA (Phase 2)
   -- ===========================================================================
-  describe "Model.PCA" $ do
+  describe "Hanalyze.Model.PCA" $ do
     it "PCA on rank-1 matrix: 1st component explains ~100% var" $ do
       let -- Rank-1: each row = scalar × [1, 2, 3]
           ks = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
@@ -1714,9 +1714,9 @@ main = hspec $ do
       all (> 0) (LA.toList (PCA.pcaScale r)) `shouldBe` True
 
   -- ===========================================================================
-  -- Stat.ClassMetrics (Phase 3)
+  -- Hanalyze.Stat.ClassMetrics (Phase 3)
   -- ===========================================================================
-  describe "Stat.ClassMetrics" $ do
+  describe "Hanalyze.Stat.ClassMetrics" $ do
     it "confusionMatrix: 完全一致で TP/TN のみ" $ do
       let c = CM.confusionMatrix [1, 0, 1, 0, 1] [1, 0, 1, 0, 1]
       CM.confTP c `shouldBe` 3
@@ -1761,9 +1761,9 @@ main = hspec $ do
       CM.macroF1 cm       `shouldBe` 1.0
 
   -- ===========================================================================
-  -- Stat.CV (Phase 4)
+  -- Hanalyze.Stat.CV (Phase 4)
   -- ===========================================================================
-  describe "Stat.CV" $ do
+  describe "Hanalyze.Stat.CV" $ do
     it "kFold(5, 100): 5 fold で全 100 行を test に使用、重複なし" $ do
       gen <- MWC.createSystemRandom
       folds <- CV.kFold 5 100 gen
@@ -1804,9 +1804,9 @@ main = hspec $ do
                (maximum tr < minimum te) `shouldBe` True) folds
 
   -- ===========================================================================
-  -- Model.Cluster (Phase 5)
+  -- Hanalyze.Model.Cluster (Phase 5)
   -- ===========================================================================
-  describe "Model.Cluster" $ do
+  describe "Hanalyze.Model.Cluster" $ do
     it "kMeans: 2 つの離れたクラスタで正しく分類" $ do
       gen <- MWC.createSystemRandom
       -- Cluster 1: around (0, 0); cluster 2: around (10, 10)
@@ -1842,9 +1842,9 @@ main = hspec $ do
       Cl.kmrConverged r `shouldBe` True
 
   -- ===========================================================================
-  -- Stat.MultipleTesting (Phase 6)
+  -- Hanalyze.Stat.MultipleTesting (Phase 6)
   -- ===========================================================================
-  describe "Stat.MultipleTesting" $ do
+  describe "Hanalyze.Stat.MultipleTesting" $ do
     it "Bonferroni: p × m, capped at 1" $ do
       let ps = [0.01, 0.04, 0.05, 0.10]
           adj = MT.bonferroni ps
@@ -1872,9 +1872,9 @@ main = hspec $ do
       and (zipWith (>=) by bh) `shouldBe` True
 
   -- ===========================================================================
-  -- Stat.Bootstrap (Phase 7)
+  -- Hanalyze.Stat.Bootstrap (Phase 7)
   -- ===========================================================================
-  describe "Stat.Bootstrap" $ do
+  describe "Hanalyze.Stat.Bootstrap" $ do
     it "bootstrapCI on N(0,1) sample: 0 が 95% CI 内" $ do
       gen <- MWC.createSystemRandom
       let xs = LA.fromList [-1.0, -0.5, 0.0, 0.5, 1.0,
@@ -1897,9 +1897,9 @@ main = hspec $ do
       Boot.sampleMedian v `shouldBe` 3.0
 
   -- ===========================================================================
-  -- DataIO.Reshape (Phase 8)
+  -- Hanalyze.DataIO.Reshape (Phase 8)
   -- ===========================================================================
-  describe "DataIO.Reshape" $ do
+  describe "Hanalyze.DataIO.Reshape" $ do
     it "lagColumn(1): 先頭が NaN、残りは 1 つずれる" $ do
       let df = DX.fromNamedColumns
                  [("x", DX.fromList [1.0, 2.0, 3.0, 4.0, 5.0 :: Double])]
@@ -1938,9 +1938,9 @@ main = hspec $ do
       length (DX.columnNames df') `shouldBe` 2  -- Y, Z (X drop)
 
   -- ===========================================================================
-  -- Stat.Effect (Phase 9)
+  -- Hanalyze.Stat.Effect (Phase 9)
   -- ===========================================================================
-  describe "Stat.Effect" $ do
+  describe "Hanalyze.Stat.Effect" $ do
     it "cohenD: 同じ分布で 0、平均差 1 SD で ~1" $ do
       let xs = LA.fromList [1, 2, 3, 4, 5] :: LA.Vector Double
           ys = LA.fromList [1, 2, 3, 4, 5] :: LA.Vector Double
@@ -1983,9 +1983,9 @@ main = hspec $ do
       Eff.cramerV 50 100 2 2 `shouldSatisfy` (> 0.5)
 
   -- ===========================================================================
-  -- Model.DecisionTree (Phase 10)
+  -- Hanalyze.Model.DecisionTree (Phase 10)
   -- ===========================================================================
-  describe "Model.DecisionTree" $ do
+  describe "Hanalyze.Model.DecisionTree" $ do
     it "fitDT: 線形分離可能なデータで perfect train accuracy" $ do
       -- y = 0 if x[0] < 5, else 1
       let xs = [[fromIntegral x] | x <- [1..10::Int]]
@@ -2027,9 +2027,9 @@ main = hspec $ do
         _           -> expectationFailure "Expected DNode at root"
 
   -- ===========================================================================
-  -- Model.TimeSeries (Phase 11)
+  -- Hanalyze.Model.TimeSeries (Phase 11)
   -- ===========================================================================
-  describe "Model.TimeSeries" $ do
+  describe "Hanalyze.Model.TimeSeries" $ do
     it "autocorrelation: lag 0 = 1.0" $ do
       let y = LA.fromList [1.0, 2.0, 1.5, 2.5, 1.8]
           acf = TS.autocorrelation 5 y
@@ -2093,9 +2093,9 @@ main = hspec $ do
       LA.size seasonal `shouldBe` LA.size y
 
   -- ===========================================================================
-  -- Model.Survival (Phase 12)
+  -- Hanalyze.Model.Survival (Phase 12)
   -- ===========================================================================
-  describe "Model.Survival" $ do
+  describe "Hanalyze.Model.Survival" $ do
     it "kaplanMeier: 全 event observed で S(t) は単調減少" $ do
       let samples = [ Surv.SurvSample t Surv.Observed | t <- [1, 2, 3, 4, 5] ]
           km = Surv.kaplanMeier samples
@@ -2144,9 +2144,9 @@ main = hspec $ do
       LA.atIndex (Surv.coxBeta fit) 0 `shouldSatisfy` (> 0)
 
   -- ===========================================================================
-  -- Stat.Interpret (Phase 13)
+  -- Hanalyze.Stat.Interpret (Phase 13)
   -- ===========================================================================
-  describe "Stat.Interpret" $ do
+  describe "Hanalyze.Stat.Interpret" $ do
     it "permutationImportance: 重要 feature が高 importance" $ do
       gen <- MWC.createSystemRandom
       -- y = x_0 のみに依存、x_1 は無関係
@@ -2184,7 +2184,7 @@ main = hspec $ do
       length (Interp.iceMean ice) `shouldBe` 3
 
   -- ─────────────────────────────────────────────────────────────────────
-  describe "Model.LM.Diagnostics (vs statsmodels OLS)" $ do
+  describe "Hanalyze.Model.LM.Diagnostics (vs statsmodels OLS)" $ do
     let xRaw = [1.0, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         yRaw = [3.7, 5.2, 6.8, 8.5, 9.9, 11.3, 13.1, 14.4, 15.8, 17.2]
         x    = LA.fromColumns
@@ -2252,7 +2252,7 @@ main = hspec $ do
       (LA.toList sds !! 1) `shouldSatisfy` approx 1e-6 3.027650
 
   -- ─────────────────────────────────────────────────────────────────────
-  describe "Design.Orthogonal.listArraysWithSize" $ do
+  describe "Hanalyze.Design.Orthogonal.listArraysWithSize" $ do
     it "returns one entry per standard array" $
       length OA.listArraysWithSize `shouldBe` length OA.standardArrays
 
@@ -2264,7 +2264,7 @@ main = hspec $ do
       OA.omLevels l9meta  `shouldBe` [3, 3, 3, 3]
 
   -- ─────────────────────────────────────────────────────────────────────
-  describe "Design.Taguchi extras" $ do
+  describe "Hanalyze.Design.Taguchi extras" $ do
     it "snRatioWithDetails: SmallerBetter on [1, 2, 3]" $ do
       let d = TG.snRatioWithDetails TG.SmallerBetter [1.0, 2.0, 3.0]
       TG.sdN d `shouldBe` 3
@@ -2288,7 +2288,7 @@ main = hspec $ do
         Left e -> expectationFailure (show e)
 
   -- ─────────────────────────────────────────────────────────────────────
-  describe "Design.Quality.processCapability" $ do
+  describe "Hanalyze.Design.Quality.processCapability" $ do
     it "centred process with σ=1, USL=6, LSL=−6 → Cp ≈ 2.0, Cpk ≈ 2.0" $ do
       -- 11-point symmetric sample around 0 with σ=1 (population)
       let xs = LA.fromList [-1.5, -1.0, -0.5, 0.5, 1.0, 1.5,

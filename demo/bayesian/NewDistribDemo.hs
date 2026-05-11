@@ -12,10 +12,10 @@ import Data.Maybe (fromMaybe)
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import MCMC.Core (Chain, chainSamples, posteriorMean, posteriorSD,
+import Hanalyze.MCMC.Core (Chain, chainSamples, posteriorMean, posteriorSD,
                   posteriorQuantile, acceptanceRate)
-import MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
-import Model.HBM (ModelP, sample, observe, Distribution (..))
+import Hanalyze.MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
+import Hanalyze.Model.HBM (ModelP, sample, observe, Distribution (..))
 
 obsData :: [Double]
 obsData = [1.5, 2.1, 1.8, 2.5, 1.9, 2.3, 1.7, 2.0, 2.2, 1.6]

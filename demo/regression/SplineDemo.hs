@@ -12,10 +12,10 @@ import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 import qualified System.Random.MWC.Distributions as MWC
 
-import Model.Spline (SplineKind (..), fitSpline, predictSpline,
+import Hanalyze.Model.Spline (SplineKind (..), fitSpline, predictSpline,
                      SplineFit (..), equalSpacedKnots)
-import Model.Core (rSquared1)
-import Viz.Core (defaultConfig, OutputFormat (..), PlotConfig (..),
+import Hanalyze.Model.Core (rSquared1)
+import Hanalyze.Viz.Core (defaultConfig, OutputFormat (..), PlotConfig (..),
                  writeSpec)
 import Graphics.Vega.VegaLite
 

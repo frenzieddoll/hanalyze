@@ -7,7 +7,7 @@ module Main where
 
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
-import Optim.NSGA (Solution (..), dominates, paretoDominates,
+import Hanalyze.Optim.NSGA (Solution (..), dominates, paretoDominates,
                    nonDominatedSort, crowdingDistance,
                    sbxCrossover, polynomialMutation, randomInBounds,
                    binaryTournament, crowdedCompare)

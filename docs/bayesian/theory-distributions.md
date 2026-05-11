@@ -3,7 +3,7 @@
 > 🌐 **English** | [日本語](theory-distributions.ja.md)
 
 > Formulas, intuition, and typical uses for every distribution implemented in
-> hanalyze's `Model.HBM.Distribution`. The relationship map is in
+> hanalyze's `Hanalyze.Model.HBM.Distribution`. The relationship map is in
 > [01-distributions.md](01-distributions.md).
 
 ## 0. Probability vocabulary
@@ -291,5 +291,5 @@ graph TD
 ## Next steps
 
 - **Inference exploiting conjugacy**: [theory-bayesian-basics.md](theory-bayesian-basics.md).
-- **Sampling and density evaluation in code**: read `logDensity` / `sampleDist` in `Model.HBM`.
+- **Sampling and density evaluation in code**: read `logDensity` / `sampleDist` in `Hanalyze.Model.HBM`.
 - **Visualisation**: `cabal run histogram-demo` (theoretical density overlaid on a histogram per distribution).

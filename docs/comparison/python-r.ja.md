@@ -19,35 +19,35 @@
 
 | 領域 | hanalyze | Python | R | 数値 bench |
 |---|---|---|---|---|
-| 古典回帰 (LM/Ridge/Lasso) | `Model.LM` / `Model.Regularized` | sklearn / statsmodels | base R / glmnet | ✅ |
-| GLM (Binomial/Poisson) | `Model.GLM` | statsmodels | base R `glm()` | ✅ |
-| 混合効果 (LME / GLMM) | `Model.GLMM` | statsmodels MixedLM | lme4 | ✅ |
-| カーネル法 / GP | `Model.{Kernel,GP,RFF}` | sklearn KernelRidge / GP | kernlab / GPML | ✅ |
-| 単目的最適化 | `Optim.{NM,LBFGS,DE,CMAES,SA,PSO}` | scipy.optimize | optimx | ✅ |
-| 多目的最適化 | `Optim.NSGA` | pymoo | mco / emoa | ✅ |
-| ベイズ最適化 | `Optim.BayesOpt` | scikit-optimize / GPyOpt | mlrMBO | ✅ |
-| ベイズ MCMC | `MCMC.{MH,HMC,NUTS,Gibbs}` | PyMC / NumPyro | rstan / brms | ✅ |
-| HBM (確率プログラミング) | `Model.HBM` 多相 DSL | PyMC / Pyro / Stan | rstan / brms | 🟡 (機能対応は [PyMC 比較](../02-pymc-comparison.ja.md) を参照) |
-| 変分推論 (ADVI) | `Stat.VI` | PyMC / Pyro | rstan ADVI | 🟡 |
-| モデル比較 (WAIC / LOO) | `Stat.ModelSelect` | ArviZ | loo (R) | ✅ (`mcmc_extras` suite) |
-| 実験計画 (DOE) | `Design.*` | pyDOE / pyDOE2 | DoE.base | 🟡 |
-| 直交表 + タグチ | `Design.{Orthogonal,Taguchi}` | (限定的) | qualityTools / DoE.base | 🟡 |
-| 仮説検定 | `Stat.Test` | scipy.stats | base R / rstatix | ✅ (`stat_util` suite) |
-| 多重比較補正 | `Stat.MultipleTesting` | statsmodels | `p.adjust` | ✅ |
-| Bootstrap CI / 並べ替え | `Stat.Bootstrap` | scipy.stats / arch | boot | ✅ |
-| 効果量 + Power 解析 | `Stat.Effect` | statsmodels.stats.power | pwr / effsize | 🟡 |
-| PCA / 次元削減 | `Model.PCA` | sklearn.decomposition | prcomp | ✅ (`ml` suite) |
-| クラスタリング (K-means) | `Model.Cluster` | sklearn.cluster | cluster / mclust | ✅ |
-| 決定木 (CART 分類) | `Model.DecisionTree` | sklearn.tree | rpart / tree | ✅ |
-| 時系列 (ARIMA / Holt-Winters) | `Model.TimeSeries` | statsmodels.tsa | forecast / fable | ✅ (`survts` / `ts_extras` suite) |
-| 生存解析 (KM / Cox) | `Model.Survival` | lifelines | survival | ✅ |
-| 分類評価 (AUC / F1 / Brier) | `Stat.ClassMetrics` | sklearn.metrics | pROC / mlr3measures | 🟡 |
-| Cross-validation | `Stat.CV` | sklearn.model_selection | caret / rsample | 🟡 |
-| 解釈 (Permutation imp / PDP / ICE) | `Stat.Interpret` | sklearn.inspection / shap / pdpbox | iml | 🟡 |
-| データ操作 (DataFrame) | Hackage `dataframe` + `DataIO.Reshape` | pandas | tidyverse | 🟡 |
-| 可視化 | `Viz.*` (Vega-Lite ベース) | matplotlib / seaborn / plotly | ggplot2 | (質的比較のみ) |
-| CSV / Parquet / JSON I/O | `DataIO.{CSV,External}` | pandas / pyarrow | readr / arrow | 🟡 |
-| 汚いデータ防衛 | `DataIO.{Health,Sniff,Clean}` | (DIY) | janitor (一部) | 独自 |
+| 古典回帰 (LM/Ridge/Lasso) | `Hanalyze.Model.LM` / `Hanalyze.Model.Regularized` | sklearn / statsmodels | base R / glmnet | ✅ |
+| GLM (Binomial/Poisson) | `Hanalyze.Model.GLM` | statsmodels | base R `glm()` | ✅ |
+| 混合効果 (LME / GLMM) | `Hanalyze.Model.GLMM` | statsmodels MixedLM | lme4 | ✅ |
+| カーネル法 / GP | `Hanalyze.Model.{Kernel,GP,RFF}` | sklearn KernelRidge / GP | kernlab / GPML | ✅ |
+| 単目的最適化 | `Hanalyze.Optim.{NM,LBFGS,DE,CMAES,SA,PSO}` | scipy.optimize | optimx | ✅ |
+| 多目的最適化 | `Hanalyze.Optim.NSGA` | pymoo | mco / emoa | ✅ |
+| ベイズ最適化 | `Hanalyze.Optim.BayesOpt` | scikit-optimize / GPyOpt | mlrMBO | ✅ |
+| ベイズ MCMC | `Hanalyze.MCMC.{MH,HMC,NUTS,Gibbs}` | PyMC / NumPyro | rstan / brms | ✅ |
+| HBM (確率プログラミング) | `Hanalyze.Model.HBM` 多相 DSL | PyMC / Pyro / Stan | rstan / brms | 🟡 (機能対応は [PyMC 比較](../02-pymc-comparison.ja.md) を参照) |
+| 変分推論 (ADVI) | `Hanalyze.Stat.VI` | PyMC / Pyro | rstan ADVI | 🟡 |
+| モデル比較 (WAIC / LOO) | `Hanalyze.Stat.ModelSelect` | ArviZ | loo (R) | ✅ (`mcmc_extras` suite) |
+| 実験計画 (DOE) | `Hanalyze.Design.*` | pyDOE / pyDOE2 | DoE.base | 🟡 |
+| 直交表 + タグチ | `Hanalyze.Design.{Orthogonal,Taguchi}` | (限定的) | qualityTools / DoE.base | 🟡 |
+| 仮説検定 | `Hanalyze.Stat.Test` | scipy.stats | base R / rstatix | ✅ (`stat_util` suite) |
+| 多重比較補正 | `Hanalyze.Stat.MultipleTesting` | statsmodels | `p.adjust` | ✅ |
+| Bootstrap CI / 並べ替え | `Hanalyze.Stat.Bootstrap` | scipy.stats / arch | boot | ✅ |
+| 効果量 + Power 解析 | `Hanalyze.Stat.Effect` | statsmodels.stats.power | pwr / effsize | 🟡 |
+| PCA / 次元削減 | `Hanalyze.Model.PCA` | sklearn.decomposition | prcomp | ✅ (`ml` suite) |
+| クラスタリング (K-means) | `Hanalyze.Model.Cluster` | sklearn.cluster | cluster / mclust | ✅ |
+| 決定木 (CART 分類) | `Hanalyze.Model.DecisionTree` | sklearn.tree | rpart / tree | ✅ |
+| 時系列 (ARIMA / Holt-Winters) | `Hanalyze.Model.TimeSeries` | statsmodels.tsa | forecast / fable | ✅ (`survts` / `ts_extras` suite) |
+| 生存解析 (KM / Cox) | `Hanalyze.Model.Survival` | lifelines | survival | ✅ |
+| 分類評価 (AUC / F1 / Brier) | `Hanalyze.Stat.ClassMetrics` | sklearn.metrics | pROC / mlr3measures | 🟡 |
+| Cross-validation | `Hanalyze.Stat.CV` | sklearn.model_selection | caret / rsample | 🟡 |
+| 解釈 (Permutation imp / PDP / ICE) | `Hanalyze.Stat.Interpret` | sklearn.inspection / shap / pdpbox | iml | 🟡 |
+| データ操作 (DataFrame) | Hackage `dataframe` + `Hanalyze.DataIO.Reshape` | pandas | tidyverse | 🟡 |
+| 可視化 | `Hanalyze.Viz.*` (Vega-Lite ベース) | matplotlib / seaborn / plotly | ggplot2 | (質的比較のみ) |
+| CSV / Parquet / JSON I/O | `Hanalyze.DataIO.{CSV,External}` | pandas / pyarrow | readr / arrow | 🟡 |
+| 汚いデータ防衛 | `Hanalyze.DataIO.{Health,Sniff,Clean}` | (DIY) | janitor (一部) | 独自 |
 
 ## 2. 数値ベンチ
 
@@ -84,7 +84,7 @@
 - 型安全 — 行列次元 / dtype mismatch がコンパイル時検出
 - HBM 多相 DSL — 同一モデルから 4 種解釈 (構造検査 / log joint / AD 勾配 /
   依存抽出) が Free monad で導ける
-- 汚いデータ防衛 (`DataIO.{Health,Sniff,Clean}`) — pandas / R で明示的に
+- 汚いデータ防衛 (`Hanalyze.DataIO.{Health,Sniff,Clean}`) — pandas / R で明示的に
   対応するパッケージは限定的
 - 単一バイナリ — Python interpreter 不要、CLI として完結
 

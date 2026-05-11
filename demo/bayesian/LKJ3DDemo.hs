@@ -15,10 +15,10 @@ import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 import qualified System.Random.MWC.Distributions as MWC
 
-import MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
-import Model.HBM (ModelP, sample, observeMV, lkjCorrCholesky,
+import Hanalyze.MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
+import Hanalyze.Model.HBM (ModelP, sample, observeMV, lkjCorrCholesky,
                   Distribution (..), augmentChainWithDeterministic)
-import Viz.MCMC (printPosteriorSummary, posteriorSummaryFile)
+import Hanalyze.Viz.MCMC (printPosteriorSummary, posteriorSummaryFile)
 
 cfg :: NUTSConfig
 cfg = defaultNUTSConfig

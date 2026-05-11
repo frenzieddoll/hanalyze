@@ -3,7 +3,7 @@
 > 🌐 [English](06-gam.md) | **日本語**
 
 > 各説明変数を個別の滑らかな関数で表現する加法モデル。
-> 解釈性 + 非線形性のバランス。`Model.GAM` モジュール。
+> 解釈性 + 非線形性のバランス。`Hanalyze.Model.GAM` モジュール。
 >
 > 関連: [06-quantile.ja.md](06-quantile.ja.md) / [04-spline.ja.md](04-spline.ja.md)
 
@@ -141,7 +141,7 @@ let baseSec = [ RB.secDataOverview df xCols yCol
 - **過学習リスク**: ノット数 K を大きくすると過学習しやすい。λ で正則化、
   または K を 5-10 程度に抑える。
 - **加法性の仮定**: $s_j(x_j) \cdot s_k(x_k)$ のような交互作用は表現できない。
-  必要なら `Model.Spline` で 2D テンソル積基底を別途構築するか、Random Forest
+  必要なら `Hanalyze.Model.Spline` で 2D テンソル積基底を別途構築するか、Random Forest
   / Gradient Boosting に切り替える。
 - **外挿は危険**: 訓練範囲外の x で各 $s_j$ は非自然な振動をすることがある。
 

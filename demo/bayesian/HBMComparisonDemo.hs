@@ -18,14 +18,14 @@ import System.Random.MWC (initialize)
 import qualified Data.Vector as V
 import Text.Printf (printf)
 
-import MCMC.Core (chainVals, posteriorMean, posteriorSD, acceptanceRate)
-import MCMC.HMC  (HMCConfig (..), defaultHMCConfig, gradU, hmc)
-import MCMC.HMC (hmc)
-import Model.HBM  (Model)
-import qualified Model.HBM  as HBM
-import qualified Model.HBM as HBMP
-import Stat.Distribution (Distribution (..))
-import Stat.MCMC (ess)
+import Hanalyze.MCMC.Core (chainVals, posteriorMean, posteriorSD, acceptanceRate)
+import Hanalyze.MCMC.HMC  (HMCConfig (..), defaultHMCConfig, gradU, hmc)
+import Hanalyze.MCMC.HMC (hmc)
+import Hanalyze.Model.HBM  (Model)
+import qualified Hanalyze.Model.HBM  as HBM
+import qualified Hanalyze.Model.HBM as HBMP
+import Hanalyze.Stat.Distribution (Distribution (..))
+import Hanalyze.Stat.MCMC (ess)
 
 -- ---------------------------------------------------------------------------
 -- 共通設定
@@ -273,7 +273,7 @@ overviewSection = T.unlines
   , "HMC サンプリング時の勾配精度・速度・推論品質を比較します。</p>"
   , "<div class=\"grid-2\">"
   , "<div class=\"card\">"
-  , "  <div class=\"card-title\">HBM (Model.HBM)</div>"
+  , "  <div class=\"card-title\">HBM (Hanalyze.Model.HBM)</div>"
   , "  <ul>"
   , "    <li>継続型固定: <code>Double → next</code></li>"
   , "    <li>勾配: 中心差分数値微分 h=1×10⁻⁵</li>"
@@ -282,7 +282,7 @@ overviewSection = T.unlines
   , "  </ul>"
   , "</div>"
   , "<div class=\"card\">"
-  , "  <div class=\"card-title\">HBMP (Model.HBM)</div>"
+  , "  <div class=\"card-title\">HBMP (Hanalyze.Model.HBM)</div>"
   , "  <ul>"
   , "    <li>継続型多相: <code>a → next</code></li>"
   , "    <li>勾配: forward-mode AD (Numeric.AD.Mode.Forward)</li>"

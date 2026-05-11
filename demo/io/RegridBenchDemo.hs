@@ -19,10 +19,10 @@ import           Control.Monad         (forM)
 import           Data.List             (sort)
 
 import qualified DataFrame             as DX
-import qualified DataIO.Preprocess     as Pp
-import qualified Stat.Interpolate      as Interp
-import qualified Stat.AdaptiveGrid     as AG
-import qualified Viz.ReportBuilder     as RB
+import qualified Hanalyze.DataIO.Preprocess     as Pp
+import qualified Hanalyze.Stat.Interpolate      as Interp
+import qualified Hanalyze.Stat.AdaptiveGrid     as AG
+import qualified Hanalyze.Viz.ReportBuilder     as RB
 
 -- ---------------------------------------------------------------------------
 -- 真の物理モデル (PotentialGen.hs と同じ)

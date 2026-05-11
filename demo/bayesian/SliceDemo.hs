@@ -14,12 +14,12 @@ import qualified Data.Map.Strict as Map
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import MCMC.MH    (metropolis, defaultMCMCConfig, MCMCConfig (..))
-import MCMC.NUTS  (nuts, defaultNUTSConfig, NUTSConfig (..))
-import MCMC.Slice (slice, defaultSliceConfig, SliceConfig (..))
-import MCMC.Core  (acceptanceRate)
-import Model.HBM  (ModelP, sample, observe, Distribution (..))
-import Viz.MCMC   (printPosteriorSummary)
+import Hanalyze.MCMC.MH    (metropolis, defaultMCMCConfig, MCMCConfig (..))
+import Hanalyze.MCMC.NUTS  (nuts, defaultNUTSConfig, NUTSConfig (..))
+import Hanalyze.MCMC.Slice (slice, defaultSliceConfig, SliceConfig (..))
+import Hanalyze.MCMC.Core  (acceptanceRate)
+import Hanalyze.Model.HBM  (ModelP, sample, observe, Distribution (..))
+import Hanalyze.Viz.MCMC   (printPosteriorSummary)
 
 simpleModel :: ModelP ()
 simpleModel = do

@@ -12,7 +12,7 @@ import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 import qualified System.Random.MWC.Distributions as MWC
 
-import Model.Regularized (Penalty (..), RegFit (..),
+import Hanalyze.Model.Regularized (Penalty (..), RegFit (..),
                           fitRegularized, standardize)
 
 main :: IO ()

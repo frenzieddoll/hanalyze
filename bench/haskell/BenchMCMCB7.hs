@@ -21,15 +21,15 @@ import qualified Data.Map.Strict         as Map
 import qualified Data.Text               as T
 import qualified System.Random.MWC       as MWC
 
-import           Model.HBM               (Distribution (..), ModelP, sample,
+import           Hanalyze.Model.HBM               (Distribution (..), ModelP, sample,
                                           observe)
-import           MCMC.Core               (Chain, chainAccepted, chainTotal,
+import           Hanalyze.MCMC.Core               (Chain, chainAccepted, chainTotal,
                                           chainVals, posteriorMean,
                                           posteriorSD)
-import           MCMC.HMC                (HMCConfig (..), defaultHMCConfig, hmc)
-import           MCMC.NUTS               (NUTSConfig (..), defaultNUTSConfig,
+import           Hanalyze.MCMC.HMC                (HMCConfig (..), defaultHMCConfig, hmc)
+import           Hanalyze.MCMC.NUTS               (NUTSConfig (..), defaultNUTSConfig,
                                           nuts)
-import           Stat.MCMC               (ess)
+import           Hanalyze.Stat.MCMC               (ess)
 
 import           BenchUtil
 

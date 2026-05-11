@@ -4,14 +4,14 @@
 
 > 関連デモ:
 > - [`hbm-example`](../demo/HBMExample.hs) — 階層正規モデル + 4 チェーン NUTS
-> - [`hbm-regression`](../demo/HBMRegressionDemo.hs) — ベイズ単回帰 (HTML レポート付き; legacy `Viz.AnalysisReport` 経由)
+> - [`hbm-regression`](../demo/HBMRegressionDemo.hs) — ベイズ単回帰 (HTML レポート付き; legacy `Hanalyze.Viz.AnalysisReport` 経由)
 > - [`clinical-trial`](../demo/ClinicalTrial.hs) — Beta-Binomial A/B テスト
 > - [`simpson-paradox`](../demo/SimpsonParadoxDemo.hs) — シンプソン例で LM/GLMM/HBM 比較
 > - [`hbm-random-slope`](../demo/HBMRandomSlopeDemo.hs) — ランダム傾き拡張
 
 ## 概要
 
-`Model.HBM` は Free Monad で実装した多相な確率的プログラミング DSL です。
+`Hanalyze.Model.HBM` は Free Monad で実装した多相な確率的プログラミング DSL です。
 Stan や PyMC のように宣言的にモデルを書けます。
 
 継続を `forall a. (Floating a, Ord a) => Model a r` として多相化してあるため、
@@ -24,7 +24,7 @@ Stan や PyMC のように宣言的にモデルを書けます。
 | AD 勾配 | `a = Forward Double` | `gradAD`, `gradADU` (machine epsilon 精度) |
 | 依存追跡 | `a = Track` | `extractDeps`, `buildModelGraph` (DAG 自動抽出) |
 
-サンプラー (`MCMC.HMC`/`NUTS`/`Gibbs`) は AD 勾配と自動制約変換を活用します。
+サンプラー (`Hanalyze.MCMC.HMC`/`NUTS`/`Gibbs`) は AD 勾配と自動制約変換を活用します。
 
 ---
 
@@ -268,14 +268,14 @@ extractDeps (schoolModel schoolData)
 -- ,...]
 ```
 
-`Viz.Report.MCMCReport` の `reportGraph` フィールドにこの `ModelGraph` を渡すと、
+`Hanalyze.Viz.Report.MCMCReport` の `reportGraph` フィールドにこの `ModelGraph` を渡すと、
 MCMC レポート HTML 内に DAG が埋め込まれます。
 
 ---
 
 ## 観測値ごとの対数尤度
 
-WAIC / LOO 計算 (`Stat.ModelSelect`) の内部で使われますが、
+WAIC / LOO 計算 (`Hanalyze.Stat.ModelSelect`) の内部で使われますが、
 直接呼び出してデバッグにも使えます。
 
 ```haskell

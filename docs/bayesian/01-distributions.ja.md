@@ -137,7 +137,7 @@ graph TD
 ```
 
 これらは Gibbs サンプラーで個別パラメタを直接 sample するときに使う。
-hanalyze の `MCMC.Gibbs.gibbsMH` は事前/尤度の組み合わせから自動で
+hanalyze の `Hanalyze.MCMC.Gibbs.gibbsMH` は事前/尤度の組み合わせから自動で
 共役構造を検出して使う。
 
 ## 4. 多変量と相関
@@ -181,7 +181,7 @@ graph TD
   GP -->|"格子上 = 多変量正規"| MvN["MvNormal"]
 ```
 
-`ar1Latent` (J2) と `Model.GP` (master) で実装済み。
+`ar1Latent` (J2) と `Hanalyze.Model.GP` (master) で実装済み。
 
 ## 6. 切り詰め・打ち切り・混合
 

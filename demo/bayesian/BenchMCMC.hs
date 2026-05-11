@@ -22,13 +22,13 @@ import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import Model.HBM
-import MCMC.Core (Chain (..), chainVals, acceptanceRate, posteriorMean)
-import MCMC.MH   (metropolis, MCMCConfig (..))
-import MCMC.HMC  (hmc,  HMCConfig (..),  defaultHMCConfig)
-import MCMC.NUTS (nuts, NUTSConfig (..), defaultNUTSConfig)
-import Stat.Distribution ()
-import Stat.MCMC (ess)
+import Hanalyze.Model.HBM
+import Hanalyze.MCMC.Core (Chain (..), chainVals, acceptanceRate, posteriorMean)
+import Hanalyze.MCMC.MH   (metropolis, MCMCConfig (..))
+import Hanalyze.MCMC.HMC  (hmc,  HMCConfig (..),  defaultHMCConfig)
+import Hanalyze.MCMC.NUTS (nuts, NUTSConfig (..), defaultNUTSConfig)
+import Hanalyze.Stat.Distribution ()
+import Hanalyze.Stat.MCMC (ess)
 
 -- ---------------------------------------------------------------------------
 -- モデル定義

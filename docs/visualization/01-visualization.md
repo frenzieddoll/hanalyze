@@ -3,13 +3,13 @@
 > 🌐 **English** | [日本語](01-visualization.ja.md)
 
 > Related demos:
-> - [`hbm-example`](../demo/HBMExample.hs) — `Viz.Report` (KDE / trace / DAG / pair scatter)
-> - [`hbm-regression`](../demo/HBMRegressionDemo.hs) — HBM regression HTML report (DAG + MCMC + credible-interval predictions; report builder is migrating from deprecated `Viz.AnalysisReport` to standard `Viz.ReportBuilder`)
+> - [`hbm-example`](../demo/HBMExample.hs) — `Hanalyze.Viz.Report` (KDE / trace / DAG / pair scatter)
+> - [`hbm-regression`](../demo/HBMRegressionDemo.hs) — HBM regression HTML report (DAG + MCMC + credible-interval predictions; report builder is migrating from deprecated `Hanalyze.Viz.AnalysisReport` to standard `Hanalyze.Viz.ReportBuilder`)
 > - [`simpson-paradox`](../demo/SimpsonParadoxDemo.hs) — multi-model side-by-side via `writeComparisonReport`
-> - [`bar-demo`](../demo/BarDemo.hs) — `Viz.Bar` + PNG/SVG export
+> - [`bar-demo`](../demo/BarDemo.hs) — `Hanalyze.Viz.Bar` + PNG/SVG export
 > - [`gp-demo`](../demo/GPDemo.hs) — GP-specific report
 >
-> CLI: `--report` builds an HTML report (`regress` uses legacy `Viz.AnalysisReport`; other subcommands use the standard `Viz.ReportBuilder`); `--format png|svg` renders individual plots as images.
+> CLI: `--report` builds an HTML report (`regress` uses legacy `Hanalyze.Viz.AnalysisReport`; other subcommands use the standard `Hanalyze.Viz.ReportBuilder`); `--format png|svg` renders individual plots as images.
 
 ## Output formats
 
@@ -28,7 +28,7 @@ If PNG/SVG generation fails, the function automatically falls back to HTML.
 
 ## Viz.Report — integrated MCMC HTML report (recommended)
 
-`Viz.Report` collects diagnostic plots, the model graph, and summary
+`Hanalyze.Viz.Report` collects diagnostic plots, the model graph, and summary
 statistics into a **single self-contained HTML file**.
 
 ```haskell
@@ -81,7 +81,7 @@ renderReport "report_multi.html" report
 
 ## Viz.MCMC — individual MCMC plots
 
-When you want individual plots without going through `Viz.Report`:
+When you want individual plots without going through `Hanalyze.Viz.Report`:
 
 ```haskell
 import Viz.MCMC

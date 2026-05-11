@@ -1,6 +1,6 @@
 # Model.PCA — 主成分分析
 
-> hanalyze の `Model.PCA` は SVD ベースの PCA を提供します。
+> hanalyze の `Hanalyze.Model.PCA` は SVD ベースの PCA を提供します。
 > sklearn `decomposition.PCA` 相当。
 
 ## 1. API

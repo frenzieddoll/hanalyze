@@ -25,13 +25,13 @@ import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import Model.HBM
--- import Stat.Distribution (Distribution (..)) -- now from Model.HBM
-import MCMC.Core (chainVals, posteriorMean, posteriorSD)
-import MCMC.Gibbs (GibbsConfig (..), defaultGibbsConfig, gibbs, normalNormal)
-import MCMC.NUTS  (NUTSConfig (..), defaultNUTSConfig, nuts)
-import Stat.MCMC  (ess)
-import Stat.ModelSelect
+import Hanalyze.Model.HBM
+-- import Hanalyze.Stat.Distribution (Distribution (..)) -- now from Hanalyze.Model.HBM
+import Hanalyze.MCMC.Core (chainVals, posteriorMean, posteriorSD)
+import Hanalyze.MCMC.Gibbs (GibbsConfig (..), defaultGibbsConfig, gibbs, normalNormal)
+import Hanalyze.MCMC.NUTS  (NUTSConfig (..), defaultNUTSConfig, nuts)
+import Hanalyze.Stat.MCMC  (ess)
+import Hanalyze.Stat.ModelSelect
 
 -- ---------------------------------------------------------------------------
 -- 合成データ  (真値 μ = 3, σ = 2, n = 20)

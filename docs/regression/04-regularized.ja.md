@@ -3,7 +3,7 @@
 > 🌐 [English](04-regularized.md) | **日本語**
 
 > p (列数) が n に近い、または p > n のときの安定推定 + 変数選択。
-> `Model.Regularized` モジュール。
+> `Hanalyze.Model.Regularized` モジュール。
 >
 > 関連: [04-spline.ja.md](04-spline.ja.md) (非線形) / [04-kernel.ja.md](04-kernel.ja.md) (カーネル) /
 > 理論: [theory-regression-extensions.ja.md](theory-regression-extensions.ja.md)
@@ -102,4 +102,4 @@ graph TD
 - カーネル回帰: [04-kernel.ja.md](04-kernel.ja.md)
 - ガウス過程 (代替): [04-gp.ja.md](04-gp.ja.md)
 - Cross-validation で λ を選ぶ: [Stat.CV](../stat/04-cv.ja.md)
-- ベイズ版正則化: `Model.HBM` で `potential` を使うとカスタムペナルティが書ける
+- ベイズ版正則化: `Hanalyze.Model.HBM` で `potential` を使うとカスタムペナルティが書ける

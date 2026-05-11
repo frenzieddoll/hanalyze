@@ -27,12 +27,12 @@ import           Control.Monad           (replicateM_)
 import qualified Numeric.LinearAlgebra   as LA
 import           System.Environment      (getArgs)
 
-import           Model.Core              (coefficients)
-import           Model.GLM               (Family (..), LinkFn (..), fitGLMFull)
-import qualified Model.Regularized       as Reg
-import           Model.Regularized       (Penalty (..), rfBeta)
-import qualified Model.Kernel            as Kn
-import qualified Stat.KernelDist         as KD
+import           Hanalyze.Model.Core              (coefficients)
+import           Hanalyze.Model.GLM               (Family (..), LinkFn (..), fitGLMFull)
+import qualified Hanalyze.Model.Regularized       as Reg
+import           Hanalyze.Model.Regularized       (Penalty (..), rfBeta)
+import qualified Hanalyze.Model.Kernel            as Kn
+import qualified Hanalyze.Stat.KernelDist         as KD
 
 import           BenchUtil               (readCsvXY)
 

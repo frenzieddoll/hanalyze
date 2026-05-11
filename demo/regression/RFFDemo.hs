@@ -14,8 +14,8 @@ module Main where
 import qualified Numeric.LinearAlgebra as LA
 import qualified System.Random.MWC as MWC
 import Control.Exception (evaluate)
-import Model.GP        as GP
-import Model.RFF       as RFF
+import Hanalyze.Model.GP        as GP
+import Hanalyze.Model.RFF       as RFF
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import Text.Printf     (printf)
 
@@ -61,7 +61,7 @@ main = do
   putStrLn ""
 
   -- ================================================
-  -- 1. 厳密 GP (Model.GP, RBF)
+  -- 1. 厳密 GP (Hanalyze.Model.GP, RBF)
   -- ================================================
   putStrLn "--- Exact GP (RBF, Cholesky O(n^3)) ---"
   t0 <- getCurrentTime

@@ -9,8 +9,8 @@
 -- 3. ロバスト GP w/ StudentT(ν=4, σ=0.5) — Cauchy より軽い裾
 module Main where
 
-import Model.GP        (Kernel (..), GPParams (..), GPModel (..), fitGP, gpMean)
-import Model.GPRobust  (RobustLikelihood (..), RobustGPFit (..),
+import Hanalyze.Model.GP        (Kernel (..), GPParams (..), GPModel (..), fitGP, gpMean)
+import Hanalyze.Model.GPRobust  (RobustLikelihood (..), RobustGPFit (..),
                         fitGPRobust, predictGPRobust)
 import Text.Printf     (printf)
 
@@ -60,7 +60,7 @@ main = do
   putStrLn ""
 
   -- 1. 通常 GP (Gaussian)
-  putStrLn "--- 1. Gaussian GP (Model.GP) ---"
+  putStrLn "--- 1. Gaussian GP (Hanalyze.Model.GP) ---"
   let gpRes = fitGP (GPModel RBF hp) trainX trainY testX
       gaussRMSE = rmse testY (gpMean gpRes)
   printf "  RMSE (vs true f): %.4f\n" gaussRMSE

@@ -25,92 +25,92 @@ Benchmarks (see below) show competitive accuracy with Python/R references in the
 
 Features grouped by category. Each capability links to a usage doc and (where relevant) a theory doc.
 
-### Statistical inference (`Stat.*`)
+### Statistical inference (`Hanalyze.Stat.*`)
 
 | Feature | Module | Usage | Theory |
 |---|---|---|---|
-| 12 hypothesis tests (t/χ²/ANOVA/Wilcoxon/KS/Shapiro/Levene/Bartlett/...) | `Stat.Test` | [stat/01-test.md](docs/stat/01-test.md) | — |
-| Multiple-testing correction (Bonferroni/Holm/BH/BY) | `Stat.MultipleTesting` | [stat/06-multipletesting.md](docs/stat/06-multipletesting.md) | — |
-| Bootstrap CI / permutation tests | `Stat.Bootstrap` | [stat/07-bootstrap.md](docs/stat/07-bootstrap.md) | — |
-| Effect size + power analysis (Cohen's d/η²/Cramér V/n estimation) | `Stat.Effect` | [stat/09-effect.md](docs/stat/09-effect.md) | — |
-| Cross-validation (k-fold/stratified/LOO) + Grid search | `Stat.CV` | [stat/04-cv.md](docs/stat/04-cv.md) | — |
+| 12 hypothesis tests (t/χ²/ANOVA/Wilcoxon/KS/Shapiro/Levene/Bartlett/...) | `Hanalyze.Stat.Test` | [stat/01-test.md](docs/stat/01-test.md) | — |
+| Multiple-testing correction (Bonferroni/Holm/BH/BY) | `Hanalyze.Stat.MultipleTesting` | [stat/06-multipletesting.md](docs/stat/06-multipletesting.md) | — |
+| Bootstrap CI / permutation tests | `Hanalyze.Stat.Bootstrap` | [stat/07-bootstrap.md](docs/stat/07-bootstrap.md) | — |
+| Effect size + power analysis (Cohen's d/η²/Cramér V/n estimation) | `Hanalyze.Stat.Effect` | [stat/09-effect.md](docs/stat/09-effect.md) | — |
+| Cross-validation (k-fold/stratified/LOO) + Grid search | `Hanalyze.Stat.CV` | [stat/04-cv.md](docs/stat/04-cv.md) | — |
 
-### Regression (`Model.*`)
-
-| Feature | Module | Usage | Theory |
-|---|---|---|---|
-| Linear regression (LM) + inference stats (SE/t/p, F, AIC/BIC, leverage, Cook's) | `Model.LM` / `Model.LM.Diagnostics` | [regression/01-lm.md](docs/regression/01-lm.md) | [principles/lm.md](docs/principles/lm.md) |
-| GLM (Binomial / Poisson / Gaussian) | `Model.GLM` | [regression/02-glm.md](docs/regression/02-glm.md) | [principles/glm.md](docs/principles/glm.md) |
-| GLMM / mixed-effects model (LME) | `Model.GLMM` | [regression/03-glmm.md](docs/regression/03-glmm.md) | [principles/glmm.md](docs/principles/glmm.md) |
-| Spline regression (B-spline / NaturalCubic) | `Model.Spline` | [regression/04-spline.md](docs/regression/04-spline.md) | [regression/theory-regression-extensions.md](docs/regression/theory-regression-extensions.md) |
-| Kernel regression (NW / Kernel Ridge) + multi-D inputs | `Model.Kernel` | [regression/04-kernel.md](docs/regression/04-kernel.md) | same |
-| Regularised (Ridge / Lasso / ElasticNet) | `Model.Regularized` | [regression/04-regularized.md](docs/regression/04-regularized.md) | same |
-| Gaussian process (RBF / Matérn / Periodic + ARD + multi-input) | `Model.GP` | [regression/04-gp.md](docs/regression/04-gp.md) | [principles/gp.md](docs/principles/gp.md) |
-| Random Fourier Features (large-scale GP approximation) | `Model.RFF` | [regression/04-rff.md](docs/regression/04-rff.md) | [regression/theory-regression-extensions.md](docs/regression/theory-regression-extensions.md) |
-| Multivariate regression / Multi-output GP | `Model.{Multivariate,MultiGP,MultiOutput}` | [regression/05-multivariate.md](docs/regression/05-multivariate.md) | [regression/theory-multivariate.md](docs/regression/theory-multivariate.md) |
-| Quantile regression | `Model.Quantile` | [regression/06-quantile.md](docs/regression/06-quantile.md) | [regression/theory-regression-extensions.md](docs/regression/theory-regression-extensions.md) |
-| Generalized additive model (GAM) | `Model.GAM` | [regression/06-gam.md](docs/regression/06-gam.md) | same |
-| Random forest (regression) | `Model.RandomForest` | [regression/06-randomforest.md](docs/regression/06-randomforest.md) | same |
-| Multi-output regression + interactive HTML | `Model.MultiOutput` | [regression/07-multireg.md](docs/regression/07-multireg.md) | [regression/theory-multivariate.md](docs/regression/theory-multivariate.md) |
-
-### Machine learning (`Model.*` / `Stat.*`)
+### Regression (`Hanalyze.Model.*`)
 
 | Feature | Module | Usage | Theory |
 |---|---|---|---|
-| PCA + cumulative variance + standardisation | `Model.PCA` | [stat/02-pca.md](docs/stat/02-pca.md) | — |
-| Clustering (K-means + k-means++ + silhouette) | `Model.Cluster` | [stat/05-cluster.md](docs/stat/05-cluster.md) | — |
-| Decision tree (CART classifier) | `Model.DecisionTree` | [regression/08-decisiontree.md](docs/regression/08-decisiontree.md) | — |
-| Time series (ARIMA / Holt-Winters / STL / ACF / PACF) | `Model.TimeSeries` | [regression/09-timeseries.md](docs/regression/09-timeseries.md) | — |
-| Survival analysis (Kaplan-Meier / Nelson-Aalen / Log-rank / Cox PH) | `Model.Survival` | [regression/10-survival.md](docs/regression/10-survival.md) | — |
-| Classification metrics (Confusion / AUC / F1 / MCC / log-loss / Brier) | `Stat.ClassMetrics` | [stat/03-classmetrics.md](docs/stat/03-classmetrics.md) | — |
-| Model interpretation (Permutation imp / PDP / ICE) | `Stat.Interpret` | [stat/13-interpret.md](docs/stat/13-interpret.md) | — |
+| Linear regression (LM) + inference stats (SE/t/p, F, AIC/BIC, leverage, Cook's) | `Hanalyze.Model.LM` / `Hanalyze.Model.LM.Diagnostics` | [regression/01-lm.md](docs/regression/01-lm.md) | [principles/lm.md](docs/principles/lm.md) |
+| GLM (Binomial / Poisson / Gaussian) | `Hanalyze.Model.GLM` | [regression/02-glm.md](docs/regression/02-glm.md) | [principles/glm.md](docs/principles/glm.md) |
+| GLMM / mixed-effects model (LME) | `Hanalyze.Model.GLMM` | [regression/03-glmm.md](docs/regression/03-glmm.md) | [principles/glmm.md](docs/principles/glmm.md) |
+| Spline regression (B-spline / NaturalCubic) | `Hanalyze.Model.Spline` | [regression/04-spline.md](docs/regression/04-spline.md) | [regression/theory-regression-extensions.md](docs/regression/theory-regression-extensions.md) |
+| Kernel regression (NW / Kernel Ridge) + multi-D inputs | `Hanalyze.Model.Kernel` | [regression/04-kernel.md](docs/regression/04-kernel.md) | same |
+| Regularised (Ridge / Lasso / ElasticNet) | `Hanalyze.Model.Regularized` | [regression/04-regularized.md](docs/regression/04-regularized.md) | same |
+| Gaussian process (RBF / Matérn / Periodic + ARD + multi-input) | `Hanalyze.Model.GP` | [regression/04-gp.md](docs/regression/04-gp.md) | [principles/gp.md](docs/principles/gp.md) |
+| Random Fourier Features (large-scale GP approximation) | `Hanalyze.Model.RFF` | [regression/04-rff.md](docs/regression/04-rff.md) | [regression/theory-regression-extensions.md](docs/regression/theory-regression-extensions.md) |
+| Multivariate regression / Multi-output GP | `Hanalyze.Model.{Multivariate,MultiGP,MultiOutput}` | [regression/05-multivariate.md](docs/regression/05-multivariate.md) | [regression/theory-multivariate.md](docs/regression/theory-multivariate.md) |
+| Quantile regression | `Hanalyze.Model.Quantile` | [regression/06-quantile.md](docs/regression/06-quantile.md) | [regression/theory-regression-extensions.md](docs/regression/theory-regression-extensions.md) |
+| Generalized additive model (GAM) | `Hanalyze.Model.GAM` | [regression/06-gam.md](docs/regression/06-gam.md) | same |
+| Random forest (regression) | `Hanalyze.Model.RandomForest` | [regression/06-randomforest.md](docs/regression/06-randomforest.md) | same |
+| Multi-output regression + interactive HTML | `Hanalyze.Model.MultiOutput` | [regression/07-multireg.md](docs/regression/07-multireg.md) | [regression/theory-multivariate.md](docs/regression/theory-multivariate.md) |
 
-### Bayesian (`MCMC.*` / `Stat.*` / `Model.HBM`)
-
-| Feature | Module | Usage | Theory |
-|---|---|---|---|
-| 27 probability distributions (Truncated/Censored/MvNormal/LKJ/Multinomial/...) | `Stat.Distribution` | [bayesian/01-distributions.md](docs/bayesian/01-distributions.md) | [bayesian/theory-distributions.md](docs/bayesian/theory-distributions.md) |
-| Probabilistic model DSL (HBM polymorphic free monad, incl. `deterministic` / `dataNamed`) | `Model.HBM` | [bayesian/02-probabilistic-model.md](docs/bayesian/02-probabilistic-model.md) | [principles/hbm.md](docs/principles/hbm.md) |
-| MCMC samplers (MH / HMC / NUTS / Slice) | `MCMC.{MH,HMC,NUTS,Slice}` | [bayesian/03-mcmc-samplers.md](docs/bayesian/03-mcmc-samplers.md) | [bayesian/theory-mcmc.md](docs/bayesian/theory-mcmc.md) / [theory-hmc-nuts.md](docs/bayesian/theory-hmc-nuts.md) |
-| Gibbs sampling (auto-conjugate detection + hybrid) | `MCMC.Gibbs` | [bayesian/04-gibbs.md](docs/bayesian/04-gibbs.md) | [bayesian/theory-mcmc.md](docs/bayesian/theory-mcmc.md) |
-| Variational inference (ADVI mean-field Adam) | `Stat.VI` | [bayesian/05-vi.md](docs/bayesian/05-vi.md) | [bayesian/theory-advanced.md](docs/bayesian/theory-advanced.md) |
-| Model comparison (WAIC / PSIS-LOO / Pseudo-BMA) | `Stat.ModelSelect` | [bayesian/06-model-comparison.md](docs/bayesian/06-model-comparison.md) | [bayesian/theory-bayesian-basics.md](docs/bayesian/theory-bayesian-basics.md) |
-| Posterior predictive checks; selected PyMC-style modelling features | `Stat.PosteriorPredictive` | [02-pymc-comparison.md](docs/02-pymc-comparison.md) | — |
-
-### Optimisation (`Optim.*`)
+### Machine learning (`Hanalyze.Model.*` / `Hanalyze.Stat.*`)
 
 | Feature | Module | Usage | Theory |
 |---|---|---|---|
-| Single-obj (gradient): NM / L-BFGS / Brent | `Optim.NelderMead`<br>`Optim.LBFGS`<br>`Optim.LineSearch` | [optim/01-singleobj.md](docs/optim/01-singleobj.md) | [optim/theory-singleobj.md](docs/optim/theory-singleobj.md) |
-| Single-obj (evolutionary): DE / CMA-ES / SA / PSO | `Optim.DifferentialEvolution`<br>`Optim.CMAES`<br>`Optim.SimulatedAnnealing`<br>`Optim.ParticleSwarm` | [optim/01-singleobj.md](docs/optim/01-singleobj.md) | [optim/theory-singleobj.md](docs/optim/theory-singleobj.md) |
-| Multi-objective (NSGA-II + Pareto) | `Optim.{NSGA,Pareto}` | [optim/02-multi-objective.md](docs/optim/02-multi-objective.md) | [optim/theory-pareto-moo.md](docs/optim/theory-pareto-moo.md) |
-| Acquisition functions (EHVI / ParEGO / EI / LCB / PI) | `Optim.Acquisition` | [optim/02-multi-objective.md](docs/optim/02-multi-objective.md) | [optim/theory-bayesopt.md](docs/optim/theory-bayesopt.md) |
-| Bayesian optimisation (BO + GP-Hedge + analytic gradient) | `Optim.BayesOpt` | [optim/01-singleobj.md](docs/optim/01-singleobj.md) | [optim/theory-bayesopt.md](docs/optim/theory-bayesopt.md) |
+| PCA + cumulative variance + standardisation | `Hanalyze.Model.PCA` | [stat/02-pca.md](docs/stat/02-pca.md) | — |
+| Clustering (K-means + k-means++ + silhouette) | `Hanalyze.Model.Cluster` | [stat/05-cluster.md](docs/stat/05-cluster.md) | — |
+| Decision tree (CART classifier) | `Hanalyze.Model.DecisionTree` | [regression/08-decisiontree.md](docs/regression/08-decisiontree.md) | — |
+| Time series (ARIMA / Holt-Winters / STL / ACF / PACF) | `Hanalyze.Model.TimeSeries` | [regression/09-timeseries.md](docs/regression/09-timeseries.md) | — |
+| Survival analysis (Kaplan-Meier / Nelson-Aalen / Log-rank / Cox PH) | `Hanalyze.Model.Survival` | [regression/10-survival.md](docs/regression/10-survival.md) | — |
+| Classification metrics (Confusion / AUC / F1 / MCC / log-loss / Brier) | `Hanalyze.Stat.ClassMetrics` | [stat/03-classmetrics.md](docs/stat/03-classmetrics.md) | — |
+| Model interpretation (Permutation imp / PDP / ICE) | `Hanalyze.Stat.Interpret` | [stat/13-interpret.md](docs/stat/13-interpret.md) | — |
+
+### Bayesian (`Hanalyze.MCMC.*` / `Hanalyze.Stat.*` / `Hanalyze.Model.HBM`)
+
+| Feature | Module | Usage | Theory |
+|---|---|---|---|
+| 27 probability distributions (Truncated/Censored/MvNormal/LKJ/Multinomial/...) | `Hanalyze.Stat.Distribution` | [bayesian/01-distributions.md](docs/bayesian/01-distributions.md) | [bayesian/theory-distributions.md](docs/bayesian/theory-distributions.md) |
+| Probabilistic model DSL (HBM polymorphic free monad, incl. `deterministic` / `dataNamed`) | `Hanalyze.Model.HBM` | [bayesian/02-probabilistic-model.md](docs/bayesian/02-probabilistic-model.md) | [principles/hbm.md](docs/principles/hbm.md) |
+| MCMC samplers (MH / HMC / NUTS / Slice) | `Hanalyze.MCMC.{MH,HMC,NUTS,Slice}` | [bayesian/03-mcmc-samplers.md](docs/bayesian/03-mcmc-samplers.md) | [bayesian/theory-mcmc.md](docs/bayesian/theory-mcmc.md) / [theory-hmc-nuts.md](docs/bayesian/theory-hmc-nuts.md) |
+| Gibbs sampling (auto-conjugate detection + hybrid) | `Hanalyze.MCMC.Gibbs` | [bayesian/04-gibbs.md](docs/bayesian/04-gibbs.md) | [bayesian/theory-mcmc.md](docs/bayesian/theory-mcmc.md) |
+| Variational inference (ADVI mean-field Adam) | `Hanalyze.Stat.VI` | [bayesian/05-vi.md](docs/bayesian/05-vi.md) | [bayesian/theory-advanced.md](docs/bayesian/theory-advanced.md) |
+| Model comparison (WAIC / PSIS-LOO / Pseudo-BMA) | `Hanalyze.Stat.ModelSelect` | [bayesian/06-model-comparison.md](docs/bayesian/06-model-comparison.md) | [bayesian/theory-bayesian-basics.md](docs/bayesian/theory-bayesian-basics.md) |
+| Posterior predictive checks; selected PyMC-style modelling features | `Hanalyze.Stat.PosteriorPredictive` | [02-pymc-comparison.md](docs/02-pymc-comparison.md) | — |
+
+### Optimisation (`Hanalyze.Optim.*`)
+
+| Feature | Module | Usage | Theory |
+|---|---|---|---|
+| Single-obj (gradient): NM / L-BFGS / Brent | `Hanalyze.Optim.NelderMead`<br>`Hanalyze.Optim.LBFGS`<br>`Hanalyze.Optim.LineSearch` | [optim/01-singleobj.md](docs/optim/01-singleobj.md) | [optim/theory-singleobj.md](docs/optim/theory-singleobj.md) |
+| Single-obj (evolutionary): DE / CMA-ES / SA / PSO | `Hanalyze.Optim.DifferentialEvolution`<br>`Hanalyze.Optim.CMAES`<br>`Hanalyze.Optim.SimulatedAnnealing`<br>`Hanalyze.Optim.ParticleSwarm` | [optim/01-singleobj.md](docs/optim/01-singleobj.md) | [optim/theory-singleobj.md](docs/optim/theory-singleobj.md) |
+| Multi-objective (NSGA-II + Pareto) | `Hanalyze.Optim.{NSGA,Pareto}` | [optim/02-multi-objective.md](docs/optim/02-multi-objective.md) | [optim/theory-pareto-moo.md](docs/optim/theory-pareto-moo.md) |
+| Acquisition functions (EHVI / ParEGO / EI / LCB / PI) | `Hanalyze.Optim.Acquisition` | [optim/02-multi-objective.md](docs/optim/02-multi-objective.md) | [optim/theory-bayesopt.md](docs/optim/theory-bayesopt.md) |
+| Bayesian optimisation (BO + GP-Hedge + analytic gradient) | `Hanalyze.Optim.BayesOpt` | [optim/01-singleobj.md](docs/optim/01-singleobj.md) | [optim/theory-bayesopt.md](docs/optim/theory-bayesopt.md) |
 | Algorithm selection guide | — | [optim/03-algorithm-guide.md](docs/optim/03-algorithm-guide.md) | — |
 
-### Design of experiments (`Design.*`)
+### Design of experiments (`Hanalyze.Design.*`)
 
 | Feature | Module | Usage | Theory |
 |---|---|---|---|
-| DoE (Factorial / Block / Mixed / RSM / Optimal / Power / Quality) | `Design.{Factorial,Block,Mixed,RSM,Optimal,Power,Quality,MultiRSM,Anova}` | [doe/01-doe.md](docs/doe/01-doe.md) | [doe/theory-doe.md](docs/doe/theory-doe.md) |
-| Orthogonal arrays (L4/L8/L9/L12/L16/L18) + Taguchi (S/N + inner/outer) + process capability (Cp/Cpk) | `Design.{Orthogonal,Taguchi,Quality}` | [doe/02-orthogonal-taguchi.md](docs/doe/02-orthogonal-taguchi.md) | [doe/theory-doe.md](docs/doe/theory-doe.md) |
+| DoE (Factorial / Block / Mixed / RSM / Optimal / Power / Quality) | `Hanalyze.Design.{Factorial,Block,Mixed,RSM,Optimal,Power,Quality,MultiRSM,Anova}` | [doe/01-doe.md](docs/doe/01-doe.md) | [doe/theory-doe.md](docs/doe/theory-doe.md) |
+| Orthogonal arrays (L4/L8/L9/L12/L16/L18) + Taguchi (S/N + inner/outer) + process capability (Cp/Cpk) | `Hanalyze.Design.{Orthogonal,Taguchi,Quality}` | [doe/02-orthogonal-taguchi.md](docs/doe/02-orthogonal-taguchi.md) | [doe/theory-doe.md](docs/doe/theory-doe.md) |
 
-### Visualisation (`Viz.*`)
-
-| Feature | Module | Usage |
-|---|---|---|
-| Scatter / bar / histograms / MCMC diagnostics / GP plot / Pareto plot | `Viz.{Scatter,Bar,Histogram,MCMC,GP,Pareto,ModelGraph,Taguchi}` | [visualization/01-visualization.md](docs/visualization/01-visualization.md) |
-| Integrated HTML report (MathJax + Mermaid + interactive) | `Viz.ReportBuilder` | [visualization/02-report-builder.md](docs/visualization/02-report-builder.md) |
-
-### Data I/O (`DataIO.*`)
+### Visualisation (`Hanalyze.Viz.*`)
 
 | Feature | Module | Usage |
 |---|---|---|
-| CSV/TSV/SSV (cassava) + Parquet/JSON (Hackage `dataframe`) | `DataIO.{CSV,External,Convert}` | [io/01-dirty-data.md](docs/io/01-dirty-data.md) |
-| Dirty-data defence (W001-W008 warnings + auto-sniff + clean DSL) | `DataIO.{Health,Sniff,Clean,Log}` | [io/01-dirty-data.md](docs/io/01-dirty-data.md) |
-| Reshape (pivot_wider / one-hot / lag-lead / rolling window) | `DataIO.Reshape` | [io/02-reshape.md](docs/io/02-reshape.md) |
-| Preprocessing (impute / groupBy / derived columns / melt) | `DataIO.Preprocess` | [io/01-dirty-data.md](docs/io/01-dirty-data.md) |
-| Long-form regrid (`regridLong`) | `DataIO.Preprocess` + `Stat.Interpolate` | [io/03-regrid.md](docs/io/03-regrid.md) |
+| Scatter / bar / histograms / MCMC diagnostics / GP plot / Pareto plot | `Hanalyze.Viz.{Scatter,Bar,Histogram,MCMC,GP,Pareto,ModelGraph,Taguchi}` | [visualization/01-visualization.md](docs/visualization/01-visualization.md) |
+| Integrated HTML report (MathJax + Mermaid + interactive) | `Hanalyze.Viz.ReportBuilder` | [visualization/02-report-builder.md](docs/visualization/02-report-builder.md) |
+
+### Data I/O (`Hanalyze.DataIO.*`)
+
+| Feature | Module | Usage |
+|---|---|---|
+| CSV/TSV/SSV (cassava) + Parquet/JSON (Hackage `dataframe`) | `Hanalyze.DataIO.{CSV,External,Convert}` | [io/01-dirty-data.md](docs/io/01-dirty-data.md) |
+| Dirty-data defence (W001-W008 warnings + auto-sniff + clean DSL) | `Hanalyze.DataIO.{Health,Sniff,Clean,Log}` | [io/01-dirty-data.md](docs/io/01-dirty-data.md) |
+| Reshape (pivot_wider / one-hot / lag-lead / rolling window) | `Hanalyze.DataIO.Reshape` | [io/02-reshape.md](docs/io/02-reshape.md) |
+| Preprocessing (impute / groupBy / derived columns / melt) | `Hanalyze.DataIO.Preprocess` | [io/01-dirty-data.md](docs/io/01-dirty-data.md) |
+| Long-form regrid (`regridLong`) | `Hanalyze.DataIO.Preprocess` + `Hanalyze.Stat.Interpolate` | [io/03-regrid.md](docs/io/03-regrid.md) |
 
 ---
 
@@ -291,8 +291,8 @@ graph TD
 
 ## Roadmap & API stability
 
-- **Stable** (API expected to remain backward-compatible within minor versions): `DataIO.*`, `Stat.{Test, Bootstrap, MultipleTesting, ClassMetrics, CV, Effect, Distribution}`, `Model.{LM, GLM, Spline, Regularized, RandomForest, DecisionTree, TimeSeries, Survival, GAM}`, `Optim.{NelderMead, LBFGS, DifferentialEvolution, CMAES, NSGA, BayesOpt, SimulatedAnnealing, ParticleSwarm}`, `Design.*`, `Viz.{Scatter, Bar, Histogram}`.
-- **Experimental** (API may evolve): `Model.HBM` DSL, `MCMC.NUTS` (mass-matrix adaptation is opt-in), `Stat.VI` (ADVI), `Model.{GP, RFF, GPRobust, GLMM}`, `Viz.ReportBuilder`. Behaviour is benchmarked but type signatures may shift.
+- **Stable** (API expected to remain backward-compatible within minor versions): `Hanalyze.DataIO.*`, `Hanalyze.Stat.{Test, Bootstrap, MultipleTesting, ClassMetrics, CV, Effect, Distribution}`, `Hanalyze.Model.{LM, GLM, Spline, Regularized, RandomForest, DecisionTree, TimeSeries, Survival, GAM}`, `Hanalyze.Optim.{NelderMead, LBFGS, DifferentialEvolution, CMAES, NSGA, BayesOpt, SimulatedAnnealing, ParticleSwarm}`, `Hanalyze.Design.*`, `Hanalyze.Viz.{Scatter, Bar, Histogram}`.
+- **Experimental** (API may evolve): `Hanalyze.Model.HBM` DSL, `Hanalyze.MCMC.NUTS` (mass-matrix adaptation is opt-in), `Hanalyze.Stat.VI` (ADVI), `Hanalyze.Model.{GP, RFF, GPRobust, GLMM}`, `Hanalyze.Viz.ReportBuilder`. Behaviour is benchmarked but type signatures may shift.
 - **Future direction**: a unified top-level `Hanalyze.*` re-export layer, a Pipeline-style `Unfitted → Fitted` API, and a backend-abstraction typeclass for swapping hmatrix/Massiv/Accelerate are under consideration but not on a fixed schedule.
 
 ---

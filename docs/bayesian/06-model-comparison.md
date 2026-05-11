@@ -11,7 +11,7 @@
 
 ## Overview
 
-`Stat.ModelSelect` provides information-criterion-based model comparison from MCMC chains.
+`Hanalyze.Stat.ModelSelect` provides information-criterion-based model comparison from MCMC chains.
 
 | Criterion | Function | Description |
 |---|---|---|

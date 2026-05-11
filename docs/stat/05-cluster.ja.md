@@ -61,7 +61,7 @@ silhouettes <- forM [2 .. 8] $ \k -> do
 
 ## 4. 注意
 
-- **特徴量のスケーリング必須** (Euclidean 距離前提)。`Stat.Standardize`
+- **特徴量のスケーリング必須** (Euclidean 距離前提)。`Hanalyze.Stat.Standardize`
   の `applyStandardizer` で前処理推奨
 - **空 cluster 対応**: 現状は zero vector (改善余地あり)
 - **大規模 n**: Mini-batch K-means は未実装

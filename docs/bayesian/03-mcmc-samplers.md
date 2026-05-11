@@ -11,10 +11,10 @@
 
 | Sampler | Module | Best for | Main tuning |
 |---|---|---|---|
-| Metropolis-Hastings | `MCMC.MH` (`metropolis`) | Sanity check / simple models | `mcmcStepSizes` (target 20-50% accept) |
-| HMC | `MCMC.HMC` (`hmc`) | Continuous params, mid-size | `hmcStepSize`, `hmcLeapfrogSteps` |
-| **NUTS** | `MCMC.NUTS` (`nuts`) | **Recommended for most cases** | `nutsStepSize` (others auto-tuned by dual averaging) |
-| Gibbs / hybrid | `MCMC.Gibbs` (`gibbsMH`) | Conjugate models (very fast) | None (direct sampling) |
+| Metropolis-Hastings | `Hanalyze.MCMC.MH` (`metropolis`) | Sanity check / simple models | `mcmcStepSizes` (target 20-50% accept) |
+| HMC | `Hanalyze.MCMC.HMC` (`hmc`) | Continuous params, mid-size | `hmcStepSize`, `hmcLeapfrogSteps` |
+| **NUTS** | `Hanalyze.MCMC.NUTS` (`nuts`) | **Recommended for most cases** | `nutsStepSize` (others auto-tuned by dual averaging) |
+| Gibbs / hybrid | `Hanalyze.MCMC.Gibbs` (`gibbsMH`) | Conjugate models (very fast) | None (direct sampling) |
 
 HMC and NUTS use exact gradients via `Numeric.AD.Mode.Forward`, so they are more
 accurate and faster than numerical-derivative versions.

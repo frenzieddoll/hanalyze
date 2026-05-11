@@ -11,13 +11,13 @@ import System.Random.MWC (initialize)
 import qualified Data.Vector as V
 import Data.Word (Word32)
 
-import MCMC.Core (Chain (..), chainVals, posteriorMean, posteriorSD, acceptanceRate)
-import MCMC.Gibbs  (GibbsConfig (..), defaultGibbsConfig, gibbsMH, gibbsFromModel)
-import MCMC.Gibbs (gibbsMH, gibbsFromModel)
-import qualified Model.HBM  as HBM
-import qualified Model.HBM as HBMP
-import Stat.Distribution (Distribution (..))
-import Stat.MCMC (ess)
+import Hanalyze.MCMC.Core (Chain (..), chainVals, posteriorMean, posteriorSD, acceptanceRate)
+import Hanalyze.MCMC.Gibbs  (GibbsConfig (..), defaultGibbsConfig, gibbsMH, gibbsFromModel)
+import Hanalyze.MCMC.Gibbs (gibbsMH, gibbsFromModel)
+import qualified Hanalyze.Model.HBM  as HBM
+import qualified Hanalyze.Model.HBM as HBMP
+import Hanalyze.Stat.Distribution (Distribution (..))
+import Hanalyze.Stat.MCMC (ess)
 
 cfg :: GibbsConfig
 cfg = defaultGibbsConfig { gibbsIterations = 2000, gibbsBurnIn = 500 }

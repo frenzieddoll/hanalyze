@@ -13,12 +13,12 @@ import qualified Data.Map.Strict as Map
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import MCMC.Core (chainEnergy)
-import MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
-import Model.HBM (ModelP, sample, observe, Distribution (..))
-import Stat.MCMC (bfmi)
-import Viz.Core  (PlotConfig (..), defaultConfig, OutputFormat (..))
-import Viz.MCMC  (energyPlotFile)
+import Hanalyze.MCMC.Core (chainEnergy)
+import Hanalyze.MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
+import Hanalyze.Model.HBM (ModelP, sample, observe, Distribution (..))
+import Hanalyze.Stat.MCMC (bfmi)
+import Hanalyze.Viz.Core  (PlotConfig (..), defaultConfig, OutputFormat (..))
+import Hanalyze.Viz.MCMC  (energyPlotFile)
 
 cfg :: NUTSConfig
 cfg = defaultNUTSConfig

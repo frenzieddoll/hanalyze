@@ -103,7 +103,7 @@ main = do
   ...
 ```
 
-## Auto-inference (`DataIO.Sniff`)
+## Auto-inference (`Hanalyze.DataIO.Sniff`)
 
 Reads the first 8 KB to fill in items the user did not specify.
 - Delimiter (chosen from `,;\t|` by ascending variance + descending median).
@@ -137,13 +137,13 @@ hanalyze melt data/io/wide_sample.csv \
 # → 27 rows × 5 columns (name, x1, x2, t, y); NA dropped automatically
 ```
 
-Library API: `DataIO.Preprocess.meltLonger`.
+Library API: `Hanalyze.DataIO.Preprocess.meltLonger`.
 
 > For multivariate regression on the long-form output, and for the wide-form-direct
 > true multi-output regression (`hanalyze multireg`), see
 > [regression/07-multireg.md](../regression/07-multireg.md).
 
-## Cleaning DSL (`DataIO.Clean`)
+## Cleaning DSL (`Hanalyze.DataIO.Clean`)
 
 Currency / thousands separators / units / decimal-point variants — columns that the
 health checks could only flag as warnings — can be explicitly normalised by applying rules

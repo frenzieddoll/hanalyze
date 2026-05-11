@@ -9,8 +9,8 @@
 module Main where
 
 import qualified Numeric.LinearAlgebra as LA
-import qualified Stat.KernelDist       as KD ()
-import qualified Stat.KernelDist       as KD
+import qualified Hanalyze.Stat.KernelDist       as KD ()
+import qualified Hanalyze.Stat.KernelDist       as KD
 import qualified Data.Massiv.Array     as A
 import           Data.Massiv.Array     ( Array, Comp (..), Ix2 (..), Sz (..) )
 import           Data.Time.Clock       (getCurrentTime, diffUTCTime)

@@ -12,11 +12,11 @@ import qualified Data.Vector             as V
 import qualified Data.Text               as T
 import qualified Numeric.LinearAlgebra   as LA
 
-import           Model.Core              (FitResult (..))
-import           Model.LM                (fitLMVec)
-import           Model.GLM               (Family (..), LinkFn (..), fitGLMFull)
-import qualified Model.GLMM              as GLMM
-import qualified Model.Regularized       as Reg
+import           Hanalyze.Model.Core              (FitResult (..))
+import           Hanalyze.Model.LM                (fitLMVec)
+import           Hanalyze.Model.GLM               (Family (..), LinkFn (..), fitGLMFull)
+import qualified Hanalyze.Model.GLMM              as GLMM
+import qualified Hanalyze.Model.Regularized       as Reg
 
 import           BenchUtil
 

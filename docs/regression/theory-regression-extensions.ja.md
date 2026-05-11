@@ -19,10 +19,10 @@
 
 | 限界 | 解決策 | hanalyze API |
 |---|---|---|
-| 非線形性 | 基底拡張 (多項式・スプライン) | `Model.Spline` |
-| 関数形不明 | カーネル法 | `Model.Kernel` |
-| 高次元・共線性 | 正則化 | `Model.Regularized` |
-| 局所構造 | カーネル / GP | `Model.Kernel`, `Model.GP` |
+| 非線形性 | 基底拡張 (多項式・スプライン) | `Hanalyze.Model.Spline` |
+| 関数形不明 | カーネル法 | `Hanalyze.Model.Kernel` |
+| 高次元・共線性 | 正則化 | `Hanalyze.Model.Regularized` |
+| 局所構造 | カーネル / GP | `Hanalyze.Model.Kernel`, `Hanalyze.Model.GP` |
 
 ---
 
@@ -244,7 +244,7 @@ $$ \lambda |\beta_j| = \lambda \cdot \beta_j^* \cdot \sigma_j $$
 | L1 (Lasso) | $\beta_j \sim \text{Laplace}(0, b)$, $\lambda = 1/b$ |
 | Elastic Net | Laplace × Normal の積 |
 
-→ `Model.HBM` の `potential` プリミティブでカスタム罰則を表現可能。
+→ `Hanalyze.Model.HBM` の `potential` プリミティブでカスタム罰則を表現可能。
 
 ---
 

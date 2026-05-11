@@ -6,12 +6,12 @@ module Main where
 
 import Text.Printf (printf)
 
-import qualified Design.Factorial as DF
-import qualified Design.Block     as DB
-import qualified Design.Mixed     as DM
-import qualified Design.Anova     as DA
-import qualified Design.Power     as DP
-import qualified Design.Quality   as DQ
+import qualified Hanalyze.Design.Factorial as DF
+import qualified Hanalyze.Design.Block     as DB
+import qualified Hanalyze.Design.Mixed     as DM
+import qualified Hanalyze.Design.Anova     as DA
+import qualified Hanalyze.Design.Power     as DP
+import qualified Hanalyze.Design.Quality   as DQ
 
 main :: IO ()
 main = do

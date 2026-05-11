@@ -17,10 +17,10 @@ import qualified Data.Text as T
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import Model.HBM
--- import Stat.Distribution (Distribution (..)) -- now from Model.HBM
-import MCMC.Core   (Chain (..), chainVals, posteriorMean, posteriorSD)
-import MCMC.Gibbs  (GibbsConfig (..), defaultGibbsConfig,
+import Hanalyze.Model.HBM
+-- import Hanalyze.Stat.Distribution (Distribution (..)) -- now from Hanalyze.Model.HBM
+import Hanalyze.MCMC.Core   (Chain (..), chainVals, posteriorMean, posteriorSD)
+import Hanalyze.MCMC.Gibbs  (GibbsConfig (..), defaultGibbsConfig,
                     gibbsFromModel, gibbsMH)
 
 -- ---------------------------------------------------------------------------

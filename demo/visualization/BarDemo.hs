@@ -1,9 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Viz.Bar と PNG/SVG 出力のデモ
+-- | Hanalyze.Viz.Bar と PNG/SVG 出力のデモ
 module Main where
 
-import Viz.Core (defaultConfig, OutputFormat (..), writeSpec)
-import Viz.Bar
+import Hanalyze.Viz.Core (defaultConfig, OutputFormat (..), writeSpec)
+import Hanalyze.Viz.Bar
 
 -- ---------------------------------------------------------------------------
 -- Main

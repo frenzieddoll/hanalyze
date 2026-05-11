@@ -6,9 +6,9 @@
 -- 総合 HTML レポートを demo/gp_report.html に出力します。
 module Main where
 
-import Model.GP
-import Viz.GPReport
-import Viz.Core (openInBrowser)
+import Hanalyze.Model.GP
+import Hanalyze.Viz.GPReport
+import Hanalyze.Viz.Core (openInBrowser)
 import Text.Printf (printf)
 
 -- 真の関数

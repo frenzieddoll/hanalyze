@@ -4,14 +4,14 @@
 
 > Related demos:
 > - [`hbm-example`](../demo/HBMExample.hs) — hierarchical normal model + 4-chain NUTS
-> - [`hbm-regression`](../demo/HBMRegressionDemo.hs) — Bayesian simple regression (HTML report via legacy `Viz.AnalysisReport`)
+> - [`hbm-regression`](../demo/HBMRegressionDemo.hs) — Bayesian simple regression (HTML report via legacy `Hanalyze.Viz.AnalysisReport`)
 > - [`clinical-trial`](../demo/ClinicalTrial.hs) — Beta-Binomial A/B test
 > - [`simpson-paradox`](../demo/SimpsonParadoxDemo.hs) — LM/GLMM/HBM compared on Simpson's example
 > - [`hbm-random-slope`](../demo/HBMRandomSlopeDemo.hs) — random-slope extension
 
 ## Overview
 
-`Model.HBM` is a polymorphic probabilistic programming DSL implemented as a
+`Hanalyze.Model.HBM` is a polymorphic probabilistic programming DSL implemented as a
 free monad. Models can be written declaratively, similar to Stan or PyMC.
 
 The continuation is polymorphic as `forall a. (Floating a, Ord a) => Model a r`,
@@ -24,7 +24,7 @@ so a single model definition supports **four interpretations**:
 | AD gradient | `a = Forward Double` | `gradAD`, `gradADU` (machine-epsilon precision) |
 | Dependency tracking | `a = Track` | `extractDeps`, `buildModelGraph` (auto DAG) |
 
-The samplers (`MCMC.HMC` / `NUTS` / `Gibbs`) leverage AD gradients and
+The samplers (`Hanalyze.MCMC.HMC` / `NUTS` / `Gibbs`) leverage AD gradients and
 automatic constraint transforms.
 
 ---
@@ -277,14 +277,14 @@ extractDeps (schoolModel schoolData)
 -- ,...]
 ```
 
-Passing this `ModelGraph` to `reportGraph` of `Viz.Report.MCMCReport`
+Passing this `ModelGraph` to `reportGraph` of `Hanalyze.Viz.Report.MCMCReport`
 embeds the DAG inside the MCMC report HTML.
 
 ---
 
 ## Per-observation log-likelihood
 
-Used internally by WAIC / LOO computation (`Stat.ModelSelect`), but also
+Used internally by WAIC / LOO computation (`Hanalyze.Stat.ModelSelect`), but also
 callable directly for debugging.
 
 ```haskell

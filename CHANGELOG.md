@@ -10,7 +10,7 @@ and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
 Initial Hackage release.
 
 ### LM diagnostics + Taguchi/Quality 拡張
-- `Model.LM.Diagnostics` (new module): inference and residual diagnostics
+- `Hanalyze.Model.LM.Diagnostics` (new module): inference and residual diagnostics
   for OLS — `ciTValue`, `lmStdErrors[Multi]`, `CoefStats` /
   `lmCoefStats[Multi]` (SE / t / two-sided p), `FStat` / `lmFStatistic`
   (whole-model F, follows R-style df1 = p − 1, df2 = n − p), `ICs` /
@@ -18,14 +18,14 @@ Initial Hackage release.
   `hatDiagonal`, `standardizedResiduals`, `cooksDistance`,
   `predictorStdDevs`. Multi-output (Matrix p × q) is the canonical form;
   Vector wrappers cover q = 1.
-- `Design.Orthogonal.OAMetadata` + `listArraysWithSize`: structured
+- `Hanalyze.Design.Orthogonal.OAMetadata` + `listArraysWithSize`: structured
   metadata (name / runs / factors / levels / description) for the
   standard L4–L18 arrays.
-- `Design.Taguchi.SNDetails` + `snRatioWithDetails`: SN ratio bundled
+- `Hanalyze.Design.Taguchi.SNDetails` + `snRatioWithDetails`: SN ratio bundled
   with sample mean / variance / N.
-- `Design.Taguchi.FactorEffectExt` + `factorEffectsTable`: factor-effect
+- `Hanalyze.Design.Taguchi.FactorEffectExt` + `factorEffectsTable`: factor-effect
   rows enriched with `feeRange` and `feeContribution`.
-- `Design.Quality.Capability` + `processCapability` /
+- `Hanalyze.Design.Quality.Capability` + `processCapability` /
   `processCapabilityUpper` / `processCapabilityLower`: Cp / Cpk for
   two-sided and one-sided spec limits.
 
@@ -36,17 +36,17 @@ Initial Hackage release.
   (Optim.{NSGA,LBFGS,DE,CMAES,CMAESFull,SA,PSO,Common,BayesOpt,Acquisition,
   Pareto,NelderMead,LineSearch}, Model.{GLM,Regularized,RFF,GP,Kernel},
   Stat.{KernelDist,Cholesky}, MCMC.{HMC,NUTS}).
-- INLINE pragmas on hot-path wrappers: `Stat.Cholesky.{cholSolve,cholFactor,
-  cholSolveWithFactor}`, `Stat.KernelDist.{diagAB,rowDotsAB,rowSqNorms}`,
-  `Optim.Common.flipFor`, plus 9 polymorphic helpers in `Stat.AD`.
-- `Stat.KernelDist.pairwiseSqDist` rewritten with `runST + Storable.Mutable`
+- INLINE pragmas on hot-path wrappers: `Hanalyze.Stat.Cholesky.{cholSolve,cholFactor,
+  cholSolveWithFactor}`, `Hanalyze.Stat.KernelDist.{diagAB,rowDotsAB,rowSqNorms}`,
+  `Hanalyze.Optim.Common.flipFor`, plus 9 polymorphic helpers in `Hanalyze.Stat.AD`.
+- `Hanalyze.Stat.KernelDist.pairwiseSqDist` rewritten with `runST + Storable.Mutable`
   flat-index loop; massiv dependency removed from this hot path
   (16-26% speedup on KR/Gram benchmarks).
-- `Model.GLM.glmLogLik` switched from list-based `zipWith`+`sum` to
+- `Hanalyze.Model.GLM.glmLogLik` switched from list-based `zipWith`+`sum` to
   `VS.zipWith`+`VS.sum` (~20% speedup on GLM_logit_n=10000).
-- `Model.GLM.irlsStep` weight/working-response computation switched from
+- `Hanalyze.Model.GLM.irlsStep` weight/working-response computation switched from
   massiv `MA.map`/`MA.zipWith3` to `VS.map`/`VS.zipWith3`.
-- `Stat.ModelSelect.lmPosteriorLogLiks`/`glmPosteriorLogLiks` switched to
+- `Hanalyze.Stat.ModelSelect.lmPosteriorLogLiks`/`glmPosteriorLogLiks` switched to
   the same `VS.zipWith`-based pattern (avoids per-sample `LA.toList`
   allocations).
 - Benchmark infrastructure: added `bench-tasty` (focused tasty-bench
@@ -57,16 +57,16 @@ Initial Hackage release.
   of fixed-N `timeit`. CSV output schema is preserved.
 - Reverted experiments documented for future reference (all in
   `bench/results/perf_profile_findings.md`):
-  parallel `Strategies` on `Stat.Bootstrap` (Storable allocator
+  parallel `Strategies` on `Hanalyze.Stat.Bootstrap` (Storable allocator
   contention), mutable axpy in Lasso CD (BLAS daxpy already optimal),
   `VS.map`-based `mapMatrix`/`mapVector` (massiv's fused map wins on
   large matrices).
 
 ### Documentation
 - Added Haddock `>>>` examples to a curated set of pure helpers
-  (`Stat.Interpolate.interp1d`, `Stat.AdaptiveGrid.uniformGrid`,
-  `Optim.Common.projectToBounds` / `inBounds`, `Model.MultiOutput.asMultiY`,
-  `DataIO.Log.hasErrors`). The doctest runner test-suite is deferred until
+  (`Hanalyze.Stat.Interpolate.interp1d`, `Hanalyze.Stat.AdaptiveGrid.uniformGrid`,
+  `Hanalyze.Optim.Common.projectToBounds` / `inBounds`, `Hanalyze.Model.MultiOutput.asMultiY`,
+  `Hanalyze.DataIO.Log.hasErrors`). The doctest runner test-suite is deferred until
   the cabal/doctest package-db wiring is settled; the examples remain
   valid as Haddock documentation.
 - Updated `bench/results/SUMMARY.md` and `bench/results/OPEN_ISSUES.md`
@@ -84,55 +84,55 @@ Initial Hackage release.
   ```
 
 ### Models
-- Linear models: `Model.LM`, `Model.GLM` (Gaussian / Binomial / Poisson + IRLS),
-  `Model.GLMM` (LME via exact EM, GLMM via Laplace).
-- Smoothers: `Model.Spline` (B-spline / natural cubic),
-  `Model.Kernel` (Nadaraya-Watson + kernel ridge).
-- Gaussian process: `Model.GP` (RBF / Matérn / periodic, single + multi output),
-  `Model.GPRobust` (Student-t / Cauchy via IRLS MAP),
-  `Model.RFF` (random Fourier features, multi-output).
-- Regularization: `Model.Regularized` (ridge / lasso / elastic net).
-- Probabilistic DSL: `Model.HBM` (free monad with structure / log-joint / AD /
+- Linear models: `Hanalyze.Model.LM`, `Hanalyze.Model.GLM` (Gaussian / Binomial / Poisson + IRLS),
+  `Hanalyze.Model.GLMM` (LME via exact EM, GLMM via Laplace).
+- Smoothers: `Hanalyze.Model.Spline` (B-spline / natural cubic),
+  `Hanalyze.Model.Kernel` (Nadaraya-Watson + kernel ridge).
+- Gaussian process: `Hanalyze.Model.GP` (RBF / Matérn / periodic, single + multi output),
+  `Hanalyze.Model.GPRobust` (Student-t / Cauchy via IRLS MAP),
+  `Hanalyze.Model.RFF` (random Fourier features, multi-output).
+- Regularization: `Hanalyze.Model.Regularized` (ridge / lasso / elastic net).
+- Probabilistic DSL: `Hanalyze.Model.HBM` (free monad with structure / log-joint / AD /
   dependency interpretations).
 
 ### MCMC and inference
-- `MCMC.MH`, `MCMC.HMC`, `MCMC.NUTS`, `MCMC.Gibbs`, `MCMC.Slice`.
-- `Stat.VI` (mean-field ADVI), `Stat.ModelSelect` (WAIC / PSIS-LOO / pseudo-BMA),
-  `Stat.MCMC` (split R-hat, ESS, autocorrelation, KDE).
+- `Hanalyze.MCMC.MH`, `Hanalyze.MCMC.HMC`, `Hanalyze.MCMC.NUTS`, `Hanalyze.MCMC.Gibbs`, `Hanalyze.MCMC.Slice`.
+- `Hanalyze.Stat.VI` (mean-field ADVI), `Hanalyze.Stat.ModelSelect` (WAIC / PSIS-LOO / pseudo-BMA),
+  `Hanalyze.Stat.MCMC` (split R-hat, ESS, autocorrelation, KDE).
 
 ### Distributions
-- `Stat.Distribution`: 27 distributions including Truncated, Censored, MvNormal,
+- `Hanalyze.Stat.Distribution`: 27 distributions including Truncated, Censored, MvNormal,
   Dirichlet, LKJ, Multinomial, ZeroInflated, AR(1).
 
 ### Design of Experiments
-- `Design.Factorial`, `Design.Block`, `Design.RSM`, `Design.Optimal`,
-  `Design.Anova`, `Design.Power`, `Design.Quality`, `Design.MultiRSM`,
-  `Design.Orthogonal` (L4-L18), `Design.Taguchi` (4 SN ratios, inner/outer).
+- `Hanalyze.Design.Factorial`, `Hanalyze.Design.Block`, `Hanalyze.Design.RSM`, `Hanalyze.Design.Optimal`,
+  `Hanalyze.Design.Anova`, `Hanalyze.Design.Power`, `Hanalyze.Design.Quality`, `Hanalyze.Design.MultiRSM`,
+  `Hanalyze.Design.Orthogonal` (L4-L18), `Hanalyze.Design.Taguchi` (4 SN ratios, inner/outer).
 
 ### Optimization
-- Single-objective: `Optim.NelderMead`, `Optim.LBFGS`, `Optim.LineSearch`,
-  `Optim.DifferentialEvolution`, `Optim.CMAES`, `Optim.CMAESFull`,
-  `Optim.SimulatedAnnealing`, `Optim.ParticleSwarm`.
-- Multi-objective: `Optim.NSGA`, `Optim.Pareto`, `Optim.Acquisition`,
-  `Optim.BayesOpt`, `Optim.Desirability`.
-- Constrained: `Optim.Constrained` (augmented Lagrangian + penalty).
-- Unified `Optim.Common.Bounds` API for box constraints across all algorithms.
+- Single-objective: `Hanalyze.Optim.NelderMead`, `Hanalyze.Optim.LBFGS`, `Hanalyze.Optim.LineSearch`,
+  `Hanalyze.Optim.DifferentialEvolution`, `Hanalyze.Optim.CMAES`, `Hanalyze.Optim.CMAESFull`,
+  `Hanalyze.Optim.SimulatedAnnealing`, `Hanalyze.Optim.ParticleSwarm`.
+- Multi-objective: `Hanalyze.Optim.NSGA`, `Hanalyze.Optim.Pareto`, `Hanalyze.Optim.Acquisition`,
+  `Hanalyze.Optim.BayesOpt`, `Hanalyze.Optim.Desirability`.
+- Constrained: `Hanalyze.Optim.Constrained` (augmented Lagrangian + penalty).
+- Unified `Hanalyze.Optim.Common.Bounds` API for box constraints across all algorithms.
 
 ### Data I/O
-- `DataIO.CSV` with `loadAuto` / `loadAutoSafe` / `loadAutoSafeWith`,
-  `DataIO.External` (Parquet / JSON via @dataframe@),
-  `DataIO.Convert`, `DataIO.Preprocess` (NA handling, group-by, melt, regrid).
-- Dirty-data defense: `DataIO.Log` (W001..W008), `DataIO.Health`,
-  `DataIO.Sniff` (delimiter / header / comment auto-detection),
-  `DataIO.Clean` (column-cleaning DSL).
-- Long-form regrid: `Stat.Interpolate` (Linear / NaturalSpline / PCHIP),
-  `Stat.AdaptiveGrid` (peak |dy/dz|-based grid), `regridLong`.
+- `Hanalyze.DataIO.CSV` with `loadAuto` / `loadAutoSafe` / `loadAutoSafeWith`,
+  `Hanalyze.DataIO.External` (Parquet / JSON via @dataframe@),
+  `Hanalyze.DataIO.Convert`, `Hanalyze.DataIO.Preprocess` (NA handling, group-by, melt, regrid).
+- Dirty-data defense: `Hanalyze.DataIO.Log` (W001..W008), `Hanalyze.DataIO.Health`,
+  `Hanalyze.DataIO.Sniff` (delimiter / header / comment auto-detection),
+  `Hanalyze.DataIO.Clean` (column-cleaning DSL).
+- Long-form regrid: `Hanalyze.Stat.Interpolate` (Linear / NaturalSpline / PCHIP),
+  `Hanalyze.Stat.AdaptiveGrid` (peak |dy/dz|-based grid), `regridLong`.
 
 ### Visualization
-- `Viz.Core` (HTML / PNG / SVG via @vl-convert@), `Viz.Bar`, `Viz.Scatter`,
-  `Viz.Histogram`, `Viz.MCMC` (PyMC-style diagnostics),
-  `Viz.ModelGraph` (Mermaid DAG via Track interpretation),
-  `Viz.ReportBuilder` (compositional report API, 11 `Reportable` instances,
+- `Hanalyze.Viz.Core` (HTML / PNG / SVG via @vl-convert@), `Hanalyze.Viz.Bar`, `Hanalyze.Viz.Scatter`,
+  `Hanalyze.Viz.Histogram`, `Hanalyze.Viz.MCMC` (PyMC-style diagnostics),
+  `Hanalyze.Viz.ModelGraph` (Mermaid DAG via Track interpretation),
+  `Hanalyze.Viz.ReportBuilder` (compositional report API, 11 `Reportable` instances,
   20+ section helpers including `secInterpolation`).
 
 ### Command-line interface

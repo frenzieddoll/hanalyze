@@ -5,9 +5,9 @@ module Main where
 import qualified Numeric.LinearAlgebra as LA
 import Text.Printf (printf)
 
-import Design.RSM (centralCompositeRotatable)
-import Design.MultiRSM
-import Optim.Desirability
+import Hanalyze.Design.RSM (centralCompositeRotatable)
+import Hanalyze.Design.MultiRSM
+import Hanalyze.Optim.Desirability
 
 -- 真の関数 (3 応答):
 --   y_1 = (x_1 - 0.5)² + (x_2)² + 1                      (最小化したい、極小は (0.5, 0))

@@ -12,9 +12,9 @@ module Main where
 import qualified Data.Vector             as V
 import qualified Numeric.LinearAlgebra   as LA
 
-import           Model.TimeSeries        (HWMode (..), holtWinters, hwFitted)
-import           Model.GAM               (fitGAM, gamYHat)
-import           Stat.Interpolate        (InterpKind (..), interp1d)
+import           Hanalyze.Model.TimeSeries        (HWMode (..), holtWinters, hwFitted)
+import           Hanalyze.Model.GAM               (fitGAM, gamYHat)
+import           Hanalyze.Stat.Interpolate        (InterpKind (..), interp1d)
 
 import           BenchUtil
 

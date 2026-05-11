@@ -2,8 +2,8 @@
 -- | AnalysisReport vs ReportBuilder の比較デモ。
 --
 -- LM / GLM / GLMM / GP / HBM の 5 モデルそれぞれで:
---   1. 既存 'Viz.AnalysisReport' で HTML を生成
---   2. 新 'Viz.ReportBuilder' で同等の HTML を生成
+--   1. 既存 'Hanalyze.Viz.AnalysisReport' で HTML を生成
+--   2. 新 'Hanalyze.Viz.ReportBuilder' で同等の HTML を生成
 -- → trash/ 以下に 10 ファイルが出力されるので、ブラウザで開いて見比べる。
 module Main where
 
@@ -16,24 +16,24 @@ import Text.Printf (printf)
 
 import qualified DataFrame                    as DX
 import qualified DataFrame.Internal.DataFrame as DXD
-import DataIO.Convert      (getDoubleVec, getTextVec)
-import DataIO.CSV          (loadAuto)
-import qualified Model.Core as Core
-import qualified Model.LM   as LM
-import qualified Model.GLM  as GLM
-import qualified Model.GLMM as GLMM
-import qualified Model.GP   as GP
-import qualified Model.HBM  as HBM
-import qualified MCMC.NUTS  as NUTS
-import qualified MCMC.Core  as MCMCcore
-import qualified Stat.MCMC  as StatMCMC
+import Hanalyze.DataIO.Convert      (getDoubleVec, getTextVec)
+import Hanalyze.DataIO.CSV          (loadAuto)
+import qualified Hanalyze.Model.Core as Core
+import qualified Hanalyze.Model.LM   as LM
+import qualified Hanalyze.Model.GLM  as GLM
+import qualified Hanalyze.Model.GLMM as GLMM
+import qualified Hanalyze.Model.GP   as GP
+import qualified Hanalyze.Model.HBM  as HBM
+import qualified Hanalyze.MCMC.NUTS  as NUTS
+import qualified Hanalyze.MCMC.Core  as MCMCcore
+import qualified Hanalyze.Stat.MCMC  as StatMCMC
 
-import Model.Core (residualsV, fittedList, coeffList, rSquared1)
+import Hanalyze.Model.Core (residualsV, fittedList, coeffList, rSquared1)
 
-import qualified Viz.AnalysisReport as AR
-import qualified Viz.ReportBuilder  as RB
-import qualified Viz.ReportInstances as RI
-import qualified Viz.ModelGraph     as VMG
+import qualified Hanalyze.Viz.AnalysisReport as AR
+import qualified Hanalyze.Viz.ReportBuilder  as RB
+import qualified Hanalyze.Viz.ReportInstances as RI
+import qualified Hanalyze.Viz.ModelGraph     as VMG
 
 -- ---------------------------------------------------------------------------
 -- Helpers

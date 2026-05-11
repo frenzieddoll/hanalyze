@@ -12,11 +12,11 @@ module Main where
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import Optim.NSGA   (Solution (..), NSGAConfig (..), defaultNSGAConfig,
+import Hanalyze.Optim.NSGA   (Solution (..), NSGAConfig (..), defaultNSGAConfig,
                      nsga2)
-import Optim.Pareto (hypervolume)
-import Viz.Pareto   (parallelCoordinatesFile, paretoPairFile)
-import Viz.Core     (defaultConfig, OutputFormat (..), PlotConfig (..))
+import Hanalyze.Optim.Pareto (hypervolume)
+import Hanalyze.Viz.Pareto   (parallelCoordinatesFile, paretoPairFile)
+import Hanalyze.Viz.Core     (defaultConfig, OutputFormat (..), PlotConfig (..))
 
 -- 材料科学シナリオ: x ∈ [0, 1] (合金中の銅含有率)
 -- すべて最小化問題に統一 (強度は -strength)

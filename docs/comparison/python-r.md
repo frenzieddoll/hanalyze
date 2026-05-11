@@ -19,35 +19,35 @@ independent — few comparable packages on the Python or R side.
 
 | Area | hanalyze | Python | R | Bench |
 |---|---|---|---|---|
-| Classical regression (LM / Ridge / Lasso) | `Model.LM` / `Model.Regularized` | sklearn / statsmodels | base R / glmnet | ✅ |
-| GLM (Binomial / Poisson) | `Model.GLM` | statsmodels | base R `glm()` | ✅ |
-| Mixed effects (LME / GLMM) | `Model.GLMM` | statsmodels MixedLM | lme4 | ✅ |
-| Kernel methods / GP | `Model.{Kernel,GP,RFF}` | sklearn KernelRidge / GP | kernlab / GPML | ✅ |
-| Single-objective optim | `Optim.{NM,LBFGS,DE,CMAES,SA,PSO}` | scipy.optimize | optimx | ✅ |
-| Multi-objective optim | `Optim.NSGA` | pymoo | mco / emoa | ✅ |
-| Bayesian optim | `Optim.BayesOpt` | scikit-optimize / GPyOpt | mlrMBO | ✅ |
-| Bayesian MCMC | `MCMC.{MH,HMC,NUTS,Gibbs}` | PyMC / NumPyro | rstan / brms | ✅ |
-| HBM (probabilistic programming) | `Model.HBM` polymorphic DSL | PyMC / Pyro / Stan | rstan / brms | 🟡 (feature parity in [PyMC comparison](../02-pymc-comparison.md)) |
-| Variational inference (ADVI) | `Stat.VI` | PyMC / Pyro | rstan ADVI | 🟡 |
-| Model comparison (WAIC / LOO) | `Stat.ModelSelect` | ArviZ | loo (R) | ✅ (`mcmc_extras` suite) |
-| Design of experiments (DOE) | `Design.*` | pyDOE / pyDOE2 | DoE.base | 🟡 |
-| Orthogonal arrays + Taguchi | `Design.{Orthogonal,Taguchi}` | (limited) | qualityTools / DoE.base | 🟡 |
-| Hypothesis tests | `Stat.Test` | scipy.stats | base R / rstatix | ✅ (`stat_util` suite) |
-| Multiple-testing correction | `Stat.MultipleTesting` | statsmodels | `p.adjust` | ✅ |
-| Bootstrap CI / permutation | `Stat.Bootstrap` | scipy.stats / arch | boot | ✅ |
-| Effect size + power analysis | `Stat.Effect` | statsmodels.stats.power | pwr / effsize | 🟡 |
-| PCA / dimensionality reduction | `Model.PCA` | sklearn.decomposition | prcomp | ✅ (`ml` suite) |
-| Clustering (K-means) | `Model.Cluster` | sklearn.cluster | cluster / mclust | ✅ |
-| Decision tree (CART) | `Model.DecisionTree` | sklearn.tree | rpart / tree | ✅ |
-| Time series (ARIMA / Holt-Winters) | `Model.TimeSeries` | statsmodels.tsa | forecast / fable | ✅ (`survts` / `ts_extras` suite) |
-| Survival analysis (KM / Cox) | `Model.Survival` | lifelines | survival | ✅ |
-| Classification metrics (AUC / F1 / Brier) | `Stat.ClassMetrics` | sklearn.metrics | pROC / mlr3measures | 🟡 |
-| Cross-validation | `Stat.CV` | sklearn.model_selection | caret / rsample | 🟡 |
-| Interpretation (permutation imp / PDP / ICE) | `Stat.Interpret` | sklearn.inspection / shap / pdpbox | iml | 🟡 |
-| DataFrame manipulation | Hackage `dataframe` + `DataIO.Reshape` | pandas | tidyverse | 🟡 |
-| Visualization | `Viz.*` (Vega-Lite) | matplotlib / seaborn / plotly | ggplot2 | (qualitative only) |
-| CSV / Parquet / JSON I/O | `DataIO.{CSV,External}` | pandas / pyarrow | readr / arrow | 🟡 |
-| Dirty-data defenses | `DataIO.{Health,Sniff,Clean}` | (DIY) | janitor (partial) | independent |
+| Classical regression (LM / Ridge / Lasso) | `Hanalyze.Model.LM` / `Hanalyze.Model.Regularized` | sklearn / statsmodels | base R / glmnet | ✅ |
+| GLM (Binomial / Poisson) | `Hanalyze.Model.GLM` | statsmodels | base R `glm()` | ✅ |
+| Mixed effects (LME / GLMM) | `Hanalyze.Model.GLMM` | statsmodels MixedLM | lme4 | ✅ |
+| Kernel methods / GP | `Hanalyze.Model.{Kernel,GP,RFF}` | sklearn KernelRidge / GP | kernlab / GPML | ✅ |
+| Single-objective optim | `Hanalyze.Optim.{NM,LBFGS,DE,CMAES,SA,PSO}` | scipy.optimize | optimx | ✅ |
+| Multi-objective optim | `Hanalyze.Optim.NSGA` | pymoo | mco / emoa | ✅ |
+| Bayesian optim | `Hanalyze.Optim.BayesOpt` | scikit-optimize / GPyOpt | mlrMBO | ✅ |
+| Bayesian MCMC | `Hanalyze.MCMC.{MH,HMC,NUTS,Gibbs}` | PyMC / NumPyro | rstan / brms | ✅ |
+| HBM (probabilistic programming) | `Hanalyze.Model.HBM` polymorphic DSL | PyMC / Pyro / Stan | rstan / brms | 🟡 (feature parity in [PyMC comparison](../02-pymc-comparison.md)) |
+| Variational inference (ADVI) | `Hanalyze.Stat.VI` | PyMC / Pyro | rstan ADVI | 🟡 |
+| Model comparison (WAIC / LOO) | `Hanalyze.Stat.ModelSelect` | ArviZ | loo (R) | ✅ (`mcmc_extras` suite) |
+| Design of experiments (DOE) | `Hanalyze.Design.*` | pyDOE / pyDOE2 | DoE.base | 🟡 |
+| Orthogonal arrays + Taguchi | `Hanalyze.Design.{Orthogonal,Taguchi}` | (limited) | qualityTools / DoE.base | 🟡 |
+| Hypothesis tests | `Hanalyze.Stat.Test` | scipy.stats | base R / rstatix | ✅ (`stat_util` suite) |
+| Multiple-testing correction | `Hanalyze.Stat.MultipleTesting` | statsmodels | `p.adjust` | ✅ |
+| Bootstrap CI / permutation | `Hanalyze.Stat.Bootstrap` | scipy.stats / arch | boot | ✅ |
+| Effect size + power analysis | `Hanalyze.Stat.Effect` | statsmodels.stats.power | pwr / effsize | 🟡 |
+| PCA / dimensionality reduction | `Hanalyze.Model.PCA` | sklearn.decomposition | prcomp | ✅ (`ml` suite) |
+| Clustering (K-means) | `Hanalyze.Model.Cluster` | sklearn.cluster | cluster / mclust | ✅ |
+| Decision tree (CART) | `Hanalyze.Model.DecisionTree` | sklearn.tree | rpart / tree | ✅ |
+| Time series (ARIMA / Holt-Winters) | `Hanalyze.Model.TimeSeries` | statsmodels.tsa | forecast / fable | ✅ (`survts` / `ts_extras` suite) |
+| Survival analysis (KM / Cox) | `Hanalyze.Model.Survival` | lifelines | survival | ✅ |
+| Classification metrics (AUC / F1 / Brier) | `Hanalyze.Stat.ClassMetrics` | sklearn.metrics | pROC / mlr3measures | 🟡 |
+| Cross-validation | `Hanalyze.Stat.CV` | sklearn.model_selection | caret / rsample | 🟡 |
+| Interpretation (permutation imp / PDP / ICE) | `Hanalyze.Stat.Interpret` | sklearn.inspection / shap / pdpbox | iml | 🟡 |
+| DataFrame manipulation | Hackage `dataframe` + `Hanalyze.DataIO.Reshape` | pandas | tidyverse | 🟡 |
+| Visualization | `Hanalyze.Viz.*` (Vega-Lite) | matplotlib / seaborn / plotly | ggplot2 | (qualitative only) |
+| CSV / Parquet / JSON I/O | `Hanalyze.DataIO.{CSV,External}` | pandas / pyarrow | readr / arrow | 🟡 |
+| Dirty-data defenses | `Hanalyze.DataIO.{Health,Sniff,Clean}` | (DIY) | janitor (partial) | independent |
 
 ## 2. Numerical benchmarks
 
@@ -86,7 +86,7 @@ A short summary of trends visible in `SUMMARY.md`. Numbers belong there.
 - HBM polymorphic DSL — one model definition admits 4 interpretations
   (structural inspection, log joint, AD gradient, dependency extraction)
   via Free monad
-- Dirty-data defenses (`DataIO.{Health,Sniff,Clean}`) — explicit
+- Dirty-data defenses (`Hanalyze.DataIO.{Health,Sniff,Clean}`) — explicit
   packages for this in pandas / R are limited
 - Single binary — no Python interpreter, ships as a CLI
 

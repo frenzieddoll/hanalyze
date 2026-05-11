@@ -54,7 +54,7 @@ hanalyze multireg data/io/potential_wide.csv dose 'y_z*' \
 
 ## 出力 HTML の構造
 
-`Viz.ReportBuilder.SecInteractiveMultiOut` セクションが埋め込まれます:
+`Hanalyze.Viz.ReportBuilder.SecInteractiveMultiOut` セクションが埋め込まれます:
 
 - **入力スライダ** (例 dose 6〜14): 1 本
 - **予測曲線** (赤線): スライダ値で全 q 出力を JS が再計算 →
@@ -66,15 +66,15 @@ hanalyze multireg data/io/potential_wide.csv dose 'y_z*' \
 | レイヤ | API | 役割 |
 |---|---|---|
 | データ | wide CSV | `dose,y_z001,...,y_z100` |
-| 共通基盤 | `Model.MultiOutput` | `asMultiY`/`fromMultiY`/`r2Multi` |
-| モデル | `Model.MultiLM.fitMultiLM` | 線形 (B=(XᵀX)⁻¹XᵀY) |
-|        | `Model.Kernel.kernelRidgeMulti` + `autoTuneKernelRidgeMulti` | RBF カーネルリッジ + LOOCV |
-| レポート | `Viz.ReportBuilder.secInteractiveMultiOut` + `mkInteractiveMOLinear` / `mkInteractiveMOKernelRBF` | 対話的 HTML 生成 |
+| 共通基盤 | `Hanalyze.Model.MultiOutput` | `asMultiY`/`fromMultiY`/`r2Multi` |
+| モデル | `Hanalyze.Model.MultiLM.fitMultiLM` | 線形 (B=(XᵀX)⁻¹XᵀY) |
+|        | `Hanalyze.Model.Kernel.kernelRidgeMulti` + `autoTuneKernelRidgeMulti` | RBF カーネルリッジ + LOOCV |
+| レポート | `Hanalyze.Viz.ReportBuilder.secInteractiveMultiOut` + `mkInteractiveMOLinear` / `mkInteractiveMOKernelRBF` | 対話的 HTML 生成 |
 
 ## 設計上の注意
 
 - **入力 1 次元のみ**: 現状は xcol に 1 列しか取れない。多入力 + 多出力は
-  `Model.RFF.rffRidgeMVMulti` を直接使うか、別の CLI コマンドが必要。
+  `Hanalyze.Model.RFF.rffRidgeMVMulti` を直接使うか、別の CLI コマンドが必要。
 - **出力グリッド**: `--xaxis-min`/`--xaxis-max` で z 軸の範囲を指定。
   指定しないと `1..q` で線形展開。
 - **データ点数**: kernel-rbf を使うなら N ≥ 10 dose 水準を推奨
@@ -84,18 +84,18 @@ hanalyze multireg data/io/potential_wide.csv dose 'y_z*' \
 
 ## 関連: 多出力モデル全般
 
-`Model.*` の主要モデルは「多出力 = 主、1 出力 = 特殊化」のポリシで
+`Hanalyze.Model.*` の主要モデルは「多出力 = 主、1 出力 = 特殊化」のポリシで
 統一されています:
 
-- `Model.Regularized.fitRegularizedMulti` (Ridge は閉形式、Lasso/EN は列ごと CD)
-- `Model.Spline.fitSplineMulti`
-- `Model.Kernel.kernelRidgeMulti` / `nwRegressionMulti`
-- `Model.RFF.rffRidgeMulti` (1D 入力) / `rffRidgeMVMulti` (多入力)
-- `Model.GP.fitGPMulti` (Ky⁻¹ 共有、分散も共有)
-- `Model.GPRobust.fitGPRobustMulti`
-- `Model.GLM.fitGLMMulti` (列ごと IRLS)
-- `Model.GLMM.fitLMEMulti` / `fitGLMMMulti`
-- `Model.HBM.observeColumns` (DSL 多出力ヘルパ)
+- `Hanalyze.Model.Regularized.fitRegularizedMulti` (Ridge は閉形式、Lasso/EN は列ごと CD)
+- `Hanalyze.Model.Spline.fitSplineMulti`
+- `Hanalyze.Model.Kernel.kernelRidgeMulti` / `nwRegressionMulti`
+- `Hanalyze.Model.RFF.rffRidgeMulti` (1D 入力) / `rffRidgeMVMulti` (多入力)
+- `Hanalyze.Model.GP.fitGPMulti` (Ky⁻¹ 共有、分散も共有)
+- `Hanalyze.Model.GPRobust.fitGPRobustMulti`
+- `Hanalyze.Model.GLM.fitGLMMulti` (列ごと IRLS)
+- `Hanalyze.Model.GLMM.fitLMEMulti` / `fitGLMMMulti`
+- `Hanalyze.Model.HBM.observeColumns` (DSL 多出力ヘルパ)
 
 q=1 と q>1 で旧 API と数値一致するかは `test/Spec.hs` の
 "Multi-output equivalence (q=1)" describe ブロックで検証済 (10 件)。

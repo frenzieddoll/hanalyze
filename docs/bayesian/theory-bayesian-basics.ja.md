@@ -1,6 +1,6 @@
 # 学習資料 2 — ベイズ統計の基礎
 
-> ベイズ推論の根本原理から、hanalyze の `Model.HBM` で扱う階層モデル
+> ベイズ推論の根本原理から、hanalyze の `Hanalyze.Model.HBM` で扱う階層モデル
 > までを段階的に解説。
 
 ## 1. ベイズの定理
@@ -92,7 +92,7 @@ logJoint :: (Floating a, Ord a) => Model a r -> Map Text a -> a
 | Normal$(\mu, \sigma)$, $\sigma$ 既知 | Normal$(\mu_0, \sigma_0)$ | 重み付き平均で更新 |
 | Normal$(\mu, \sigma)$, $\mu$ 既知 | InverseGamma$(\alpha, \beta)$ | 二乗和で更新 |
 
-`MCMC.Gibbs.gibbsMH` は、モデル定義から共役構造を自動検出して
+`Hanalyze.MCMC.Gibbs.gibbsMH` は、モデル定義から共役構造を自動検出して
 個別パラメタを直接 sample する (高速)。
 
 ### 3.2 弱情報事前 (Weakly Informative)
@@ -210,7 +210,7 @@ $$ \text{BF}_{12} = \frac{p(y \mid M_1)}{p(y \mid M_2)} $$
 $$ p(\tilde{y} \mid y) = \int p(\tilde{y} \mid \theta) p(\theta \mid y) d\theta $$
 
 「事後の各 $\theta$ から $\tilde{y}$ を引いて、それらを混合する」。
-hanalyze では `Stat.PosteriorPredictive.posteriorPredictive` で実装。
+hanalyze では `Hanalyze.Stat.PosteriorPredictive.posteriorPredictive` で実装。
 
 ### 事前予測
 
@@ -241,13 +241,13 @@ graph LR
 
 | Step | 機能 |
 |---|---|
-| 1. モデル定式化 | `Model.HBM` (DSL) |
-| 2. 事前予測 | `Stat.PosteriorPredictive.priorPredictive` |
-| 3. 推論 | `MCMC.NUTS.nuts`, `MCMC.HMC.hmc`, `MCMC.MH.metropolis`, `MCMC.Gibbs`, `MCMC.Slice` |
-| 4. 収束診断 | `Stat.MCMC.rhat`, `ess`, `bfmi`; `Viz.MCMC.{trace,rank,energy}Plot`; `chainDivergences` |
-| 5. 事後予測 | `Stat.PosteriorPredictive.posteriorPredictive` + `Viz.MCMC.ppcPlot` |
-| 6. モデル比較 | `Stat.ModelSelect.{waic, loo, compareModels}` |
-| 7. 結論 | `Viz.MCMC.posteriorSummary*`, `forestPlot`, `Viz.Report.renderReport` |
+| 1. モデル定式化 | `Hanalyze.Model.HBM` (DSL) |
+| 2. 事前予測 | `Hanalyze.Stat.PosteriorPredictive.priorPredictive` |
+| 3. 推論 | `Hanalyze.MCMC.NUTS.nuts`, `Hanalyze.MCMC.HMC.hmc`, `Hanalyze.MCMC.MH.metropolis`, `Hanalyze.MCMC.Gibbs`, `Hanalyze.MCMC.Slice` |
+| 4. 収束診断 | `Hanalyze.Stat.MCMC.rhat`, `ess`, `bfmi`; `Hanalyze.Viz.MCMC.{trace,rank,energy}Plot`; `chainDivergences` |
+| 5. 事後予測 | `Hanalyze.Stat.PosteriorPredictive.posteriorPredictive` + `Hanalyze.Viz.MCMC.ppcPlot` |
+| 6. モデル比較 | `Hanalyze.Stat.ModelSelect.{waic, loo, compareModels}` |
+| 7. 結論 | `Hanalyze.Viz.MCMC.posteriorSummary*`, `forestPlot`, `Hanalyze.Viz.Report.renderReport` |
 
 ---
 

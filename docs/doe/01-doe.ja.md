@@ -7,20 +7,20 @@
 
 | モジュール | 内容 |
 |---|---|
-| `Design.Factorial` | 完全/部分要因 (2^k, 3^k, 2^(k-p)), 混合水準 |
-| `Design.Block`     | ラテン方格、Graeco-Latin、乱塊法 |
-| `Design.Mixed`     | 混合水準計画ヘルパ |
-| `Design.Anova`     | 一元/二元 ANOVA テーブル (F, p, η²) |
-| `Design.Power`     | t 検定、F 検定、比率検定の検出力解析・サンプルサイズ決定 |
-| `Design.Quality`   | 直交度、D/A 効率、条件数、VIF |
-| `Design.RSM`       | CCD (rotatable/face-centered) + Box-Behnken + 二次回帰 |
-| `Design.Optimal`   | D-optimal / A-optimal (Fedorov 交換) |
-| `Design.Orthogonal` | 直交表 Lₙ (L4/L8/L9/L12/L16/L18) |
-| `Design.Taguchi`    | タグチメソッド (SN 比 + 要因効果 + 内/外配置) |
+| `Hanalyze.Design.Factorial` | 完全/部分要因 (2^k, 3^k, 2^(k-p)), 混合水準 |
+| `Hanalyze.Design.Block`     | ラテン方格、Graeco-Latin、乱塊法 |
+| `Hanalyze.Design.Mixed`     | 混合水準計画ヘルパ |
+| `Hanalyze.Design.Anova`     | 一元/二元 ANOVA テーブル (F, p, η²) |
+| `Hanalyze.Design.Power`     | t 検定、F 検定、比率検定の検出力解析・サンプルサイズ決定 |
+| `Hanalyze.Design.Quality`   | 直交度、D/A 効率、条件数、VIF |
+| `Hanalyze.Design.RSM`       | CCD (rotatable/face-centered) + Box-Behnken + 二次回帰 |
+| `Hanalyze.Design.Optimal`   | D-optimal / A-optimal (Fedorov 交換) |
+| `Hanalyze.Design.Orthogonal` | 直交表 Lₙ (L4/L8/L9/L12/L16/L18) |
+| `Hanalyze.Design.Taguchi`    | タグチメソッド (SN 比 + 要因効果 + 内/外配置) |
 
 ---
 
-## 1. 完全要因計画 (`Design.Factorial`)
+## 1. 完全要因計画 (`Hanalyze.Design.Factorial`)
 
 ```haskell
 import Design.Factorial
@@ -55,7 +55,7 @@ mixedFactorial :: [Int] -> [[Double]]
 
 ---
 
-## 2. ブロック計画 (`Design.Block`)
+## 2. ブロック計画 (`Hanalyze.Design.Block`)
 
 ```haskell
 import Design.Block
@@ -74,7 +74,7 @@ randomizedBlock :: Int -> Int -> Int -> [[Int]]
 
 ---
 
-## 3. ANOVA (`Design.Anova`)
+## 3. ANOVA (`Hanalyze.Design.Anova`)
 
 ```haskell
 import Design.Anova
@@ -105,7 +105,7 @@ Total           8       3.7396       0.4675        --        --      --
 
 ---
 
-## 4. 検出力解析 (`Design.Power`)
+## 4. 検出力解析 (`Hanalyze.Design.Power`)
 
 ### 4.1 効果量
 
@@ -147,7 +147,7 @@ let n = sampleSizeTTest 0.5 0.8 0.05  -- → 64
 
 ---
 
-## 5. 設計の質指標 (`Design.Quality`)
+## 5. 設計の質指標 (`Hanalyze.Design.Quality`)
 
 ```haskell
 import Design.Quality
@@ -169,7 +169,7 @@ vifList            :: [[Double]] -> [Double]              -- 各列の VIF
 
 ---
 
-## 6. 応答曲面法 (`Design.RSM`)
+## 6. 応答曲面法 (`Hanalyze.Design.RSM`)
 
 二次関数の極値 (最適条件) を見つけるための設計と解析。
 
@@ -205,7 +205,7 @@ let fit = fitQuadratic design ys
 
 ---
 
-## 6.5 直交表 Lₙ (`Design.Orthogonal`)
+## 6.5 直交表 Lₙ (`Hanalyze.Design.Orthogonal`)
 
 タグチ流の標準直交表を定数として実装。Lₙ の **n** は試行数、**括弧内** が
 水準構成 (例: L18(2¹×3⁷) は 1 因子 × 2 水準 + 7 因子 × 3 水準)。
@@ -269,9 +269,9 @@ hanalyze doe ortho L9 \
 
 ---
 
-## 6.6 タグチメソッド (`Design.Taguchi`)
+## 6.6 タグチメソッド (`Hanalyze.Design.Taguchi`)
 
-`Design.Orthogonal` 上にロバスト設計の解析層を追加するモジュール。
+`Hanalyze.Design.Orthogonal` 上にロバスト設計の解析層を追加するモジュール。
 
 ### SN 比 4 種
 
@@ -323,7 +323,7 @@ hanalyze taguchi cross L9 L4 \
 
 ---
 
-## 7. 最適計画 (`Design.Optimal`)
+## 7. 最適計画 (`Hanalyze.Design.Optimal`)
 
 候補集合から指定試行数の部分集合を Fedorov 交換で最適化。
 
@@ -385,4 +385,4 @@ let nA = sampleSizeOneWayAnova 0.25 3 0.8 0.05
 
 - 理論: [docs/doe/theory-doe.ja.md](theory-doe.ja.md)
 - demo: `doe-demo`, `rsm-demo`, `optimaldoe-demo`
-- 既存の回帰: `Model.LM` で因子効果を fit
+- 既存の回帰: `Hanalyze.Model.LM` で因子効果を fit

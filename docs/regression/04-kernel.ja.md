@@ -3,7 +3,7 @@
 > 🌐 [English](04-kernel.md) | **日本語**
 
 > パラメトリックモデルを避けた **局所的非線形** 回帰。
-> `Model.Kernel` モジュール。
+> `Hanalyze.Model.Kernel` モジュール。
 >
 > 関連: [04-spline.ja.md](04-spline.ja.md) (スプライン) / [04-gp.ja.md](04-gp.ja.md) (GP) /
 > 理論: [theory-regression-extensions.ja.md](theory-regression-extensions.ja.md)
@@ -70,11 +70,11 @@ let krFit = kernelRidge Gaussian bestH 0.1 xs ys
 
 ## 6. 多次元入力 (`gramMatrixMV` / `kernelRidgeMV` / `nwRegressionMV`)
 
-`Model.Kernel` は **`X :: LA.Matrix Double` (`n × p`)** を直接受け取る MV (Multi-Variate) API を持つ。「多次元 = 主、1 次元 = 特殊化」という方針。
+`Hanalyze.Model.Kernel` は **`X :: LA.Matrix Double` (`n × p`)** を直接受け取る MV (Multi-Variate) API を持つ。「多次元 = 主、1 次元 = 特殊化」という方針。
 
 ### 距離行列を BLAS で組む
 
-`Stat.KernelDist.pairwiseSqDist :: Matrix → Matrix` は
+`Hanalyze.Stat.KernelDist.pairwiseSqDist :: Matrix → Matrix` は
 
 \[ D_{ij} = \|x_i\|^2 + \|x_j\|^2 - 2 x_i^\top x_j \]
 

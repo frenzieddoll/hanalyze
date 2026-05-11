@@ -7,13 +7,13 @@ import qualified Data.Map.Strict as Map
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import MCMC.Core (Chain)
-import MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
-import Model.HBM (ModelP, sample, observe, Distribution (..))
-import Stat.ModelSelect
+import Hanalyze.MCMC.Core (Chain)
+import Hanalyze.MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
+import Hanalyze.Model.HBM (ModelP, sample, observe, Distribution (..))
+import Hanalyze.Stat.ModelSelect
   (CompareEntry (..), CompareResult (..), compareModels, chainLogLikMatrix)
-import Viz.Core (PlotConfig (..), OutputFormat (..))
-import Viz.MCMC (forestPlotFile)
+import Hanalyze.Viz.Core (PlotConfig (..), OutputFormat (..))
+import Hanalyze.Viz.MCMC (forestPlotFile)
 
 -- ---------------------------------------------------------------------------
 -- 3 モデル: 分散事前を変えて比較

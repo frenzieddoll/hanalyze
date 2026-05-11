@@ -104,7 +104,7 @@ main = do
   ...
 ```
 
-## 自動推論 (`DataIO.Sniff`)
+## 自動推論 (`Hanalyze.DataIO.Sniff`)
 
 冒頭 8 KB を読んで、ユーザが明示指定しなかった項目を自動補完する。
 - delimiter (`,;\t|` から variance 昇順 + median 降順で選定)
@@ -138,12 +138,12 @@ hanalyze melt data/io/wide_sample.csv \
 # → 27 行 × 5 列 (name, x1, x2, t, y)、NA は自動 drop
 ```
 
-ライブラリ API: `DataIO.Preprocess.meltLonger`。
+ライブラリ API: `Hanalyze.DataIO.Preprocess.meltLonger`。
 
 > melt 後の long-form データを使った多変量回帰や、wide CSV を直接受ける真の
 > 多出力回帰 (`hanalyze multireg`) については [regression/07-multireg.ja.md](../regression/07-multireg.ja.md) を参照。
 
-## クリーニング DSL (`DataIO.Clean`)
+## クリーニング DSL (`Hanalyze.DataIO.Clean`)
 
 通貨記号 / 桁区切り / 単位 / decimal point 違いなど、健全性検査では
 警告止まりだった列を、明示的なルール適用で数値化できる。

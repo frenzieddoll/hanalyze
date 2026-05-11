@@ -24,14 +24,14 @@ import Text.Printf (printf)
 import qualified Data.Text as T
 import Control.Monad (replicateM)
 
-import DataIO.CSV          (loadAuto)
-import DataIO.Convert      (getDoubleVec)
-import qualified Model.LM  as LM
-import qualified Model.GAM as GAM
-import qualified Model.RandomForest as RF
-import Model.Core          (coeffList, fittedList, residualsV, rSquared1)
+import Hanalyze.DataIO.CSV          (loadAuto)
+import Hanalyze.DataIO.Convert      (getDoubleVec)
+import qualified Hanalyze.Model.LM  as LM
+import qualified Hanalyze.Model.GAM as GAM
+import qualified Hanalyze.Model.RandomForest as RF
+import Hanalyze.Model.Core          (coeffList, fittedList, residualsV, rSquared1)
 
-import qualified Viz.ReportBuilder as RB
+import qualified Hanalyze.Viz.ReportBuilder as RB
 
 -- ---------------------------------------------------------------------------
 -- ヘルパ
@@ -175,7 +175,7 @@ main = do
       sections =
         [ RB.secMarkdown "概要"
             (T.unlines
-              [ "Cycle 1 + Cycle 9 で `Viz.ReportBuilder` に追加した計 7 つのセクションを"
+              [ "Cycle 1 + Cycle 9 で `Hanalyze.Viz.ReportBuilder` に追加した計 7 つのセクションを"
               , "1 つのレポートで使うデモ。"
               , ""
               , "データ: `data/regression/test_lm.csv` (50 行、x, y 二列)。"

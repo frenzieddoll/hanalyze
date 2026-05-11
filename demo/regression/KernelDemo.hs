@@ -10,9 +10,9 @@ import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 import qualified System.Random.MWC.Distributions as MWC
 
-import Model.Kernel (Kernel (..), nwRegression, kernelRidge,
+import Hanalyze.Model.Kernel (Kernel (..), nwRegression, kernelRidge,
                      predictKernelRidge, gridSearchBandwidth)
-import Viz.Core (defaultConfig, OutputFormat (..), PlotConfig (..),
+import Hanalyze.Viz.Core (defaultConfig, OutputFormat (..), PlotConfig (..),
                  writeSpec)
 import Graphics.Vega.VegaLite
 

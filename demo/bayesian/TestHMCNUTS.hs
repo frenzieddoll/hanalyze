@@ -13,12 +13,12 @@ import qualified Data.Text as T
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import Model.HBM
-import MCMC.Core (Chain (..), chainVals, posteriorMean, posteriorSD, acceptanceRate)
-import MCMC.HMC
-import MCMC.NUTS
-import Stat.Distribution ()
-import Stat.MCMC (rhat)
+import Hanalyze.Model.HBM
+import Hanalyze.MCMC.Core (Chain (..), chainVals, posteriorMean, posteriorSD, acceptanceRate)
+import Hanalyze.MCMC.HMC
+import Hanalyze.MCMC.NUTS
+import Hanalyze.Stat.Distribution ()
+import Hanalyze.Stat.MCMC (rhat)
 
 -- モデル1: μ のみ (unconstrained)
 gaussModel :: [Double] -> ModelP ()

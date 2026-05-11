@@ -13,13 +13,13 @@ import qualified Data.Text as T
 import Text.Printf (printf)
 import qualified System.Random.MWC as MWC
 
-import qualified Optim.Common              as OC
-import qualified Optim.NelderMead          as NM
-import qualified Optim.LBFGS               as LBFGS
-import qualified Optim.LineSearch          as LS
-import qualified Optim.DifferentialEvolution as DE
-import qualified Optim.CMAES               as CMAES
-import qualified Viz.ReportBuilder         as RB
+import qualified Hanalyze.Optim.Common              as OC
+import qualified Hanalyze.Optim.NelderMead          as NM
+import qualified Hanalyze.Optim.LBFGS               as LBFGS
+import qualified Hanalyze.Optim.LineSearch          as LS
+import qualified Hanalyze.Optim.DifferentialEvolution as DE
+import qualified Hanalyze.Optim.CMAES               as CMAES
+import qualified Hanalyze.Viz.ReportBuilder         as RB
 import Graphics.Vega.VegaLite hiding (filter, name, sphere)
 
 -- ベンチ関数

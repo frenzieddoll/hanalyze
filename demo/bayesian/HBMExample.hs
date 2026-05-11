@@ -18,14 +18,14 @@ import qualified Data.Text       as T
 import qualified Data.Text.IO    as TIO
 import Text.Printf (printf)
 
-import Model.HBM
-import MCMC.Core
-import MCMC.MH   (MCMCConfig (..), defaultMCMCConfig, metropolis)
-import MCMC.NUTS (nutsChains, NUTSConfig (..), defaultNUTSConfig)
-import Stat.Distribution ()
-import Stat.MCMC  (ess)
-import Viz.Core      (openInBrowser)
-import Viz.Report    (MCMCReport (..), defaultReport, renderReport)
+import Hanalyze.Model.HBM
+import Hanalyze.MCMC.Core
+import Hanalyze.MCMC.MH   (MCMCConfig (..), defaultMCMCConfig, metropolis)
+import Hanalyze.MCMC.NUTS (nutsChains, NUTSConfig (..), defaultNUTSConfig)
+import Hanalyze.Stat.Distribution ()
+import Hanalyze.Stat.MCMC  (ess)
+import Hanalyze.Viz.Core      (openInBrowser)
+import Hanalyze.Viz.Report    (MCMCReport (..), defaultReport, renderReport)
 import System.Random.MWC (createSystemRandom)
 
 -- ---------------------------------------------------------------------------

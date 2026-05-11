@@ -8,11 +8,11 @@ module Main where
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import Optim.NSGA   (Solution (..), NSGAConfig (..), defaultNSGAConfig,
+import Hanalyze.Optim.NSGA   (Solution (..), NSGAConfig (..), defaultNSGAConfig,
                      nsga2)
-import Optim.Pareto (hypervolume, igd)
-import Viz.Pareto   (paretoCompareFile, parallelCoordinatesFile)
-import Viz.Core     (defaultConfig, OutputFormat (..), PlotConfig (..))
+import Hanalyze.Optim.Pareto (hypervolume, igd)
+import Hanalyze.Viz.Pareto   (paretoCompareFile, parallelCoordinatesFile)
+import Hanalyze.Viz.Core     (defaultConfig, OutputFormat (..), PlotConfig (..))
 
 -- ---------------------------------------------------------------------------
 -- ZDT1 (Zitzler-Deb-Thiele 2000):

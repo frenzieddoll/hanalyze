@@ -11,10 +11,10 @@ module Main where
 
 import qualified Numeric.LinearAlgebra as LA
 
-import           Model.MultiLM         (fitMultiLM, predictMultiLM)
-import           Model.MultiGP         (fitMultiGPMV, fitMultiGPMVSharedHP,
+import           Hanalyze.Model.MultiLM         (fitMultiLM, predictMultiLM)
+import           Hanalyze.Model.MultiGP         (fitMultiGPMV, fitMultiGPMVSharedHP,
                                         MultiGPResultMV (..))
-import           Model.GP              (Kernel (..))
+import           Hanalyze.Model.GP              (Kernel (..))
 
 import           BenchUtil
 

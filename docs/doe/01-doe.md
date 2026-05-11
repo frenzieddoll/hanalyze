@@ -8,20 +8,20 @@
 
 | Module | Contents |
 |---|---|
-| `Design.Factorial` | Full / fractional factorial (2^k, 3^k, 2^(k-p)), mixed levels |
-| `Design.Block`     | Latin squares, Graeco-Latin squares, randomized block design |
-| `Design.Mixed`     | Mixed-level design helpers |
-| `Design.Anova`     | One-/two-way ANOVA tables (F, p, η²) |
-| `Design.Power`     | Power analysis & sample-size determination for t / F / proportion tests |
-| `Design.Quality`   | Orthogonality, D/A efficiency, condition number, VIF |
-| `Design.RSM`       | CCD (rotatable / face-centered) + Box-Behnken + quadratic regression |
-| `Design.Optimal`   | D-optimal / A-optimal (Fedorov exchange) |
-| `Design.Orthogonal` | Orthogonal arrays Lₙ (L4/L8/L9/L12/L16/L18) |
-| `Design.Taguchi`    | Taguchi method (SN ratio + factor effects + inner/outer arrays) |
+| `Hanalyze.Design.Factorial` | Full / fractional factorial (2^k, 3^k, 2^(k-p)), mixed levels |
+| `Hanalyze.Design.Block`     | Latin squares, Graeco-Latin squares, randomized block design |
+| `Hanalyze.Design.Mixed`     | Mixed-level design helpers |
+| `Hanalyze.Design.Anova`     | One-/two-way ANOVA tables (F, p, η²) |
+| `Hanalyze.Design.Power`     | Power analysis & sample-size determination for t / F / proportion tests |
+| `Hanalyze.Design.Quality`   | Orthogonality, D/A efficiency, condition number, VIF |
+| `Hanalyze.Design.RSM`       | CCD (rotatable / face-centered) + Box-Behnken + quadratic regression |
+| `Hanalyze.Design.Optimal`   | D-optimal / A-optimal (Fedorov exchange) |
+| `Hanalyze.Design.Orthogonal` | Orthogonal arrays Lₙ (L4/L8/L9/L12/L16/L18) |
+| `Hanalyze.Design.Taguchi`    | Taguchi method (SN ratio + factor effects + inner/outer arrays) |
 
 ---
 
-## 1. Full factorial (`Design.Factorial`)
+## 1. Full factorial (`Hanalyze.Design.Factorial`)
 
 ```haskell
 import Design.Factorial
@@ -56,7 +56,7 @@ mixedFactorial :: [Int] -> [[Double]]
 
 ---
 
-## 2. Block designs (`Design.Block`)
+## 2. Block designs (`Hanalyze.Design.Block`)
 
 ```haskell
 import Design.Block
@@ -75,7 +75,7 @@ randomizedBlock :: Int -> Int -> Int -> [[Int]]
 
 ---
 
-## 3. ANOVA (`Design.Anova`)
+## 3. ANOVA (`Hanalyze.Design.Anova`)
 
 ```haskell
 import Design.Anova
@@ -106,7 +106,7 @@ Total           8       3.7396       0.4675        --        --      --
 
 ---
 
-## 4. Power analysis (`Design.Power`)
+## 4. Power analysis (`Hanalyze.Design.Power`)
 
 ### 4.1 Effect sizes
 
@@ -148,7 +148,7 @@ let n = sampleSizeTTest 0.5 0.8 0.05  -- → 64
 
 ---
 
-## 5. Design quality metrics (`Design.Quality`)
+## 5. Design quality metrics (`Hanalyze.Design.Quality`)
 
 ```haskell
 import Design.Quality
@@ -170,7 +170,7 @@ vifList            :: [[Double]] -> [Double]              -- VIF per column
 
 ---
 
-## 6. Response Surface Methodology (`Design.RSM`)
+## 6. Response Surface Methodology (`Hanalyze.Design.RSM`)
 
 Designs and analyses to find the optimum of a quadratic response surface.
 
@@ -206,7 +206,7 @@ let fit = fitQuadratic design ys
 
 ---
 
-## 6.5 Orthogonal arrays Lₙ (`Design.Orthogonal`)
+## 6.5 Orthogonal arrays Lₙ (`Hanalyze.Design.Orthogonal`)
 
 Standard Taguchi-style orthogonal arrays as constants. The Lₙ **n** is the
 number of runs; the **parenthesized expression** describes the level
@@ -272,9 +272,9 @@ that tool for variability minimization.
 
 ---
 
-## 6.6 Taguchi method (`Design.Taguchi`)
+## 6.6 Taguchi method (`Hanalyze.Design.Taguchi`)
 
-A robust-design analysis layer built on top of `Design.Orthogonal`.
+A robust-design analysis layer built on top of `Hanalyze.Design.Orthogonal`.
 
 ### Four SN ratios
 
@@ -326,7 +326,7 @@ hanalyze taguchi cross L9 L4 \
 
 ---
 
-## 7. Optimal designs (`Design.Optimal`)
+## 7. Optimal designs (`Hanalyze.Design.Optimal`)
 
 Pick the best-of-size subset from a candidate set via Fedorov exchange.
 
@@ -388,4 +388,4 @@ let nA = sampleSizeOneWayAnova 0.25 3 0.8 0.05
 
 - Theory: [docs/doe/theory-doe.md](theory-doe.md)
 - Demos: `doe-demo`, `rsm-demo`, `optimaldoe-demo`
-- Related regression: fit factor effects with `Model.LM`
+- Related regression: fit factor effects with `Hanalyze.Model.LM`

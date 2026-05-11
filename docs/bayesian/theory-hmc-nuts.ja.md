@@ -181,7 +181,7 @@ $$ \text{BFMI} = \frac{E[(H_t - H_{t-1})^2]}{\text{Var}(H_t)} $$
 | 0.3〜0.5 | 注意 |
 | > 0.5 | 良好 |
 
-`Stat.MCMC.bfmi`、`Viz.MCMC.energyPlot` で可視化。
+`Hanalyze.Stat.MCMC.bfmi`、`Hanalyze.Viz.MCMC.energyPlot` で可視化。
 
 ### 5.2 Divergence
 
@@ -191,8 +191,8 @@ leapfrog の積分誤差がしきい値 ($|\Delta H| > 1000$) を超えると
 - 局所的に curvature が大きい (= 病的事後分布)
 - ほぼ常に **non-centered パラメタ化** で改善
 
-`MCMC.NUTS` は `Chain.chainDivergences` に divergent 反復の index を
-記録。`Viz.MCMC.pairScatterDiv` でパラメタ空間での発生位置を可視化。
+`Hanalyze.MCMC.NUTS` は `Chain.chainDivergences` に divergent 反復の index を
+記録。`Hanalyze.Viz.MCMC.pairScatterDiv` でパラメタ空間での発生位置を可視化。
 
 ### 5.3 典型例: Neal's funnel
 

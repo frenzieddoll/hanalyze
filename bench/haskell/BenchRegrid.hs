@@ -10,10 +10,10 @@
 module Main where
 
 import qualified DataFrame                  as DX
-import qualified DataIO.Preprocess          as Pre
-import qualified Stat.Interpolate           as IL
-import qualified Stat.AdaptiveGrid          as AG
-import           DataIO.CSV                 (loadAuto)
+import qualified Hanalyze.DataIO.Preprocess          as Pre
+import qualified Hanalyze.Stat.Interpolate           as IL
+import qualified Hanalyze.Stat.AdaptiveGrid          as AG
+import           Hanalyze.DataIO.CSV                 (loadAuto)
 
 import           BenchUtil
 

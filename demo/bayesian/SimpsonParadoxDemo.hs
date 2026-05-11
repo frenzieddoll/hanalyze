@@ -22,22 +22,22 @@ import System.Random.MWC (createSystemRandom)
 
 import qualified DataFrame                    as DX
 import qualified DataFrame.Internal.DataFrame as DXD
-import Model.Core    (Band (..), coefficientsV)
-import Model.LM      (fitPolyWithSmooth, SmoothFit (..), polyDesignMatrix)
-import Model.GLMM    (fitLMEDataFrame, GLMMResult (..))
-import Model.GLM     (Family (..), LinkFn (..))
+import Hanalyze.Model.Core    (Band (..), coefficientsV)
+import Hanalyze.Model.LM      (fitPolyWithSmooth, SmoothFit (..), polyDesignMatrix)
+import Hanalyze.Model.GLMM    (fitLMEDataFrame, GLMMResult (..))
+import Hanalyze.Model.GLM     (Family (..), LinkFn (..))
 import qualified Numeric.LinearAlgebra as LA
-import Stat.ModelSelect (lmPosteriorLogLiks, lmePosteriorLogLiks, waic, loo,
+import Hanalyze.Stat.ModelSelect (lmPosteriorLogLiks, lmePosteriorLogLiks, waic, loo,
                          WAICResult (..), LOOResult (..))
 
-import MCMC.Core (Chain (..), chainVals, posteriorMean, posteriorSD,
+import Hanalyze.MCMC.Core (Chain (..), chainVals, posteriorMean, posteriorSD,
                   posteriorQuantile, acceptanceRate)
-import MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
-import Model.HBM (ModelP, sample, observe, Distribution (..),
+import Hanalyze.MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
+import Hanalyze.Model.HBM (ModelP, sample, observe, Distribution (..),
                   buildModelGraph, perObsLogLiks)
-import Stat.MCMC (ess)
+import Hanalyze.Stat.MCMC (ess)
 
-import Viz.AnalysisReport
+import Hanalyze.Viz.AnalysisReport
   ( AnalysisReportConfig (..), defaultAnalysisConfig
   , FitSummary (..), GLMMSummary (..), HBMRegSummary (..), SmoothData (..)
   , ModelFit (..), NamedPlot (..)
@@ -45,8 +45,8 @@ import Viz.AnalysisReport
   , mkFitSummary, mkGLMMSummary
   , writeAnalysisReport, writeComparisonReport
   )
-import Viz.Core (PlotConfig (..))
-import Viz.MCMC (mcmcDiagnostics, autocorrPlot)
+import Hanalyze.Viz.Core (PlotConfig (..))
+import Hanalyze.Viz.MCMC (mcmcDiagnostics, autocorrPlot)
 
 -- ---------------------------------------------------------------------------
 -- データ生成 (Simpson's Paradox)

@@ -3,7 +3,7 @@ import qualified System.Random.MWC as MWC
 import qualified System.Random.MWC.Distributions as MWCD
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import qualified Data.Vector.Storable as VS
-import MCMC.Gibbs (sampleBetaBB)
+import Hanalyze.MCMC.Gibbs (sampleBetaBB)
 
 sampleBetaGamma :: Double -> Double -> MWC.GenIO -> IO Double
 sampleBetaGamma a b gen = do

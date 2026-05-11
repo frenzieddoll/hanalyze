@@ -11,10 +11,10 @@ import Data.List (sort)
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import MCMC.Core (chainSamples)
-import MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
-import Model.HBM (ModelP, sample, observe, Distribution (..))
-import Stat.PosteriorPredictive
+import Hanalyze.MCMC.Core (chainSamples)
+import Hanalyze.MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
+import Hanalyze.Model.HBM (ModelP, sample, observe, Distribution (..))
+import Hanalyze.Stat.PosteriorPredictive
   (priorPredictive, posteriorPredictive, posteriorPredictiveSummary)
 
 obsData :: [Double]

@@ -7,8 +7,8 @@ module Main where
 
 import Text.Printf (printf)
 
-import qualified Design.Optimal as DO
-import qualified Design.Quality as DQ
+import qualified Hanalyze.Design.Optimal as DO
+import qualified Hanalyze.Design.Quality as DQ
 
 main :: IO ()
 main = do

@@ -10,12 +10,12 @@
 
 | モジュール | 用途 |
 |---|---|
-| `Optim.NSGA`         | NSGA-II + 非優越ソート + 遺伝的演算子 |
-| `Optim.Pareto`       | Pareto front utilities (HV / IGD / GD) |
-| `Optim.Acquisition`  | EI / UCB / PI / ParEGO / EHVI |
-| `Optim.BayesOpt`     | Bayesian Optimization ループ (単目的・多目的) |
-| `Optim.Desirability` | Derringer-Suich 望ましさ関数 |
-| `Viz.Pareto`         | Pareto front 可視化 (5 種) |
+| `Hanalyze.Optim.NSGA`         | NSGA-II + 非優越ソート + 遺伝的演算子 |
+| `Hanalyze.Optim.Pareto`       | Pareto front utilities (HV / IGD / GD) |
+| `Hanalyze.Optim.Acquisition`  | EI / UCB / PI / ParEGO / EHVI |
+| `Hanalyze.Optim.BayesOpt`     | Bayesian Optimization ループ (単目的・多目的) |
+| `Hanalyze.Optim.Desirability` | Derringer-Suich 望ましさ関数 |
+| `Hanalyze.Viz.Pareto`         | Pareto front 可視化 (5 種) |
 
 ---
 

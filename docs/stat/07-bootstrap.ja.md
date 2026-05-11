@@ -51,7 +51,7 @@ Boot.sampleMedian :: Vector Double -> Double
 |---|---|---|
 | `bootstrapCI` (percentile) | 統計量がほぼ symmetric | 標準 |
 | `bootstrapBcaCI` (BCa) | 統計量が biased / skewed (例: median, var) | + jackknife (n 倍) |
-| Normal-theory CI (`Stat.Test`) | 正規性が成立 | O(1) |
+| Normal-theory CI (`Hanalyze.Stat.Test`) | 正規性が成立 | O(1) |
 
 ## 5. ベストプラクティス
 

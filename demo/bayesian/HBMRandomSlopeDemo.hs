@@ -28,22 +28,22 @@ import System.Random.MWC (createSystemRandom)
 import qualified DataFrame                    as DX
 import qualified DataFrame.Internal.DataFrame as DXD
 
-import MCMC.Core (Chain (..), chainVals, posteriorMean, posteriorSD,
+import Hanalyze.MCMC.Core (Chain (..), chainVals, posteriorMean, posteriorSD,
                   posteriorQuantile, acceptanceRate)
-import MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
-import Model.HBM (ModelP, sample, observe, Distribution (..),
+import Hanalyze.MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
+import Hanalyze.Model.HBM (ModelP, sample, observe, Distribution (..),
                   buildModelGraph, perObsLogLiks)
-import Stat.MCMC (ess)
-import Stat.ModelSelect (waic, loo, WAICResult (..), LOOResult (..))
+import Hanalyze.Stat.MCMC (ess)
+import Hanalyze.Stat.ModelSelect (waic, loo, WAICResult (..), LOOResult (..))
 
-import Viz.AnalysisReport
+import Hanalyze.Viz.AnalysisReport
   ( AnalysisReportConfig (..), defaultAnalysisConfig
   , FitSummary (..), HBMRegSummary (..), SmoothData (..)
   , ModelFit (..), NamedPlot (..), CompareEntry (..)
   , writeAnalysisReport, writeComparisonReport
   )
-import Viz.Core (PlotConfig (..))
-import Viz.MCMC (mcmcDiagnostics, autocorrPlot)
+import Hanalyze.Viz.Core (PlotConfig (..))
+import Hanalyze.Viz.MCMC (mcmcDiagnostics, autocorrPlot)
 
 -- ---------------------------------------------------------------------------
 -- データ生成: グループごとに異なる傾き

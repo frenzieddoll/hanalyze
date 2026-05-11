@@ -11,8 +11,8 @@ import qualified Numeric.LinearAlgebra as LA
 import System.Random.MWC (createSystemRandom)
 import qualified System.Random.MWC.Distributions as MWC
 
-import qualified Design.RSM as RSM
-import qualified Design.Quality as DQ
+import qualified Hanalyze.Design.RSM as RSM
+import qualified Hanalyze.Design.Quality as DQ
 
 main :: IO ()
 main = do

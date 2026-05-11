@@ -24,22 +24,22 @@ import System.Random.MWC (createSystemRandom)
 
 import qualified DataFrame                    as DX
 import qualified DataFrame.Internal.DataFrame as DXD
-import MCMC.Core (Chain (..), chainVals, posteriorMean, posteriorSD,
+import Hanalyze.MCMC.Core (Chain (..), chainVals, posteriorMean, posteriorSD,
                   posteriorQuantile)
-import MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
-import Model.HBM (ModelP, sample, observe, Distribution (..),
+import Hanalyze.MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
+import Hanalyze.Model.HBM (ModelP, sample, observe, Distribution (..),
                   buildModelGraph)
-import Stat.MCMC (ess)
-import Viz.AnalysisReport
+import Hanalyze.Stat.MCMC (ess)
+import Hanalyze.Viz.AnalysisReport
   ( AnalysisReportConfig (..), defaultAnalysisConfig
   , FitSummary (..), SmoothData (..), HBMRegSummary (..)
   , ModelFit (..), NamedPlot (..)
   , writeAnalysisReport
   )
-import Viz.Core (PlotConfig (..))
-import Viz.MCMC (mcmcDiagnostics, autocorrPlot)
+import Hanalyze.Viz.Core (PlotConfig (..))
+import Hanalyze.Viz.MCMC (mcmcDiagnostics, autocorrPlot)
 
-import Model.GLM (Family (..), LinkFn (..))
+import Hanalyze.Model.GLM (Family (..), LinkFn (..))
 
 -- ---------------------------------------------------------------------------
 -- 合成データ: y = 2 + 3x + ε,  ε ~ N(0, 1.5²)

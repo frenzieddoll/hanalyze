@@ -7,7 +7,7 @@
 > [theory-singleobj.ja.md](theory-singleobj.ja.md)、
 > [theory-bayesopt.ja.md](theory-bayesopt.ja.md)
 
-`Optim.*` の全アルゴリズムは **`Optim.Common.Bounds`** 型と
+`Hanalyze.Optim.*` の全アルゴリズムは **`Hanalyze.Optim.Common.Bounds`** 型と
 **`Maybe Bounds` を各 Config に持つ統一インターフェース**でリファクタ済み。
 本ドキュメントは「どのアルゴリズムを選ぶか」「制約をどう書くか」を 1 ページに集約する。
 
@@ -39,22 +39,22 @@ flowchart TD
 
 | 状況 | 推奨 | モジュール |
 |---|---|---|
-| 1D 単峰 | **Brent** | `Optim.LineSearch` |
-| 滑らか・勾配あり | **L-BFGS** | `Optim.LBFGS` |
-| 微分不能・低次元 (≤20) | **Nelder-Mead** | `Optim.NelderMead` |
-| 非凸・大域・微分不要 (≤30 次元) | **Differential Evolution** | `Optim.DifferentialEvolution` |
-| 非凸・連続・高次元 (10–100) | **CMA-ES** | `Optim.CMAES` / `Optim.CMAESFull` |
-| 古典的メタヒューリスティック | **Simulated Annealing** | `Optim.SimulatedAnnealing` |
-| 群知能 | **Particle Swarm** | `Optim.ParticleSwarm` |
-| 評価コスト極大 | **Bayesian Optimization** | `Optim.BayesOpt` |
-| 多目的 (Pareto front) | **NSGA-II** | `Optim.NSGA` |
-| 等式・不等式制約 | **Augmented Lagrangian** | `Optim.Constrained` |
+| 1D 単峰 | **Brent** | `Hanalyze.Optim.LineSearch` |
+| 滑らか・勾配あり | **L-BFGS** | `Hanalyze.Optim.LBFGS` |
+| 微分不能・低次元 (≤20) | **Nelder-Mead** | `Hanalyze.Optim.NelderMead` |
+| 非凸・大域・微分不要 (≤30 次元) | **Differential Evolution** | `Hanalyze.Optim.DifferentialEvolution` |
+| 非凸・連続・高次元 (10–100) | **CMA-ES** | `Hanalyze.Optim.CMAES` / `Hanalyze.Optim.CMAESFull` |
+| 古典的メタヒューリスティック | **Simulated Annealing** | `Hanalyze.Optim.SimulatedAnnealing` |
+| 群知能 | **Particle Swarm** | `Hanalyze.Optim.ParticleSwarm` |
+| 評価コスト極大 | **Bayesian Optimization** | `Hanalyze.Optim.BayesOpt` |
+| 多目的 (Pareto front) | **NSGA-II** | `Hanalyze.Optim.NSGA` |
+| 等式・不等式制約 | **Augmented Lagrangian** | `Hanalyze.Optim.Constrained` |
 
 ---
 
 ## 2. 制約条件の指定 — 5 段階
 
-`hanalyze` の `Optim.*` は制約の種類ごとに 5 段階の API を提供する。
+`hanalyze` の `Hanalyze.Optim.*` は制約の種類ごとに 5 段階の API を提供する。
 
 ### Level 0 — 無制約
 
@@ -65,20 +65,20 @@ r <- LBFGS.runLBFGS f gradF x0
 
 ### Level 1 — box 制約 (各次元 lo ≤ x_i ≤ hi)
 
-すべての `Optim.*` モジュールで **`<prefix>Bounds :: Maybe Bounds`** フィールドが
+すべての `Hanalyze.Optim.*` モジュールで **`<prefix>Bounds :: Maybe Bounds`** フィールドが
 config に追加されている (R5 リファクタ)。`Just bs` を渡すと自動で制約処理が走る。
 
 | モジュール | フィールド | 内部処理 |
 |---|---|---|
-| `Optim.NelderMead`         | `nmBounds`  | soft penalty (`boundsPenalty`, k=1e6) を目的関数に加算 |
-| `Optim.LBFGS`              | `lbBounds`  | soft penalty + その勾配を ∇f に加算 |
-| `Optim.CMAES`              | `cmBounds`  | サンプル後に **反射** (`clipToBounds`) |
-| `Optim.CMAESFull`          | `cmfBounds` | サンプル後に **反射** (y は元のまま保持し共分散更新を歪めない) |
-| `Optim.DifferentialEvolution` | `deBounds`  | 必須 (初期化と境界補正で使用)。反射方式 |
-| `Optim.SimulatedAnnealing` | `saBounds`  | 提案後に反射 |
-| `Optim.ParticleSwarm`      | `psoBounds` | 位置更新後に反射 |
-| `Optim.NSGA`               | `bounds` (引数) | 必須。反射方式 |
-| `Optim.BayesOpt`           | `boBounds`  | 必須。獲得関数最大化の探索範囲 |
+| `Hanalyze.Optim.NelderMead`         | `nmBounds`  | soft penalty (`boundsPenalty`, k=1e6) を目的関数に加算 |
+| `Hanalyze.Optim.LBFGS`              | `lbBounds`  | soft penalty + その勾配を ∇f に加算 |
+| `Hanalyze.Optim.CMAES`              | `cmBounds`  | サンプル後に **反射** (`clipToBounds`) |
+| `Hanalyze.Optim.CMAESFull`          | `cmfBounds` | サンプル後に **反射** (y は元のまま保持し共分散更新を歪めない) |
+| `Hanalyze.Optim.DifferentialEvolution` | `deBounds`  | 必須 (初期化と境界補正で使用)。反射方式 |
+| `Hanalyze.Optim.SimulatedAnnealing` | `saBounds`  | 提案後に反射 |
+| `Hanalyze.Optim.ParticleSwarm`      | `psoBounds` | 位置更新後に反射 |
+| `Hanalyze.Optim.NSGA`               | `bounds` (引数) | 必須。反射方式 |
+| `Hanalyze.Optim.BayesOpt`           | `boBounds`  | 必須。獲得関数最大化の探索範囲 |
 
 ```haskell
 import Optim.Common (Bounds)
@@ -139,7 +139,7 @@ let bs   = [(0, 10), (-1, 1)]
 
 ## 3. 内部処理の使い分け方針
 
-`Optim.Common` は box 制約を扱うヘルパとして次の 3 種を提供する:
+`Hanalyze.Optim.Common` は box 制約を扱うヘルパとして次の 3 種を提供する:
 
 | ヘルパ | 用途 | 使うアルゴリズム |
 |---|---|---|
@@ -171,7 +171,7 @@ let bs   = [(0, 10), (-1, 1)]
 
 ## 5. 多目的最適化での制約
 
-`Optim.NSGA` は **constraint dominance** で制約付き多目的最適化を扱う:
+`Hanalyze.Optim.NSGA` は **constraint dominance** で制約付き多目的最適化を扱う:
 
 ```haskell
 import qualified Optim.NSGA as NSGA

@@ -26,16 +26,16 @@ import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 import qualified System.Random.MWC.Distributions as MWC
 
-import MCMC.Core (chainEnergy, chainDivergences)
-import MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
-import Model.HBM (ModelP, sample, observe, deterministic,
+import Hanalyze.MCMC.Core (chainEnergy, chainDivergences)
+import Hanalyze.MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
+import Hanalyze.Model.HBM (ModelP, sample, observe, deterministic,
                   Distribution (..), augmentChainWithDeterministic,
                   lkjCorrCholesky)
-import Stat.MCMC (bfmi)
-import Stat.PosteriorPredictive (posteriorPredictive)
-import Viz.MCMC (printPosteriorSummary, posteriorSummaryFile,
+import Hanalyze.Stat.MCMC (bfmi)
+import Hanalyze.Stat.PosteriorPredictive (posteriorPredictive)
+import Hanalyze.Viz.MCMC (printPosteriorSummary, posteriorSummaryFile,
                  tracePlotHDIFile, energyPlotFile, ppcPlotFile)
-import Viz.Core (defaultConfig, OutputFormat (..), PlotConfig (..))
+import Hanalyze.Viz.Core (defaultConfig, OutputFormat (..), PlotConfig (..))
 
 cfg :: NUTSConfig
 cfg = defaultNUTSConfig

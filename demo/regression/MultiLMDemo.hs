@@ -10,8 +10,8 @@ import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 import qualified System.Random.MWC.Distributions as MWC
 
-import Model.Core (FitResult (..))
-import Model.MultiLM
+import Hanalyze.Model.Core (FitResult (..))
+import Hanalyze.Model.MultiLM
 
 main :: IO ()
 main = do

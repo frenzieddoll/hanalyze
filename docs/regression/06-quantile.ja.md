@@ -3,7 +3,7 @@
 > 🌐 [English](06-quantile.md) | **日本語**
 
 > τ-分位点を直接 fit する手法。中央値・四分位点・極値域の予測に。
-> `Model.Quantile` モジュール。
+> `Hanalyze.Model.Quantile` モジュール。
 >
 > 関連: [06-gam.ja.md](06-gam.ja.md) (加法モデル) / [06-randomforest.ja.md](06-randomforest.ja.md)
 
@@ -52,7 +52,7 @@ $$ |u| \le \frac{u^2 + u_k^2}{2|u_k|}  \quad \text{(等号は } u = u_k \text{)}
    - β_{k+1} = (Xᵀ W X)⁻¹ Xᵀ W y'
 3. ||β_{k+1} - β_k|| < tol で停止
 
-`Model.Quantile.fitQuantile` で実装。max 100 iter, tol 1e-7。
+`Hanalyze.Model.Quantile.fitQuantile` で実装。max 100 iter, tol 1e-7。
 
 ## 評価指標 — Pseudo R¹_τ (Koenker-Machado 1999)
 

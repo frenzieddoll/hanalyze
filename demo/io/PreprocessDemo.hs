@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
--- | DataIO.Preprocess の総合デモ。
+-- | Hanalyze.DataIO.Preprocess の総合デモ。
 --
 -- - NA 文字列を含む CSV をロード (Hackage dataframe 経由)
 -- - countMissing で欠損列を確認
@@ -13,8 +13,8 @@ import qualified Data.Text as T
 
 import qualified DataFrame                    as DX
 import qualified DataFrame.Internal.DataFrame as DXD
-import DataIO.CSV         (loadCSV)
-import DataIO.Preprocess
+import Hanalyze.DataIO.CSV         (loadCSV)
+import Hanalyze.DataIO.Preprocess
 
 import System.IO          (hPutStrLn, stderr)
 import System.Exit        (exitFailure)
@@ -48,7 +48,7 @@ main = do
 runDemo :: DXD.DataFrame -> IO ()
 runDemo df = do
   putStrLn "=================================="
-  putStrLn " DataIO.Preprocess Demo"
+  putStrLn " Hanalyze.DataIO.Preprocess Demo"
   putStrLn "=================================="
   putStrLn ""
   let (nrows, _) = DX.dimensions df

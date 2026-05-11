@@ -2,7 +2,7 @@
 
 > 🌐 [English](06-randomforest.md) | **日本語**
 
-> 決定木 + bagging + ランダム特徴選択。`Model.RandomForest` モジュール。
+> 決定木 + bagging + ランダム特徴選択。`Hanalyze.Model.RandomForest` モジュール。
 > 分類版は [08-decisiontree.ja.md](08-decisiontree.ja.md) を参照 (分類は CART 単体)。
 >
 > 関連: [06-quantile.ja.md](06-quantile.ja.md) / [06-gam.ja.md](06-gam.ja.md)
@@ -47,7 +47,7 @@ n 本の木をそれぞれ **異なる bootstrap サンプル** (元データか
 
 ### 特徴重要度
 
-`Design.RandomForest` の簡易版: **各特徴で行われた split の回数**。
+`Hanalyze.Design.RandomForest` の簡易版: **各特徴で行われた split の回数**。
 もう少し原則的な指標:
 - **Mean Decrease in Impurity (MDI)**: split 時の分散減少を集計
 - **Permutation Importance**: 1 列ランダム並べ替えして MSE 増を測る

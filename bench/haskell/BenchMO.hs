@@ -2,13 +2,13 @@
 {-# OPTIONS_GHC -fno-full-laziness -fno-cse #-}
 -- | Multi-objective optimization benchmarks (B4).
 --
--- Runs NSGA-II from 'Optim.NSGA' on ZDT1/2/3 (m=2, d=30) and DTLZ1/2
+-- Runs NSGA-II from 'Hanalyze.Optim.NSGA' on ZDT1/2/3 (m=2, d=30) and DTLZ1/2
 -- (m=3, d=10). Reports median wall time and the hypervolume of the
 -- final approximation set against a reference point.
 
 module Main where
 
-import qualified Optim.NSGA              as NSGA
+import qualified Hanalyze.Optim.NSGA              as NSGA
 import qualified System.Random.MWC       as MWC
 import           Data.List               (sort)
 import           Control.Monad           (forM)

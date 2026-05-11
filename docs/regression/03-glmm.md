@@ -368,7 +368,7 @@ hanalyze data.csv x y GLM -d binomial -l logit --group hospital --report
 
 ### 6.4 Bayesian hierarchical models (recommended for complex cases)
 
-Complex hierarchies are easiest in `Model.HBM`:
+Complex hierarchies are easiest in `Hanalyze.Model.HBM`:
 
 ```haskell
 import Model.HBM

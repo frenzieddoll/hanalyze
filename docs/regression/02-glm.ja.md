@@ -2,7 +2,7 @@
 
 > 🌐 [English](02-glm.md) | **日本語**
 
-> hanalyze の `Model.GLM` は LM の自然な拡張で、応答変数が
+> hanalyze の `Hanalyze.Model.GLM` は LM の自然な拡張で、応答変数が
 > 正規分布以外 (二項・ポアソン・負の二項…) の場合をカバーします。
 > 関連: [01-lm.ja.md](01-lm.ja.md) / [03-glmm.ja.md](03-glmm.ja.md)
 > **多出力対応**: `fitGLMMulti` (列ごと IRLS) — 詳細は [05-multivariate.ja.md](05-multivariate.ja.md)。
@@ -209,7 +209,7 @@ hanalyze data.csv x y GLM -d poisson -l log --report
 
 $$ y_i \sim \text{Normal}(\mu_i, \sigma^2), \quad \mu_i = X_i \boldsymbol\beta $$
 
-LM と等価。`Model.LM.fitLM` を使うべき (IRLS 不要、閉形式)。
+LM と等価。`Hanalyze.Model.LM.fitLM` を使うべき (IRLS 不要、閉形式)。
 `fitGLM Gaussian xs ys` でも同じ結果。
 
 ### 6.2 Binomial (ロジスティック / プロビット)
@@ -306,7 +306,7 @@ $$ y_i \sim \text{NegativeBinomial}(\mu_i, \alpha) $$
 
 しかし NegativeBinomial は **正規の指数型分布族 ではない** (α が固定なら family、free なら違う)。
 hanalyze の `fitGLM` には現状ファミリとして含まれていないが、
-ベイズ枠組み (`Model.HBM` の `NegativeBinomial`) では使えます:
+ベイズ枠組み (`Hanalyze.Model.HBM` の `NegativeBinomial`) では使えます:
 
 ```haskell
 -- ベイズ NB regression (Model.HBM)
@@ -341,9 +341,9 @@ $$ y_i \sim \text{Gamma}(\nu, \nu/\mu_i), \quad g(\mu_i) = X_i \boldsymbol\beta 
 - 等分散性違反の対処 (応答 log 変換の代わりに)
 
 #### hanalyze
-現在 `Model.GLM` には Gamma family は未実装。代替:
+現在 `Hanalyze.Model.GLM` には Gamma family は未実装。代替:
 - 応答を log 変換して LM
-- ベイズ枠組み (`Model.HBM.Gamma`) で書く
+- ベイズ枠組み (`Hanalyze.Model.HBM.Gamma`) で書く
 
 ### 6.6 InverseGaussian
 
@@ -384,7 +384,7 @@ LM の R² と類似の指標。複数の流派:
 | **Nagelkerke** | Cox-Snell の正規化版 |
 | **Deviance** | $1 - D(\hat) / D(\text{null})$ |
 
-hanalyze の `pseudoR2` (`Model.GLM`) は **Deviance ベース** を採用。
+hanalyze の `pseudoR2` (`Hanalyze.Model.GLM`) は **Deviance ベース** を採用。
 LM の R² と直接比較しないこと (尺度が違う)。
 
 ---

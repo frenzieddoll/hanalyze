@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
-import Model.HBM
-import Stat.Distribution
+import Hanalyze.Model.HBM
+import Hanalyze.Stat.Distribution
 import qualified Data.Map.Strict as Map
 import qualified Data.Text.IO as TIO
 import Text.Printf (printf)

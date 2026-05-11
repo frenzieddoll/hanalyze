@@ -8,7 +8,7 @@ module Main where
 
 import Text.Printf (printf)
 
-import Model.HBM (Distribution (..), distCDF)
+import Hanalyze.Model.HBM (Distribution (..), distCDF)
 
 -- distCDF Just から値を取り出す
 cdfAt :: Distribution Double -> Double -> Double

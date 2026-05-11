@@ -138,7 +138,7 @@ graph TD
 ```
 
 These are used for direct Gibbs sampling of individual parameters.
-hanalyze's `MCMC.Gibbs.gibbsMH` automatically detects and exploits the conjugacy
+hanalyze's `Hanalyze.MCMC.Gibbs.gibbsMH` automatically detects and exploits the conjugacy
 structure of the prior/likelihood combination.
 
 ## 4. Multivariate and correlation
@@ -182,7 +182,7 @@ graph TD
   GP -->|"on a grid = MvNormal"| MvN["MvNormal"]
 ```
 
-`ar1Latent` (J2) and `Model.GP` (master) are implemented.
+`ar1Latent` (J2) and `Hanalyze.Model.GP` (master) are implemented.
 
 ## 6. Truncation / censoring / mixtures
 

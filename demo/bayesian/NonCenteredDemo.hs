@@ -19,13 +19,13 @@ import Data.Maybe (fromMaybe)
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import MCMC.Core (chainEnergy, chainDivergences)
-import MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
-import Model.HBM (ModelP, sample, Distribution (..),
+import Hanalyze.MCMC.Core (chainEnergy, chainDivergences)
+import Hanalyze.MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
+import Hanalyze.Model.HBM (ModelP, sample, Distribution (..),
                   nonCenteredNormal, augmentChainWithDeterministic)
-import Stat.MCMC (bfmi)
-import Viz.Core  (defaultConfig, OutputFormat (..), PlotConfig (..))
-import Viz.MCMC  (energyPlotFile, posteriorSummaryFile,
+import Hanalyze.Stat.MCMC (bfmi)
+import Hanalyze.Viz.Core  (defaultConfig, OutputFormat (..), PlotConfig (..))
+import Hanalyze.Viz.MCMC  (energyPlotFile, posteriorSummaryFile,
                   printPosteriorSummary, pairScatterDivFile)
 
 cfg :: NUTSConfig

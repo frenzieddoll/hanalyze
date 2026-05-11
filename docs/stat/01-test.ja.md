@@ -1,6 +1,6 @@
 # Stat.Test — 仮説検定
 
-> hanalyze の `Stat.Test` モジュールは scipy.stats / R の base 統計検定相当の
+> hanalyze の `Hanalyze.Stat.Test` モジュールは scipy.stats / R の base 統計検定相当の
 > 仮説検定 12 種を統一 API (`TestResult`) で提供します。
 
 ## 1. 設計方針
@@ -94,7 +94,7 @@ let normRes = ST.shapiroWilk groupA
 
 ## 4. p-value 補正との連携
 
-複数検定を行う場合は `Stat.MultipleTesting` で補正:
+複数検定を行う場合は `Hanalyze.Stat.MultipleTesting` で補正:
 
 ```haskell
 import qualified Stat.MultipleTesting as MT
@@ -129,7 +129,7 @@ p-value だけでなく effect size を併記する習慣を:
 
 - `tTest*` は `trEffect` に Cohen's d を返却
 - `anovaOneWay` は η² を返却
-- 詳細・Power 解析は [`Stat.Effect`](09-effect.ja.md) 参照
+- 詳細・Power 解析は [`Hanalyze.Stat.Effect`](09-effect.ja.md) 参照
 
 ## 7. 参考文献
 

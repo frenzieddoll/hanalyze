@@ -184,7 +184,7 @@ $$ \text{BFMI} = \frac{E[(H_t - H_{t-1})^2]}{\text{Var}(H_t)} $$
 | 0.3–0.5 | Watch out |
 | > 0.5 | Healthy |
 
-`Stat.MCMC.bfmi`; visualised with `Viz.MCMC.energyPlot`.
+`Hanalyze.Stat.MCMC.bfmi`; visualised with `Hanalyze.Viz.MCMC.energyPlot`.
 
 ### 5.2 Divergences
 
@@ -194,8 +194,8 @@ When leapfrog integration error exceeds a threshold ($|\Delta H| > 1000$) it bec
 - High local curvature (= pathological posterior).
 - Almost always fixed by **non-centered parameterisation**.
 
-`MCMC.NUTS` records divergent iteration indices in `Chain.chainDivergences`.
-Visualise their location in parameter space with `Viz.MCMC.pairScatterDiv`.
+`Hanalyze.MCMC.NUTS` records divergent iteration indices in `Chain.chainDivergences`.
+Visualise their location in parameter space with `Hanalyze.Viz.MCMC.pairScatterDiv`.
 
 ### 5.3 Canonical example: Neal's funnel
 

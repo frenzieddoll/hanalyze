@@ -3,22 +3,22 @@
 -- | B9 Optim+: Constrained / Adam / CMAESFull のベンチ。
 --
 --   * Constrained: 2D 問題 minimise (x-1)^2 + (y-2)^2 s.t. x+y=1
---     → Augmented Lagrangian (Optim.Constrained)、scipy SLSQP / trust-constr
+--     → Augmented Lagrangian (Hanalyze.Optim.Constrained)、scipy SLSQP / trust-constr
 --   * Adam: 50D quadratic min ‖x‖^2 を 1000 step
---     → Optim.Adam.runAdamMinimize、torch / scipy 自前
+--     → Hanalyze.Optim.Adam.runAdamMinimize、torch / scipy 自前
 --   * CMAESFull: Rosenbrock 5D (full-rank covariance)
---     → Optim.CMAESFull、cma library full-rank
+--     → Hanalyze.Optim.CMAESFull、cma library full-rank
 --
 -- 出力: bench/results/haskell/optim_plus.csv
 module Main where
 
 import qualified System.Random.MWC      as MWC
 
-import qualified Optim.Common           as OC
-import qualified Optim.Constrained      as Co
-import           Optim.Adam             (defaultAdamConfig, AdamConfig (..),
+import qualified Hanalyze.Optim.Common           as OC
+import qualified Hanalyze.Optim.Constrained      as Co
+import           Hanalyze.Optim.Adam             (defaultAdamConfig, AdamConfig (..),
                                          runAdamMinimize)
-import           Optim.CMAESFull        (defaultCMAESFConfig, CMAESFConfig (..),
+import           Hanalyze.Optim.CMAESFull        (defaultCMAESFConfig, CMAESFConfig (..),
                                          runCMAESFullWith)
 
 import           BenchUtil

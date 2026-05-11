@@ -17,9 +17,9 @@ import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom, GenIO)
 import qualified System.Random.MWC.Distributions as MWC
 
-import MCMC.Core (posteriorMean, posteriorSD)
-import MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
-import Model.HBM (ModelP, sample, observeMV, Distribution (..),
+import Hanalyze.MCMC.Core (posteriorMean, posteriorSD)
+import Hanalyze.MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
+import Hanalyze.Model.HBM (ModelP, sample, observeMV, Distribution (..),
                   mvNormalLogDensity)
 
 cfg :: NUTSConfig

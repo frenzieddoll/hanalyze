@@ -18,10 +18,10 @@ import Data.Text (Text)
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom, GenIO)
 
-import MCMC.Core   (Chain (..), posteriorMean, posteriorSD, acceptanceRate)
-import MCMC.HMC    (HMCConfig (..), defaultHMCConfig)
-import MCMC.HMC   (hmc)
-import Model.HBM
+import Hanalyze.MCMC.Core   (Chain (..), posteriorMean, posteriorSD, acceptanceRate)
+import Hanalyze.MCMC.HMC    (HMCConfig (..), defaultHMCConfig)
+import Hanalyze.MCMC.HMC   (hmc)
+import Hanalyze.Model.HBM
 
 -- ---------------------------------------------------------------------------
 -- モデル群: 多相 HBM DSL で書かれた 4 種のモデル

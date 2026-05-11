@@ -54,7 +54,7 @@ plus the grid evaluations.
 
 ## Output HTML structure
 
-A `Viz.ReportBuilder.SecInteractiveMultiOut` section is embedded:
+A `Hanalyze.Viz.ReportBuilder.SecInteractiveMultiOut` section is embedded:
 
 - **Input slider** (e.g. dose 6–14): a single slider.
 - **Predicted curve** (red): JS recomputes all q outputs at the slider value and renders via Vega-Lite.
@@ -65,15 +65,15 @@ A `Viz.ReportBuilder.SecInteractiveMultiOut` section is embedded:
 | Layer | API | Role |
 |---|---|---|
 | Data | wide CSV | `dose,y_z001,...,y_z100` |
-| Common base | `Model.MultiOutput` | `asMultiY` / `fromMultiY` / `r2Multi` |
-| Model | `Model.MultiLM.fitMultiLM` | linear (B=(XᵀX)⁻¹XᵀY) |
-|       | `Model.Kernel.kernelRidgeMulti` + `autoTuneKernelRidgeMulti` | RBF kernel ridge + LOOCV |
-| Report | `Viz.ReportBuilder.secInteractiveMultiOut` + `mkInteractiveMOLinear` / `mkInteractiveMOKernelRBF` | interactive HTML |
+| Common base | `Hanalyze.Model.MultiOutput` | `asMultiY` / `fromMultiY` / `r2Multi` |
+| Model | `Hanalyze.Model.MultiLM.fitMultiLM` | linear (B=(XᵀX)⁻¹XᵀY) |
+|       | `Hanalyze.Model.Kernel.kernelRidgeMulti` + `autoTuneKernelRidgeMulti` | RBF kernel ridge + LOOCV |
+| Report | `Hanalyze.Viz.ReportBuilder.secInteractiveMultiOut` + `mkInteractiveMOLinear` / `mkInteractiveMOKernelRBF` | interactive HTML |
 
 ## Design notes
 
 - **One input dimension only**: currently `xcol` accepts a single column. For multi-input
-  + multi-output, use `Model.RFF.rffRidgeMVMulti` directly or wait for an extended CLI.
+  + multi-output, use `Hanalyze.Model.RFF.rffRidgeMVMulti` directly or wait for an extended CLI.
 - **Output grid**: `--xaxis-min` / `--xaxis-max` set the z-axis range. Without them the
   grid expands linearly over `1..q`.
 - **Number of data points**: with `kernel-rbf` aim for N ≥ 10 doses (LOOCV stability
@@ -83,18 +83,18 @@ A `Viz.ReportBuilder.SecInteractiveMultiOut` section is embedded:
 
 ## Related: multi-output across all models
 
-The major models in `Model.*` follow a single unified policy: **multi-output is the
+The major models in `Hanalyze.Model.*` follow a single unified policy: **multi-output is the
 primary API and single-output is a thin wrapper**.
 
-- `Model.Regularized.fitRegularizedMulti` (Ridge closed form, Lasso/EN per-column CD)
-- `Model.Spline.fitSplineMulti`
-- `Model.Kernel.kernelRidgeMulti` / `nwRegressionMulti`
-- `Model.RFF.rffRidgeMulti` (1D input) / `rffRidgeMVMulti` (multi-input)
-- `Model.GP.fitGPMulti` (shared Ky⁻¹ and shared variance)
-- `Model.GPRobust.fitGPRobustMulti`
-- `Model.GLM.fitGLMMulti` (per-column IRLS)
-- `Model.GLMM.fitLMEMulti` / `fitGLMMMulti`
-- `Model.HBM.observeColumns` (multi-output DSL helper)
+- `Hanalyze.Model.Regularized.fitRegularizedMulti` (Ridge closed form, Lasso/EN per-column CD)
+- `Hanalyze.Model.Spline.fitSplineMulti`
+- `Hanalyze.Model.Kernel.kernelRidgeMulti` / `nwRegressionMulti`
+- `Hanalyze.Model.RFF.rffRidgeMulti` (1D input) / `rffRidgeMVMulti` (multi-input)
+- `Hanalyze.Model.GP.fitGPMulti` (shared Ky⁻¹ and shared variance)
+- `Hanalyze.Model.GPRobust.fitGPRobustMulti`
+- `Hanalyze.Model.GLM.fitGLMMulti` (per-column IRLS)
+- `Hanalyze.Model.GLMM.fitLMEMulti` / `fitGLMMMulti`
+- `Hanalyze.Model.HBM.observeColumns` (multi-output DSL helper)
 
 q=1 numerically matches the legacy single-output API (verified in `test/Spec.hs` under
 the "Multi-output equivalence (q=1)" describe block — 10 cases).

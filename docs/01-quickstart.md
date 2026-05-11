@@ -95,7 +95,7 @@ cabal run hanalyze -- regress data.csv x y LM --report    # regression (= bare f
 | Goal | Recommended approach | Example |
 |---|---|---|
 | Bayesian simple regression (one-shot CLI) | CLI: `HBM --report --waic` | `hanalyze data.csv x y HBM --report` |
-| Hierarchical model (group structure) | Demo: `simpson-paradox` / `hbm-random-slope` | For custom hierarchies, write `Model.HBM` directly |
+| Hierarchical model (group structure) | Demo: `simpson-paradox` / `hbm-random-slope` | For custom hierarchies, write `Hanalyze.Model.HBM` directly |
 | Random-slope model | Demo: `hbm-random-slope` | Compare M1 (shared β) vs M2 (β_g) by WAIC |
 | Bayesian A/B test | Demo: `clinical-trial` | Beta-Binomial, decision theory |
 | Multi-chain NUTS + R-hat diagnostics | Demo: `hbm-example` | 4 chains in parallel, `mcmc_report_multi.html` |
@@ -122,11 +122,11 @@ cabal run hanalyze -- regress data.csv x y LM --report    # regression (= bare f
 
 | Goal | Recommended approach | Example |
 |---|---|---|
-| HTML report (DAG / MCMC diagnostics / prediction curves) | CLI: `--report` | LM/GLM/GLMM/GP/HBM all supported (legacy `Viz.AnalysisReport`; successor is `Viz.ReportBuilder`) |
+| HTML report (DAG / MCMC diagnostics / prediction curves) | CLI: `--report` | LM/GLM/GLMM/GP/HBM all supported (legacy `Hanalyze.Viz.AnalysisReport`; successor is `Hanalyze.Viz.ReportBuilder`) |
 | Bar chart / histogram alone | Demo: `bar-demo` / CLI: `--hist COL` | PNG/SVG export available |
-| MCMC-only report (KDE + trace + DAG) | `Viz.Report.renderReport` | Demo: `hbm-example` |
+| MCMC-only report (KDE + trace + DAG) | `Hanalyze.Viz.Report.renderReport` | Demo: `hbm-example` |
 | Export plots as PNG/SVG | CLI: `--format png` | Each NamedPlot becomes a separate image |
-| Standalone model DAG HTML | `Viz.ModelGraph.renderModelGraph` | Auto dependency extraction via the Track type |
+| Standalone model DAG HTML | `Hanalyze.Viz.ModelGraph.renderModelGraph` | Auto dependency extraction via the Track type |
 
 ---
 
@@ -193,77 +193,77 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 ### Regression / statistical models
 | Use case | Module | Key functions |
 |---|---|---|
-| OLS / polynomial / confidence band | `Model.LM` | `fitLM`, `fitLMVec`, `fitPolyWithSmooth` |
-| **LM inference stats (SE/t/p, F, AIC/BIC, leverage, Cook's)** | `Model.LM.Diagnostics` | `lmCoefStats`, `lmFStatistic`, `lmInformationCriteria`, `hatDiagonal`, `cooksDistance` |
-| GLM (Gaussian/Binomial/Poisson) | `Model.GLM` | `fitGLM`, `fitGLMWithSmooth` |
-| LME / GLMM | `Model.GLMM` | `fitLME`, `fitLMEDataFrame` |
-| Spline (B-spline / Natural) | `Model.Spline` | `fitSpline`, `fitSplineMulti` |
-| Kernel regression / Kernel Ridge | `Model.Kernel` | `nwRegression`, `kernelRidge` |
-| Ridge / Lasso / Elastic Net | `Model.Regularized` | `fitRegularized` (sum-type penalty) |
-| **RFF (Random Fourier Features)** | `Model.RFF` | `sampleRFFRBF`, `rffRidge`, `rffGP` |
-| Multivariate LR / RRR / PLS / CCA | `Model.MultiLM` / `Model.Multivariate` | |
-| **Multi-output common base** | `Model.MultiOutput` | `asMultiY`, `fromMultiY`, `r2Multi`, `rmseMulti` |
-| Gaussian process / Multi-output GP | `Model.GP` / `Model.MultiGP` | `optimizeGP`, `fitGP`, `fitGPMulti` |
-| **Robust GP** (StudentT/Cauchy) | `Model.GPRobust` | `fitGPRobust`, `predictGPRobust` |
-| **Quantile regression** (τ-quantile) | `Model.Quantile` | `fitQuantile`, `predictQuantile` |
-| **GAM** (additive B-spline) | `Model.GAM` | `fitGAM`, `predictGAM`, `predictGAMComponent` |
-| **Random Forest** (regression) | `Model.RandomForest` | `fitRF`, `predictRF`, `featureImportance` |
+| OLS / polynomial / confidence band | `Hanalyze.Model.LM` | `fitLM`, `fitLMVec`, `fitPolyWithSmooth` |
+| **LM inference stats (SE/t/p, F, AIC/BIC, leverage, Cook's)** | `Hanalyze.Model.LM.Diagnostics` | `lmCoefStats`, `lmFStatistic`, `lmInformationCriteria`, `hatDiagonal`, `cooksDistance` |
+| GLM (Gaussian/Binomial/Poisson) | `Hanalyze.Model.GLM` | `fitGLM`, `fitGLMWithSmooth` |
+| LME / GLMM | `Hanalyze.Model.GLMM` | `fitLME`, `fitLMEDataFrame` |
+| Spline (B-spline / Natural) | `Hanalyze.Model.Spline` | `fitSpline`, `fitSplineMulti` |
+| Kernel regression / Kernel Ridge | `Hanalyze.Model.Kernel` | `nwRegression`, `kernelRidge` |
+| Ridge / Lasso / Elastic Net | `Hanalyze.Model.Regularized` | `fitRegularized` (sum-type penalty) |
+| **RFF (Random Fourier Features)** | `Hanalyze.Model.RFF` | `sampleRFFRBF`, `rffRidge`, `rffGP` |
+| Multivariate LR / RRR / PLS / CCA | `Hanalyze.Model.MultiLM` / `Hanalyze.Model.Multivariate` | |
+| **Multi-output common base** | `Hanalyze.Model.MultiOutput` | `asMultiY`, `fromMultiY`, `r2Multi`, `rmseMulti` |
+| Gaussian process / Multi-output GP | `Hanalyze.Model.GP` / `Hanalyze.Model.MultiGP` | `optimizeGP`, `fitGP`, `fitGPMulti` |
+| **Robust GP** (StudentT/Cauchy) | `Hanalyze.Model.GPRobust` | `fitGPRobust`, `predictGPRobust` |
+| **Quantile regression** (τ-quantile) | `Hanalyze.Model.Quantile` | `fitQuantile`, `predictQuantile` |
+| **GAM** (additive B-spline) | `Hanalyze.Model.GAM` | `fitGAM`, `predictGAM`, `predictGAMComponent` |
+| **Random Forest** (regression) | `Hanalyze.Model.RandomForest` | `fitRF`, `predictRF`, `featureImportance` |
 
 ### Data I/O & preprocessing
 | Use case | Module | Key functions |
 |---|---|---|
-| CSV / TSV / SSV (cassava) | `DataIO.CSV` | `loadAuto`, `loadCSV`, `loadTSV` (returns Hackage `DataFrame` directly) |
-| Defensive CSV loader | `DataIO.CSV` | `loadAutoSafe`, `loadAutoSafeWith`, `LoadOpts` (--no-header / --skip / --comment / --delim / --strict / --no-sniff) |
-| Parquet / JSON | `DataIO.External` | `loadParquet`, `loadJSON` |
-| DataFrame → vector extraction | `DataIO.Convert` | `getDoubleVec`, `getTextVec`, `getMaybeTextVec` |
-| Structured log | `DataIO.Log` | `LogEntry`, `LogReport`, `printLogReport` |
-| Health checks (W001..W008) | `DataIO.Health` | `inspectDataFrame`, `inspectWithPreview` |
-| Auto-sniff (delim / header / skip) | `DataIO.Sniff` | `sniffBytes`, `sniffFile` |
-| Column cleaning DSL | `DataIO.Clean` | `ColumnRule`, `applyRule`, `cleanPipeline`, `dedupeColumns`, `fillBlankNames` |
-| Wide → long reshape | `DataIO.Preprocess` | `meltLonger`, `hanalyze melt --id ... --vars ...` |
-| Multivariate RFF Ridge | `Model.RFF` | `RFFFeaturesMV`, `rffRidgeMV`, `predictRFFRidgeMV` (CLI: `hanalyze kernel "x1 t" y --method rff`) |
-| Input standardization (z-score) | `Stat.Standardize` | `Standardizer`, `fitStandardizer`, `applyStandardizer`, `unapplyStandardizer` (CLI: `--standardize`) |
-| Marginal-likelihood max (RFF/GP HP) | `Model.RFF` | `logMarginalLikRBFMV`, `maximizeMarginalLikRBFMV` (CLI: `--auto-hp`) |
-| Imputation / filter / derived columns | `DataIO.Preprocess` | `imputeMean`, `imputeMedian`, `dropMissingRows`, `filterRowsByNumeric`, `deriveNumeric`, `mapNumeric` |
-| groupBy / aggregate | `DataIO.Preprocess` | `groupByMean`, `groupBySum`, `groupByMin`, `groupByMax`, `groupByMedian`, `groupByCount`, `groupByAggregate` |
+| CSV / TSV / SSV (cassava) | `Hanalyze.DataIO.CSV` | `loadAuto`, `loadCSV`, `loadTSV` (returns Hackage `DataFrame` directly) |
+| Defensive CSV loader | `Hanalyze.DataIO.CSV` | `loadAutoSafe`, `loadAutoSafeWith`, `LoadOpts` (--no-header / --skip / --comment / --delim / --strict / --no-sniff) |
+| Parquet / JSON | `Hanalyze.DataIO.External` | `loadParquet`, `loadJSON` |
+| DataFrame → vector extraction | `Hanalyze.DataIO.Convert` | `getDoubleVec`, `getTextVec`, `getMaybeTextVec` |
+| Structured log | `Hanalyze.DataIO.Log` | `LogEntry`, `LogReport`, `printLogReport` |
+| Health checks (W001..W008) | `Hanalyze.DataIO.Health` | `inspectDataFrame`, `inspectWithPreview` |
+| Auto-sniff (delim / header / skip) | `Hanalyze.DataIO.Sniff` | `sniffBytes`, `sniffFile` |
+| Column cleaning DSL | `Hanalyze.DataIO.Clean` | `ColumnRule`, `applyRule`, `cleanPipeline`, `dedupeColumns`, `fillBlankNames` |
+| Wide → long reshape | `Hanalyze.DataIO.Preprocess` | `meltLonger`, `hanalyze melt --id ... --vars ...` |
+| Multivariate RFF Ridge | `Hanalyze.Model.RFF` | `RFFFeaturesMV`, `rffRidgeMV`, `predictRFFRidgeMV` (CLI: `hanalyze kernel "x1 t" y --method rff`) |
+| Input standardization (z-score) | `Hanalyze.Stat.Standardize` | `Standardizer`, `fitStandardizer`, `applyStandardizer`, `unapplyStandardizer` (CLI: `--standardize`) |
+| Marginal-likelihood max (RFF/GP HP) | `Hanalyze.Model.RFF` | `logMarginalLikRBFMV`, `maximizeMarginalLikRBFMV` (CLI: `--auto-hp`) |
+| Imputation / filter / derived columns | `Hanalyze.DataIO.Preprocess` | `imputeMean`, `imputeMedian`, `dropMissingRows`, `filterRowsByNumeric`, `deriveNumeric`, `mapNumeric` |
+| groupBy / aggregate | `Hanalyze.DataIO.Preprocess` | `groupByMean`, `groupBySum`, `groupByMin`, `groupByMax`, `groupByMedian`, `groupByCount`, `groupByAggregate` |
 
 ### Design of Experiments
 | Use case | Module | Key functions |
 |---|---|---|
-| Full / fractional factorial / mixed levels | `Design.Factorial` | `fullFactorial`, `fractionalFactorial` |
-| Latin square / RCBD | `Design.Block` | `latinSquare`, `randomizedBlock` |
-| ANOVA (one-way / two-way) | `Design.Anova` | `oneWayAnova`, `twoWayAnova` |
-| Power analysis / sample size | `Design.Power` | `powerTTest`, `sampleSizeTTest` |
-| Orthogonality / D-eff / VIF / **Cp, Cpk** | `Design.Quality` | `dEfficiency`, `vifList`, `processCapability`, `processCapabilityUpper`, `processCapabilityLower` |
-| RSM (CCD / Box-Behnken) | `Design.RSM` | `centralComposite`, `boxBehnken` |
-| D-/A-optimal | `Design.Optimal` | `dOptimal`, `aOptimal` |
-| **Orthogonal arrays Lₙ (L4/L8/L9/L12/L16/L18)** | `Design.Orthogonal` | `lookupOA`, `assignFactors`, `renderCSV`, `listArraysWithSize` (OAMetadata) |
-| **Taguchi method (SN ratio, factor effects, inner/outer)** | `Design.Taguchi` | `snRatio`, `analyzeSN`, `optimalLevels`, `makeInnerOuter`, `snRatioWithDetails`, `factorEffectsTable` |
+| Full / fractional factorial / mixed levels | `Hanalyze.Design.Factorial` | `fullFactorial`, `fractionalFactorial` |
+| Latin square / RCBD | `Hanalyze.Design.Block` | `latinSquare`, `randomizedBlock` |
+| ANOVA (one-way / two-way) | `Hanalyze.Design.Anova` | `oneWayAnova`, `twoWayAnova` |
+| Power analysis / sample size | `Hanalyze.Design.Power` | `powerTTest`, `sampleSizeTTest` |
+| Orthogonality / D-eff / VIF / **Cp, Cpk** | `Hanalyze.Design.Quality` | `dEfficiency`, `vifList`, `processCapability`, `processCapabilityUpper`, `processCapabilityLower` |
+| RSM (CCD / Box-Behnken) | `Hanalyze.Design.RSM` | `centralComposite`, `boxBehnken` |
+| D-/A-optimal | `Hanalyze.Design.Optimal` | `dOptimal`, `aOptimal` |
+| **Orthogonal arrays Lₙ (L4/L8/L9/L12/L16/L18)** | `Hanalyze.Design.Orthogonal` | `lookupOA`, `assignFactors`, `renderCSV`, `listArraysWithSize` (OAMetadata) |
+| **Taguchi method (SN ratio, factor effects, inner/outer)** | `Hanalyze.Design.Taguchi` | `snRatio`, `analyzeSN`, `optimalLevels`, `makeInnerOuter`, `snRatioWithDetails`, `factorEffectsTable` |
 
 ### Optimization
 | Use case | Module | Key functions |
 |---|---|---|
-| Adam / gradient ascent / numeric gradient | `Optim.Adam` / `Optim.GradAscent` / `Optim.Numeric` | |
-| NSGA-II + Pareto | `Optim.NSGA` / `Optim.Pareto` | `nsga2`, `hypervolume` |
-| Bayesian Optimization | `Optim.BayesOpt` / `Optim.Acquisition` | `bayesOpt`, `ei` |
-| Desirability function | `Optim.Desirability` | `overallDesirability` |
+| Adam / gradient ascent / numeric gradient | `Hanalyze.Optim.Adam` / `Hanalyze.Optim.GradAscent` / `Hanalyze.Optim.Numeric` | |
+| NSGA-II + Pareto | `Hanalyze.Optim.NSGA` / `Hanalyze.Optim.Pareto` | `nsga2`, `hypervolume` |
+| Bayesian Optimization | `Hanalyze.Optim.BayesOpt` / `Hanalyze.Optim.Acquisition` | `bayesOpt`, `ei` |
+| Desirability function | `Hanalyze.Optim.Desirability` | `overallDesirability` |
 
 ### Bayesian / MCMC
 | Use case | Module | Key functions |
 |---|---|---|
-| Polymorphic DSL (27 distributions) | `Model.HBM` | `sample`, `observe`, `ModelP r` |
-| HMC / NUTS | `MCMC.HMC` / `MCMC.NUTS` | `hmc`, `nuts`, `nutsChains` |
-| Gibbs / MH / Slice | `MCMC.Gibbs` / `MCMC.MH` / `MCMC.Slice` | |
-| Variational inference | `Stat.VI` | `advi` |
-| WAIC / LOO / Pseudo-BMA | `Stat.ModelSelect` | `waic`, `loo`, `compareModels` |
+| Polymorphic DSL (27 distributions) | `Hanalyze.Model.HBM` | `sample`, `observe`, `ModelP r` |
+| HMC / NUTS | `Hanalyze.MCMC.HMC` / `Hanalyze.MCMC.NUTS` | `hmc`, `nuts`, `nutsChains` |
+| Gibbs / MH / Slice | `Hanalyze.MCMC.Gibbs` / `Hanalyze.MCMC.MH` / `Hanalyze.MCMC.Slice` | |
+| Variational inference | `Hanalyze.Stat.VI` | `advi` |
+| WAIC / LOO / Pseudo-BMA | `Hanalyze.Stat.ModelSelect` | `waic`, `loo`, `compareModels` |
 
 ### Visualization
 | Use case | Module | Key functions |
 |---|---|---|
-| MCMC report (KDE / trace / DAG) | `Viz.Report` / `Viz.MCMC` | `renderReport`, `tracePlotHDI` |
-| Pareto front (5 styles) | `Viz.Pareto` | `paretoScatter`, `parallelCoordinates` |
-| Scatter / bar / histogram | `Viz.Scatter` / `Viz.Bar` / `Viz.Histogram` | |
-| Multi-model comparison report | `Viz.ReportBuilder` (★ standard) / `Viz.AnalysisReport` (deprecated) | `renderReport` / `writeAnalysisReport` |
-| Interactive prediction (1 input → q outputs) | `Viz.ReportBuilder` | `secInteractiveMultiOut`, `mkInteractiveMOLinear`, `mkInteractiveMOKernelRBF` |
+| MCMC report (KDE / trace / DAG) | `Hanalyze.Viz.Report` / `Hanalyze.Viz.MCMC` | `renderReport`, `tracePlotHDI` |
+| Pareto front (5 styles) | `Hanalyze.Viz.Pareto` | `paretoScatter`, `parallelCoordinates` |
+| Scatter / bar / histogram | `Hanalyze.Viz.Scatter` / `Hanalyze.Viz.Bar` / `Hanalyze.Viz.Histogram` | |
+| Multi-model comparison report | `Hanalyze.Viz.ReportBuilder` (★ standard) / `Hanalyze.Viz.AnalysisReport` (deprecated) | `renderReport` / `writeAnalysisReport` |
+| Interactive prediction (1 input → q outputs) | `Hanalyze.Viz.ReportBuilder` | `secInteractiveMultiOut`, `mkInteractiveMOLinear`, `mkInteractiveMOKernelRBF` |
 
 > **Multi-output unification**: All major models (Regularized / Spline / Kernel / RFF / GP / GPRobust / GLM / GLMM / HBM) follow a unified policy where **multi-output (Y :: Matrix n×q) is the primary API and single-output is a thin wrapper that lifts to a 1-column matrix**. Each module exposes a `fitXMulti` / `XFitMulti` family, callable from both Reportable and CLI layers. See [regression/07-multireg.md](regression/07-multireg.md).

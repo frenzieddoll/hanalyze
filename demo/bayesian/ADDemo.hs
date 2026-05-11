@@ -15,13 +15,13 @@ import qualified Data.Map.Strict as Map
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import MCMC.Core   (Chain (..), posteriorMean, posteriorSD)
-import MCMC.HMC    (HMCConfig (..), defaultHMCConfig, hmc, gradU)
-import Model.HBM   (Model, sample, observe, sampleNames)
-import qualified Stat.Distribution as D
-import Stat.AD     (LogJointF, logNormalF, logNormalObsF, logExpF,
+import Hanalyze.MCMC.Core   (Chain (..), posteriorMean, posteriorSD)
+import Hanalyze.MCMC.HMC    (HMCConfig (..), defaultHMCConfig, hmc, gradU)
+import Hanalyze.Model.HBM   (Model, sample, observe, sampleNames)
+import qualified Hanalyze.Stat.Distribution as D
+import Hanalyze.Stat.AD     (LogJointF, logNormalF, logNormalObsF, logExpF,
                     gradAD, hmcAD)
-import Stat.Distribution (Transform (..))
+import Hanalyze.Stat.Distribution (Transform (..))
 
 -- ---------------------------------------------------------------------------
 -- モデル定義 (HBM DSL 版)

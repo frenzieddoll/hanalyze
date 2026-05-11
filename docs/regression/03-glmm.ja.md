@@ -370,7 +370,7 @@ hanalyze data.csv x y GLM -d binomial -l logit --group hospital --report
 
 ### 6.4 ベイズ階層モデル (推奨)
 
-複雑な階層は `Model.HBM` で書くのが柔軟:
+複雑な階層は `Hanalyze.Model.HBM` で書くのが柔軟:
 
 ```haskell
 import Model.HBM

@@ -2,9 +2,9 @@
 module Main where
 
 import qualified DataFrame as DX
-import Model.GLMM
-import Model.Core (coeffList, rSquared1, fittedList)
-import Model.LM   (multiPolyDesignMatrix, fitLMVec)
+import Hanalyze.Model.GLMM
+import Hanalyze.Model.Core (coeffList, rSquared1, fittedList)
+import Hanalyze.Model.LM   (multiPolyDesignMatrix, fitLMVec)
 
 import qualified Data.Vector           as V
 import qualified Data.Text             as T

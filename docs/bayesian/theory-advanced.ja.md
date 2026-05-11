@@ -519,8 +519,8 @@ y  = max(0, y*)  (観測値、検出下限 0 で打ち切り)
    - `forest-compare` (モデル比較)
 
 2. **実データで適用**:
-   - 自分のデータを `Model.HBM` で書く
-   - NUTS で fit → `Viz.Report` で診断 HTML を見る
+   - 自分のデータを `Hanalyze.Model.HBM` で書く
+   - NUTS で fit → `Hanalyze.Viz.Report` で診断 HTML を見る
    - 仮定がおかしければ Truncated/Censored/Mixture を検討
 
 3. **理論を深掘り** (本書の参考文献に進む):

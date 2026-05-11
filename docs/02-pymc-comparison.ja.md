@@ -2,7 +2,7 @@
 
 > 🌐 [English](02-pymc-comparison.md) | **日本語**
 
-hanalyze の **ベイズ統計部分** (`Model.HBM` / MCMC / VI) を PyMC と
+hanalyze の **ベイズ統計部分** (`Hanalyze.Model.HBM` / MCMC / VI) を PyMC と
 比較した機能対応表。古典的回帰・実験計画・多目的最適化など hanalyze
 独自領域はここでは比較対象外。
 
@@ -55,12 +55,12 @@ PyMC にあって hanalyze にない機能を一覧化する。
 
 | PyMC | hanalyze | 備考 |
 |---|---|---|
-| `pymc.sample` (NUTS) | ✅ `MCMC.NUTS` | dual averaging 付き |
-| HMC | ✅ `MCMC.HMC` | |
-| Metropolis | ✅ `MCMC.MH` | |
-| `CompoundStep` (Gibbs+MH) | ✅ `MCMC.Gibbs.gibbsMH` | 共役自動検出 |
-| Slice | ✅ `MCMC.Slice` | 勾配不要、ステップサイズ自動調整 |
-| `pymc.fit` (ADVI) | ✅ `Stat.VI.advi` | 平均場のみ |
+| `pymc.sample` (NUTS) | ✅ `Hanalyze.MCMC.NUTS` | dual averaging 付き |
+| HMC | ✅ `Hanalyze.MCMC.HMC` | |
+| Metropolis | ✅ `Hanalyze.MCMC.MH` | |
+| `CompoundStep` (Gibbs+MH) | ✅ `Hanalyze.MCMC.Gibbs.gibbsMH` | 共役自動検出 |
+| Slice | ✅ `Hanalyze.MCMC.Slice` | 勾配不要、ステップサイズ自動調整 |
+| `pymc.fit` (ADVI) | ✅ `Hanalyze.Stat.VI.advi` | 平均場のみ |
 | Full-rank ADVI | ❌ | Stretch |
 | 正規化フロー | ❌ | Stretch |
 | SMC (逐次モンテカルロ) | ❌ | Stretch |
@@ -69,8 +69,8 @@ PyMC にあって hanalyze にない機能を一覧化する。
 
 | PyMC | hanalyze | 備考 |
 |---|---|---|
-| `pm.sample_posterior_predictive` | ✅ `Stat.PosteriorPredictive.posteriorPredictive` | |
-| `pm.sample_prior_predictive` | ✅ `Stat.PosteriorPredictive.priorPredictive` | |
+| `pm.sample_posterior_predictive` | ✅ `Hanalyze.Stat.PosteriorPredictive.posteriorPredictive` | |
+| `pm.sample_prior_predictive` | ✅ `Hanalyze.Stat.PosteriorPredictive.priorPredictive` | |
 | `pm.set_data` (再構築なしでデータ差し替え) | ✅ `dataNamed` / `withData` | Rank-2 多相対応 |
 | `pm.Deterministic` (派生量) | ✅ `deterministic` | `augmentChainWithDeterministic` で Chain に注入 |
 | `pm.Potential` (任意 log 項追加) | ✅ `potential` | ソフト制約・カスタム尤度・正則化 |
@@ -79,34 +79,34 @@ PyMC にあって hanalyze にない機能を一覧化する。
 
 | PyMC / ArviZ | hanalyze | 備考 |
 |---|---|---|
-| トレースプロット | ✅ `Viz.MCMC.tracePlot` | |
-| 事後 KDE | ✅ `Viz.MCMC.posteriorPlot` | |
-| ペア散布 | ✅ `Viz.MCMC.pairScatter` | |
-| 自己相関 | ✅ `Viz.MCMC.autocorrPlot` | |
-| Forest plot | ✅ `Viz.MCMC.forestPlot` | |
-| Energy plot (NUTS) | ✅ `Viz.MCMC.energyPlot` | BFMI 値も表示 |
-| BFMI スコア | ✅ `Stat.MCMC.bfmi` | Betancourt 2016 |
-| ESS / R-hat 表 | ✅ `Viz.Report` | |
+| トレースプロット | ✅ `Hanalyze.Viz.MCMC.tracePlot` | |
+| 事後 KDE | ✅ `Hanalyze.Viz.MCMC.posteriorPlot` | |
+| ペア散布 | ✅ `Hanalyze.Viz.MCMC.pairScatter` | |
+| 自己相関 | ✅ `Hanalyze.Viz.MCMC.autocorrPlot` | |
+| Forest plot | ✅ `Hanalyze.Viz.MCMC.forestPlot` | |
+| Energy plot (NUTS) | ✅ `Hanalyze.Viz.MCMC.energyPlot` | BFMI 値も表示 |
+| BFMI スコア | ✅ `Hanalyze.Stat.MCMC.bfmi` | Betancourt 2016 |
+| ESS / R-hat 表 | ✅ `Hanalyze.Viz.Report` | |
 | 事後予測プロット | ❌ | TODO — `posteriorPredictive` 結果を Vega-Lite で |
 | HDI 帯 (トレース / KDE) | 🚧 一部 | |
 | ランクプロット (PyMC `plot_rank`) | ❌ | TODO — チェーン間の収束診断 |
 | Divergences の散布表示 | ❌ | TODO — NUTS の divergent 検出&可視化 |
-| Posterior table (`az.summary` 相当) | 🚧 `Viz.Report` 内に部分 | TODO — 単独ヘルパ |
+| Posterior table (`az.summary` 相当) | 🚧 `Hanalyze.Viz.Report` 内に部分 | TODO — 単独ヘルパ |
 
 ## モデル比較
 
 | PyMC | hanalyze | 備考 |
 |---|---|---|
-| `pm.waic` | ✅ `Stat.ModelSelect.waic` | |
-| `pm.loo` (PSIS-LOO) | ✅ `Stat.ModelSelect.loo` | k̂ 診断付き |
-| `pm.compare` (モデル重み) | ✅ `Stat.ModelSelect.compareModels` | Pseudo-BMA |
+| `pm.waic` | ✅ `Hanalyze.Stat.ModelSelect.waic` | |
+| `pm.loo` (PSIS-LOO) | ✅ `Hanalyze.Stat.ModelSelect.loo` | k̂ 診断付き |
+| `pm.compare` (モデル重み) | ✅ `Hanalyze.Stat.ModelSelect.compareModels` | Pseudo-BMA |
 | ベイズファクター/周辺尤度 | ❌ | Stretch |
 
 ## モデリングプリミティブ
 
 | PyMC | hanalyze | 備考 |
 |---|---|---|
-| 階層モデル | ✅ `Model.HBM` 経由 | |
+| 階層モデル | ✅ `Hanalyze.Model.HBM` 経由 | |
 | ランダム切片 | ✅ demo: `simpson-paradox` | |
 | ランダム傾き | ✅ demo: `hbm-random-slope` | |
 | 非中心化パラメタ化 | ✅ `nonCenteredNormal` | Neal's funnel で BFMI 改善実証 |

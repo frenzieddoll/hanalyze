@@ -528,8 +528,8 @@ Suggested order for newcomers:
    - `forest-compare` (model comparison)
 
 2. **Apply to real data**:
-   - Write your model in `Model.HBM`.
-   - Fit with NUTS → inspect the diagnostic HTML via `Viz.Report`.
+   - Write your model in `Hanalyze.Model.HBM`.
+   - Fit with NUTS → inspect the diagnostic HTML via `Hanalyze.Viz.Report`.
    - If assumptions are off, try Truncated/Censored/Mixture.
 
 3. **Deepen the theory** (proceed to the references):

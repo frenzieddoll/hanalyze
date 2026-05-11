@@ -23,11 +23,11 @@ import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import Model.HBM
-import Stat.Distribution ()
-import MCMC.Core (chainVals, posteriorMean, posteriorSD)
-import MCMC.NUTS (NUTSConfig (..), defaultNUTSConfig, nuts)
-import Stat.VI
+import Hanalyze.Model.HBM
+import Hanalyze.Stat.Distribution ()
+import Hanalyze.MCMC.Core (chainVals, posteriorMean, posteriorSD)
+import Hanalyze.MCMC.NUTS (NUTSConfig (..), defaultNUTSConfig, nuts)
+import Hanalyze.Stat.VI
 
 -- ---------------------------------------------------------------------------
 -- モデル 1: Beta-Binomial (臨床試験)

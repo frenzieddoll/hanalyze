@@ -156,7 +156,7 @@ is closed form (Beta, Gamma, Normal, …). No acceptance tuning, very fast.
 ### 4.3 Hybrid Gibbs+MH
 
 Update non-conjugate parameters with MH; conjugate ones with Gibbs.
-`MCMC.Gibbs.gibbsMH` autodetects this from the prior/likelihood combination.
+`Hanalyze.MCMC.Gibbs.gibbsMH` autodetects this from the prior/likelihood combination.
 
 ### 4.4 In hanalyze
 
@@ -167,7 +167,7 @@ import MCMC.Gibbs (gibbsMH, defaultGibbsConfig)
 ch <- gibbsMH model defaultGibbsConfig init0 gen
 ```
 
-`Stat.Gibbs.detectConjugate` decides whether each latent's full conditional is closed form.
+`Hanalyze.Stat.Gibbs.detectConjugate` decides whether each latent's full conditional is closed form.
 
 ---
 
@@ -185,7 +185,7 @@ the **independent information content is much smaller**:
 
 $$ \text{ESS} = \frac{N}{1 + 2 \sum_{k=1}^\infty \rho_k} $$
 
-with $\rho_k$ the lag-$k$ autocorrelation. `Stat.MCMC.ess` (Geyer's initial monotone
+with $\rho_k$ the lag-$k$ autocorrelation. `Hanalyze.Stat.MCMC.ess` (Geyer's initial monotone
 sequence estimator).
 
 | ESS | State |
@@ -208,14 +208,14 @@ $$ \hat{R} = \sqrt{\frac{\text{var}_+}{W}} $$
 | > 1.01 | Not converged |
 | < 1.01 | Converged |
 
-`Stat.MCMC.rhat` (Vehtari 2021 split-R-hat). Run chains in parallel via
-`MCMC.NUTS.nutsChains`; display via `Viz.MCMC.posteriorSummary`.
+`Hanalyze.Stat.MCMC.rhat` (Vehtari 2021 split-R-hat). Run chains in parallel via
+`Hanalyze.MCMC.NUTS.nutsChains`; display via `Hanalyze.Viz.MCMC.posteriorSummary`.
 
 ### 5.4 Trace plot / Rank plot
 
 - **Trace plot**: iteration vs. value (white-noise-like is ideal).
 - **Rank plot**: rank across pooled chains; uniform per chain is ideal
-  (Vehtari 2021, `Viz.MCMC.rankPlot`).
+  (Vehtari 2021, `Hanalyze.Viz.MCMC.rankPlot`).
 
 ---
 
@@ -245,7 +245,7 @@ A tuning-free alternative:
 In practice, build per-axis intervals $[L, R]$ via **stepping-out**, then **shrinkage** on
 the uniform draw until it accepts.
 
-`MCMC.Slice.slice`. No gradient required; step size auto-adjusts.
+`Hanalyze.MCMC.Slice.slice`. No gradient required; step size auto-adjusts.
 
 ---
 

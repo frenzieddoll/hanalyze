@@ -93,7 +93,7 @@ cabal run hanalyze -- regress data.csv x y LM --report    # 既存の回帰 (= b
 | やりたいこと | 推奨アプローチ | 例 |
 |---|---|---|
 | 単回帰のベイズ版 (CLI から一発) | CLI: `HBM --report --waic` | `hanalyze data.csv x y HBM --report` |
-| 階層モデル (グループ構造) | デモ: `simpson-paradox` / `hbm-random-slope` | カスタム階層は `Model.HBM` で直接記述 |
+| 階層モデル (グループ構造) | デモ: `simpson-paradox` / `hbm-random-slope` | カスタム階層は `Hanalyze.Model.HBM` で直接記述 |
 | ランダム傾きモデル | デモ: `hbm-random-slope` | M1 (β 共通) vs M2 (β_g) を WAIC 比較 |
 | ベイズ A/B テスト | デモ: `clinical-trial` | Beta-Binomial、決定理論 |
 | 多チェーン NUTS + R-hat 診断 | デモ: `hbm-example` | 4 チェーン並列、`mcmc_report_multi.html` |
@@ -120,11 +120,11 @@ cabal run hanalyze -- regress data.csv x y LM --report    # 既存の回帰 (= b
 
 | やりたいこと | 推奨アプローチ | 例 |
 |---|---|---|
-| HTML レポート (DAG・MCMC 診断・予測曲線統合) | CLI: `--report` | LM/GLM/GLMM/GP/HBM 全対応 (legacy `Viz.AnalysisReport` 経由、後継は `Viz.ReportBuilder`) |
+| HTML レポート (DAG・MCMC 診断・予測曲線統合) | CLI: `--report` | LM/GLM/GLMM/GP/HBM 全対応 (legacy `Hanalyze.Viz.AnalysisReport` 経由、後継は `Hanalyze.Viz.ReportBuilder`) |
 | 棒グラフ・ヒストグラム単体 | デモ: `bar-demo` / CLI: `--hist COL` | PNG/SVG 出力可能 |
-| MCMC 単独レポート (KDE + トレース + DAG) | `Viz.Report.renderReport` | デモ: `hbm-example` |
+| MCMC 単独レポート (KDE + トレース + DAG) | `Hanalyze.Viz.Report.renderReport` | デモ: `hbm-example` |
 | プロットを PNG/SVG にエクスポート | CLI: `--format png` | 各 NamedPlot が個別画像化 |
-| モデル DAG 単独 HTML | `Viz.ModelGraph.renderModelGraph` | Track 型による依存自動抽出 |
+| モデル DAG 単独 HTML | `Hanalyze.Viz.ModelGraph.renderModelGraph` | Track 型による依存自動抽出 |
 
 ---
 
@@ -191,77 +191,77 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 ### 回帰 / 統計モデル
 | 用途 | モジュール | 主要関数 |
 |---|---|---|
-| OLS / 多項式 / 信頼帯 | `Model.LM` | `fitLM`, `fitLMVec`, `fitPolyWithSmooth` |
-| **LM 推論統計 (SE/t/p, F, AIC/BIC, leverage, Cook's)** | `Model.LM.Diagnostics` | `lmCoefStats`, `lmFStatistic`, `lmInformationCriteria`, `hatDiagonal`, `cooksDistance` |
-| GLM (Gaussian/Binomial/Poisson) | `Model.GLM` | `fitGLM`, `fitGLMWithSmooth` |
-| LME / GLMM | `Model.GLMM` | `fitLME`, `fitLMEDataFrame` |
-| スプライン (B-spline / Natural) | `Model.Spline` | `fitSpline`, `fitSplineMulti` |
-| カーネル回帰 / Kernel Ridge | `Model.Kernel` | `nwRegression`, `kernelRidge` |
-| Ridge / Lasso / Elastic Net | `Model.Regularized` | `fitRegularized` (sum-type penalty) |
-| **RFF (Random Fourier Features)** | `Model.RFF` | `sampleRFFRBF`, `rffRidge`, `rffGP` |
-| 多変量 LR / RRR / PLS / CCA | `Model.MultiLM` / `Model.Multivariate` | |
-| **多出力共通基盤** | `Model.MultiOutput` | `asMultiY`, `fromMultiY`, `r2Multi`, `rmseMulti` |
-| ガウス過程 / Multi-output GP | `Model.GP` / `Model.MultiGP` | `optimizeGP`, `fitGP`, `fitGPMulti` |
-| **ロバスト GP** (StudentT/Cauchy) | `Model.GPRobust` | `fitGPRobust`, `predictGPRobust` |
-| **Quantile regression** (τ-quantile) | `Model.Quantile` | `fitQuantile`, `predictQuantile` |
-| **GAM** (additive B-spline) | `Model.GAM` | `fitGAM`, `predictGAM`, `predictGAMComponent` |
-| **Random Forest** (回帰) | `Model.RandomForest` | `fitRF`, `predictRF`, `featureImportance` |
+| OLS / 多項式 / 信頼帯 | `Hanalyze.Model.LM` | `fitLM`, `fitLMVec`, `fitPolyWithSmooth` |
+| **LM 推論統計 (SE/t/p, F, AIC/BIC, leverage, Cook's)** | `Hanalyze.Model.LM.Diagnostics` | `lmCoefStats`, `lmFStatistic`, `lmInformationCriteria`, `hatDiagonal`, `cooksDistance` |
+| GLM (Gaussian/Binomial/Poisson) | `Hanalyze.Model.GLM` | `fitGLM`, `fitGLMWithSmooth` |
+| LME / GLMM | `Hanalyze.Model.GLMM` | `fitLME`, `fitLMEDataFrame` |
+| スプライン (B-spline / Natural) | `Hanalyze.Model.Spline` | `fitSpline`, `fitSplineMulti` |
+| カーネル回帰 / Kernel Ridge | `Hanalyze.Model.Kernel` | `nwRegression`, `kernelRidge` |
+| Ridge / Lasso / Elastic Net | `Hanalyze.Model.Regularized` | `fitRegularized` (sum-type penalty) |
+| **RFF (Random Fourier Features)** | `Hanalyze.Model.RFF` | `sampleRFFRBF`, `rffRidge`, `rffGP` |
+| 多変量 LR / RRR / PLS / CCA | `Hanalyze.Model.MultiLM` / `Hanalyze.Model.Multivariate` | |
+| **多出力共通基盤** | `Hanalyze.Model.MultiOutput` | `asMultiY`, `fromMultiY`, `r2Multi`, `rmseMulti` |
+| ガウス過程 / Multi-output GP | `Hanalyze.Model.GP` / `Hanalyze.Model.MultiGP` | `optimizeGP`, `fitGP`, `fitGPMulti` |
+| **ロバスト GP** (StudentT/Cauchy) | `Hanalyze.Model.GPRobust` | `fitGPRobust`, `predictGPRobust` |
+| **Quantile regression** (τ-quantile) | `Hanalyze.Model.Quantile` | `fitQuantile`, `predictQuantile` |
+| **GAM** (additive B-spline) | `Hanalyze.Model.GAM` | `fitGAM`, `predictGAM`, `predictGAMComponent` |
+| **Random Forest** (回帰) | `Hanalyze.Model.RandomForest` | `fitRF`, `predictRF`, `featureImportance` |
 
 ### データ I/O・前処理
 | 用途 | モジュール | 主要関数 |
 |---|---|---|
-| CSV / TSV / SSV (cassava) | `DataIO.CSV` | `loadAuto`, `loadCSV`, `loadTSV` (Hackage `DataFrame` を直接返す) |
-| 防衛的 CSV ローダ | `DataIO.CSV` | `loadAutoSafe`, `loadAutoSafeWith`, `LoadOpts` (--no-header / --skip / --comment / --delim / --strict / --no-sniff) |
-| Parquet / JSON | `DataIO.External` | `loadParquet`, `loadJSON` |
-| DataFrame → ベクタ抽出 | `DataIO.Convert` | `getDoubleVec`, `getTextVec`, `getMaybeTextVec` |
-| 構造化ログ | `DataIO.Log` | `LogEntry`, `LogReport`, `printLogReport` |
-| 健全性検査 (W001..W008) | `DataIO.Health` | `inspectDataFrame`, `inspectWithPreview` |
-| 自動推論 (delimiter / 有ヘッダ / skip) | `DataIO.Sniff` | `sniffBytes`, `sniffFile` |
-| 列クリーニング DSL | `DataIO.Clean` | `ColumnRule`, `applyRule`, `cleanPipeline`, `dedupeColumns`, `fillBlankNames` |
-| Wide → Long 変形 | `DataIO.Preprocess` | `meltLonger`, `hanalyze melt --id ... --vars ...` |
-| 多変量 RFF Ridge | `Model.RFF` | `RFFFeaturesMV`, `rffRidgeMV`, `predictRFFRidgeMV` (CLI: `hanalyze kernel "x1 t" y --method rff`) |
-| 入力標準化 (z-score) | `Stat.Standardize` | `Standardizer`, `fitStandardizer`, `applyStandardizer`, `unapplyStandardizer` (CLI: `--standardize`) |
-| 周辺尤度最大化 (RFF/GP HP) | `Model.RFF` | `logMarginalLikRBFMV`, `maximizeMarginalLikRBFMV` (CLI: `--auto-hp`) |
-| 欠損補完 / フィルタ / 派生列 | `DataIO.Preprocess` | `imputeMean`, `imputeMedian`, `dropMissingRows`, `filterRowsByNumeric`, `deriveNumeric`, `mapNumeric` |
-| groupBy / aggregate | `DataIO.Preprocess` | `groupByMean`, `groupBySum`, `groupByMin`, `groupByMax`, `groupByMedian`, `groupByCount`, `groupByAggregate` |
+| CSV / TSV / SSV (cassava) | `Hanalyze.DataIO.CSV` | `loadAuto`, `loadCSV`, `loadTSV` (Hackage `DataFrame` を直接返す) |
+| 防衛的 CSV ローダ | `Hanalyze.DataIO.CSV` | `loadAutoSafe`, `loadAutoSafeWith`, `LoadOpts` (--no-header / --skip / --comment / --delim / --strict / --no-sniff) |
+| Parquet / JSON | `Hanalyze.DataIO.External` | `loadParquet`, `loadJSON` |
+| DataFrame → ベクタ抽出 | `Hanalyze.DataIO.Convert` | `getDoubleVec`, `getTextVec`, `getMaybeTextVec` |
+| 構造化ログ | `Hanalyze.DataIO.Log` | `LogEntry`, `LogReport`, `printLogReport` |
+| 健全性検査 (W001..W008) | `Hanalyze.DataIO.Health` | `inspectDataFrame`, `inspectWithPreview` |
+| 自動推論 (delimiter / 有ヘッダ / skip) | `Hanalyze.DataIO.Sniff` | `sniffBytes`, `sniffFile` |
+| 列クリーニング DSL | `Hanalyze.DataIO.Clean` | `ColumnRule`, `applyRule`, `cleanPipeline`, `dedupeColumns`, `fillBlankNames` |
+| Wide → Long 変形 | `Hanalyze.DataIO.Preprocess` | `meltLonger`, `hanalyze melt --id ... --vars ...` |
+| 多変量 RFF Ridge | `Hanalyze.Model.RFF` | `RFFFeaturesMV`, `rffRidgeMV`, `predictRFFRidgeMV` (CLI: `hanalyze kernel "x1 t" y --method rff`) |
+| 入力標準化 (z-score) | `Hanalyze.Stat.Standardize` | `Standardizer`, `fitStandardizer`, `applyStandardizer`, `unapplyStandardizer` (CLI: `--standardize`) |
+| 周辺尤度最大化 (RFF/GP HP) | `Hanalyze.Model.RFF` | `logMarginalLikRBFMV`, `maximizeMarginalLikRBFMV` (CLI: `--auto-hp`) |
+| 欠損補完 / フィルタ / 派生列 | `Hanalyze.DataIO.Preprocess` | `imputeMean`, `imputeMedian`, `dropMissingRows`, `filterRowsByNumeric`, `deriveNumeric`, `mapNumeric` |
+| groupBy / aggregate | `Hanalyze.DataIO.Preprocess` | `groupByMean`, `groupBySum`, `groupByMin`, `groupByMax`, `groupByMedian`, `groupByCount`, `groupByAggregate` |
 
 ### 実験計画法
 | 用途 | モジュール | 主要関数 |
 |---|---|---|
-| 完全 / 部分要因 / 混合水準 | `Design.Factorial` | `fullFactorial`, `fractionalFactorial` |
-| ラテン方格 / 乱塊法 | `Design.Block` | `latinSquare`, `randomizedBlock` |
-| ANOVA (一元/二元) | `Design.Anova` | `oneWayAnova`, `twoWayAnova` |
-| 検出力解析 / サンプルサイズ | `Design.Power` | `powerTTest`, `sampleSizeTTest` |
-| 直交性 / D-eff / VIF / **Cp・Cpk** | `Design.Quality` | `dEfficiency`, `vifList`, `processCapability`, `processCapabilityUpper`, `processCapabilityLower` |
-| RSM (CCD / Box-Behnken) | `Design.RSM` | `centralComposite`, `boxBehnken` |
-| D-/A-optimal | `Design.Optimal` | `dOptimal`, `aOptimal` |
-| **直交表 Lₙ (L4/L8/L9/L12/L16/L18)** | `Design.Orthogonal` | `lookupOA`, `assignFactors`, `renderCSV`, `listArraysWithSize` (OAMetadata) |
-| **タグチメソッド (SN 比・要因効果・内外配置)** | `Design.Taguchi` | `snRatio`, `analyzeSN`, `optimalLevels`, `makeInnerOuter`, `snRatioWithDetails`, `factorEffectsTable` |
+| 完全 / 部分要因 / 混合水準 | `Hanalyze.Design.Factorial` | `fullFactorial`, `fractionalFactorial` |
+| ラテン方格 / 乱塊法 | `Hanalyze.Design.Block` | `latinSquare`, `randomizedBlock` |
+| ANOVA (一元/二元) | `Hanalyze.Design.Anova` | `oneWayAnova`, `twoWayAnova` |
+| 検出力解析 / サンプルサイズ | `Hanalyze.Design.Power` | `powerTTest`, `sampleSizeTTest` |
+| 直交性 / D-eff / VIF / **Cp・Cpk** | `Hanalyze.Design.Quality` | `dEfficiency`, `vifList`, `processCapability`, `processCapabilityUpper`, `processCapabilityLower` |
+| RSM (CCD / Box-Behnken) | `Hanalyze.Design.RSM` | `centralComposite`, `boxBehnken` |
+| D-/A-optimal | `Hanalyze.Design.Optimal` | `dOptimal`, `aOptimal` |
+| **直交表 Lₙ (L4/L8/L9/L12/L16/L18)** | `Hanalyze.Design.Orthogonal` | `lookupOA`, `assignFactors`, `renderCSV`, `listArraysWithSize` (OAMetadata) |
+| **タグチメソッド (SN 比・要因効果・内外配置)** | `Hanalyze.Design.Taguchi` | `snRatio`, `analyzeSN`, `optimalLevels`, `makeInnerOuter`, `snRatioWithDetails`, `factorEffectsTable` |
 
 ### 最適化
 | 用途 | モジュール | 主要関数 |
 |---|---|---|
-| Adam / 勾配上昇 / 数値勾配 | `Optim.Adam` / `Optim.GradAscent` / `Optim.Numeric` | |
-| NSGA-II + Pareto | `Optim.NSGA` / `Optim.Pareto` | `nsga2`, `hypervolume` |
-| Bayesian Optimization | `Optim.BayesOpt` / `Optim.Acquisition` | `bayesOpt`, `ei` |
-| Desirability function | `Optim.Desirability` | `overallDesirability` |
+| Adam / 勾配上昇 / 数値勾配 | `Hanalyze.Optim.Adam` / `Hanalyze.Optim.GradAscent` / `Hanalyze.Optim.Numeric` | |
+| NSGA-II + Pareto | `Hanalyze.Optim.NSGA` / `Hanalyze.Optim.Pareto` | `nsga2`, `hypervolume` |
+| Bayesian Optimization | `Hanalyze.Optim.BayesOpt` / `Hanalyze.Optim.Acquisition` | `bayesOpt`, `ei` |
+| Desirability function | `Hanalyze.Optim.Desirability` | `overallDesirability` |
 
 ### ベイズ統計 / MCMC
 | 用途 | モジュール | 主要関数 |
 |---|---|---|
-| 多相 DSL (27 分布) | `Model.HBM` | `sample`, `observe`, `ModelP r` |
-| HMC / NUTS | `MCMC.HMC` / `MCMC.NUTS` | `hmc`, `nuts`, `nutsChains` |
-| Gibbs / MH / Slice | `MCMC.Gibbs` / `MCMC.MH` / `MCMC.Slice` | |
-| 変分推論 | `Stat.VI` | `advi` |
-| WAIC / LOO / Pseudo-BMA | `Stat.ModelSelect` | `waic`, `loo`, `compareModels` |
+| 多相 DSL (27 分布) | `Hanalyze.Model.HBM` | `sample`, `observe`, `ModelP r` |
+| HMC / NUTS | `Hanalyze.MCMC.HMC` / `Hanalyze.MCMC.NUTS` | `hmc`, `nuts`, `nutsChains` |
+| Gibbs / MH / Slice | `Hanalyze.MCMC.Gibbs` / `Hanalyze.MCMC.MH` / `Hanalyze.MCMC.Slice` | |
+| 変分推論 | `Hanalyze.Stat.VI` | `advi` |
+| WAIC / LOO / Pseudo-BMA | `Hanalyze.Stat.ModelSelect` | `waic`, `loo`, `compareModels` |
 
 ### 可視化
 | 用途 | モジュール | 主要関数 |
 |---|---|---|
-| MCMC レポート (KDE / trace / DAG) | `Viz.Report` / `Viz.MCMC` | `renderReport`, `tracePlotHDI` |
-| Pareto front (5 種) | `Viz.Pareto` | `paretoScatter`, `parallelCoordinates` |
-| 散布 / 棒 / ヒスト | `Viz.Scatter` / `Viz.Bar` / `Viz.Histogram` | |
-| 多モデル比較レポート | `Viz.ReportBuilder` (★ 標準) / `Viz.AnalysisReport` (非推奨) | `renderReport` / `writeAnalysisReport` |
-| 対話的予測 (1 入力 → q 出力) | `Viz.ReportBuilder` | `secInteractiveMultiOut`, `mkInteractiveMOLinear`, `mkInteractiveMOKernelRBF` |
+| MCMC レポート (KDE / trace / DAG) | `Hanalyze.Viz.Report` / `Hanalyze.Viz.MCMC` | `renderReport`, `tracePlotHDI` |
+| Pareto front (5 種) | `Hanalyze.Viz.Pareto` | `paretoScatter`, `parallelCoordinates` |
+| 散布 / 棒 / ヒスト | `Hanalyze.Viz.Scatter` / `Hanalyze.Viz.Bar` / `Hanalyze.Viz.Histogram` | |
+| 多モデル比較レポート | `Hanalyze.Viz.ReportBuilder` (★ 標準) / `Hanalyze.Viz.AnalysisReport` (非推奨) | `renderReport` / `writeAnalysisReport` |
+| 対話的予測 (1 入力 → q 出力) | `Hanalyze.Viz.ReportBuilder` | `secInteractiveMultiOut`, `mkInteractiveMOLinear`, `mkInteractiveMOKernelRBF` |
 
 > **多出力統一**: 全主要モデル (Regularized / Spline / Kernel / RFF / GP / GPRobust / GLM / GLMM / HBM) で **多出力 (Y :: Matrix n×q) を主 API、1 出力は 1 列行列化して委譲する薄いラッパ** という統一ポリシ。各モジュールに `fitXMulti` / `XFitMulti` 系列があり、Reportable / CLI 両方から利用可能。詳細は [regression/07-multireg.ja.md](regression/07-multireg.ja.md)。

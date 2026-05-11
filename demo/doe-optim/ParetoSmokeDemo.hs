@@ -3,7 +3,7 @@
 module Main where
 
 import Text.Printf (printf)
-import Optim.Pareto (isNonDominated, paretoFront, hypervolume, igd, gd)
+import Hanalyze.Optim.Pareto (isNonDominated, paretoFront, hypervolume, igd, gd)
 
 approxEq :: Double -> Double -> Bool
 approxEq a b = abs (a - b) < 1e-6

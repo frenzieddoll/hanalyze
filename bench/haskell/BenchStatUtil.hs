@@ -18,15 +18,15 @@ import qualified Data.Vector.Unboxed     as VU
 import qualified Numeric.LinearAlgebra   as LA
 import qualified System.Random.MWC       as MWC
 
-import           Stat.Bootstrap          (bootstrapMeanCI)
-import           Stat.Test               (Alternative (..),
+import           Hanalyze.Stat.Bootstrap          (bootstrapMeanCI)
+import           Hanalyze.Stat.Test               (Alternative (..),
                                           tTestWelch, mannWhitneyU,
                                           kolmogorovSmirnovNormal,
                                           TestResult (..))
-import           Stat.MultipleTesting    (benjaminiHochbergV)
-import           Stat.QuasiRandom        (haltonMatrix)
-import           Stat.ClassMetrics       (auc, logLoss)
-import           Stat.CV                 (kFold)
+import           Hanalyze.Stat.MultipleTesting    (benjaminiHochbergV)
+import           Hanalyze.Stat.QuasiRandom        (haltonMatrix)
+import           Hanalyze.Stat.ClassMetrics       (auc, logLoss)
+import           Hanalyze.Stat.CV                 (kFold)
 
 import           BenchUtil
 

@@ -17,12 +17,12 @@ module Main where
 import qualified Data.Map.Strict as Map
 import System.Random.MWC (createSystemRandom)
 
-import MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
-import Model.HBM (ModelP, sample, observe, dataNamed, withData,
+import Hanalyze.MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
+import Hanalyze.Model.HBM (ModelP, sample, observe, dataNamed, withData,
                   Distribution (..))
-import Stat.PosteriorPredictive (posteriorPredictive)
-import Viz.MCMC (printPosteriorSummary, ppcPlotFile)
-import Viz.Core (defaultConfig, OutputFormat (..), PlotConfig (..))
+import Hanalyze.Stat.PosteriorPredictive (posteriorPredictive)
+import Hanalyze.Viz.MCMC (printPosteriorSummary, ppcPlotFile)
+import Hanalyze.Viz.Core (defaultConfig, OutputFormat (..), PlotConfig (..))
 
 cfg :: NUTSConfig
 cfg = defaultNUTSConfig

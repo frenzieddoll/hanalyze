@@ -16,10 +16,10 @@ import qualified Data.Vector             as V
 import qualified Numeric.LinearAlgebra   as LA
 import qualified System.Random.MWC       as MWC
 
-import qualified Model.PCA               as PCA
-import qualified Model.Cluster           as Cl
-import qualified Model.DecisionTree      as DT
-import qualified Model.RandomForest      as RF
+import qualified Hanalyze.Model.PCA               as PCA
+import qualified Hanalyze.Model.Cluster           as Cl
+import qualified Hanalyze.Model.DecisionTree      as DT
+import qualified Hanalyze.Model.RandomForest      as RF
 
 import           BenchUtil
 
@@ -73,7 +73,7 @@ benchPCA path name k = do
   let ratio = LA.sumElements (PCA.pcaExplainedRatio res)
       sigma = LA.sumElements (PCA.pcaSingularValues res)
   return [ BenchRow "haskell" "ml" name ms ratio sigma
-            ("Model.PCA k=" ++ show k ++ " standardized") ]
+            ("Hanalyze.Model.PCA k=" ++ show k ++ " standardized") ]
   where
     probe r = LA.sumElements (PCA.pcaExplainedRatio r)
             + LA.sumElements (PCA.pcaSingularValues r)
@@ -91,7 +91,7 @@ benchKMeans path name k = do
   let inert = Cl.kmrInertia res
       iters = fromIntegral (Cl.kmrIters res)
   return [ BenchRow "haskell" "ml" name ms inert iters
-            ("Model.Cluster.kMeans k=" ++ show k) ]
+            ("Hanalyze.Model.Cluster.kMeans k=" ++ show k) ]
   where
     probe r = Cl.kmrInertia r
 
@@ -110,7 +110,7 @@ benchDT path name = do
                 hits  = length (filter id (zipWith (==) preds ys))
             in fromIntegral hits / fromIntegral (length ys) :: Double
   return [ BenchRow "haskell" "ml" name ms acc 0
-            "Model.DecisionTree.fitDT default config" ]
+            "Hanalyze.Model.DecisionTree.fitDT default config" ]
   where
     -- Force tree by predicting on the first row.
     probe t = case [ DT.predictDT t [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] ] of
@@ -135,7 +135,7 @@ benchRF path name = do
       hits  = length (filter id (zipWith (==) pi' yi))
       acc   = fromIntegral hits / fromIntegral (length ys) :: Double
   return [ BenchRow "haskell" "ml" name ms acc 0
-            "Model.RandomForest.fitRF (20 trees)" ]
+            "Hanalyze.Model.RandomForest.fitRF (20 trees)" ]
   where
     probe forest = case xs of
       (row:_) -> RF.predictRF forest row

@@ -13,11 +13,11 @@ import Data.Maybe (fromMaybe)
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import MCMC.Core (chainSamples, posteriorMean, posteriorSD,
+import Hanalyze.MCMC.Core (chainSamples, posteriorMean, posteriorSD,
                   posteriorQuantile, acceptanceRate)
-import MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
-import Model.HBM (ModelP, sample, observe, Distribution (..))
-import Stat.PosteriorPredictive (posteriorPredictive)
+import Hanalyze.MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
+import Hanalyze.Model.HBM (ModelP, sample, observe, Distribution (..))
+import Hanalyze.Stat.PosteriorPredictive (posteriorPredictive)
 
 cfg :: NUTSConfig
 cfg = defaultNUTSConfig

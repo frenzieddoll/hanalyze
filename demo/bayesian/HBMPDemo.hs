@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
--- | 多相 HBM DSL (Model.HBM) のデモ。
+-- | 多相 HBM DSL (Hanalyze.Model.HBM) のデモ。
 --
 -- 同じ多相モデル一つから 4 つの解釈を取り出す:
 --   1. 構造検査  (collectNodes)         — Double 特殊化
@@ -18,7 +18,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Text.Printf (printf)
 
-import Model.HBM
+import Hanalyze.Model.HBM
 
 -- ---------------------------------------------------------------------------
 -- 多相モデル定義 (一度書けば 4 つの解釈に使える)

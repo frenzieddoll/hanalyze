@@ -2,7 +2,7 @@
 
 > 🌐 **English** | [日本語](02-glm.ja.md)
 
-> `Model.GLM` is the natural extension of LM that covers response variables outside
+> `Hanalyze.Model.GLM` is the natural extension of LM that covers response variables outside
 > the normal distribution (binomial, Poisson, negative binomial, …).
 > Related: [01-lm.md](01-lm.md) / [03-glmm.md](03-glmm.md)
 > **Multi-output**: `fitGLMMulti` (per-column IRLS) — see [05-multivariate.md](05-multivariate.md).
@@ -201,7 +201,7 @@ Continuous real response with Gaussian noise:
 
 $$ y_i \sim \text{Normal}(\mu_i, \sigma^2), \quad \mu_i = X_i \boldsymbol\beta $$
 
-Equivalent to LM. Prefer `Model.LM.fitLM` (no IRLS, closed form).
+Equivalent to LM. Prefer `Hanalyze.Model.LM.fitLM` (no IRLS, closed form).
 `fitGLM Gaussian xs ys` produces the same result.
 
 ### 6.2 Binomial (logistic / probit)
@@ -297,7 +297,7 @@ Mean $\mu_i$, variance $\mu_i + \mu_i^2/\alpha$ (Poisson is recovered as $\alpha
 
 NegativeBinomial is not strictly a regular exponential family (it is when $\alpha$ is fixed,
 not when free). hanalyze's `fitGLM` does not currently include it as a family, but the
-Bayesian framework (`Model.HBM` `NegativeBinomial`) does:
+Bayesian framework (`Hanalyze.Model.HBM` `NegativeBinomial`) does:
 
 ```haskell
 -- Bayesian NB regression (Model.HBM)
@@ -335,9 +335,9 @@ $$ y_i \sim \text{Gamma}(\nu, \nu/\mu_i), \quad g(\mu_i) = X_i \boldsymbol\beta 
 
 #### hanalyze
 
-`Model.GLM` does not yet implement the Gamma family. Workarounds:
+`Hanalyze.Model.GLM` does not yet implement the Gamma family. Workarounds:
 - log-transform the response and use LM.
-- Bayesian fit via `Model.HBM.Gamma`.
+- Bayesian fit via `Hanalyze.Model.HBM.Gamma`.
 
 ### 6.6 InverseGaussian
 
@@ -377,7 +377,7 @@ R²-like indices for GLMs; multiple flavours exist:
 | **Nagelkerke** | normalised Cox-Snell |
 | **Deviance** | $1 - D(\hat) / D(\text{null})$ |
 
-hanalyze's `pseudoR2` (`Model.GLM`) uses the **deviance-based** definition.
+hanalyze's `pseudoR2` (`Hanalyze.Model.GLM`) uses the **deviance-based** definition.
 Do not compare these directly to LM R² — the scales differ.
 
 ---

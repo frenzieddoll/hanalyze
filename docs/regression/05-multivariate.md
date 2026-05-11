@@ -11,7 +11,7 @@ All major regression models in hanalyze follow a single unified policy:
 **multi-output (Y :: Matrix n×q) is the primary API; single-output is a thin
 wrapper that lifts to a 1-column matrix and delegates.**
 
-- Common base: `Model.MultiOutput` (`asMultiY` / `fromMultiY` / `r2Multi` / `rmseMulti` / `mseMulti`)
+- Common base: `Hanalyze.Model.MultiOutput` (`asMultiY` / `fromMultiY` / `r2Multi` / `rmseMulti` / `mseMulti`)
 - Each model exposes a `fitXMulti` / `XFitMulti` family
 - q=1 numerically matches the legacy single-output API (verified by 10 hspec tests)
 
@@ -19,23 +19,23 @@ wrapper that lifts to a 1-column matrix and delegates.**
 
 | Module | Single-output | Multi-output (primary) |
 |---|---|---|
-| `Model.LM`           | `fitLMVec`            | `fitLM` (multi-output from the start) |
-| `Model.MultiLM`      | —                     | `fitMultiLM` + residual covariance Σ |
-| `Model.GLM`          | `fitGLM`              | `fitGLMMulti` (per-column IRLS) |
-| `Model.GLMM`         | `fitLME` / `fitGLMM`  | `fitLMEMulti` / `fitGLMMMulti` |
-| `Model.Spline`       | `fitSpline`           | `fitSplineMulti` (shared basis) |
-| `Model.Kernel`       | `kernelRidge` / `nwRegression` | `kernelRidgeMulti` / `nwRegressionMulti` |
-| `Model.Regularized`  | `fitRegularized`      | `fitRegularizedMulti` (Ridge/OLS via closed-form matrix solve) |
-| `Model.RFF`          | `rffRidge` / `rffRidgeMV` | `rffRidgeMulti` / `rffRidgeMVMulti` |
-| `Model.GP`           | `fitGP`               | `fitGPMulti` (shared Ky⁻¹ and shared variance) |
-| `Model.GPRobust`     | `fitGPRobust`         | `fitGPRobustMulti` (per-column IRLS, shared K) |
-| `Model.MultiGP`      | —                     | `fitMultiGP` (Independent GPs with per-output HPs) |
-| `Model.Multivariate` | —                     | RRR / PLS / CCA |
-| `Model.HBM`          | `observe` (1 col)     | `observeColumns` helper + `MvNormal` observation |
+| `Hanalyze.Model.LM`           | `fitLMVec`            | `fitLM` (multi-output from the start) |
+| `Hanalyze.Model.MultiLM`      | —                     | `fitMultiLM` + residual covariance Σ |
+| `Hanalyze.Model.GLM`          | `fitGLM`              | `fitGLMMulti` (per-column IRLS) |
+| `Hanalyze.Model.GLMM`         | `fitLME` / `fitGLMM`  | `fitLMEMulti` / `fitGLMMMulti` |
+| `Hanalyze.Model.Spline`       | `fitSpline`           | `fitSplineMulti` (shared basis) |
+| `Hanalyze.Model.Kernel`       | `kernelRidge` / `nwRegression` | `kernelRidgeMulti` / `nwRegressionMulti` |
+| `Hanalyze.Model.Regularized`  | `fitRegularized`      | `fitRegularizedMulti` (Ridge/OLS via closed-form matrix solve) |
+| `Hanalyze.Model.RFF`          | `rffRidge` / `rffRidgeMV` | `rffRidgeMulti` / `rffRidgeMVMulti` |
+| `Hanalyze.Model.GP`           | `fitGP`               | `fitGPMulti` (shared Ky⁻¹ and shared variance) |
+| `Hanalyze.Model.GPRobust`     | `fitGPRobust`         | `fitGPRobustMulti` (per-column IRLS, shared K) |
+| `Hanalyze.Model.MultiGP`      | —                     | `fitMultiGP` (Independent GPs with per-output HPs) |
+| `Hanalyze.Model.Multivariate` | —                     | RRR / PLS / CCA |
+| `Hanalyze.Model.HBM`          | `observe` (1 col)     | `observeColumns` helper + `MvNormal` observation |
 
 ---
 
-## 1. Multivariate Linear Regression (`Model.MultiLM`)
+## 1. Multivariate Linear Regression (`Hanalyze.Model.MultiLM`)
 
 When you also want the residual covariance Σ:
 
@@ -93,7 +93,7 @@ let yPred = predictRFFRidgeMulti mf xListNew
 
 ---
 
-## 3. RRR / PLS / CCA (`Model.Multivariate`)
+## 3. RRR / PLS / CCA (`Hanalyze.Model.Multivariate`)
 
 ```haskell
 import Model.Multivariate
@@ -116,7 +116,7 @@ let ccaFit = cca xMat yMat
 
 ## 4. Multi-output GP
 
-### Shared-kernel (fast, `Model.GP.fitGPMulti`)
+### Shared-kernel (fast, `Hanalyze.Model.GP.fitGPMulti`)
 All q outputs share the same kernel and hyperparameters → one Cholesky:
 
 ```haskell
@@ -128,7 +128,7 @@ let (meanMat, varList) = GP.fitGPMulti model trainX trainYMat testX
 -- varList :: [Double] (length m, shared across q outputs)
 ```
 
-### Per-output independent HP (`Model.MultiGP`)
+### Per-output independent HP (`Hanalyze.Model.MultiGP`)
 When each output should have its own hyperparameters:
 
 ```haskell
@@ -140,7 +140,7 @@ let res = fitMultiGP RBF trainX trainYs testX
 
 ---
 
-## 5. Robust multi-output GP (`Model.GPRobust`)
+## 5. Robust multi-output GP (`Hanalyze.Model.GPRobust`)
 
 StudentT / Cauchy observation likelihood for outlier robustness, per-column IRLS:
 

@@ -8,10 +8,10 @@ import qualified Numeric.LinearAlgebra   as LA
 import qualified System.Random.MWC       as MWC
 import qualified Data.Vector             as V
 
-import qualified Model.Kernel            as Kn
-import qualified Model.GP                as GP
-import qualified Model.RFF               as RFF
-import qualified Model.GPRobust          as GPR
+import qualified Hanalyze.Model.Kernel            as Kn
+import qualified Hanalyze.Model.GP                as GP
+import qualified Hanalyze.Model.RFF               as RFF
+import qualified Hanalyze.Model.GPRobust          as GPR
 
 import           BenchUtil
 

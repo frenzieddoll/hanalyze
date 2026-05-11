@@ -3,7 +3,7 @@
 > 🌐 [English](04-spline.md) | **日本語**
 
 > 関数形を仮定せず滑らかな曲線を当てる **非パラメトリック** 回帰。
-> `Model.Spline` モジュール。
+> `Hanalyze.Model.Spline` モジュール。
 >
 > 関連: [04-kernel.ja.md](04-kernel.ja.md) (カーネル回帰) / [04-regularized.ja.md](04-regularized.ja.md) (正則化) /
 > 理論: [theory-regression-extensions.ja.md](theory-regression-extensions.ja.md)

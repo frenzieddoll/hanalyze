@@ -11,11 +11,11 @@ import qualified Data.Vector as V
 import qualified Numeric.LinearAlgebra as LA
 import Text.Printf (printf)
 
-import qualified DataIO.CSV as IO
-import qualified DataIO.Convert as Conv
-import qualified Model.MultiLM as ML
-import Model.Core (FitResult (..))
-import Viz.ReportBuilder
+import qualified Hanalyze.DataIO.CSV as IO
+import qualified Hanalyze.DataIO.Convert as Conv
+import qualified Hanalyze.Model.MultiLM as ML
+import Hanalyze.Model.Core (FitResult (..))
+import Hanalyze.Viz.ReportBuilder
 
 zGrid :: [Double]
 zGrid =

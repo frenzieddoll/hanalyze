@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | 汚いデータを @data\/dirty\/@ から読み込み、'DataIO.CSV.loadAutoSafeWith'
+-- | 汚いデータを @data\/dirty\/@ から読み込み、'Hanalyze.DataIO.CSV.loadAutoSafeWith'
 -- がどんな警告コード (W001…W008) や情報コード (I010…I012) を出すかを
 -- 19 ファイル分一覧表示するショーケース demo。
 --
@@ -31,8 +31,8 @@ import Data.List (sort)
 import Text.Printf (printf)
 
 import qualified DataFrame     as DX
-import qualified DataIO.CSV    as CSV
-import qualified DataIO.Log    as Log
+import qualified Hanalyze.DataIO.CSV    as CSV
+import qualified Hanalyze.DataIO.Log    as Log
 
 dataDir :: FilePath
 dataDir = "data/dirty"
@@ -71,7 +71,7 @@ fixtures =
 main :: IO ()
 main = do
   putStrLn "==========================================================="
-  putStrLn " Dirty Data Demo — DataIO.CSV.loadAutoSafeWith showcase"
+  putStrLn " Dirty Data Demo — Hanalyze.DataIO.CSV.loadAutoSafeWith showcase"
   putStrLn "==========================================================="
   putStrLn ""
 

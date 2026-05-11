@@ -22,14 +22,14 @@ import qualified Data.Time.Clock      as Time
 import           System.IO            (hSetBuffering, stdout, BufferMode (..))
 import           Text.Printf          (printf)
 
-import           Model.HBM            (Distribution (..), ModelP, sample,
+import           Hanalyze.Model.HBM            (Distribution (..), ModelP, sample,
                                        observe)
-import           MCMC.Core            (Chain, chainAccepted, chainTotal,
+import           Hanalyze.MCMC.Core            (Chain, chainAccepted, chainTotal,
                                        chainVals, posteriorMean,
                                        posteriorSD)
-import           MCMC.NUTS            (NUTSConfig (..), defaultNUTSConfig,
+import           Hanalyze.MCMC.NUTS            (NUTSConfig (..), defaultNUTSConfig,
                                        nuts)
-import           Stat.MCMC            (ess)
+import           Hanalyze.Stat.MCMC            (ess)
 
 schoolData :: [[Double]]
 schoolData =

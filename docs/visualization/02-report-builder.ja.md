@@ -1,11 +1,11 @@
-# HTML レポート — `Viz.ReportBuilder` と `Reportable`
+# HTML レポート — `Hanalyze.Viz.ReportBuilder` と `Reportable`
 
 > 🌐 [English](02-report-builder.md) | **日本語**
 
 > 関連: [01-visualization.ja.md](01-visualization.ja.md) (棒グラフ・ヒストグラム等の単発プロット),
-> `Viz.AnalysisReport` (**非推奨** — LM/GLM/GLMM/GP/HBM 専用 sum-type ベース、CLI `regress --report` 互換のため残置)
+> `Hanalyze.Viz.AnalysisReport` (**非推奨** — LM/GLM/GLMM/GP/HBM 専用 sum-type ベース、CLI `regress --report` 互換のため残置)
 >
-> **状態**: `Viz.ReportBuilder` が今後の標準。`Viz.AnalysisReport` は非推奨化済み (`{-# DEPRECATED #-}`) で、機能パリティが取れたら削除予定。新規モデル/可視化はすべて ReportBuilder で実装する。
+> **状態**: `Hanalyze.Viz.ReportBuilder` が今後の標準。`Hanalyze.Viz.AnalysisReport` は非推奨化済み (`{-# DEPRECATED #-}`) で、機能パリティが取れたら削除予定。新規モデル/可視化はすべて ReportBuilder で実装する。
 
 ## 目次
 
@@ -16,14 +16,14 @@
 5. [モデル別の使用例](#5-モデル別の使用例)
 6. [CLI からの利用](#6-cli-からの利用)
 7. [カスタムレポートの作り方](#7-カスタムレポートの作り方)
-8. [既存 `Viz.AnalysisReport` との関係](#8-既存-vizanalysisreport-との関係)
+8. [既存 `Hanalyze.Viz.AnalysisReport` との関係](#8-既存-vizanalysisreport-との関係)
 9. [よくあるパターンと落とし穴](#9-よくあるパターンと落とし穴)
 
 ---
 
 ## 1. 概要・設計思想
 
-`Viz.ReportBuilder` は **コンポジション型 HTML レポートビルダ**。
+`Hanalyze.Viz.ReportBuilder` は **コンポジション型 HTML レポートビルダ**。
 分析結果を **section の並び** として組み立て、自己完結 HTML
 (Vega-Lite アセット込み) を 1 ファイルで出力する。
 
@@ -34,12 +34,12 @@
 | **コンポジション** | `[ReportSection]` を構築するだけ。各セクションは独立した HTML チャンク。|
 | **フォーマット非依存** | 内部で Vega-Lite spec を JSON 化し、HTML テンプレに埋め込む。Mermaid DAG も対応。|
 | **モデル拡張容易** | 新しいモデル/分析を追加したら `Reportable` instance を 1 つ書くだけ。|
-| **既存資産の流用** | `hvega` (Vega-Lite spec)、`Viz.Assets` (オフライン JS バンドル) を再利用。|
-| **AnalysisReport の後継** | `Viz.AnalysisReport` (非推奨) を置き換える今後の標準。LM/GLM/GLMM/GP/HBM 含む全モデルの詳細レポートは ReportBuilder + `Reportable` instance で構築する方針。|
+| **既存資産の流用** | `hvega` (Vega-Lite spec)、`Hanalyze.Viz.Assets` (オフライン JS バンドル) を再利用。|
+| **AnalysisReport の後継** | `Hanalyze.Viz.AnalysisReport` (非推奨) を置き換える今後の標準。LM/GLM/GLMM/GP/HBM 含む全モデルの詳細レポートは ReportBuilder + `Reportable` instance で構築する方針。|
 
 ### なぜ別モジュールが必要だったか
 
-既存の `Viz.AnalysisReport` (~2000 行) は 5 種類のモデル
+既存の `Hanalyze.Viz.AnalysisReport` (~2000 行) は 5 種類のモデル
 (`ModelFit = RegFit | MixFit | GPFit | HBMFit | NoRegFit`) に
 特化した sum-type ベースで、新モデルを増やすたびに本体を編集する必要があった。
 ここに `ridge / kernel / spline / RFF / RobustGP / quantile / gam / rf` の
@@ -147,24 +147,24 @@ class Reportable a where
            -> [ReportSection]
 ```
 
-### 提供 instance (`Viz.ReportInstances`)
+### 提供 instance (`Hanalyze.Viz.ReportInstances`)
 
 | 型 | モジュール | 含まれるセクション |
 |---|---|---|
-| `LMReport`       | `Viz.ReportInstances` | DataOverview / ModelOverview / Collapsible(回帰結果: StatRow + 係数 + 散布図 + 残差) / InteractiveMulti |
-| `GLMReport`      | `Viz.ReportInstances` | DataOverview / ModelOverviewLink / Collapsible(回帰結果: StatRow + 係数 + 散布図 + 残差) / InteractiveMulti |
-| `GLMMReport`     | `Viz.ReportInstances` | DataOverview / ModelOverviewLink / Collapsible(R²/σ²_u/σ²/ICC + 固定効果 + **BLUP 表** + 残差) / InteractiveMulti |
-| `GPReport`       | `Viz.ReportInstances` | DataOverview / ModelOverviewExtras (カーネル) / Collapsible(ハイパーパラメータ + LML + 残差) / InteractiveLM (信頼帯付き) |
-| `HBMLinearReport`| `Viz.ReportInstances` | DataOverview / ModelOverviewExtras (サンプラー + DAG) / Collapsible(R²/受容率 + 事後平均係数 + **MCMC 診断 (KDE/トレース/自己相関/ペア)** + 残差) / InteractiveLM (信用区間付き) |
-| `HBMReport`      | `Viz.ReportInstances` | **一般 HBM** (multi-x / 非線形対応)。ユーザーが `hbmrPostSummaryG` と `hbmrYHatG`、必要なら `hbmrRibbonG` (`HBMRibbon`) を渡す。サンプラー名・DAG・ペア散布対象も自由に設定可能。 |
-| `QRFit`          | `Model.Quantile`    | DataOverview / ModelOverview / Collapsible(τ-分位点 + Pseudo R¹ + Pinball + 係数 + 散布図 + 残差) |
-| `GAMFit`         | `Model.GAM`         | DataOverview / ModelOverview / Collapsible(R²/degree/knots + **特徴ごとの partial effect カード** + 残差) |
-| `RFReport`       | `Viz.ReportInstances` | DataOverview / ModelOverview / Collapsible(R² + Trees/Features + **Feature importance** + 残差) |
-| `RegFit`         | `Model.Regularized` | DataOverview / ModelOverview / Coefficients (β + R²) / KeyValue (penalty/λ/sparsity) / FitScatter / Residuals |
-| `SplineFit`      | `Model.Spline`      | DataOverview / ModelOverview / KeyValue (kind/knots) / FitScatter / Residuals |
-| `KernelRidgeFit` | `Model.Kernel`      | DataOverview / ModelOverview / KeyValue (kernel/h/λ) / FitScatter / Residuals |
-| `RFFRidgeFit`    | `Model.RFF`         | DataOverview / ModelOverview / KeyValue (D/ℓ/σ_f/λ) / FitScatter / Residuals |
-| `RobustGPFit`    | `Model.GPRobust`    | DataOverview / ModelOverview / KeyValue (kernel/likelihood/IRLS iter) |
+| `LMReport`       | `Hanalyze.Viz.ReportInstances` | DataOverview / ModelOverview / Collapsible(回帰結果: StatRow + 係数 + 散布図 + 残差) / InteractiveMulti |
+| `GLMReport`      | `Hanalyze.Viz.ReportInstances` | DataOverview / ModelOverviewLink / Collapsible(回帰結果: StatRow + 係数 + 散布図 + 残差) / InteractiveMulti |
+| `GLMMReport`     | `Hanalyze.Viz.ReportInstances` | DataOverview / ModelOverviewLink / Collapsible(R²/σ²_u/σ²/ICC + 固定効果 + **BLUP 表** + 残差) / InteractiveMulti |
+| `GPReport`       | `Hanalyze.Viz.ReportInstances` | DataOverview / ModelOverviewExtras (カーネル) / Collapsible(ハイパーパラメータ + LML + 残差) / InteractiveLM (信頼帯付き) |
+| `HBMLinearReport`| `Hanalyze.Viz.ReportInstances` | DataOverview / ModelOverviewExtras (サンプラー + DAG) / Collapsible(R²/受容率 + 事後平均係数 + **MCMC 診断 (KDE/トレース/自己相関/ペア)** + 残差) / InteractiveLM (信用区間付き) |
+| `HBMReport`      | `Hanalyze.Viz.ReportInstances` | **一般 HBM** (multi-x / 非線形対応)。ユーザーが `hbmrPostSummaryG` と `hbmrYHatG`、必要なら `hbmrRibbonG` (`HBMRibbon`) を渡す。サンプラー名・DAG・ペア散布対象も自由に設定可能。 |
+| `QRFit`          | `Hanalyze.Model.Quantile`    | DataOverview / ModelOverview / Collapsible(τ-分位点 + Pseudo R¹ + Pinball + 係数 + 散布図 + 残差) |
+| `GAMFit`         | `Hanalyze.Model.GAM`         | DataOverview / ModelOverview / Collapsible(R²/degree/knots + **特徴ごとの partial effect カード** + 残差) |
+| `RFReport`       | `Hanalyze.Viz.ReportInstances` | DataOverview / ModelOverview / Collapsible(R² + Trees/Features + **Feature importance** + 残差) |
+| `RegFit`         | `Hanalyze.Model.Regularized` | DataOverview / ModelOverview / Coefficients (β + R²) / KeyValue (penalty/λ/sparsity) / FitScatter / Residuals |
+| `SplineFit`      | `Hanalyze.Model.Spline`      | DataOverview / ModelOverview / KeyValue (kind/knots) / FitScatter / Residuals |
+| `KernelRidgeFit` | `Hanalyze.Model.Kernel`      | DataOverview / ModelOverview / KeyValue (kernel/h/λ) / FitScatter / Residuals |
+| `RFFRidgeFit`    | `Hanalyze.Model.RFF`         | DataOverview / ModelOverview / KeyValue (D/ℓ/σ_f/λ) / FitScatter / Residuals |
+| `RobustGPFit`    | `Hanalyze.Model.GPRobust`    | DataOverview / ModelOverview / KeyValue (kernel/likelihood/IRLS iter) |
 
 `LMReport` / `GLMReport` のラッパ型:
 
@@ -216,7 +216,7 @@ main = do
 
 | 関数 | 内容 |
 |---|---|
-| `secMCMCDiagnostics title params chain`           | KDE + トレース (`Viz.MCMC.mcmcDiagnostics` 経由) |
+| `secMCMCDiagnostics title params chain`           | KDE + トレース (`Hanalyze.Viz.MCMC.mcmcDiagnostics` 経由) |
 | `secMCMCDiagnosticsMulti title params chains`     | 多チェーン版 (チェーン色分け) |
 | `secMCMCAutocorr title maxLag params chain`       | 自己相関バーチャート |
 | `secMCMCPair title pa pb chain`                   | 2 パラメータのペアスキャッター |
@@ -438,9 +438,9 @@ renderReport "rgp.html" cfg (toReport cfg df ["x"] "y" fit)
 
 レポート: Data / Model / KeyValue (kernel/likelihood/IRLS iterations)。fit 自体は scatter/residual 表示なし (生 GP モデルの可視化は別途必要)。
 
-### タグチ分析 — `Viz.Taguchi`
+### タグチ分析 — `Hanalyze.Viz.Taguchi`
 
-タグチ分析は固有の構造 (要因効果 + SN 比) があるため、専用の `Viz.Taguchi.renderTaguchiReport` を持つ:
+タグチ分析は固有の構造 (要因効果 + SN 比) があるため、専用の `Hanalyze.Viz.Taguchi.renderTaguchiReport` を持つ:
 
 ```haskell
 import qualified Design.Orthogonal as OA
@@ -485,10 +485,10 @@ hanalyze taguchi  analyze L9 -f ... --csv ... --report
 `--report` の引数を省略すると `<subcommand>.html` (例: `ridge.html`) になる。
 明示する場合: `--report path/to/myreport.html`。
 
-**全サブコマンドが `Viz.ReportBuilder` 経路** で動作。`regress` も
+**全サブコマンドが `Hanalyze.Viz.ReportBuilder` 経路** で動作。`regress` も
 `app/Main.hs` の `cliRegressSections` / `cliMixedSections` / `cliGPSections` /
 `cliHBMSections` を経由して `RB.renderReport` で生成される。
-`Viz.AnalysisReport` は非推奨だがレガシーとして残置。
+`Hanalyze.Viz.AnalysisReport` は非推奨だがレガシーとして残置。
 
 ---
 
@@ -547,12 +547,12 @@ renderReport "out.html" cfg (baseSections ++ extra)
 
 ---
 
-## 8. 既存 `Viz.AnalysisReport` との関係
+## 8. 既存 `Hanalyze.Viz.AnalysisReport` との関係
 
-`Viz.AnalysisReport` は **非推奨 (deprecated)**。`{-# DEPRECATED #-}` プラグマ付きで、import すると GHC 警告が出る。
-今後の標準は `Viz.ReportBuilder`。
+`Hanalyze.Viz.AnalysisReport` は **非推奨 (deprecated)**。`{-# DEPRECATED #-}` プラグマ付きで、import すると GHC 警告が出る。
+今後の標準は `Hanalyze.Viz.ReportBuilder`。
 
-| 項目 | `Viz.AnalysisReport` (非推奨) | `Viz.ReportBuilder` (★ 標準) |
+| 項目 | `Hanalyze.Viz.AnalysisReport` (非推奨) | `Hanalyze.Viz.ReportBuilder` (★ 標準) |
 |---|---|---|
 | 対象 | LM / GLM / GLMM / GP / HBM 専用 | 全モデル (RegFit/Spline/Kernel/RFF/RobustGP に instance 済み + LM/GLM/GLMM/GP/HBM は instance 化予定) |
 | 設計 | sum-type `ModelFit` (~2000 行、密結合) | section 並び + `Reportable` typeclass (拡張容易) |
@@ -565,7 +565,7 @@ renderReport "out.html" cfg (baseSections ++ extra)
 **選択指針**:
 - 新規実装 → 必ず `ReportBuilder`
 - `regress` CLI も `ReportBuilder` 経路で動作する
-- HBM の MCMC 診断のみ単独で見たい → `Viz.Report`
+- HBM の MCMC 診断のみ単独で見たい → `Hanalyze.Viz.Report`
 
 ---
 
@@ -597,7 +597,7 @@ myChart = toVegaLite
 ### ファイルサイズ
 
 各レポートは **800-870 KB** ほど (Vega-Lite + Mermaid アセット込み)。
-オフライン動作させる代償として大きめ。アセットは `Viz.Assets` で
+オフライン動作させる代償として大きめ。アセットは `Hanalyze.Viz.Assets` で
 ハードコードされている。
 
 ### 数値フォーマット
@@ -614,7 +614,7 @@ Mermaid は CDN から取得 (オフラインでない場合のみ動作):
 secMermaid "graph LR\n  A[mu] --> B[theta]\n  B --> C[y]"
 ```
 
-オフライン化が必要なら `Viz.ModelGraph` の出力 (HBM の DAG 自動抽出) を
+オフライン化が必要なら `Hanalyze.Viz.ModelGraph` の出力 (HBM の DAG 自動抽出) を
 HTML 文字列に整形して `secHtml` に渡す方法もある。
 
 ### Reportable で扱えない情報
@@ -639,7 +639,7 @@ renderReport path cfg augmented
 
 ### LM/GLM/GLMM/GP/HBM の Reportable instance
 
-これらは現状 `Viz.AnalysisReport` 専用 (sum-type ベース)。比較デモ
+これらは現状 `Hanalyze.Viz.AnalysisReport` 専用 (sum-type ベース)。比較デモ
 `AnalysisCompareDemo.hs` では各モデルから section を直接構築する例を
 示しているので、Reportable instance 化したい場合はそれを参考にできる。
 
@@ -663,4 +663,4 @@ RB.secInteractiveLM "Interactive prediction" xc yc xs ys credibleBand range
 - [01-visualization.ja.md](01-visualization.ja.md) — 単発プロット (棒グラフ、ヒストグラム、散布図、Mermaid DAG 等)
 - [../doe/02-orthogonal-taguchi.ja.md](../doe/02-orthogonal-taguchi.ja.md) — 直交表とタグチメソッド (Viz.Taguchi 含む)
 - [../regression/06-randomforest.ja.md](../regression/06-randomforest.ja.md) — Quantile / GAM / Random Forest
-- 既存 `Viz.AnalysisReport` (LM/GLM/GLMM/GP/HBM 専用) — ソース読みでの理解推奨
+- 既存 `Hanalyze.Viz.AnalysisReport` (LM/GLM/GLMM/GP/HBM 専用) — ソース読みでの理解推奨

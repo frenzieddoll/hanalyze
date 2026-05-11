@@ -11,10 +11,10 @@
 
 | サンプラー | モジュール | 向いているケース | 主な調整パラメータ |
 |---|---|---|---|
-| Metropolis-Hastings | `MCMC.MH` (`metropolis`) | 動作確認・シンプルモデル | `mcmcStepSizes` (受容率 20-50%) |
-| HMC | `MCMC.HMC` (`hmc`) | 連続パラメータ・中規模 | `hmcStepSize`, `hmcLeapfrogSteps` |
-| **NUTS** | `MCMC.NUTS` (`nuts`) | **ほぼ全ケースで推奨** | `nutsStepSize` (他は dual averaging で自動調整) |
-| Gibbs / ハイブリッド | `MCMC.Gibbs` (`gibbsMH`) | 共役モデル (超高速) | 不要 (直接サンプリング) |
+| Metropolis-Hastings | `Hanalyze.MCMC.MH` (`metropolis`) | 動作確認・シンプルモデル | `mcmcStepSizes` (受容率 20-50%) |
+| HMC | `Hanalyze.MCMC.HMC` (`hmc`) | 連続パラメータ・中規模 | `hmcStepSize`, `hmcLeapfrogSteps` |
+| **NUTS** | `Hanalyze.MCMC.NUTS` (`nuts`) | **ほぼ全ケースで推奨** | `nutsStepSize` (他は dual averaging で自動調整) |
+| Gibbs / ハイブリッド | `Hanalyze.MCMC.Gibbs` (`gibbsMH`) | 共役モデル (超高速) | 不要 (直接サンプリング) |
 
 HMC/NUTS は `Numeric.AD.Mode.Forward` による正確な勾配を使うため、
 数値微分版に比べて精度・速度ともに優れます。

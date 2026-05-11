@@ -10,7 +10,7 @@
 hanalyze の主要回帰モデルはすべて **「多出力 (Y :: Matrix n×q) を主 API、
 1 出力は 1 列行列化して委譲する薄いラッパ」** という統一ポリシで実装されています。
 
-- 共通基盤: `Model.MultiOutput` (`asMultiY` / `fromMultiY` / `r2Multi` / `rmseMulti` / `mseMulti`)
+- 共通基盤: `Hanalyze.Model.MultiOutput` (`asMultiY` / `fromMultiY` / `r2Multi` / `rmseMulti` / `mseMulti`)
 - 各モデルに `fitXMulti` / `XFitMulti` 系列を提供
 - q=1 と q>1 で旧 API と数値一致 (テスト 10 件で検証済)
 
@@ -18,23 +18,23 @@ hanalyze の主要回帰モデルはすべて **「多出力 (Y :: Matrix n×q) 
 
 | モジュール | 単出力 | 多出力 (主 API) |
 |---|---|---|
-| `Model.LM`           | `fitLMVec`            | `fitLM` (元から多出力対応) |
-| `Model.MultiLM`      | —                     | `fitMultiLM` + 残差共分散 Σ |
-| `Model.GLM`          | `fitGLM`              | `fitGLMMulti` (列ごと IRLS) |
-| `Model.GLMM`         | `fitLME` / `fitGLMM`  | `fitLMEMulti` / `fitGLMMMulti` |
-| `Model.Spline`       | `fitSpline`           | `fitSplineMulti` (基底共有) |
-| `Model.Kernel`       | `kernelRidge` / `nwRegression` | `kernelRidgeMulti` / `nwRegressionMulti` |
-| `Model.Regularized`  | `fitRegularized`      | `fitRegularizedMulti` (Ridge/OLS は閉形式行列) |
-| `Model.RFF`          | `rffRidge` / `rffRidgeMV` | `rffRidgeMulti` / `rffRidgeMVMulti` |
-| `Model.GP`           | `fitGP`               | `fitGPMulti` (Ky⁻¹ 共有、分散も共有) |
-| `Model.GPRobust`     | `fitGPRobust`         | `fitGPRobustMulti` (列ごと IRLS、K 共有) |
-| `Model.MultiGP`      | —                     | `fitMultiGP` (出力ごと別 HP の Independent GPs) |
-| `Model.Multivariate` | —                     | RRR / PLS / CCA |
-| `Model.HBM`          | `observe` (1 列)      | `observeColumns` ヘルパ + `MvNormal` 観測 |
+| `Hanalyze.Model.LM`           | `fitLMVec`            | `fitLM` (元から多出力対応) |
+| `Hanalyze.Model.MultiLM`      | —                     | `fitMultiLM` + 残差共分散 Σ |
+| `Hanalyze.Model.GLM`          | `fitGLM`              | `fitGLMMulti` (列ごと IRLS) |
+| `Hanalyze.Model.GLMM`         | `fitLME` / `fitGLMM`  | `fitLMEMulti` / `fitGLMMMulti` |
+| `Hanalyze.Model.Spline`       | `fitSpline`           | `fitSplineMulti` (基底共有) |
+| `Hanalyze.Model.Kernel`       | `kernelRidge` / `nwRegression` | `kernelRidgeMulti` / `nwRegressionMulti` |
+| `Hanalyze.Model.Regularized`  | `fitRegularized`      | `fitRegularizedMulti` (Ridge/OLS は閉形式行列) |
+| `Hanalyze.Model.RFF`          | `rffRidge` / `rffRidgeMV` | `rffRidgeMulti` / `rffRidgeMVMulti` |
+| `Hanalyze.Model.GP`           | `fitGP`               | `fitGPMulti` (Ky⁻¹ 共有、分散も共有) |
+| `Hanalyze.Model.GPRobust`     | `fitGPRobust`         | `fitGPRobustMulti` (列ごと IRLS、K 共有) |
+| `Hanalyze.Model.MultiGP`      | —                     | `fitMultiGP` (出力ごと別 HP の Independent GPs) |
+| `Hanalyze.Model.Multivariate` | —                     | RRR / PLS / CCA |
+| `Hanalyze.Model.HBM`          | `observe` (1 列)      | `observeColumns` ヘルパ + `MvNormal` 観測 |
 
 ---
 
-## 1. Multivariate Linear Regression (`Model.MultiLM`)
+## 1. Multivariate Linear Regression (`Hanalyze.Model.MultiLM`)
 
 残差共分散 Σ も推定したい場合の専用 API:
 
@@ -91,7 +91,7 @@ let yPred = predictRFFRidgeMulti mf xListNew
 
 ---
 
-## 3. RRR / PLS / CCA (`Model.Multivariate`)
+## 3. RRR / PLS / CCA (`Hanalyze.Model.Multivariate`)
 
 ```haskell
 import Model.Multivariate
@@ -114,7 +114,7 @@ let ccaFit = cca xMat yMat
 
 ## 4. Multi-output GP
 
-### 共有カーネル版 (高速、`Model.GP.fitGPMulti`)
+### 共有カーネル版 (高速、`Hanalyze.Model.GP.fitGPMulti`)
 全 q 出力で同じカーネルとハイパーパラメータを共有 → Cholesky 1 回:
 
 ```haskell
@@ -126,7 +126,7 @@ let (meanMat, varList) = GP.fitGPMulti model trainX trainYMat testX
 -- varList :: [Double] (length m, q 出力で共有)
 ```
 
-### 出力ごと独立 HP 版 (`Model.MultiGP`)
+### 出力ごと独立 HP 版 (`Hanalyze.Model.MultiGP`)
 各出力に独自のハイパーパラメータを学習したい場合:
 
 ```haskell
@@ -138,7 +138,7 @@ let res = fitMultiGP RBF trainX trainYs testX
 
 ---
 
-## 5. Robust Multi-output GP (`Model.GPRobust`)
+## 5. Robust Multi-output GP (`Hanalyze.Model.GPRobust`)
 
 StudentT / Cauchy 観測尤度で外れ値耐性、列ごと IRLS:
 

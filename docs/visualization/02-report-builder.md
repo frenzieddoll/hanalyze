@@ -1,11 +1,11 @@
-# HTML Reports — `Viz.ReportBuilder` and `Reportable`
+# HTML Reports — `Hanalyze.Viz.ReportBuilder` and `Reportable`
 
 > 🌐 **English** | [日本語](02-report-builder.ja.md)
 
 > Related: [01-visualization.md](01-visualization.md) (one-shot bar / histogram / scatter plots),
-> `Viz.AnalysisReport` (**deprecated** — LM/GLM/GLMM/GP/HBM-specific sum-type, kept for `regress --report` legacy compatibility)
+> `Hanalyze.Viz.AnalysisReport` (**deprecated** — LM/GLM/GLMM/GP/HBM-specific sum-type, kept for `regress --report` legacy compatibility)
 >
-> **Status**: `Viz.ReportBuilder` is the going-forward standard. `Viz.AnalysisReport` carries a `{-# DEPRECATED #-}` pragma; importers get a GHC warning. New models / visualizations must be implemented on top of `ReportBuilder`.
+> **Status**: `Hanalyze.Viz.ReportBuilder` is the going-forward standard. `Hanalyze.Viz.AnalysisReport` carries a `{-# DEPRECATED #-}` pragma; importers get a GHC warning. New models / visualizations must be implemented on top of `ReportBuilder`.
 
 ## Table of contents
 
@@ -16,14 +16,14 @@
 5. [Per-model usage](#5-per-model-usage)
 6. [CLI usage](#6-cli-usage)
 7. [Custom reports](#7-custom-reports)
-8. [Relationship to legacy `Viz.AnalysisReport`](#8-relationship-to-legacy-vizanalysisreport)
+8. [Relationship to legacy `Hanalyze.Viz.AnalysisReport`](#8-relationship-to-legacy-vizanalysisreport)
 9. [Common patterns and pitfalls](#9-common-patterns-and-pitfalls)
 
 ---
 
 ## 1. Overview & design
 
-`Viz.ReportBuilder` is a **compositional HTML report builder**. You define an
+`Hanalyze.Viz.ReportBuilder` is a **compositional HTML report builder**. You define an
 analysis as a list of `ReportSection` values; `renderReport` produces a single
 self-contained HTML file with Vega-Lite assets embedded.
 
@@ -34,12 +34,12 @@ self-contained HTML file with Vega-Lite assets embedded.
 | **Composition** | Build `[ReportSection]`. Each section is an independent HTML chunk. |
 | **Format independent** | Internally Vega-Lite specs are JSON-encoded into an HTML template. Mermaid DAGs are also supported. |
 | **Easy to extend** | Adding a new model = one `Reportable` instance. |
-| **Reuse existing assets** | Built on top of `hvega` and `Viz.Assets` (offline JS bundle). |
+| **Reuse existing assets** | Built on top of `hvega` and `Hanalyze.Viz.Assets` (offline JS bundle). |
 | **Successor of AnalysisReport** | All standard models (LM/GLM/GLMM/GP/HBM and beyond) live here via `Reportable` instances. |
 
 ### Why a separate module was needed
 
-The legacy `Viz.AnalysisReport` (~2000 LoC) is built on a sum type
+The legacy `Hanalyze.Viz.AnalysisReport` (~2000 LoC) is built on a sum type
 `ModelFit = RegFit | MixFit | GPFit | HBMFit | NoRegFit`, requiring source
 edits to add each new model. Adding ridge / kernel / spline / RFF / RobustGP /
 quantile / GAM / RF would not have scaled. The compositional approach lets
@@ -98,7 +98,7 @@ data SmoothCurve = SmoothCurve
 
 | Function | Purpose |
 |---|---|
-| `secMCMCDiagnostics title params chain`           | KDE + trace (via `Viz.MCMC.mcmcDiagnostics`) |
+| `secMCMCDiagnostics title params chain`           | KDE + trace (via `Hanalyze.Viz.MCMC.mcmcDiagnostics`) |
 | `secMCMCDiagnosticsMulti title params chains`     | Multi-chain version (chains color-coded) |
 | `secMCMCAutocorr title maxLag params chain`       | Autocorrelation bars |
 | `secMCMCPair title pa pb chain`                   | Pair scatter for two parameters |
@@ -174,24 +174,24 @@ class Reportable a where
            -> [ReportSection]
 ```
 
-### Provided instances (`Viz.ReportInstances`)
+### Provided instances (`Hanalyze.Viz.ReportInstances`)
 
 | Type | Module | Sections produced |
 |---|---|---|
-| `LMReport`        | `Viz.ReportInstances` | DataOverview / ModelOverview / Collapsible(StatRow + coefficients + scatter + residuals) / InteractiveMulti |
-| `GLMReport`       | `Viz.ReportInstances` | DataOverview / ModelOverviewLink / Collapsible(StatRow + coefficients + scatter + residuals) / InteractiveMulti |
-| `GLMMReport`      | `Viz.ReportInstances` | DataOverview / ModelOverviewLink / Collapsible(R²/σ²_u/σ²/ICC + fixed effects + **BLUP table** + residuals) / InteractiveMulti |
-| `GPReport`        | `Viz.ReportInstances` | DataOverview / ModelOverviewExtras (kernel) / Collapsible(hyperparameters + LML + residuals) / InteractiveLM (with credible band) |
-| `HBMLinearReport` | `Viz.ReportInstances` | DataOverview / ModelOverviewExtras (sampler + DAG) / Collapsible(R²/accept-rate + posterior means + **MCMC diagnostics** + residuals) / InteractiveLM (with credible ribbon) |
-| `HBMReport`       | `Viz.ReportInstances` | General HBM (multi-x / non-linear). User-supplied posterior summary + ribbon function. |
-| `QRFit`           | `Model.Quantile`    | DataOverview / ModelOverview / Collapsible(τ + Pseudo R¹ + Pinball + coefficients + scatter + residuals) |
-| `GAMFit`          | `Model.GAM`         | DataOverview / ModelOverview / Collapsible(R²/degree/knots + **per-feature partial-effect cards** + residuals) |
-| `RFReport`        | `Viz.ReportInstances` | DataOverview / ModelOverview / Collapsible(R² + Trees/Features + **Feature importance** + residuals) |
-| `RegFit`          | `Model.Regularized` | DataOverview / ModelOverview / Coefficients (β + R²) / KeyValue (penalty/λ/sparsity) / FitScatter / Residuals |
-| `SplineFit`       | `Model.Spline`      | DataOverview / ModelOverview / KeyValue (kind/knots) / FitScatter / Residuals |
-| `KernelRidgeFit`  | `Model.Kernel`      | DataOverview / ModelOverview / KeyValue (kernel/h/λ) / FitScatter / Residuals |
-| `RFFRidgeFit`     | `Model.RFF`         | DataOverview / ModelOverview / KeyValue (D/ℓ/σ_f/λ) / FitScatter / Residuals |
-| `RobustGPFit`     | `Model.GPRobust`    | DataOverview / ModelOverview / KeyValue (kernel/likelihood/IRLS iterations) |
+| `LMReport`        | `Hanalyze.Viz.ReportInstances` | DataOverview / ModelOverview / Collapsible(StatRow + coefficients + scatter + residuals) / InteractiveMulti |
+| `GLMReport`       | `Hanalyze.Viz.ReportInstances` | DataOverview / ModelOverviewLink / Collapsible(StatRow + coefficients + scatter + residuals) / InteractiveMulti |
+| `GLMMReport`      | `Hanalyze.Viz.ReportInstances` | DataOverview / ModelOverviewLink / Collapsible(R²/σ²_u/σ²/ICC + fixed effects + **BLUP table** + residuals) / InteractiveMulti |
+| `GPReport`        | `Hanalyze.Viz.ReportInstances` | DataOverview / ModelOverviewExtras (kernel) / Collapsible(hyperparameters + LML + residuals) / InteractiveLM (with credible band) |
+| `HBMLinearReport` | `Hanalyze.Viz.ReportInstances` | DataOverview / ModelOverviewExtras (sampler + DAG) / Collapsible(R²/accept-rate + posterior means + **MCMC diagnostics** + residuals) / InteractiveLM (with credible ribbon) |
+| `HBMReport`       | `Hanalyze.Viz.ReportInstances` | General HBM (multi-x / non-linear). User-supplied posterior summary + ribbon function. |
+| `QRFit`           | `Hanalyze.Model.Quantile`    | DataOverview / ModelOverview / Collapsible(τ + Pseudo R¹ + Pinball + coefficients + scatter + residuals) |
+| `GAMFit`          | `Hanalyze.Model.GAM`         | DataOverview / ModelOverview / Collapsible(R²/degree/knots + **per-feature partial-effect cards** + residuals) |
+| `RFReport`        | `Hanalyze.Viz.ReportInstances` | DataOverview / ModelOverview / Collapsible(R² + Trees/Features + **Feature importance** + residuals) |
+| `RegFit`          | `Hanalyze.Model.Regularized` | DataOverview / ModelOverview / Coefficients (β + R²) / KeyValue (penalty/λ/sparsity) / FitScatter / Residuals |
+| `SplineFit`       | `Hanalyze.Model.Spline`      | DataOverview / ModelOverview / KeyValue (kind/knots) / FitScatter / Residuals |
+| `KernelRidgeFit`  | `Hanalyze.Model.Kernel`      | DataOverview / ModelOverview / KeyValue (kernel/h/λ) / FitScatter / Residuals |
+| `RFFRidgeFit`     | `Hanalyze.Model.RFF`         | DataOverview / ModelOverview / KeyValue (D/ℓ/σ_f/λ) / FitScatter / Residuals |
+| `RobustGPFit`     | `Hanalyze.Model.GPRobust`    | DataOverview / ModelOverview / KeyValue (kernel/likelihood/IRLS iterations) |
 
 ### Library usage
 
@@ -269,7 +269,7 @@ fully general `HBMReport`.
 
 ### Taguchi
 
-Taguchi has its own `Viz.Taguchi.renderTaguchiReport` due to its specialized
+Taguchi has its own `Hanalyze.Viz.Taguchi.renderTaguchiReport` due to its specialized
 factor-effect / SN-ratio structure. CLI:
 `hanalyze taguchi analyze L9 -f ... --csv ... --report taguchi.html`.
 
@@ -291,7 +291,7 @@ hanalyze taguchi  analyze L9 -f ... --csv ... --report
 ```
 
 Omitting the report path uses `<subcommand>.html`. **All subcommands
-render through `Viz.ReportBuilder`**. `Viz.AnalysisReport` remains in
+render through `Hanalyze.Viz.ReportBuilder`**. `Hanalyze.Viz.AnalysisReport` remains in
 tree as a deprecated legacy module.
 
 ---
@@ -346,12 +346,12 @@ Order is preserved.
 
 ---
 
-## 8. Relationship to legacy `Viz.AnalysisReport`
+## 8. Relationship to legacy `Hanalyze.Viz.AnalysisReport`
 
-`Viz.AnalysisReport` is **deprecated** (`{-# DEPRECATED #-}` pragma — importers
-get a GHC warning). `Viz.ReportBuilder` is the going-forward standard.
+`Hanalyze.Viz.AnalysisReport` is **deprecated** (`{-# DEPRECATED #-}` pragma — importers
+get a GHC warning). `Hanalyze.Viz.ReportBuilder` is the going-forward standard.
 
-| Aspect | `Viz.AnalysisReport` (deprecated) | `Viz.ReportBuilder` (★ standard) |
+| Aspect | `Hanalyze.Viz.AnalysisReport` (deprecated) | `Hanalyze.Viz.ReportBuilder` (★ standard) |
 |---|---|---|
 | Coverage | LM / GLM / GLMM / GP / HBM only | All models (RegFit / Spline / Kernel / RFF / RobustGP, LM / GLM / GLMM / GP / HBM, Quantile / GAM / RF) |
 | Design | Sum type `ModelFit` (~2000 LoC, tightly coupled) | Section list + `Reportable` typeclass (easy to extend) |
@@ -364,7 +364,7 @@ get a GHC warning). `Viz.ReportBuilder` is the going-forward standard.
 **Selection guide**:
 - New code → always `ReportBuilder`.
 - Legacy `regress --report` runs through `ReportBuilder`.
-- HBM-only MCMC diagnostics → `Viz.Report` (a focused MCMC-only report).
+- HBM-only MCMC diagnostics → `Hanalyze.Viz.Report` (a focused MCMC-only report).
 
 ---
 
@@ -373,7 +373,7 @@ get a GHC warning). `Viz.ReportBuilder` is the going-forward standard.
 ### File size
 
 Each report is **~800-870 KB** (Vega-Lite + Mermaid assets included). The cost
-buys offline operation; assets are hardcoded in `Viz.Assets`.
+buys offline operation; assets are hardcoded in `Hanalyze.Viz.Assets`.
 
 ### Number formatting
 
@@ -384,7 +384,7 @@ are displayed as integers (`150`, not `150.0`). For custom formatting use
 ### Mermaid diagrams
 
 Mermaid is fetched from a CDN (offline use requires an internet connection
-*or* using `Viz.Assets`-based DAG output). For HBM model graphs, `Viz.ModelGraph`
+*or* using `Hanalyze.Viz.Assets`-based DAG output). For HBM model graphs, `Hanalyze.Viz.ModelGraph`
 auto-extracts dependencies from the Track interpretation and produces a
 Mermaid string suitable for `secMermaid` (or `secModelOverviewExtras` mDag arg).
 
@@ -412,5 +412,5 @@ renderReport path cfg augmented
 ## Related documents
 
 - [01-visualization.md](01-visualization.md) — single-shot plots (bar, histogram, scatter, Mermaid DAG)
-- [../doe/02-orthogonal-taguchi.md](../doe/02-orthogonal-taguchi.md) — orthogonal arrays and Taguchi method (incl. `Viz.Taguchi`)
+- [../doe/02-orthogonal-taguchi.md](../doe/02-orthogonal-taguchi.md) — orthogonal arrays and Taguchi method (incl. `Hanalyze.Viz.Taguchi`)
 - [../regression/06-randomforest.md](../regression/06-randomforest.md) — Quantile / GAM / Random Forest

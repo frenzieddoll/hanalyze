@@ -15,7 +15,7 @@
 | 制約 | 無制約 / 制約付き (等式/不等式) |
 | 確定性 | 決定的 / 確率的 |
 
-`Optim.*` のカバー範囲は **連続・無制約・決定的または確率的** の単目的最適化。
+`Hanalyze.Optim.*` のカバー範囲は **連続・無制約・決定的または確率的** の単目的最適化。
 制約付きは現状では box-constraint (DE/CMA-ES の境界反射) のみ。
 
 ---
@@ -44,7 +44,7 @@ n+1 個の頂点 (= n 次元の単体) を維持し、各反復で最悪点 $x_{
 
 ### hanalyze 実装
 
-`Optim.NelderMead.runNelderMead`。`nmInitStep` で初期 simplex 幅を調整。
+`Hanalyze.Optim.NelderMead.runNelderMead`。`nmInitStep` で初期 simplex 幅を調整。
 
 ---
 
@@ -94,7 +94,7 @@ return d = -r                          (探索方向)
 
 ### hanalyze 実装
 
-`Optim.LBFGS.runLBFGS` (解析勾配) / `runLBFGSNumeric` (中央差分)。
+`Hanalyze.Optim.LBFGS.runLBFGS` (解析勾配) / `runLBFGSNumeric` (中央差分)。
 
 ---
 
@@ -127,7 +127,7 @@ parabolic step:
 
 ### hanalyze 実装
 
-`Optim.LineSearch.brent`、`goldenSection` (純粋黄金分割版もあり)。
+`Hanalyze.Optim.LineSearch.brent`、`goldenSection` (純粋黄金分割版もあり)。
 
 ---
 
@@ -151,7 +151,7 @@ parabolic step:
 
 ### hanalyze 実装
 
-`Optim.DifferentialEvolution.runDE`。境界外は反射 (`clipBound`)。
+`Hanalyze.Optim.DifferentialEvolution.runDE`。境界外は反射 (`clipBound`)。
 
 ---
 
@@ -180,7 +180,7 @@ DE は微分不要だが共分散構造を活用しない。**CMA-ES** は集団
 
 ### hanalyze 実装
 
-`Optim.CMAES.runCMAES`。簡易版で sphere 5D / Rastrigin 5D 程度は通る。
+`Hanalyze.Optim.CMAES.runCMAES`。簡易版で sphere 5D / Rastrigin 5D 程度は通る。
 フルランク CMA-ES は別実装が必要。
 
 ---

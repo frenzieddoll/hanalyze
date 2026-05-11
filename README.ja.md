@@ -25,92 +25,92 @@
 
 機能を**ジャンル別**に整理。各機能は専用 docs (使い方) + theory docs (理論) にリンク。
 
-### 統計推測 (`Stat.*`)
+### 統計推測 (`Hanalyze.Stat.*`)
 
 | 機能 | モジュール | 使い方 | 理論 |
 |---|---|---|---|
-| 仮説検定 12 種 (t/χ²/ANOVA/Wilcoxon/KS/Shapiro/Levene/Bartlett/...) | `Stat.Test` | [stat/01-test.ja.md](docs/stat/01-test.ja.md) | — |
-| 多重比較補正 (Bonferroni/Holm/BH/BY) | `Stat.MultipleTesting` | [stat/06-multipletesting.ja.md](docs/stat/06-multipletesting.ja.md) | — |
-| Bootstrap CI / 並べ替え検定 | `Stat.Bootstrap` | [stat/07-bootstrap.ja.md](docs/stat/07-bootstrap.ja.md) | — |
-| 効果量 + Power 解析 (Cohen's d/η²/Cramér V/n推定) | `Stat.Effect` | [stat/09-effect.ja.md](docs/stat/09-effect.ja.md) | — |
-| Cross-validation (k-fold/stratified/LOO) + Grid search | `Stat.CV` | [stat/04-cv.ja.md](docs/stat/04-cv.ja.md) | — |
+| 仮説検定 12 種 (t/χ²/ANOVA/Wilcoxon/KS/Shapiro/Levene/Bartlett/...) | `Hanalyze.Stat.Test` | [stat/01-test.ja.md](docs/stat/01-test.ja.md) | — |
+| 多重比較補正 (Bonferroni/Holm/BH/BY) | `Hanalyze.Stat.MultipleTesting` | [stat/06-multipletesting.ja.md](docs/stat/06-multipletesting.ja.md) | — |
+| Bootstrap CI / 並べ替え検定 | `Hanalyze.Stat.Bootstrap` | [stat/07-bootstrap.ja.md](docs/stat/07-bootstrap.ja.md) | — |
+| 効果量 + Power 解析 (Cohen's d/η²/Cramér V/n推定) | `Hanalyze.Stat.Effect` | [stat/09-effect.ja.md](docs/stat/09-effect.ja.md) | — |
+| Cross-validation (k-fold/stratified/LOO) + Grid search | `Hanalyze.Stat.CV` | [stat/04-cv.ja.md](docs/stat/04-cv.ja.md) | — |
 
-### 回帰 (`Model.*`)
-
-| 機能 | モジュール | 使い方 | 理論 |
-|---|---|---|---|
-| 線形回帰 (LM) + 推論統計 (SE/t/p, F, AIC/BIC, leverage, Cook's) | `Model.LM` / `Model.LM.Diagnostics` | [regression/01-lm.ja.md](docs/regression/01-lm.ja.md) | [principles/lm.ja.md](docs/principles/lm.ja.md) |
-| GLM (Binomial / Poisson / Gaussian) | `Model.GLM` | [regression/02-glm.ja.md](docs/regression/02-glm.ja.md) | [principles/glm.ja.md](docs/principles/glm.ja.md) |
-| GLMM / 混合効果モデル (LME) | `Model.GLMM` | [regression/03-glmm.ja.md](docs/regression/03-glmm.ja.md) | [principles/glmm.ja.md](docs/principles/glmm.ja.md) |
-| スプライン回帰 (B-spline / NaturalCubic) | `Model.Spline` | [regression/04-spline.ja.md](docs/regression/04-spline.ja.md) | [regression/theory-regression-extensions.ja.md](docs/regression/theory-regression-extensions.ja.md) |
-| カーネル回帰 (NW / Kernel Ridge) + 多次元入力 | `Model.Kernel` | [regression/04-kernel.ja.md](docs/regression/04-kernel.ja.md) | 同上 |
-| 正則化 (Ridge / Lasso / ElasticNet) | `Model.Regularized` | [regression/04-regularized.ja.md](docs/regression/04-regularized.ja.md) | 同上 |
-| ガウス過程 (RBF / Matérn / Periodic + ARD + 多入力) | `Model.GP` | [regression/04-gp.ja.md](docs/regression/04-gp.ja.md) | [principles/gp.ja.md](docs/principles/gp.ja.md) |
-| Random Fourier Features (大規模 GP 近似) | `Model.RFF` | [regression/04-rff.ja.md](docs/regression/04-rff.ja.md) | [regression/theory-regression-extensions.ja.md](docs/regression/theory-regression-extensions.ja.md) |
-| 多変量回帰 / 多出力 GP | `Model.{Multivariate,MultiGP,MultiOutput}` | [regression/05-multivariate.ja.md](docs/regression/05-multivariate.ja.md) | [regression/theory-multivariate.ja.md](docs/regression/theory-multivariate.ja.md) |
-| 分位点回帰 (Quantile) | `Model.Quantile` | [regression/06-quantile.ja.md](docs/regression/06-quantile.ja.md) | [regression/theory-regression-extensions.ja.md](docs/regression/theory-regression-extensions.ja.md) |
-| 一般化加法モデル (GAM) | `Model.GAM` | [regression/06-gam.ja.md](docs/regression/06-gam.ja.md) | 同上 |
-| ランダムフォレスト (回帰) | `Model.RandomForest` | [regression/06-randomforest.ja.md](docs/regression/06-randomforest.ja.md) | 同上 |
-| 多出力回帰 + 対話 HTML | `Model.MultiOutput` | [regression/07-multireg.ja.md](docs/regression/07-multireg.ja.md) | [regression/theory-multivariate.ja.md](docs/regression/theory-multivariate.ja.md) |
-
-### 機械学習 (`Model.*` / `Stat.*`)
+### 回帰 (`Hanalyze.Model.*`)
 
 | 機能 | モジュール | 使い方 | 理論 |
 |---|---|---|---|
-| PCA + 累積寄与率 + 標準化 | `Model.PCA` | [stat/02-pca.ja.md](docs/stat/02-pca.ja.md) | — |
-| クラスタリング (K-means + k-means++ + silhouette) | `Model.Cluster` | [stat/05-cluster.ja.md](docs/stat/05-cluster.ja.md) | — |
-| 決定木 (CART 分類器) | `Model.DecisionTree` | [regression/08-decisiontree.ja.md](docs/regression/08-decisiontree.ja.md) | — |
-| 時系列 (ARIMA / Holt-Winters / STL / ACF / PACF) | `Model.TimeSeries` | [regression/09-timeseries.ja.md](docs/regression/09-timeseries.ja.md) | — |
-| 生存解析 (Kaplan-Meier / Nelson-Aalen / Log-rank / Cox PH) | `Model.Survival` | [regression/10-survival.ja.md](docs/regression/10-survival.ja.md) | — |
-| 分類評価メトリクス (Confusion / AUC / F1 / MCC / log-loss / Brier) | `Stat.ClassMetrics` | [stat/03-classmetrics.ja.md](docs/stat/03-classmetrics.ja.md) | — |
-| モデル解釈 (Permutation imp / PDP / ICE) | `Stat.Interpret` | [stat/13-interpret.ja.md](docs/stat/13-interpret.ja.md) | — |
+| 線形回帰 (LM) + 推論統計 (SE/t/p, F, AIC/BIC, leverage, Cook's) | `Hanalyze.Model.LM` / `Hanalyze.Model.LM.Diagnostics` | [regression/01-lm.ja.md](docs/regression/01-lm.ja.md) | [principles/lm.ja.md](docs/principles/lm.ja.md) |
+| GLM (Binomial / Poisson / Gaussian) | `Hanalyze.Model.GLM` | [regression/02-glm.ja.md](docs/regression/02-glm.ja.md) | [principles/glm.ja.md](docs/principles/glm.ja.md) |
+| GLMM / 混合効果モデル (LME) | `Hanalyze.Model.GLMM` | [regression/03-glmm.ja.md](docs/regression/03-glmm.ja.md) | [principles/glmm.ja.md](docs/principles/glmm.ja.md) |
+| スプライン回帰 (B-spline / NaturalCubic) | `Hanalyze.Model.Spline` | [regression/04-spline.ja.md](docs/regression/04-spline.ja.md) | [regression/theory-regression-extensions.ja.md](docs/regression/theory-regression-extensions.ja.md) |
+| カーネル回帰 (NW / Kernel Ridge) + 多次元入力 | `Hanalyze.Model.Kernel` | [regression/04-kernel.ja.md](docs/regression/04-kernel.ja.md) | 同上 |
+| 正則化 (Ridge / Lasso / ElasticNet) | `Hanalyze.Model.Regularized` | [regression/04-regularized.ja.md](docs/regression/04-regularized.ja.md) | 同上 |
+| ガウス過程 (RBF / Matérn / Periodic + ARD + 多入力) | `Hanalyze.Model.GP` | [regression/04-gp.ja.md](docs/regression/04-gp.ja.md) | [principles/gp.ja.md](docs/principles/gp.ja.md) |
+| Random Fourier Features (大規模 GP 近似) | `Hanalyze.Model.RFF` | [regression/04-rff.ja.md](docs/regression/04-rff.ja.md) | [regression/theory-regression-extensions.ja.md](docs/regression/theory-regression-extensions.ja.md) |
+| 多変量回帰 / 多出力 GP | `Hanalyze.Model.{Multivariate,MultiGP,MultiOutput}` | [regression/05-multivariate.ja.md](docs/regression/05-multivariate.ja.md) | [regression/theory-multivariate.ja.md](docs/regression/theory-multivariate.ja.md) |
+| 分位点回帰 (Quantile) | `Hanalyze.Model.Quantile` | [regression/06-quantile.ja.md](docs/regression/06-quantile.ja.md) | [regression/theory-regression-extensions.ja.md](docs/regression/theory-regression-extensions.ja.md) |
+| 一般化加法モデル (GAM) | `Hanalyze.Model.GAM` | [regression/06-gam.ja.md](docs/regression/06-gam.ja.md) | 同上 |
+| ランダムフォレスト (回帰) | `Hanalyze.Model.RandomForest` | [regression/06-randomforest.ja.md](docs/regression/06-randomforest.ja.md) | 同上 |
+| 多出力回帰 + 対話 HTML | `Hanalyze.Model.MultiOutput` | [regression/07-multireg.ja.md](docs/regression/07-multireg.ja.md) | [regression/theory-multivariate.ja.md](docs/regression/theory-multivariate.ja.md) |
 
-### ベイズ (`MCMC.*` / `Stat.*` / `Model.HBM`)
-
-| 機能 | モジュール | 使い方 | 理論 |
-|---|---|---|---|
-| 確率分布 27 種 (Truncated/Censored/MvNormal/LKJ/Multinomial/...) | `Stat.Distribution` | [bayesian/01-distributions.ja.md](docs/bayesian/01-distributions.ja.md) | [bayesian/theory-distributions.ja.md](docs/bayesian/theory-distributions.ja.md) |
-| 確率モデル DSL (HBM 多相 free monad、`deterministic` / `dataNamed` 含む) | `Model.HBM` | [bayesian/02-probabilistic-model.ja.md](docs/bayesian/02-probabilistic-model.ja.md) | [principles/hbm.ja.md](docs/principles/hbm.ja.md) |
-| MCMC サンプラー (MH / HMC / NUTS / Slice) | `MCMC.{MH,HMC,NUTS,Slice}` | [bayesian/03-mcmc-samplers.ja.md](docs/bayesian/03-mcmc-samplers.ja.md) | [bayesian/theory-mcmc.ja.md](docs/bayesian/theory-mcmc.ja.md) / [theory-hmc-nuts.ja.md](docs/bayesian/theory-hmc-nuts.ja.md) |
-| Gibbs サンプリング (共役自動検出 + Hybrid) | `MCMC.Gibbs` | [bayesian/04-gibbs.ja.md](docs/bayesian/04-gibbs.ja.md) | [bayesian/theory-mcmc.ja.md](docs/bayesian/theory-mcmc.ja.md) |
-| 変分推論 (ADVI 平均場 Adam) | `Stat.VI` | [bayesian/05-vi.ja.md](docs/bayesian/05-vi.ja.md) | [bayesian/theory-advanced.ja.md](docs/bayesian/theory-advanced.ja.md) |
-| モデル比較 (WAIC / PSIS-LOO / Pseudo-BMA) | `Stat.ModelSelect` | [bayesian/06-model-comparison.ja.md](docs/bayesian/06-model-comparison.ja.md) | [bayesian/theory-bayesian-basics.ja.md](docs/bayesian/theory-bayesian-basics.ja.md) |
-| 事後予測チェック; 一部の PyMC 風モデリング機能 | `Stat.PosteriorPredictive` | [02-pymc-comparison.ja.md](docs/02-pymc-comparison.ja.md) | — |
-
-### 最適化 (`Optim.*`)
+### 機械学習 (`Hanalyze.Model.*` / `Hanalyze.Stat.*`)
 
 | 機能 | モジュール | 使い方 | 理論 |
 |---|---|---|---|
-| 単目的 (勾配法): NM / L-BFGS / Brent | `Optim.NelderMead`<br>`Optim.LBFGS`<br>`Optim.LineSearch` | [optim/01-singleobj.ja.md](docs/optim/01-singleobj.ja.md) | [optim/theory-singleobj.ja.md](docs/optim/theory-singleobj.ja.md) |
-| 単目的 (進化計算): DE / CMA-ES / SA / PSO | `Optim.DifferentialEvolution`<br>`Optim.CMAES`<br>`Optim.SimulatedAnnealing`<br>`Optim.ParticleSwarm` | [optim/01-singleobj.ja.md](docs/optim/01-singleobj.ja.md) | [optim/theory-singleobj.ja.md](docs/optim/theory-singleobj.ja.md) |
-| 多目的 (NSGA-II + Pareto) | `Optim.{NSGA,Pareto}` | [optim/02-multi-objective.ja.md](docs/optim/02-multi-objective.ja.md) | [optim/theory-pareto-moo.ja.md](docs/optim/theory-pareto-moo.ja.md) |
-| 獲得関数 (EHVI / ParEGO / EI / LCB / PI) | `Optim.Acquisition` | [optim/02-multi-objective.ja.md](docs/optim/02-multi-objective.ja.md) | [optim/theory-bayesopt.ja.md](docs/optim/theory-bayesopt.ja.md) |
-| ベイズ最適化 (BO + GP-Hedge + 解析勾配) | `Optim.BayesOpt` | [optim/01-singleobj.ja.md](docs/optim/01-singleobj.ja.md) | [optim/theory-bayesopt.ja.md](docs/optim/theory-bayesopt.ja.md) |
+| PCA + 累積寄与率 + 標準化 | `Hanalyze.Model.PCA` | [stat/02-pca.ja.md](docs/stat/02-pca.ja.md) | — |
+| クラスタリング (K-means + k-means++ + silhouette) | `Hanalyze.Model.Cluster` | [stat/05-cluster.ja.md](docs/stat/05-cluster.ja.md) | — |
+| 決定木 (CART 分類器) | `Hanalyze.Model.DecisionTree` | [regression/08-decisiontree.ja.md](docs/regression/08-decisiontree.ja.md) | — |
+| 時系列 (ARIMA / Holt-Winters / STL / ACF / PACF) | `Hanalyze.Model.TimeSeries` | [regression/09-timeseries.ja.md](docs/regression/09-timeseries.ja.md) | — |
+| 生存解析 (Kaplan-Meier / Nelson-Aalen / Log-rank / Cox PH) | `Hanalyze.Model.Survival` | [regression/10-survival.ja.md](docs/regression/10-survival.ja.md) | — |
+| 分類評価メトリクス (Confusion / AUC / F1 / MCC / log-loss / Brier) | `Hanalyze.Stat.ClassMetrics` | [stat/03-classmetrics.ja.md](docs/stat/03-classmetrics.ja.md) | — |
+| モデル解釈 (Permutation imp / PDP / ICE) | `Hanalyze.Stat.Interpret` | [stat/13-interpret.ja.md](docs/stat/13-interpret.ja.md) | — |
+
+### ベイズ (`Hanalyze.MCMC.*` / `Hanalyze.Stat.*` / `Hanalyze.Model.HBM`)
+
+| 機能 | モジュール | 使い方 | 理論 |
+|---|---|---|---|
+| 確率分布 27 種 (Truncated/Censored/MvNormal/LKJ/Multinomial/...) | `Hanalyze.Stat.Distribution` | [bayesian/01-distributions.ja.md](docs/bayesian/01-distributions.ja.md) | [bayesian/theory-distributions.ja.md](docs/bayesian/theory-distributions.ja.md) |
+| 確率モデル DSL (HBM 多相 free monad、`deterministic` / `dataNamed` 含む) | `Hanalyze.Model.HBM` | [bayesian/02-probabilistic-model.ja.md](docs/bayesian/02-probabilistic-model.ja.md) | [principles/hbm.ja.md](docs/principles/hbm.ja.md) |
+| MCMC サンプラー (MH / HMC / NUTS / Slice) | `Hanalyze.MCMC.{MH,HMC,NUTS,Slice}` | [bayesian/03-mcmc-samplers.ja.md](docs/bayesian/03-mcmc-samplers.ja.md) | [bayesian/theory-mcmc.ja.md](docs/bayesian/theory-mcmc.ja.md) / [theory-hmc-nuts.ja.md](docs/bayesian/theory-hmc-nuts.ja.md) |
+| Gibbs サンプリング (共役自動検出 + Hybrid) | `Hanalyze.MCMC.Gibbs` | [bayesian/04-gibbs.ja.md](docs/bayesian/04-gibbs.ja.md) | [bayesian/theory-mcmc.ja.md](docs/bayesian/theory-mcmc.ja.md) |
+| 変分推論 (ADVI 平均場 Adam) | `Hanalyze.Stat.VI` | [bayesian/05-vi.ja.md](docs/bayesian/05-vi.ja.md) | [bayesian/theory-advanced.ja.md](docs/bayesian/theory-advanced.ja.md) |
+| モデル比較 (WAIC / PSIS-LOO / Pseudo-BMA) | `Hanalyze.Stat.ModelSelect` | [bayesian/06-model-comparison.ja.md](docs/bayesian/06-model-comparison.ja.md) | [bayesian/theory-bayesian-basics.ja.md](docs/bayesian/theory-bayesian-basics.ja.md) |
+| 事後予測チェック; 一部の PyMC 風モデリング機能 | `Hanalyze.Stat.PosteriorPredictive` | [02-pymc-comparison.ja.md](docs/02-pymc-comparison.ja.md) | — |
+
+### 最適化 (`Hanalyze.Optim.*`)
+
+| 機能 | モジュール | 使い方 | 理論 |
+|---|---|---|---|
+| 単目的 (勾配法): NM / L-BFGS / Brent | `Hanalyze.Optim.NelderMead`<br>`Hanalyze.Optim.LBFGS`<br>`Hanalyze.Optim.LineSearch` | [optim/01-singleobj.ja.md](docs/optim/01-singleobj.ja.md) | [optim/theory-singleobj.ja.md](docs/optim/theory-singleobj.ja.md) |
+| 単目的 (進化計算): DE / CMA-ES / SA / PSO | `Hanalyze.Optim.DifferentialEvolution`<br>`Hanalyze.Optim.CMAES`<br>`Hanalyze.Optim.SimulatedAnnealing`<br>`Hanalyze.Optim.ParticleSwarm` | [optim/01-singleobj.ja.md](docs/optim/01-singleobj.ja.md) | [optim/theory-singleobj.ja.md](docs/optim/theory-singleobj.ja.md) |
+| 多目的 (NSGA-II + Pareto) | `Hanalyze.Optim.{NSGA,Pareto}` | [optim/02-multi-objective.ja.md](docs/optim/02-multi-objective.ja.md) | [optim/theory-pareto-moo.ja.md](docs/optim/theory-pareto-moo.ja.md) |
+| 獲得関数 (EHVI / ParEGO / EI / LCB / PI) | `Hanalyze.Optim.Acquisition` | [optim/02-multi-objective.ja.md](docs/optim/02-multi-objective.ja.md) | [optim/theory-bayesopt.ja.md](docs/optim/theory-bayesopt.ja.md) |
+| ベイズ最適化 (BO + GP-Hedge + 解析勾配) | `Hanalyze.Optim.BayesOpt` | [optim/01-singleobj.ja.md](docs/optim/01-singleobj.ja.md) | [optim/theory-bayesopt.ja.md](docs/optim/theory-bayesopt.ja.md) |
 | アルゴリズム選択ガイド | — | [optim/03-algorithm-guide.ja.md](docs/optim/03-algorithm-guide.ja.md) | — |
 
-### 実験計画 (`Design.*`)
+### 実験計画 (`Hanalyze.Design.*`)
 
 | 機能 | モジュール | 使い方 | 理論 |
 |---|---|---|---|
-| DOE (Factorial / Block / Mixed / RSM / Optimal / Power / Quality) | `Design.{Factorial,Block,Mixed,RSM,Optimal,Power,Quality,MultiRSM,Anova}` | [doe/01-doe.ja.md](docs/doe/01-doe.ja.md) | [doe/theory-doe.ja.md](docs/doe/theory-doe.ja.md) |
-| 直交表 (L4/L8/L9/L12/L16/L18) + タグチ法 (SN比 + 内/外配置) + 工程能力 (Cp/Cpk) | `Design.{Orthogonal,Taguchi,Quality}` | [doe/02-orthogonal-taguchi.ja.md](docs/doe/02-orthogonal-taguchi.ja.md) | [doe/theory-doe.ja.md](docs/doe/theory-doe.ja.md) |
+| DOE (Factorial / Block / Mixed / RSM / Optimal / Power / Quality) | `Hanalyze.Design.{Factorial,Block,Mixed,RSM,Optimal,Power,Quality,MultiRSM,Anova}` | [doe/01-doe.ja.md](docs/doe/01-doe.ja.md) | [doe/theory-doe.ja.md](docs/doe/theory-doe.ja.md) |
+| 直交表 (L4/L8/L9/L12/L16/L18) + タグチ法 (SN比 + 内/外配置) + 工程能力 (Cp/Cpk) | `Hanalyze.Design.{Orthogonal,Taguchi,Quality}` | [doe/02-orthogonal-taguchi.ja.md](docs/doe/02-orthogonal-taguchi.ja.md) | [doe/theory-doe.ja.md](docs/doe/theory-doe.ja.md) |
 
-### 可視化 (`Viz.*`)
-
-| 機能 | モジュール | 使い方 |
-|---|---|---|
-| 散布図 / Bar / ヒストグラム / MCMC 診断 / GP 描画 / Pareto 描画 | `Viz.{Scatter,Bar,Histogram,MCMC,GP,Pareto,ModelGraph,Taguchi}` | [visualization/01-visualization.ja.md](docs/visualization/01-visualization.ja.md) |
-| 統合 HTML レポート (MathJax + Mermaid + 対話的) | `Viz.ReportBuilder` | [visualization/02-report-builder.ja.md](docs/visualization/02-report-builder.ja.md) |
-
-### データ I/O (`DataIO.*`)
+### 可視化 (`Hanalyze.Viz.*`)
 
 | 機能 | モジュール | 使い方 |
 |---|---|---|
-| CSV/TSV/SSV (cassava) + Parquet/JSON (Hackage `dataframe`) | `DataIO.{CSV,External,Convert}` | [io/01-dirty-data.ja.md](docs/io/01-dirty-data.ja.md) |
-| 汚いデータ防衛 (W001-W008 警告 + 自動 sniff + クリーニング DSL) | `DataIO.{Health,Sniff,Clean,Log}` | [io/01-dirty-data.ja.md](docs/io/01-dirty-data.ja.md) |
-| 整形 (pivot_wider / one-hot / lag-lead / rolling window) | `DataIO.Reshape` | [io/02-reshape.ja.md](docs/io/02-reshape.ja.md) |
-| 前処理 (impute / groupBy / derived columns / melt) | `DataIO.Preprocess` | [io/01-dirty-data.ja.md](docs/io/01-dirty-data.ja.md) |
-| Long-form regrid (`regridLong`) | `DataIO.Preprocess` + `Stat.Interpolate` | [io/03-regrid.ja.md](docs/io/03-regrid.ja.md) |
+| 散布図 / Bar / ヒストグラム / MCMC 診断 / GP 描画 / Pareto 描画 | `Hanalyze.Viz.{Scatter,Bar,Histogram,MCMC,GP,Pareto,ModelGraph,Taguchi}` | [visualization/01-visualization.ja.md](docs/visualization/01-visualization.ja.md) |
+| 統合 HTML レポート (MathJax + Mermaid + 対話的) | `Hanalyze.Viz.ReportBuilder` | [visualization/02-report-builder.ja.md](docs/visualization/02-report-builder.ja.md) |
+
+### データ I/O (`Hanalyze.DataIO.*`)
+
+| 機能 | モジュール | 使い方 |
+|---|---|---|
+| CSV/TSV/SSV (cassava) + Parquet/JSON (Hackage `dataframe`) | `Hanalyze.DataIO.{CSV,External,Convert}` | [io/01-dirty-data.ja.md](docs/io/01-dirty-data.ja.md) |
+| 汚いデータ防衛 (W001-W008 警告 + 自動 sniff + クリーニング DSL) | `Hanalyze.DataIO.{Health,Sniff,Clean,Log}` | [io/01-dirty-data.ja.md](docs/io/01-dirty-data.ja.md) |
+| 整形 (pivot_wider / one-hot / lag-lead / rolling window) | `Hanalyze.DataIO.Reshape` | [io/02-reshape.ja.md](docs/io/02-reshape.ja.md) |
+| 前処理 (impute / groupBy / derived columns / melt) | `Hanalyze.DataIO.Preprocess` | [io/01-dirty-data.ja.md](docs/io/01-dirty-data.ja.md) |
+| Long-form regrid (`regridLong`) | `Hanalyze.DataIO.Preprocess` + `Hanalyze.Stat.Interpolate` | [io/03-regrid.ja.md](docs/io/03-regrid.ja.md) |
 
 ---
 
@@ -287,8 +287,8 @@ graph TD
 
 ## ロードマップと API 安定性
 
-- **Stable** (minor 更新で API 後方互換を維持予定): `DataIO.*`、`Stat.{Test, Bootstrap, MultipleTesting, ClassMetrics, CV, Effect, Distribution}`、`Model.{LM, GLM, Spline, Regularized, RandomForest, DecisionTree, TimeSeries, Survival, GAM}`、`Optim.{NelderMead, LBFGS, DifferentialEvolution, CMAES, NSGA, BayesOpt, SimulatedAnnealing, ParticleSwarm}`、`Design.*`、`Viz.{Scatter, Bar, Histogram}`
-- **Experimental** (API は変動の可能性): `Model.HBM` DSL、`MCMC.NUTS` (mass-matrix adaptation は opt-in)、`Stat.VI` (ADVI)、`Model.{GP, RFF, GPRobust, GLMM}`、`Viz.ReportBuilder`。挙動はベンチで検証済ですが型シグネチャが変わる可能性あり
+- **Stable** (minor 更新で API 後方互換を維持予定): `Hanalyze.DataIO.*`、`Hanalyze.Stat.{Test, Bootstrap, MultipleTesting, ClassMetrics, CV, Effect, Distribution}`、`Hanalyze.Model.{LM, GLM, Spline, Regularized, RandomForest, DecisionTree, TimeSeries, Survival, GAM}`、`Hanalyze.Optim.{NelderMead, LBFGS, DifferentialEvolution, CMAES, NSGA, BayesOpt, SimulatedAnnealing, ParticleSwarm}`、`Hanalyze.Design.*`、`Hanalyze.Viz.{Scatter, Bar, Histogram}`
+- **Experimental** (API は変動の可能性): `Hanalyze.Model.HBM` DSL、`Hanalyze.MCMC.NUTS` (mass-matrix adaptation は opt-in)、`Hanalyze.Stat.VI` (ADVI)、`Hanalyze.Model.{GP, RFF, GPRobust, GLMM}`、`Hanalyze.Viz.ReportBuilder`。挙動はベンチで検証済ですが型シグネチャが変わる可能性あり
 - **将来検討**: トップレベル統一 API (`Hanalyze.*`)、Pipeline 風 `Unfitted → Fitted` API、hmatrix/Massiv/Accelerate を切替えるバックエンド typeclass。実装スケジュールは未定
 
 ---

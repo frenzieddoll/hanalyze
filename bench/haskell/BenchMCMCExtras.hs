@@ -14,15 +14,15 @@ import qualified Data.Map.Strict        as Map
 import qualified Data.Text              as T
 import qualified System.Random.MWC      as MWC
 
-import           Model.HBM              (Distribution (..), ModelP, sample,
+import           Hanalyze.Model.HBM              (Distribution (..), ModelP, sample,
                                          observe)
-import           MCMC.Core              (Chain, posteriorMean)
-import           MCMC.Gibbs             (betaBinomial, gibbs,
+import           Hanalyze.MCMC.Core              (Chain, posteriorMean)
+import           Hanalyze.MCMC.Gibbs             (betaBinomial, gibbs,
                                          gibbsBetaBinomial,
                                          defaultGibbsConfig, GibbsConfig (..))
-import           Stat.VI                (advi, defaultVIConfig, VIConfig (..),
+import           Hanalyze.Stat.VI                (advi, defaultVIConfig, VIConfig (..),
                                          VIResult (..))
-import           Stat.ModelSelect       (waic, WAICResult (..),
+import           Hanalyze.Stat.ModelSelect       (waic, WAICResult (..),
                                          loo, LOOResult (..))
 
 import           BenchUtil

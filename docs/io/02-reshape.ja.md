@@ -77,9 +77,9 @@ let df''' = Reshape.rollingApply 7 (\xs -> maximum xs - minimum xs)
 | sort | ✅ `DX.sortBy` | — |
 | join (inner/left/...) | ✅ `DX.innerJoin` etc. | — |
 | aggregate / groupBy | ✅ `DX.groupBy` + `aggregate` | — |
-| pivot_longer | — | ✅ `DataIO.Preprocess.meltLonger` |
+| pivot_longer | — | ✅ `Hanalyze.DataIO.Preprocess.meltLonger` |
 | **pivot_wider** | — | ✅ `Reshape.pivotWider` |
 | **one-hot** | — | ✅ `Reshape.oneHot` |
 | **lag/lead** | — | ✅ `Reshape.lagColumn` / `leadColumn` |
 | **rolling** | — | ✅ `Reshape.rollingMean` etc. |
-| imputation | — | ✅ `DataIO.Preprocess.imputeMean` etc. |
+| imputation | — | ✅ `Hanalyze.DataIO.Preprocess.imputeMean` etc. |

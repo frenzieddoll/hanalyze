@@ -6,8 +6,8 @@
 > [02-multi-objective.md](02-multi-objective.md) (multi-objective),
 > [theory-singleobj.md](theory-singleobj.md), [theory-bayesopt.md](theory-bayesopt.md)
 
-All algorithms in `Optim.*` have been refactored around the unified
-**`Optim.Common.Bounds`** type and a **`Maybe Bounds` field on every config**.
+All algorithms in `Hanalyze.Optim.*` have been refactored around the unified
+**`Hanalyze.Optim.Common.Bounds`** type and a **`Maybe Bounds` field on every config**.
 This page consolidates "which algorithm to choose" and "how to specify constraints"
 into one reference.
 
@@ -39,22 +39,22 @@ flowchart TD
 
 | Situation | Recommendation | Module |
 |---|---|---|
-| 1D unimodal | **Brent** | `Optim.LineSearch` |
-| Smooth + gradient | **L-BFGS** | `Optim.LBFGS` |
-| Non-differentiable, low-dim (≤20) | **Nelder-Mead** | `Optim.NelderMead` |
-| Non-convex, global, gradient-free (≤30 dim) | **Differential Evolution** | `Optim.DifferentialEvolution` |
-| Non-convex continuous, high-dim (10–100) | **CMA-ES** | `Optim.CMAES` / `Optim.CMAESFull` |
-| Classic metaheuristic | **Simulated Annealing** | `Optim.SimulatedAnnealing` |
-| Swarm intelligence | **Particle Swarm** | `Optim.ParticleSwarm` |
-| Very expensive evaluations | **Bayesian Optimization** | `Optim.BayesOpt` |
-| Multi-objective (Pareto front) | **NSGA-II** | `Optim.NSGA` |
-| Equality / inequality constraints | **Augmented Lagrangian** | `Optim.Constrained` |
+| 1D unimodal | **Brent** | `Hanalyze.Optim.LineSearch` |
+| Smooth + gradient | **L-BFGS** | `Hanalyze.Optim.LBFGS` |
+| Non-differentiable, low-dim (≤20) | **Nelder-Mead** | `Hanalyze.Optim.NelderMead` |
+| Non-convex, global, gradient-free (≤30 dim) | **Differential Evolution** | `Hanalyze.Optim.DifferentialEvolution` |
+| Non-convex continuous, high-dim (10–100) | **CMA-ES** | `Hanalyze.Optim.CMAES` / `Hanalyze.Optim.CMAESFull` |
+| Classic metaheuristic | **Simulated Annealing** | `Hanalyze.Optim.SimulatedAnnealing` |
+| Swarm intelligence | **Particle Swarm** | `Hanalyze.Optim.ParticleSwarm` |
+| Very expensive evaluations | **Bayesian Optimization** | `Hanalyze.Optim.BayesOpt` |
+| Multi-objective (Pareto front) | **NSGA-II** | `Hanalyze.Optim.NSGA` |
+| Equality / inequality constraints | **Augmented Lagrangian** | `Hanalyze.Optim.Constrained` |
 
 ---
 
 ## 2. Specifying constraints — five tiers
 
-`hanalyze`'s `Optim.*` exposes a 5-level API graded by constraint type.
+`hanalyze`'s `Hanalyze.Optim.*` exposes a 5-level API graded by constraint type.
 
 ### Level 0 — Unconstrained
 
@@ -65,20 +65,20 @@ r <- LBFGS.runLBFGS f gradF x0
 
 ### Level 1 — Box constraints (lo_i ≤ x_i ≤ hi_i per dimension)
 
-Every `Optim.*` module has a **`<prefix>Bounds :: Maybe Bounds`** field on its
+Every `Hanalyze.Optim.*` module has a **`<prefix>Bounds :: Maybe Bounds`** field on its
 config (R5 refactor). Passing `Just bs` enables automatic constraint handling.
 
 | Module | Field | Internal handling |
 |---|---|---|
-| `Optim.NelderMead`         | `nmBounds`  | soft penalty (`boundsPenalty`, k=1e6) added to f |
-| `Optim.LBFGS`              | `lbBounds`  | soft penalty + its gradient added to ∇f |
-| `Optim.CMAES`              | `cmBounds`  | post-sample **reflection** (`clipToBounds`) |
-| `Optim.CMAESFull`          | `cmfBounds` | post-sample reflection (y unchanged so covariance update is undistorted) |
-| `Optim.DifferentialEvolution` | `deBounds`  | required (init + bound-correction). Reflection |
-| `Optim.SimulatedAnnealing` | `saBounds`  | reflection after proposal |
-| `Optim.ParticleSwarm`      | `psoBounds` | reflection after position update |
-| `Optim.NSGA`               | `bounds` (arg) | required. Reflection |
-| `Optim.BayesOpt`           | `boBounds`  | required. Search range for acquisition maximisation |
+| `Hanalyze.Optim.NelderMead`         | `nmBounds`  | soft penalty (`boundsPenalty`, k=1e6) added to f |
+| `Hanalyze.Optim.LBFGS`              | `lbBounds`  | soft penalty + its gradient added to ∇f |
+| `Hanalyze.Optim.CMAES`              | `cmBounds`  | post-sample **reflection** (`clipToBounds`) |
+| `Hanalyze.Optim.CMAESFull`          | `cmfBounds` | post-sample reflection (y unchanged so covariance update is undistorted) |
+| `Hanalyze.Optim.DifferentialEvolution` | `deBounds`  | required (init + bound-correction). Reflection |
+| `Hanalyze.Optim.SimulatedAnnealing` | `saBounds`  | reflection after proposal |
+| `Hanalyze.Optim.ParticleSwarm`      | `psoBounds` | reflection after position update |
+| `Hanalyze.Optim.NSGA`               | `bounds` (arg) | required. Reflection |
+| `Hanalyze.Optim.BayesOpt`           | `boBounds`  | required. Search range for acquisition maximisation |
 
 ```haskell
 import Optim.Common (Bounds)
@@ -139,7 +139,7 @@ In practice it is often simpler to **absorb box constraints in each algorithm's
 
 ## 3. Internal handling: why three helpers?
 
-`Optim.Common` provides three helpers for box constraints:
+`Hanalyze.Optim.Common` provides three helpers for box constraints:
 
 | Helper | Role | Used by |
 |---|---|---|
@@ -171,7 +171,7 @@ In practice it is often simpler to **absorb box constraints in each algorithm's
 
 ## 5. Constraints in multi-objective optimisation
 
-`Optim.NSGA` handles constrained multi-objective problems via **constraint dominance**:
+`Hanalyze.Optim.NSGA` handles constrained multi-objective problems via **constraint dominance**:
 
 ```haskell
 import qualified Optim.NSGA as NSGA
