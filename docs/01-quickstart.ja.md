@@ -192,6 +192,7 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | 用途 | モジュール | 主要関数 |
 |---|---|---|
 | OLS / 多項式 / 信頼帯 | `Model.LM` | `fitLM`, `fitLMVec`, `fitPolyWithSmooth` |
+| **LM 推論統計 (SE/t/p, F, AIC/BIC, leverage, Cook's)** | `Model.LM.Diagnostics` | `lmCoefStats`, `lmFStatistic`, `lmInformationCriteria`, `hatDiagonal`, `cooksDistance` |
 | GLM (Gaussian/Binomial/Poisson) | `Model.GLM` | `fitGLM`, `fitGLMWithSmooth` |
 | LME / GLMM | `Model.GLMM` | `fitLME`, `fitLMEDataFrame` |
 | スプライン (B-spline / Natural) | `Model.Spline` | `fitSpline`, `fitSplineMulti` |
@@ -231,11 +232,11 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | ラテン方格 / 乱塊法 | `Design.Block` | `latinSquare`, `randomizedBlock` |
 | ANOVA (一元/二元) | `Design.Anova` | `oneWayAnova`, `twoWayAnova` |
 | 検出力解析 / サンプルサイズ | `Design.Power` | `powerTTest`, `sampleSizeTTest` |
-| 直交性 / D-eff / VIF | `Design.Quality` | `dEfficiency`, `vifList` |
+| 直交性 / D-eff / VIF / **Cp・Cpk** | `Design.Quality` | `dEfficiency`, `vifList`, `processCapability`, `processCapabilityUpper`, `processCapabilityLower` |
 | RSM (CCD / Box-Behnken) | `Design.RSM` | `centralComposite`, `boxBehnken` |
 | D-/A-optimal | `Design.Optimal` | `dOptimal`, `aOptimal` |
-| **直交表 Lₙ (L4/L8/L9/L12/L16/L18)** | `Design.Orthogonal` | `lookupOA`, `assignFactors`, `renderCSV` |
-| **タグチメソッド (SN 比・要因効果・内外配置)** | `Design.Taguchi` | `snRatio`, `analyzeSN`, `optimalLevels`, `makeInnerOuter` |
+| **直交表 Lₙ (L4/L8/L9/L12/L16/L18)** | `Design.Orthogonal` | `lookupOA`, `assignFactors`, `renderCSV`, `listArraysWithSize` (OAMetadata) |
+| **タグチメソッド (SN 比・要因効果・内外配置)** | `Design.Taguchi` | `snRatio`, `analyzeSN`, `optimalLevels`, `makeInnerOuter`, `snRatioWithDetails`, `factorEffectsTable` |
 
 ### 最適化
 | 用途 | モジュール | 主要関数 |

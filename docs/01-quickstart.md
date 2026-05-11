@@ -194,6 +194,7 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | Use case | Module | Key functions |
 |---|---|---|
 | OLS / polynomial / confidence band | `Model.LM` | `fitLM`, `fitLMVec`, `fitPolyWithSmooth` |
+| **LM inference stats (SE/t/p, F, AIC/BIC, leverage, Cook's)** | `Model.LM.Diagnostics` | `lmCoefStats`, `lmFStatistic`, `lmInformationCriteria`, `hatDiagonal`, `cooksDistance` |
 | GLM (Gaussian/Binomial/Poisson) | `Model.GLM` | `fitGLM`, `fitGLMWithSmooth` |
 | LME / GLMM | `Model.GLMM` | `fitLME`, `fitLMEDataFrame` |
 | Spline (B-spline / Natural) | `Model.Spline` | `fitSpline`, `fitSplineMulti` |
@@ -233,11 +234,11 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 | Latin square / RCBD | `Design.Block` | `latinSquare`, `randomizedBlock` |
 | ANOVA (one-way / two-way) | `Design.Anova` | `oneWayAnova`, `twoWayAnova` |
 | Power analysis / sample size | `Design.Power` | `powerTTest`, `sampleSizeTTest` |
-| Orthogonality / D-eff / VIF | `Design.Quality` | `dEfficiency`, `vifList` |
+| Orthogonality / D-eff / VIF / **Cp, Cpk** | `Design.Quality` | `dEfficiency`, `vifList`, `processCapability`, `processCapabilityUpper`, `processCapabilityLower` |
 | RSM (CCD / Box-Behnken) | `Design.RSM` | `centralComposite`, `boxBehnken` |
 | D-/A-optimal | `Design.Optimal` | `dOptimal`, `aOptimal` |
-| **Orthogonal arrays Lₙ (L4/L8/L9/L12/L16/L18)** | `Design.Orthogonal` | `lookupOA`, `assignFactors`, `renderCSV` |
-| **Taguchi method (SN ratio, factor effects, inner/outer)** | `Design.Taguchi` | `snRatio`, `analyzeSN`, `optimalLevels`, `makeInnerOuter` |
+| **Orthogonal arrays Lₙ (L4/L8/L9/L12/L16/L18)** | `Design.Orthogonal` | `lookupOA`, `assignFactors`, `renderCSV`, `listArraysWithSize` (OAMetadata) |
+| **Taguchi method (SN ratio, factor effects, inner/outer)** | `Design.Taguchi` | `snRatio`, `analyzeSN`, `optimalLevels`, `makeInnerOuter`, `snRatioWithDetails`, `factorEffectsTable` |
 
 ### Optimization
 | Use case | Module | Key functions |

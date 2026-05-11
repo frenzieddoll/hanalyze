@@ -39,7 +39,7 @@
 
 | 機能 | モジュール | 使い方 | 理論 |
 |---|---|---|---|
-| 線形回帰 (LM) | `Model.LM` | [regression/01-lm.ja.md](docs/regression/01-lm.ja.md) | [principles/lm.ja.md](docs/principles/lm.ja.md) |
+| 線形回帰 (LM) + 推論統計 (SE/t/p, F, AIC/BIC, leverage, Cook's) | `Model.LM` / `Model.LM.Diagnostics` | [regression/01-lm.ja.md](docs/regression/01-lm.ja.md) | [principles/lm.ja.md](docs/principles/lm.ja.md) |
 | GLM (Binomial / Poisson / Gaussian) | `Model.GLM` | [regression/02-glm.ja.md](docs/regression/02-glm.ja.md) | [principles/glm.ja.md](docs/principles/glm.ja.md) |
 | GLMM / 混合効果モデル (LME) | `Model.GLMM` | [regression/03-glmm.ja.md](docs/regression/03-glmm.ja.md) | [principles/glmm.ja.md](docs/principles/glmm.ja.md) |
 | スプライン回帰 (B-spline / NaturalCubic) | `Model.Spline` | [regression/04-spline.ja.md](docs/regression/04-spline.ja.md) | [regression/theory-regression-extensions.ja.md](docs/regression/theory-regression-extensions.ja.md) |
@@ -93,7 +93,7 @@
 | 機能 | モジュール | 使い方 | 理論 |
 |---|---|---|---|
 | DOE (Factorial / Block / Mixed / RSM / Optimal / Power / Quality) | `Design.{Factorial,Block,Mixed,RSM,Optimal,Power,Quality,MultiRSM,Anova}` | [doe/01-doe.ja.md](docs/doe/01-doe.ja.md) | [doe/theory-doe.ja.md](docs/doe/theory-doe.ja.md) |
-| 直交表 (L4/L8/L9/L12/L16/L18) + タグチ法 (SN比 + 内/外配置) | `Design.{Orthogonal,Taguchi}` | [doe/02-orthogonal-taguchi.ja.md](docs/doe/02-orthogonal-taguchi.ja.md) | [doe/theory-doe.ja.md](docs/doe/theory-doe.ja.md) |
+| 直交表 (L4/L8/L9/L12/L16/L18) + タグチ法 (SN比 + 内/外配置) + 工程能力 (Cp/Cpk) | `Design.{Orthogonal,Taguchi,Quality}` | [doe/02-orthogonal-taguchi.ja.md](docs/doe/02-orthogonal-taguchi.ja.md) | [doe/theory-doe.ja.md](docs/doe/theory-doe.ja.md) |
 
 ### 可視化 (`Viz.*`)
 
