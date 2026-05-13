@@ -23,6 +23,14 @@ and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
   `maximizeMarginalLikRBFMV` with a 3·2·2 grid runs at `n=768` in ~10 s and
   ~45 MiB peak residency (was OOM).
 
+### Fixed (P2: stray naive quicksorts)
+- `Hanalyze.Model.Quantile.quantile`: replaced file-local naive list quicksort
+  with `Data.List.sort` (mergesort, O(n log n) / O(n) space). Pivot-bias could
+  push the old version to O(n²) space on adversarial inputs.
+- `Hanalyze.Stat.Test.sortVec` and the file-local `qsort` used by
+  `mannWhitneyManual`: same replacement (`Data.List.sort` /
+  `sortBy (comparing fst)`). Both `qSort`/`qsort` definitions removed.
+
 ## [0.1.0.1] - 2026-05-14
 
 Initial Hackage release. (Version 0.1.0.0 was uploaded only as a

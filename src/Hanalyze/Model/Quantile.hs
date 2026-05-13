@@ -32,6 +32,7 @@ module Hanalyze.Model.Quantile
   , pseudoR1
   ) where
 
+import qualified Data.List                    as L
 import qualified Numeric.LinearAlgebra as LA
 import qualified Hanalyze.Stat.Cholesky        as Chol
 
@@ -140,19 +141,16 @@ quantile :: Double -> [Double] -> Double
 quantile p xs
   | null xs = 0
   | otherwise =
-      let sorted = qSort xs
+      -- Phase 11b (2026-05-14): replaced naive list quicksort with
+      -- 'Data.List.sort' (mergesort, O(n log n), O(n) space). Pivot-bias
+      -- could push the old version to O(n²) space.
+      let sorted = L.sort xs
           n      = length sorted
           ix     = p * fromIntegral (n - 1)
           lo     = floor ix :: Int
           hi     = min (n - 1) (lo + 1)
           frac   = ix - fromIntegral lo
       in (1 - frac) * (sorted !! lo) + frac * (sorted !! hi)
-
-qSort :: [Double] -> [Double]
-qSort []     = []
-qSort (p:xs) = qSort [x | x <- xs, x <= p]
-            ++ [p]
-            ++ qSort [x | x <- xs, x > p]
 
 -- | Pseudo R¹_τ を別途計算 (model loss と baseline loss から)。
 pseudoR1 :: Double            -- ^ model V̂_τ

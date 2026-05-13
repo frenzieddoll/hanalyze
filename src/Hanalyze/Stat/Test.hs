@@ -44,6 +44,8 @@ module Hanalyze.Stat.Test
   , fTestVariance
   ) where
 
+import qualified Data.List                      as L
+import           Data.Ord                       (comparing)
 import           Data.Text                      (Text)
 import qualified Data.Text                      as T
 import qualified Data.Vector.Storable           as VS
@@ -652,15 +654,11 @@ choose n k
   | otherwise = product [fromIntegral (n - i + 1) | i <- [1 .. k]]
                 `div` product [fromIntegral i | i <- [1 .. k]]
 
--- | Sort an LA vector (ascending) via Data.List.sort.
+-- | Sort an LA vector (ascending) via 'Data.List.sort' (mergesort,
+-- O(n log n) / O(n) space). Phase 11b (2026-05-14): replaced naive list
+-- quicksort to avoid pivot-bias O(n²) blowup on large inputs.
 sortVec :: LA.Vector Double -> LA.Vector Double
-sortVec v = LA.fromList (qsortD (LA.toList v))
-  where
-    qsortD :: [Double] -> [Double]
-    qsortD []     = []
-    qsortD (x:xs) = qsortD [y | y <- xs, y < x]
-                 ++ [x]
-                 ++ qsortD [y | y <- xs, y >= x]
+sortVec v = LA.fromList (L.sort (LA.toList v))
 
 -- | Manual Mann-Whitney U with normal approximation (handles ties).
 mannWhitneyManual
@@ -673,7 +671,7 @@ mannWhitneyManual xs ys alt =
       n2 = fromIntegral (VU.length ys) :: Double
       tagged = [(x, 1::Int) | x <- VU.toList xs]
             ++ [(y, 2::Int) | y <- VU.toList ys]
-      sorted = qsort tagged
+      sorted = L.sortBy (comparing fst) tagged
       ranks  = assignRanks (map fst sorted)
       r1     = sum [ rk | (rk, (_, g)) <- zip ranks sorted, g == 1 ]
       u1     = r1 - n1 * (n1 + 1) / 2
@@ -687,13 +685,6 @@ mannWhitneyManual xs ys alt =
         Less     -> SD.cumulative Normal.standard z
         Greater  -> SD.complCumulative Normal.standard z
   in (u1, u2, p)
-
--- Quicksort for simplicity (small samples).
-qsort :: Ord a => [a] -> [a]
-qsort []     = []
-qsort (p:xs) = qsort [x | x <- xs, x <  p]
-            ++ [p]
-            ++ qsort [x | x <- xs, x >= p]
 
 -- | Average ranks (handles ties via mid-rank).
 assignRanks :: [Double] -> [Double]
