@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name:          hanalyze
-version:       0.1.0.0
+version:       0.1.0.1
 synopsis:      A general-purpose statistical analysis, optimization and visualization toolkit
 description:
     @hanalyze@ is a self-contained Haskell toolkit for classical regression

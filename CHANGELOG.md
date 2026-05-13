@@ -5,9 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
 
-## [0.1.0.0] - 2026-05-14
+## [0.1.0.1] - 2026-05-14
 
-Initial Hackage release.
+Initial Hackage release. (Version 0.1.0.0 was uploaded only as a
+candidate and never published; the multi-output GP API was rearranged
+before publication — see below.)
 
 ### Multi-output GP — API のデフォルトを shared-HP に変更
 - `Hanalyze.Model.MultiGP.fitMultiGP` / `fitMultiGPMV` の **挙動を sklearn 流
