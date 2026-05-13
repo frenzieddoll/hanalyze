@@ -23,6 +23,14 @@ and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
   `maximizeMarginalLikRBFMV` with a 3·2·2 grid runs at `n=768` in ~10 s and
   ~45 MiB peak residency (was OOM).
 
+### Fixed (P4: Tier-2 O(n²) helpers in Preprocess)
+- `Hanalyze.DataIO.Preprocess.dropMissingRows`: cache per-column Text
+  `Vector` once instead of calling `tryColumnAsList` + @xs !! i@ inside
+  the inner row loop. O(rows² × cols) → O(rows × cols).
+- `Hanalyze.DataIO.Preprocess.sliceColumn` (`tryAs`): convert the
+  column to a `Vector` once and use `unsafeIndex` instead of
+  @xs !! i@ in a list comprehension. O(n²) → O(n).
+
 ### Fixed (P3: GC pressure / O(n²) helpers)
 - `Hanalyze.Model.GP.buildKernelMatrix` (1D variant): rewrote with a
   flat `Storable.Vector` filled via `runST + MVector` instead of

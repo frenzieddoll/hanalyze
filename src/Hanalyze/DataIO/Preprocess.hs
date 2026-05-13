@@ -76,6 +76,7 @@ import qualified Data.Ord
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Vector as V
 import System.IO.Unsafe (unsafePerformIO)
 import Text.Read (readMaybe)
 import qualified Hanalyze.Stat.Interpolate
@@ -186,15 +187,25 @@ countMissing df =
 
 -- | Drop rows where any of the listed columns is null. NA strings in
 -- Text columns are also treated as missing.
+--
+-- Phase 11b (2026-05-14): cache per-column Text 'Vector' once instead
+-- of calling 'tryColumnAsList' + @xs !! i@ inside the inner row loop.
+-- The previous version was O(rows² × cols); the cached version is
+-- O(rows × cols).
 dropMissingRows :: [Text] -> DXD.DataFrame -> DXD.DataFrame
 dropMissingRows targets df =
-  let n = if null cols then 0 else maximum (map (`colLength` df) cols)
-      cols = targets
-      rowMissing i =
-        any (\c -> isNullAt c i df || isTextNA c i) cols
-      isTextNA c i = case tryColumnAsList @Text c df of
-        Just xs -> i < length xs && isNAString (xs !! i)
+  let cols = targets
+      n    = if null cols then 0 else maximum (map (`colLength` df) cols)
+      -- One pass per column: Maybe (Vector Text) of NA-eligible entries.
+      textCache :: [(Text, Maybe (V.Vector Text))]
+      textCache =
+        [ (c, fmap V.fromList (tryColumnAsList @Text c df))
+        | c <- cols ]
+      isTextNAVec mv i = case mv of
+        Just v  -> i < V.length v && isNAString (V.unsafeIndex v i)
         Nothing -> False
+      rowMissing i =
+        any (\(c, mv) -> isNullAt c i df || isTextNAVec mv i) textCache
       keep = [ i | i <- [0 .. n - 1], not (rowMissing i) ]
   in selectRows keep df
 
@@ -220,12 +231,19 @@ sliceColumn name df idxs = case DXD.getColumn name df of
           (tryAs @Int
             (tryAs @Text Nothing))))
   where
+    -- Phase 11b (2026-05-14): convert the column to a 'Vector' once and
+    -- use 'unsafeIndex'. The previous @xs !! i@ in a list-comprehension
+    -- was O(i) per index, so 'sliceColumn' on n indices was O(n²).
     tryAs
       :: forall a. (DXC.Columnable a, NFData a,
                     DXC.ColumnifyRep (DXT.KindOf a) a)
       => Maybe DX.Column -> Maybe DX.Column
     tryAs fallback = case tryColumnAsList @a name df of
-      Just xs -> Just (DX.fromList [ xs !! i | i <- idxs, i < length xs ])
+      Just xs ->
+        let v   = V.fromList xs
+            len = V.length v
+        in Just (DX.fromList
+                   [ V.unsafeIndex v i | i <- idxs, i < len ])
       Nothing -> fallback
 
 -- | Impute missing values with a constant and homogenize to a 'Double'
