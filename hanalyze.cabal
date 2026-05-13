@@ -1096,6 +1096,20 @@ executable bench-rff-oom
     , hmatrix              >= 0.20 && < 0.22
     , time                 >= 1.9  && < 1.13
 
+executable bench-mem-vi
+  import:           warnings, opt
+  main-is:          BenchMemVI.hs
+  hs-source-dirs:   bench/haskell
+  default-language: GHC2021
+  ghc-options:      -rtsopts
+  build-depends:
+      base                 >= 4.14 && < 5
+    , hanalyze
+    , containers           >= 0.6  && < 0.8
+    , text                 >= 1.2  && < 2.2
+    , time                 >= 1.9  && < 1.13
+    , mwc-random           >= 0.15 && < 0.16
+
 -- Kernel / GP bench (B2): KR / NW / RFF / GP / GPRobust.
 executable bench-kernel
   import:           warnings, opt
