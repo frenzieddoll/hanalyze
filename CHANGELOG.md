@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
 
+## [Unreleased]
+
+### Fixed (P1: RFF OOM)
+- `Hanalyze.Model.RFF.medianPairwiseDist`: rewrote with BLAS gram matrix
+  (`Hanalyze.Stat.KernelDist.pairwiseSqDist`) + `Data.Vector.Algorithms.Intro.sort`
+  on a flat `Vector`. The previous implementation built an `O(n²)` list of pair
+  distances using `rows !! i` (each `O(i)`, so `O(n³)` walks total) and ran a
+  naive list quicksort, which exploded space to many GB of thunks and OOM-killed
+  WSL2 around `n=768` (e.g. inside `maximizeMarginalLikRBFMV`).
+- `Hanalyze.Model.RFF.rbfKernelMat`: rewrote as
+  `LA.cmap (...) (KD.pairwiseSqDist x)`. The old nested list comprehension with
+  `rows !! i / rows !! j` shared the same `O(n³)` shape and hit the same WSL2
+  OOM via `logMarginalLikRBFMV`.
+- Removed the file-local naive `qSort` from `RFF.hs`.
+- New `bench-rff-oom` executable as a regression guard. Post-fix:
+  `maximizeMarginalLikRBFMV` with a 3·2·2 grid runs at `n=768` in ~10 s and
+  ~45 MiB peak residency (was OOM).
+
 ## [0.1.0.1] - 2026-05-14
 
 Initial Hackage release. (Version 0.1.0.0 was uploaded only as a

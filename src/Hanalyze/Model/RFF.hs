@@ -83,6 +83,8 @@ import qualified System.Random.MWC.Distributions as MWCD
 import qualified Hanalyze.Optim.DifferentialEvolution as DEM
 import qualified Hanalyze.Optim.Common as OCM
 import qualified Hanalyze.Stat.Cholesky as Chol
+import qualified Hanalyze.Stat.KernelDist as KD
+import qualified Data.Vector.Algorithms.Intro as Intro
 
 -- ---------------------------------------------------------------------------
 -- 型
@@ -514,14 +516,10 @@ logMarginalLikRBFMV x y ell sf sn =
 -- @K[i,j] = σ_f² · exp(−‖x_i − x_j‖² / (2ℓ²))@.
 rbfKernelMat :: LA.Matrix Double -> Double -> Double -> LA.Matrix Double
 rbfKernelMat x ell sf =
-  let n     = LA.rows x
-      sf2   = sf * sf
+  let sf2   = sf * sf
       twol2 = 2 * ell * ell
-      rows  = LA.toRows x
-  in LA.fromLists
-       [ [ sf2 * exp (negate (LA.norm_2 (rows !! i - rows !! j) ^ (2::Int)) / twol2)
-         | j <- [0 .. n-1] ]
-       | i <- [0 .. n-1] ]
+      d2    = KD.pairwiseSqDist x
+  in LA.cmap (\v -> sf2 * exp (negate v / twol2)) d2
 
 -- | Marginal-likelihood maximization result.
 data MLikResult = MLikResult
@@ -639,23 +637,31 @@ logSpace lo hi n
 
 -- | Median pairwise distance between rows (the standard median heuristic
 -- for an RBF length scale).
+-- | Phase 11b (2026-05-14): rewritten to use BLAS gram matrix
+-- ('KD.pairwiseSqDist') + 'Intro.sort' on a flat 'VS.Vector'. The previous
+-- implementation built an @O(n²)@ list of pair distances with @rows !! i@
+-- (each @O(i)@) and ran a naive list quicksort, which exploded space to
+-- @O(n²)@..@O(n³)@ thunks and OOM-killed WSL2 around @n=768@.
 medianPairwiseDist :: LA.Matrix Double -> Double
 medianPairwiseDist x =
-  let rows = LA.toRows x
-      pairs = [ LA.norm_2 (rows !! i - rows !! j)
-              | i <- [0 .. length rows - 1]
-              , j <- [i+1 .. length rows - 1] ]
-  in case pairs of
-       [] -> 1.0
-       _  ->
-         let sorted = LA.toList (LA.fromList pairs)  -- to immutable
-             sorted2 = qSort sorted
-             k       = length sorted2 `div` 2
-         in if null sorted2 then 1.0 else sorted2 !! k
-
-qSort :: Ord a => [a] -> [a]
-qSort []     = []
-qSort (p:xs) = qSort [x | x <- xs, x <= p] ++ [p] ++ qSort [x | x <- xs, x > p]
+  let n = LA.rows x in
+  if n < 2 then 1.0 else
+    let d2  = KD.pairwiseSqDist x        -- n × n via BLAS GEMM
+        d2f = LA.flatten d2
+        m   = n * (n - 1) `div` 2
+        ds  = runST $ do
+          v <- VSM.unsafeNew m
+          let go !k !i !j
+                | i >= n - 1 = pure ()
+                | j >= n     = go k (i + 1) (i + 2)
+                | otherwise  = do
+                    let s = VS.unsafeIndex d2f (i * n + j)
+                    VSM.unsafeWrite v k (sqrt (max 0 s))
+                    go (k + 1) i (j + 1)
+          go 0 0 1
+          Intro.sort v
+          VS.unsafeFreeze v
+    in if VS.null ds then 1.0 else VS.unsafeIndex ds (m `div` 2)
 
 sampleStd :: [Double] -> Double
 sampleStd xs

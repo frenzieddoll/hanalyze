@@ -1083,6 +1083,19 @@ executable bench-optim
     , tasty-bench          >= 0.3  && < 0.5
     , tasty                >= 1.4  && < 1.6
 
+-- OOM regression bench (Phase 11b): RFF.medianPairwiseDist + rbfKernelMat.
+executable bench-rff-oom
+  import:           warnings, opt
+  main-is:          BenchRFFOOM.hs
+  hs-source-dirs:   bench/haskell
+  default-language: GHC2021
+  ghc-options:      -rtsopts
+  build-depends:
+      base                 >= 4.14 && < 5
+    , hanalyze
+    , hmatrix              >= 0.20 && < 0.22
+    , time                 >= 1.9  && < 1.13
+
 -- Kernel / GP bench (B2): KR / NW / RFF / GP / GPRobust.
 executable bench-kernel
   import:           warnings, opt
