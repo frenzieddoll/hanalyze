@@ -28,6 +28,7 @@ module Hanalyze.Optim.Adam
   , runAdamMinimize
   ) where
 
+import Control.DeepSeq (force)
 import Data.IORef
 import Control.Monad (forM_)
 import System.IO.Unsafe (unsafePerformIO)
@@ -101,10 +102,17 @@ runAdamMaximize cfg gradFn x0 = unsafePerformIO $ do
                           (adamBeta1 cfg) (adamBeta2 cfg) (adamEpsilon cfg)
                           (adamLearningRate cfg) t m1 m2 g
         x'           = zipWith (+) x dx
-    writeIORef xRef x'
-    writeIORef m1Ref m1'
-    writeIORef m2Ref m2'
-    modifyIORef' histRef (x' :)
+    -- Phase Q3 (2026-05-14): force lists before storing in IORef. Without
+    -- this each iter writes a thunk that reads the previous IORef contents
+    -- and chains a fresh @zipWith@ on top — after T iters the chain holds
+    -- O(T) closures. See Stat.VI for the same fix and BenchMemVI numbers.
+    let !x''  = force x'
+        !m1'' = force m1'
+        !m2'' = force m2'
+    writeIORef xRef x''
+    writeIORef m1Ref m1''
+    writeIORef m2Ref m2''
+    modifyIORef' histRef (x'' :)
   xF   <- readIORef xRef
   hist <- fmap reverse (readIORef histRef)
   return (xF, hist)
