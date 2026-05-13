@@ -192,12 +192,33 @@ kernelFn Periodic p x x' =
   in gpSignalVar p * exp (-2 * s * s / (l * l))
 
 -- | Build the kernel matrix @K(xs, xs')@ of shape @|xs| × |xs'|@.
+--
+-- Phase 11b (2026-05-14): rewritten to fill a flat 'Storable.Vector'
+-- via @runST + MVector@ instead of materialising the @|xs|·|xs'|@
+-- lazy @[Double]@ list that the previous @(n><m) [..]@ form created.
+-- The thunk-heavy list cost ~30 MB at @n=768@ purely in cons cells
+-- (one allocation per kernel call) and pressured GC; the strict
+-- buffer is a single allocation. 'kernelFn' itself is unchanged so
+-- 'Periodic' (signed-difference dependent) keeps working.
 buildKernelMatrix :: Kernel -> GPParams -> [Double] -> [Double] -> LA.Matrix Double
 buildKernelMatrix ker p xs xs' =
-  (n LA.>< m) [kernelFn ker p x x' | x <- xs, x' <- xs']
-  where
-    n = length xs
-    m = length xs'
+  let xv = VS.fromList xs
+      yv = VS.fromList xs'
+      n  = VS.length xv
+      m  = VS.length yv
+      out = runST $ do
+        v <- VSM.unsafeNew (n * m)
+        let go !i !j
+              | i >= n    = pure ()
+              | j >= m    = go (i + 1) 0
+              | otherwise = do
+                  let xi = VS.unsafeIndex xv i
+                      yj = VS.unsafeIndex yv j
+                  VSM.unsafeWrite v (i * m + j) (kernelFn ker p xi yj)
+                  go i (j + 1)
+        go 0 0
+        VS.unsafeFreeze v
+  in LA.reshape m out
 
 -- ---------------------------------------------------------------------------
 -- Inference

@@ -23,8 +23,8 @@ import Hanalyze.Model.Core     (FitResult (..))
 import Hanalyze.Model.GLM      (Family (..), LinkFn (..))
 import Hanalyze.Model.LM       (multiPolyDesignMatrix)
 
-import Data.List           (nub, sort)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set        as Set
 import Data.Text           (Text)
 import qualified Data.Vector    as V
 import qualified Numeric.LinearAlgebra as LA
@@ -58,7 +58,9 @@ data GLMMResult = GLMMResult
 -- | Parse grouping vector into (sorted unique labels, per-obs index, per-group sizes).
 buildGroups :: V.Vector Text -> (V.Vector Text, V.Vector Int, V.Vector Int)
 buildGroups gvec =
-  let labels   = V.fromList . sort . nub . V.toList $ gvec
+  -- Phase 11b (2026-05-14): Set-based dedup + sort, O(n log n) instead of
+  -- the O(n²) 'nub'. Important for grouping vectors with thousands of IDs.
+  let labels   = V.fromList . Set.toAscList . Set.fromList . V.toList $ gvec
       q        = V.length labels
       labelMap = Map.fromList (zip (V.toList labels) ([0..] :: [Int]))
       idx      = V.map (\g -> Map.findWithDefault 0 g labelMap) gvec

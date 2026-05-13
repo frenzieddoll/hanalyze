@@ -23,6 +23,17 @@ and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
   `maximizeMarginalLikRBFMV` with a 3·2·2 grid runs at `n=768` in ~10 s and
   ~45 MiB peak residency (was OOM).
 
+### Fixed (P3: GC pressure / O(n²) helpers)
+- `Hanalyze.Model.GP.buildKernelMatrix` (1D variant): rewrote with a
+  flat `Storable.Vector` filled via `runST + MVector` instead of
+  materialising the @|xs|·|xs'|@ lazy `[Double]` list that the old
+  `(n><m) [..]` form created (~30 MB of cons cells at `n=768`, pure
+  GC pressure). API is unchanged so the `Periodic` kernel keeps its
+  signed-difference behaviour.
+- `Hanalyze.Model.GLMM.buildGroups`: replaced `sort . nub` with
+  `Set.toAscList . Set.fromList` (O(n log n) vs O(n²)). Important for
+  grouping vectors with thousands of distinct group IDs.
+
 ### Fixed (P2: stray naive quicksorts)
 - `Hanalyze.Model.Quantile.quantile`: replaced file-local naive list quicksort
   with `Data.List.sort` (mergesort, O(n log n) / O(n) space). Pivot-bias could
