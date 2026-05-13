@@ -1124,6 +1124,30 @@ executable bench-mem-aggregate
     , time                 >= 1.9  && < 1.13
     , vector               >= 0.13 && < 0.14
 
+executable bench-mem-nsga2
+  import:           warnings, opt
+  main-is:          BenchMemNSGA.hs
+  hs-source-dirs:   bench/haskell
+  default-language: GHC2021
+  ghc-options:      -rtsopts
+  build-depends:
+      base                 >= 4.14 && < 5
+    , hanalyze
+    , time                 >= 1.9  && < 1.13
+    , mwc-random           >= 0.15 && < 0.16
+
+executable bench-mem-bo
+  import:           warnings, opt
+  main-is:          BenchMemBO.hs
+  hs-source-dirs:   bench/haskell
+  default-language: GHC2021
+  ghc-options:      -rtsopts
+  build-depends:
+      base                 >= 4.14 && < 5
+    , hanalyze
+    , time                 >= 1.9  && < 1.13
+    , mwc-random           >= 0.15 && < 0.16
+
 -- Kernel / GP bench (B2): KR / NW / RFF / GP / GPRobust.
 executable bench-kernel
   import:           warnings, opt
