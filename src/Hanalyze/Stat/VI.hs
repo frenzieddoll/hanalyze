@@ -34,6 +34,7 @@ module Hanalyze.Stat.VI
   , advi
   ) where
 
+import Control.DeepSeq (force)
 import Control.Monad (forM, forM_, replicateM)
 import Data.IORef
 import qualified Data.Map.Strict as Map
@@ -159,11 +160,11 @@ advi model cfg initP gen = do
       return (lj, dMu, dOm)
 
     let sD    = fromIntegral sNum :: Double
-        ljMC  = sum (map (\(l,_,_) -> l) mcResults) / sD
+        !ljMC = sum (map (\(l,_,_) -> l) mcResults) / sD
         -- ELBO = E[logJointU] + Σω + N/2×(1+log2π)
-        elboV = ljMC + sum omega + fromIntegral n * 0.5 * (1 + log (2*pi))
-        gMu   = map (/ sD) $ foldr1 (zipWith (+)) (map (\(_,g,_) -> g) mcResults)
-        gOm   = map (/ sD) $ foldr1 (zipWith (+)) (map (\(_,_,g) -> g) mcResults)
+        !elboV = ljMC + sum omega + fromIntegral n * 0.5 * (1 + log (2*pi))
+        !gMu   = force (map (/ sD) $ foldr1 (zipWith (+)) (map (\(_,g,_) -> g) mcResults))
+        !gOm   = force (map (/ sD) $ foldr1 (zipWith (+)) (map (\(_,_,g) -> g) mcResults))
 
     modifyIORef' elboRef (elboV :)
 
@@ -171,17 +172,22 @@ advi model cfg initP gen = do
     m1Mu <- readIORef m1MuRef
     m2Mu <- readIORef m2MuRef
     let (m1Mu', m2Mu', dxMu) = adamStep b1 b2 eps_ alpha t m1Mu m2Mu gMu
-    writeIORef m1MuRef m1Mu'
-    writeIORef m2MuRef m2Mu'
-    writeIORef muRef   (zipWith (+) mu dxMu)
+    -- Phase Q3 (2026-05-14): 'zipWith (+)' / Adam の各リストは lazy で、
+    -- IORef に書き戻すとそのまま thunk のまま積まれ、次イテレーションで
+    -- 読み出されると `zipWith (+) thunk_{t-1} ...` が再帰的に重なる。
+    -- iter=10000 K=20 で max residency 85 MB / 総 alloc 222 GB を観測。
+    -- 'force' で spine + 各要素を NF にし、t 階層の thunk チェーンを断つ。
+    writeIORef m1MuRef (force m1Mu')
+    writeIORef m2MuRef (force m2Mu')
+    writeIORef muRef   (force (zipWith (+) mu dxMu))
 
     -- Adam で ω を更新
     m1Om <- readIORef m1OmRef
     m2Om <- readIORef m2OmRef
     let (m1Om', m2Om', dxOm) = adamStep b1 b2 eps_ alpha t m1Om m2Om gOm
-    writeIORef m1OmRef m1Om'
-    writeIORef m2OmRef m2Om'
-    writeIORef omegaRef (zipWith (+) omega dxOm)
+    writeIORef m1OmRef (force m1Om')
+    writeIORef m2OmRef (force m2Om')
+    writeIORef omegaRef (force (zipWith (+) omega dxOm))
 
   -- 収束後: q(u; φ*) からサンプリングして constrained 空間に変換
   muFinal    <- readIORef muRef
