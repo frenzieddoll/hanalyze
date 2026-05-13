@@ -12,7 +12,7 @@ module Main where
 import qualified Numeric.LinearAlgebra as LA
 
 import           Hanalyze.Model.MultiLM         (fitMultiLM, predictMultiLM)
-import           Hanalyze.Model.MultiGP         (fitMultiGPMV, fitMultiGPMVSharedHP,
+import           Hanalyze.Model.MultiGP         (fitMultiGPMV, fitMultiGPMVIndep,
                                         MultiGPResultMV (..))
 import           Hanalyze.Model.GP              (Kernel (..))
 
@@ -74,40 +74,40 @@ benchMultiGP = do
       !q = 3
       !x = designX n p
       !y = multiY x q
-      -- yCols: list of length q, each an LA.Vector of length n.
       yCols = [ LA.flatten (y LA.?? (LA.All, LA.Pos (LA.idxs [k])))
               | k <- [0 .. q - 1] ]
       run :: Int -> IO Double
       run _ = do
-        let r = fitMultiGPMV RBF x yCols x
-            -- Sum of all per-output predicted means (forces full computation).
+        let r = fitMultiGPMV x yCols x
             s = sum [ LA.sumElements m | m <- mgpmvMean r ]
         return s
       probe = id
   (ms, _) <- timeitTastyIO probe run
   return [ BenchRow "haskell" "multi_output"
             "MultiGP_n200_p3_q3" ms 0 0
-            "MultiGP RBF n=200 p=3 q=3 (independent GPs, MV API)" ]
+            "MultiGP RBF n=200 p=3 q=3 (shared HP, default API)" ]
 
-benchMultiGPSharedHP :: IO [BenchRow]
-benchMultiGPSharedHP = do
+benchMultiGPIndep :: IO [BenchRow]
+benchMultiGPIndep = do
   let !n = 200
       !p = 3
       !q = 3
       !x = designX n p
       !y = multiY x q
+      -- yCols: list of length q, each an LA.Vector of length n.
       yCols = [ LA.flatten (y LA.?? (LA.All, LA.Pos (LA.idxs [k])))
               | k <- [0 .. q - 1] ]
       run :: Int -> IO Double
       run _ = do
-        let r = fitMultiGPMVSharedHP x yCols x
+        let r = fitMultiGPMVIndep RBF x yCols x
+            -- Sum of all per-output predicted means (forces full computation).
             s = sum [ LA.sumElements m | m <- mgpmvMean r ]
         return s
       probe = id
   (ms, _) <- timeitTastyIO probe run
   return [ BenchRow "haskell" "multi_output"
-            "MultiGP_n200_p3_q3_sharedHP" ms 0 0
-            "MultiGP RBF n=200 p=3 q=3 (single HP optimisation)" ]
+            "MultiGP_n200_p3_q3_indep" ms 0 0
+            "MultiGP RBF n=200 p=3 q=3 (per-output independent HPs)" ]
 
 -- ---------------------------------------------------------------------------
 
@@ -116,7 +116,7 @@ main = do
   rows <- mconcat <$> sequence
     [ benchMultiLM
     , benchMultiGP
-    , benchMultiGPSharedHP
+    , benchMultiGPIndep
     ]
   writeRows "bench/results/haskell/multi_output.csv" rows
   putStrLn $ "wrote " ++ show (length rows)

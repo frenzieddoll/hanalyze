@@ -28,7 +28,7 @@ hanalyze の主要回帰モデルはすべて **「多出力 (Y :: Matrix n×q) 
 | `Hanalyze.Model.RFF`          | `rffRidge` / `rffRidgeMV` | `rffRidgeMulti` / `rffRidgeMVMulti` |
 | `Hanalyze.Model.GP`           | `fitGP`               | `fitGPMulti` (Ky⁻¹ 共有、分散も共有) |
 | `Hanalyze.Model.GPRobust`     | `fitGPRobust`         | `fitGPRobustMulti` (列ごと IRLS、K 共有) |
-| `Hanalyze.Model.MultiGP`      | —                     | `fitMultiGP` (出力ごと別 HP の Independent GPs) |
+| `Hanalyze.Model.MultiGP`      | —                     | `fitMultiGP` / `fitMultiGPMV` (shared HP, RBF, デフォルト) + `fitMultiGPIndep` / `fitMultiGPMVIndep` (出力ごと別 HP) |
 | `Hanalyze.Model.Multivariate` | —                     | RRR / PLS / CCA |
 | `Hanalyze.Model.HBM`          | `observe` (1 列)      | `observeColumns` ヘルパ + `MvNormal` 観測 |
 
@@ -114,11 +114,38 @@ let ccaFit = cca xMat yMat
 
 ## 4. Multi-output GP
 
-### 共有カーネル版 (高速、`Hanalyze.Model.GP.fitGPMulti`)
-全 q 出力で同じカーネルとハイパーパラメータを共有 → Cholesky 1 回:
+3 系統あり、出力間で HP をどう共有するかで選ぶ:
+
+| API | HP 最適化回数 | カーネル | 用途 |
+|---|---|---|---|
+| `GP.fitGPMulti` / `GP.fitGPMVMulti` | 0 (HP は外部指定) | 任意 | HP が既知、Cholesky 共有で q 出力を一括予測 |
+| `MultiGP.fitMultiGP` / `fitMultiGPMV` (★デフォルト) | **1 回** (合算尤度 + Cholesky 共有) | RBF のみ | sklearn 流: 等質な q 出力。`q > 1` で per-output 比 ~q× 速い |
+| `MultiGP.fitMultiGPIndep` / `fitMultiGPMVIndep` | **q 回** (各出力独立) | 任意 (RBF / Matérn52 / Periodic) | 出力ごとに別の length-scale や noise が必要 |
+
+いずれも出力間相関 (Co-kriging / LMC) は実装しない (`B = I` 固定)。
+
+### Shared HP (デフォルト, RBF, `Hanalyze.Model.MultiGP.fitMultiGP`)
+全 q 出力で 1 セットの HP を **合算周辺尤度** `Σ_q log p(y_q | θ)` の最大化で学習し、`Ky = K + σ_n² I` の Cholesky を 1 回だけ計算して q 出力で再利用する。sklearn の `GaussianProcessRegressor.fit(X, Y::(n,q))` 相当:
 
 ```haskell
-import qualified Model.GP as GP
+import Hanalyze.Model.MultiGP
+
+let res = fitMultiGP trainX trainYs testX
+-- mgpMean, mgpLower, mgpUpper, mgpModels (q 個すべて同一)
+```
+
+多入力版 (X が `n × p` matrix):
+
+```haskell
+let resMV = fitMultiGPMV trainX trainYs testX
+-- mgpmvMean :: [Vector Double], mgpmvModels :: [GPModel] (q 個同一)
+```
+
+### Cholesky 共有 (HP 既知、`Hanalyze.Model.GP.fitGPMulti`)
+事前に HP を確定済みのとき。MCMC で HP を固定したい用途等:
+
+```haskell
+import qualified Hanalyze.Model.GP as GP
 
 let model = GP.GPModel GP.RBF GP.defaultGPParams
 let (meanMat, varList) = GP.fitGPMulti model trainX trainYMat testX
@@ -126,14 +153,14 @@ let (meanMat, varList) = GP.fitGPMulti model trainX trainYMat testX
 -- varList :: [Double] (length m, q 出力で共有)
 ```
 
-### 出力ごと独立 HP 版 (`Hanalyze.Model.MultiGP`)
-各出力に独自のハイパーパラメータを学習したい場合:
+### 出力ごと独立 HP (任意カーネル, `Hanalyze.Model.MultiGP.fitMultiGPIndep`)
+各出力に独自の length-scale / noise を学習させたい、または Matérn 5/2 や Periodic kernel を使いたい場合:
 
 ```haskell
-import Model.MultiGP
+import Hanalyze.Model.MultiGP
 
-let res = fitMultiGP RBF trainX trainYs testX
--- mgpMean, mgpLower, mgpUpper, mgpModels
+let res = fitMultiGPIndep RBF trainX trainYs testX
+-- mgpModels は出力ごとに別の GPParams を持つ
 ```
 
 ---

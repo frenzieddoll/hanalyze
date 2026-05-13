@@ -1,25 +1,36 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- | Multi-output Gaussian processes.
 --
--- A minimal implementation: **independent GPs**, fitting one GP per output.
--- This is the special case of the Intrinsic Coregionalization Model (ICM)
--- in which @B = I@.
+-- Two strategies are offered; pick by how outputs should share
+-- hyperparameters:
 --
--- More elaborate multi-task GPs (with learned cross-output correlations)
--- can be added in the future when needed. Independent GPs are sufficient
--- for Bayesian multi-objective optimization, where each acquisition
--- function is evaluated independently.
+--   * __Shared-HP (default)__ — @fitMultiGP@ / @fitMultiGPMV@.
+--     RBF only. A /single/ HP optimisation maximises the pooled marginal
+--     likelihood @Σ_q log p(y_q | θ)@, and the resulting Cholesky factor
+--     of @Ky@ is reused for every output's posterior solve. Mirrors
+--     scikit-learn's @GaussianProcessRegressor.fit(X, Y::(n,q))@. About
+--     @q@-fold faster than the per-output variant when @q > 1@.
+--
+--   * __Per-output independent HPs__ — @fitMultiGPIndep@ /
+--     @fitMultiGPMVIndep@. Supports any 'Kernel' kind. Each output
+--     runs its own LBFGS HP fit, so per-task flexibility is preserved
+--     at @q × O(LBFGS)@ cost.
+--
+-- Both treat outputs as independent likelihoods (@B = I@ in the
+-- Intrinsic Coregionalization Model). Co-kriging / LMC kernels with
+-- learned cross-output correlations are not implemented.
 module Hanalyze.Model.MultiGP
   ( MultiGPModel (..)
+    -- * Default (shared-HP, RBF only)
   , MultiGPResult (..)
   , mgpStd
   , fitMultiGP
   , predictMultiGP
-    -- * Multi-input (primary API; X is @n × p@)
   , MultiGPResultMV (..)
   , fitMultiGPMV
-    -- * Shared-HP variant
-  , fitMultiGPMVSharedHP
+    -- * Per-output independent HPs (any kernel)
+  , fitMultiGPIndep
+  , fitMultiGPMVIndep
   ) where
 
 import qualified Numeric.LinearAlgebra as LA
@@ -54,14 +65,45 @@ data MultiGPResult = MultiGPResult
 mgpStd :: MultiGPResult -> [[Double]]
 mgpStd r = zipWith (zipWith (\m u -> (u - m) / 2)) (mgpMean r) (mgpUpper r)
 
--- | Fit a multi-output GP. Each output is optimized independently via
--- 'optimizeGP' and predicted at @testX@.
-fitMultiGP :: Kernel        -- ^ Kernel kind shared by every output.
-           -> [Double]      -- ^ Training inputs (1D).
+-- | Fit a multi-output GP with shared RBF hyperparameters (default API).
+--
+-- This is the 1D-input wrapper around 'fitMultiGPMV'. A single HP set
+-- is learned by maximising the pooled marginal likelihood over all
+-- @q@ outputs, then one Cholesky factor of @Ky = K + σ_n² I@ is
+-- reused for each output's posterior solve.
+--
+-- For per-output independent HPs (any kernel kind), use
+-- 'fitMultiGPIndep'.
+fitMultiGP :: [Double]      -- ^ Training inputs (1D).
            -> [[Double]]    -- ^ Per-output training values (length @q@).
            -> [Double]      -- ^ Test inputs.
            -> MultiGPResult
-fitMultiGP kern trainX trainYs testX =
+fitMultiGP trainX trainYs testX =
+  let xMat   = LA.asColumn (LA.fromList trainX)
+      tMat   = LA.asColumn (LA.fromList testX)
+      yVecs  = map LA.fromList trainYs
+      r      = fitMultiGPMV xMat yVecs tMat
+  in MultiGPResult
+       { mgpMean   = map LA.toList (mgpmvMean   r)
+       , mgpLower  = map LA.toList (mgpmvLower  r)
+       , mgpUpper  = map LA.toList (mgpmvUpper  r)
+       , mgpModels = mgpmvModels r
+       }
+
+-- | Fit a multi-output GP with per-output independent hyperparameters.
+--
+-- Each output runs its own 'optimizeGP' LBFGS loop, then is predicted
+-- at @testX@. Supports any 'Kernel' kind. Use this when outputs need
+-- distinct length-scales / noise levels.
+--
+-- For sklearn-style shared-HP behaviour (RBF, single HP optimisation,
+-- much faster when @q > 1@), use 'fitMultiGP'.
+fitMultiGPIndep :: Kernel        -- ^ Kernel kind shared by every output.
+                -> [Double]      -- ^ Training inputs (1D).
+                -> [[Double]]    -- ^ Per-output training values (length @q@).
+                -> [Double]      -- ^ Test inputs.
+                -> MultiGPResult
+fitMultiGPIndep kern trainX trainYs testX =
   let perOutput :: [Double] -> (GPModel, GPResult)
       perOutput trainY =
         let p0   = initParamsFromData trainX trainY
@@ -111,30 +153,24 @@ data MultiGPResultMV = MultiGPResultMV
   , mgpmvModels :: [GPModel]
   } deriving (Show)
 
--- | Fit a multi-output GP with multivariate input. Each output column
--- is optimized independently via @optimizeGPMV@ and predicted at
--- @testX@. Sharing the same kernel kind across outputs.
-fitMultiGPMV
-  :: Kernel
-  -> LA.Matrix Double          -- ^ Training @X@ (@n × p@).
-  -> [LA.Vector Double]        -- ^ Per-output training values (length @q@).
-  -> LA.Matrix Double          -- ^ Test inputs (@m × p@).
-  -> MultiGPResultMV
--- | Multi-output RBF GP with /shared/ kernel hyperparameters.
+-- | Multi-output GP fit with multivariate input and /shared/ RBF
+-- hyperparameters (default API).
 --
 -- Mirrors @sklearn.gaussian_process.GaussianProcessRegressor@'s
 -- @fit(X, Y::(n,q))@ behaviour: one HP optimisation against the
 -- pooled marginal likelihood @Σ_q log p(y_q | θ)@, then a single
--- Cholesky factor reused for every output's posterior solve.
--- Compared to 'fitMultiGPMV' (q independent HP optimisations) this
--- trades per-output flexibility for a roughly q-fold reduction in
--- HP-optimisation work.
-fitMultiGPMVSharedHP
+-- Cholesky factor of @Ky = K + σ_n² I@ reused for every output's
+-- posterior solve. Roughly @q@-fold faster than 'fitMultiGPMVIndep'
+-- when @q > 1@.
+--
+-- RBF only. For other kernels (Matérn 5/2, periodic) or per-output
+-- length-scales, use 'fitMultiGPMVIndep'.
+fitMultiGPMV
   :: LA.Matrix Double          -- ^ Training @X@ (@n × p@).
   -> [LA.Vector Double]        -- ^ Per-output training values (length @q@).
   -> LA.Matrix Double          -- ^ Test inputs (@m × p@).
   -> MultiGPResultMV
-fitMultiGPMVSharedHP trainX trainYs testX =
+fitMultiGPMV trainX trainYs testX =
   let q       = length trainYs
       yMat    = LA.fromColumns trainYs                   -- n × q
       sharedD = KD.pairwiseSqDist trainX
@@ -143,7 +179,7 @@ fitMultiGPMVSharedHP trainX trainYs testX =
       -- the same).
       p0      = case trainYs of
                   (y0 : _) -> initParamsFromDataMV trainX y0
-                  []       -> error "fitMultiGPMVSharedHP: no outputs"
+                  []       -> error "fitMultiGPMV: no outputs"
       pOpt    = optimizeRBFAnalyticMulti sharedD trainX yMat p0
       mdl     = GPModel RBF pOpt
       results = [ fitGPMV mdl trainX yi testX | yi <- trainYs ]
@@ -240,7 +276,24 @@ optimizeRBFAnalyticMulti d2 trainX yMat p0 =
                             { OC.stMaxIter = 200, OC.stTolFun = 1e-8 }
         }
 
-fitMultiGPMV kern trainX trainYs testX =
+-- | Multi-output GP fit with multivariate input and /independent/
+-- per-output hyperparameters.
+--
+-- Each output column runs its own LBFGS HP optimisation via
+-- @optimizeGPMVCached@. Supports any 'Kernel' kind (RBF / Matérn 5/2
+-- / periodic). Costs @q × O(LBFGS)@; use 'fitMultiGPMV' (shared HP)
+-- for a roughly @q@-fold speed-up when outputs are homogeneous.
+--
+-- The pairwise distance matrix @D = pairwiseSqDist X@ is shared
+-- across the @q@ per-output optimisations to save @(q − 1) × O(n²)@
+-- work.
+fitMultiGPMVIndep
+  :: Kernel
+  -> LA.Matrix Double          -- ^ Training @X@ (@n × p@).
+  -> [LA.Vector Double]        -- ^ Per-output training values (length @q@).
+  -> LA.Matrix Double          -- ^ Test inputs (@m × p@).
+  -> MultiGPResultMV
+fitMultiGPMVIndep kern trainX trainYs testX =
   let -- @D = pairwiseSqDist trainX@ is shared across all q outputs
       -- (trainX is the same input matrix), so we compute it once and
       -- pass it into 'optimizeGPMVCached'. Each output's HP loop then

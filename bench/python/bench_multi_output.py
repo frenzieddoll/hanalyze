@@ -86,14 +86,46 @@ def bench_multi_lm() -> Row:
 
 
 def bench_multi_gp() -> Row | None:
-    """Independent-GP benchmark: q separate fit() calls. Matches
-    hanalyze's @fitMultiGPMV@ which optimises hyperparameters per
-    output independently."""
+    """Shared-HP multi-output GP (default): sklearn's @fit(X, Y)@ with
+    @Y :: (n, q)@ optimises kernel hyperparameters once, then solves
+    @α = K⁻¹ Y@ with a (q-column) RHS — one Cholesky factor reused
+    across outputs. Matches hanalyze's @fitMultiGPMV@."""
     try:
         from sklearn.gaussian_process import GaussianProcessRegressor
         from sklearn.gaussian_process.kernels import RBF, ConstantKernel
     except ImportError as e:
         print(f"  skip MultiGP: {e}")
+        return None
+
+    n, p, q = 200, 3, 3
+    x = design_x(n, p)
+    y = multi_y(x, q)
+
+    def run():
+        kern = ConstantKernel() * RBF(length_scale=1.0)
+        gp = GaussianProcessRegressor(
+            kernel=kern, n_restarts_optimizer=0,
+            normalize_y=False, alpha=1e-6,
+        )
+        gp.fit(x, y)              # Y is (n, q); shared HP across outputs
+        mean = gp.predict(x)      # (n, q) prediction
+        return float(mean.sum())
+
+    ms, _ = median_time(run, n_iter=3)
+    return Row(
+        "MultiGP_n200_p3_q3", ms, 0.0, 0.0,
+        "sklearn GPR fit(X, Y::(n,q)) — single HP optimization",
+    )
+
+
+def bench_multi_gp_indep() -> Row | None:
+    """Independent-GP benchmark: q separate fit() calls, each with its
+    own HP optimisation. Matches hanalyze's @fitMultiGPMVIndep@."""
+    try:
+        from sklearn.gaussian_process import GaussianProcessRegressor
+        from sklearn.gaussian_process.kernels import RBF, ConstantKernel
+    except ImportError as e:
+        print(f"  skip MultiGP_indep: {e}")
         return None
 
     n, p, q = 200, 3, 3
@@ -115,45 +147,8 @@ def bench_multi_gp() -> Row | None:
 
     ms, _ = median_time(run, n_iter=3)
     return Row(
-        "MultiGP_n200_p3_q3", ms, 0.0, 0.0,
+        "MultiGP_n200_p3_q3_indep", ms, 0.0, 0.0,
         "sklearn GaussianProcessRegressor RBF q=3 outputs (independent GPs)",
-    )
-
-
-def bench_multi_gp_shared_hp() -> Row | None:
-    """Shared-HP multi-output GP: sklearn's @fit(X, Y)@ with @Y :: (n, q)@
-    optimises kernel hyperparameters once, then solves @α = K⁻¹ Y@ with
-    a (q-column) RHS — one Cholesky factor reused across outputs.
-
-    This is sklearn's native multi-output mode. hanalyze's
-    @fitMultiGPMV@ does NOT have this mode (yet); each output gets its
-    own HP optimization. So this bench exists to document the
-    structural advantage sklearn has when shared HP is acceptable."""
-    try:
-        from sklearn.gaussian_process import GaussianProcessRegressor
-        from sklearn.gaussian_process.kernels import RBF, ConstantKernel
-    except ImportError as e:
-        print(f"  skip MultiGP_sharedHP: {e}")
-        return None
-
-    n, p, q = 200, 3, 3
-    x = design_x(n, p)
-    y = multi_y(x, q)
-
-    def run():
-        kern = ConstantKernel() * RBF(length_scale=1.0)
-        gp = GaussianProcessRegressor(
-            kernel=kern, n_restarts_optimizer=0,
-            normalize_y=False, alpha=1e-6,
-        )
-        gp.fit(x, y)              # Y is (n, q); shared HP across outputs
-        mean = gp.predict(x)      # (n, q) prediction
-        return float(mean.sum())
-
-    ms, _ = median_time(run, n_iter=3)
-    return Row(
-        "MultiGP_n200_p3_q3_sharedHP", ms, 0.0, 0.0,
-        "sklearn GPR fit(X, Y::(n,q)) — single HP optimization",
     )
 
 
@@ -161,7 +156,7 @@ def bench_multi_gp_shared_hp() -> Row | None:
 
 def main():
     rows: list[Row] = []
-    for r in (bench_multi_lm(), bench_multi_gp(), bench_multi_gp_shared_hp()):
+    for r in (bench_multi_lm(), bench_multi_gp(), bench_multi_gp_indep()):
         if r is not None:
             rows.append(r)
             print(f"  {r.name:<32} {r.time_ms:>10.3f} ms  {r.extra}")

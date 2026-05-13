@@ -29,7 +29,7 @@ wrapper that lifts to a 1-column matrix and delegates.**
 | `Hanalyze.Model.RFF`          | `rffRidge` / `rffRidgeMV` | `rffRidgeMulti` / `rffRidgeMVMulti` |
 | `Hanalyze.Model.GP`           | `fitGP`               | `fitGPMulti` (shared Ky⁻¹ and shared variance) |
 | `Hanalyze.Model.GPRobust`     | `fitGPRobust`         | `fitGPRobustMulti` (per-column IRLS, shared K) |
-| `Hanalyze.Model.MultiGP`      | —                     | `fitMultiGP` (Independent GPs with per-output HPs) |
+| `Hanalyze.Model.MultiGP`      | —                     | `fitMultiGP` / `fitMultiGPMV` (shared HP, RBF, default) + `fitMultiGPIndep` / `fitMultiGPMVIndep` (per-output independent HPs) |
 | `Hanalyze.Model.Multivariate` | —                     | RRR / PLS / CCA |
 | `Hanalyze.Model.HBM`          | `observe` (1 col)     | `observeColumns` helper + `MvNormal` observation |
 
@@ -116,11 +116,43 @@ let ccaFit = cca xMat yMat
 
 ## 4. Multi-output GP
 
-### Shared-kernel (fast, `Hanalyze.Model.GP.fitGPMulti`)
-All q outputs share the same kernel and hyperparameters → one Cholesky:
+Three flavours, distinguished by how hyperparameters are shared across
+outputs:
+
+| API | HP optimisations | Kernels | Use case |
+|---|---|---|---|
+| `GP.fitGPMulti` / `GP.fitGPMVMulti` | 0 (HPs supplied) | any | HPs are already chosen; reuse Cholesky to predict q outputs |
+| `MultiGP.fitMultiGP` / `fitMultiGPMV` (★ default) | **1** (pooled marginal lik + shared Cholesky) | RBF only | sklearn-style: homogeneous q outputs. ~q× faster than per-output for @q > 1@ |
+| `MultiGP.fitMultiGPIndep` / `fitMultiGPMVIndep` | **q** (each output independent) | any (RBF / Matérn52 / Periodic) | Outputs need distinct length-scales or noise |
+
+None of these model cross-output correlations (Co-kriging / LMC);
+@B = I@ in the ICM sense.
+
+### Shared HP (default, RBF, `Hanalyze.Model.MultiGP.fitMultiGP`)
+A single HP set is learnt by maximising the pooled marginal likelihood
+@Σ_q log p(y_q | θ)@, then one Cholesky factor of @Ky = K + σ_n² I@
+is reused for every output's posterior solve. Mirrors sklearn's
+@GaussianProcessRegressor.fit(X, Y::(n,q))@:
 
 ```haskell
-import qualified Model.GP as GP
+import Hanalyze.Model.MultiGP
+
+let res = fitMultiGP trainX trainYs testX
+-- mgpMean, mgpLower, mgpUpper, mgpModels (all q models identical)
+```
+
+Multi-input form (X is @n × p@):
+
+```haskell
+let resMV = fitMultiGPMV trainX trainYs testX
+-- mgpmvMean :: [Vector Double], mgpmvModels :: [GPModel] (all identical)
+```
+
+### Cholesky-only sharing (HPs known, `Hanalyze.Model.GP.fitGPMulti`)
+When HPs are already fixed externally (e.g. inside an MCMC step):
+
+```haskell
+import qualified Hanalyze.Model.GP as GP
 
 let model = GP.GPModel GP.RBF GP.defaultGPParams
 let (meanMat, varList) = GP.fitGPMulti model trainX trainYMat testX
@@ -128,14 +160,15 @@ let (meanMat, varList) = GP.fitGPMulti model trainX trainYMat testX
 -- varList :: [Double] (length m, shared across q outputs)
 ```
 
-### Per-output independent HP (`Hanalyze.Model.MultiGP`)
-When each output should have its own hyperparameters:
+### Per-output independent HPs (any kernel, `Hanalyze.Model.MultiGP.fitMultiGPIndep`)
+Use this when each output needs its own length-scale / noise, or when
+the kernel is Matérn 5/2 or Periodic:
 
 ```haskell
-import Model.MultiGP
+import Hanalyze.Model.MultiGP
 
-let res = fitMultiGP RBF trainX trainYs testX
--- mgpMean, mgpLower, mgpUpper, mgpModels
+let res = fitMultiGPIndep RBF trainX trainYs testX
+-- mgpModels has a distinct GPParams for each output
 ```
 
 ---

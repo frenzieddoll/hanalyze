@@ -5,9 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
 
-## [0.1.0.0] - 2026-05-11
+## [0.1.0.0] - 2026-05-14
 
 Initial Hackage release.
+
+### Multi-output GP — API のデフォルトを shared-HP に変更
+- `Hanalyze.Model.MultiGP.fitMultiGP` / `fitMultiGPMV` の **挙動を sklearn 流
+  shared-HP 版に置き換え**。1 回の HP 最適化で全 q 出力の合算周辺尤度を
+  最大化し、`Ky = K + σ_n² I` の Cholesky を再利用する (RBF 専用、
+  `q > 1` で旧版比 ~q× 速い)。
+- 旧来の per-output 独立 HP 版 (任意カーネル対応) は
+  `fitMultiGPIndep` / `fitMultiGPMVIndep` に **改名**。
+- 旧 `fitMultiGPMVSharedHP` は新しい `fitMultiGPMV` に統合済 (削除)。
+- 既存ユーザーは `fitMultiGP kern ...` を `fitMultiGPIndep kern ...` に
+  置き換えれば従来の挙動を維持できる。
 
 ### LM diagnostics + Taguchi/Quality 拡張
 - `Hanalyze.Model.LM.Diagnostics` (new module): inference and residual diagnostics
