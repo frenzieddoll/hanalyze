@@ -1110,6 +1110,20 @@ executable bench-mem-vi
     , time                 >= 1.9  && < 1.13
     , mwc-random           >= 0.15 && < 0.16
 
+executable bench-mem-aggregate
+  import:           warnings, opt
+  main-is:          BenchMemAggregate.hs
+  hs-source-dirs:   bench/haskell
+  default-language: GHC2021
+  ghc-options:      -rtsopts
+  build-depends:
+      base                 >= 4.14 && < 5
+    , hanalyze
+    , dataframe            >= 0.3  && < 2
+    , text                 >= 1.2  && < 2.2
+    , time                 >= 1.9  && < 1.13
+    , vector               >= 0.13 && < 0.14
+
 -- Kernel / GP bench (B2): KR / NW / RFF / GP / GPRobust.
 executable bench-kernel
   import:           warnings, opt
