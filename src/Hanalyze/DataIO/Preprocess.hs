@@ -70,7 +70,7 @@ import qualified DataFrame.Internal.Types     as DXT
 
 import Control.DeepSeq (NFData, force)
 import Control.Exception (SomeException, try, evaluate)
-import Data.List (sort)
+import Data.List (foldl', sort)
 import qualified Data.List
 import qualified Data.Ord
 import qualified Data.Map.Strict as Map
@@ -426,12 +426,22 @@ groupByAggregate gCol nCol agg df =
     _ -> Nothing
 
 -- | 順序保持の group→[value] 蓄積。
-collectInOrder :: Eq k => [(k, v)] -> [(k, [v])]
-collectInOrder = foldl step []
-  where
-    step acc (k, v) = case lookup k acc of
-      Just _  -> [ if k' == k then (k', vs ++ [v]) else (k', vs) | (k', vs) <- acc ]
-      Nothing -> acc ++ [(k, [v])]
+--
+-- Phase Q3 (2026-05-14): 旧実装は @foldl@ + @lookup@ + @vs ++ [v]@ の三重で
+-- O(n²) (n=50000 で 1.2 s / 10.4 GB alloc を観測)。Map で初出順 index と
+-- 累積値を保持し、最後に index 順に並べる O(n log n) 実装に置換。
+-- 蓄積は @v :@ で先頭 cons → 最後に @reverse@ するため per-element O(1)。
+collectInOrder :: Ord k => [(k, v)] -> [(k, [v])]
+collectInOrder kvs =
+  let go (!nextIdx, !mp) (k, v) =
+        case Map.lookup k mp of
+          Just (i, rev)  -> (nextIdx, Map.insert k (i, v : rev) mp)
+          Nothing        -> (nextIdx + 1, Map.insert k (nextIdx, [v]) mp)
+      (_, finalMp) = foldl' go (0 :: Int, Map.empty) kvs
+      bucketsByIdx = Data.List.sortBy
+                       (Data.Ord.comparing (fst . snd))
+                       (Map.toList finalMp)
+  in [ (k, reverse rev) | (k, (_, rev)) <- bucketsByIdx ]
 
 -- | Group-by aggregation with the per-group mean.
 groupByMean   :: Text -> Text -> DXD.DataFrame -> Maybe DXD.DataFrame
