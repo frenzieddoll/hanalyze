@@ -7,6 +7,49 @@ and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
 
 ## [Unreleased]
 
+### Added (130: HPotfire Vega-Lite migration foundation)
+- `Hanalyze.Viz.PlotConfig`: `PlotConfig` moved out of `Viz.Core` and gained
+  optional fields `plotColorScheme` / `plotFacetColumn` / `plotLegendPos`.
+  `Viz.Core` re-exports both `PlotConfig` and `defaultConfig`, so existing
+  imports keep working unchanged.
+- `Hanalyze.Viz.PlotData`: source-agnostic intermediate
+  `PlotData { pdNumeric, pdText, pdLength }` plus a `ToPlotData` adapter type
+  class so future backends (DB / Parquet stream) can feed `*Spec` functions
+  without taking a hard `dataframe` dependency. Hackage `dataframe` adapter
+  lives in `Hanalyze.Viz.PlotData.DataFrame`.
+- `Hanalyze.Viz.Core.vlJson :: VegaLite -> Text` — canonical JSON serialisation
+  helper for downstream consumers (HPotfire `/api/viz`).
+- `Hanalyze.Viz.Scatter.scatterSpec` / `Histogram.histSpec` /
+  `Bar.barSpec` — `PlotConfig -> ... -> PlotData -> VegaLite` entry points.
+  Scatter honours `plotColorScheme` / `plotFacetColumn` / `plotLegendPos`.
+
+### Changed (130: Pareto Viz API)
+- **BREAKING**: `Hanalyze.Viz.Pareto` rewritten on the `PlotData` convention.
+  All public functions (`paretoScatter` / `paretoPair` / `parallelCoordinates`
+  / `hypervolumeHistory` / `paretoCompare`) now take `PlotData` instead of
+  `[Solution]`. Use the new `solutionsToPlotData :: [Text] -> [Solution] ->
+  PlotData` helper to bridge from NSGA-II results.
+- Demos `MaterialsMOODemo.hs` and `NSGADemo.hs` updated accordingly.
+
+### Added (090: GLM diagnostics + predict SE)
+- `Hanalyze.Model.GLM` exports the previously-internal helpers `Link`,
+  `linkFnOf`, `glmDeviance`, `glmLogLik`, `glmVariance` (request 090-CD)
+  so HPotfire can drop its local re-implementations.
+- `glmPearsonResiduals` / `glmDevianceResiduals` for diagnostics
+  (Q-Q / Scale-Location plots).
+- `predictGlmEtaWithSE` and `predictGlmMuWithCI` (with `GlmPredictCI`
+  record) for proper Wald CI on η and μ scales — replaces the
+  `η ± 2·rse` approximation HPotfire has been using.
+
+### Added (100: GLMM SE)
+- `Hanalyze.Model.GLMM.glmmFixedSE :: Matrix -> Vector Int -> GLMMResult ->
+  Vector Double` — exact LME (Gaussian) fixed-effect SE via
+  block-structured `(Xᵀ V⁻¹ X)⁻¹`; non-Gaussian families fall back to a
+  `σ² = 1` Gaussian approximation.
+- `glmmBLUPSE :: Vector Int -> GLMMResult -> Vector Double` — posterior
+  SD of random-intercept BLUPs `(1/σ²_u + n_j/σ²)⁻¹^½`. Suitable for
+  forest plot whiskers.
+
 ### Fixed (P1: RFF OOM)
 - `Hanalyze.Model.RFF.medianPairwiseDist`: rewrote with BLAS gram matrix
   (`Hanalyze.Stat.KernelDist.pairwiseSqDist`) + `Data.Vector.Algorithms.Intro.sort`
