@@ -39,3 +39,7 @@ bench/data/
 
 # 編集時の一時ファイル
 *.tmp
+
+# HPotfire からの申し送り類は git 管理外 (PR ごとに done/ 移動 or 削除する運用)
+/request/
+/HANALYZE_REQUESTS.md
