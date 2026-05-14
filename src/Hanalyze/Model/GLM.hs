@@ -23,6 +23,11 @@ module Hanalyze.Model.GLM
     -- * Multi-output (per-column IRLS; Family/Link shared)
   , GLMFitMulti (..)
   , fitGLMMulti
+    -- * Diagnostic primitives (新規 export, request/090-CD)
+  , Link
+  , linkFnOf
+  , glmDeviance
+  , glmLogLik
   ) where
 
 import qualified DataFrame.Internal.DataFrame as DXD
