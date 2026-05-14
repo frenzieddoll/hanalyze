@@ -64,6 +64,9 @@ library
     Hanalyze.DataIO.Clean
     Hanalyze.DataIO.Reshape
     Hanalyze.Viz.Core
+    Hanalyze.Viz.PlotConfig
+    Hanalyze.Viz.PlotData
+    Hanalyze.Viz.PlotData.DataFrame
     Hanalyze.Viz.Scatter
     Hanalyze.Viz.Histogram
     Hanalyze.Viz.Bar

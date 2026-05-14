@@ -1,17 +1,25 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Core visualization helpers shared by every @Viz.*@ module.
+-- | Core visualization I/O helpers shared by every @Viz.*@ module.
 --
--- Provides 'PlotConfig' / 'defaultConfig' (title, dimensions, output
--- format), 'writeSpec' for emitting HTML / PNG / SVG (PNG and SVG go
--- through the @vl-convert@ subprocess; HTML is the always-available
--- fallback) and the @openInBrowser@ convenience helper.
+-- Owns 'OutputFormat', 'writeSpec' (HTML / PNG / SVG via @vl-convert@
+-- subprocess; HTML is the always-available fallback), 'openInBrowser',
+-- and the JSON serialiser 'vlJson' used by downstream consumers
+-- (HPotfire) to ship Vega-Lite specs over the wire.
+--
+-- Plot configuration ('PlotConfig' / 'defaultConfig') lives in
+-- 'Hanalyze.Viz.PlotConfig' since 2026-05-14 and is re-exported here for
+-- backwards compatibility.
 module Hanalyze.Viz.Core
-  ( PlotConfig (..)
+  ( -- * Plot configuration (re-exported from "Hanalyze.Viz.PlotConfig")
+    PlotConfig (..)
   , defaultConfig
+    -- * Spec I/O
   , openInBrowser
   , OutputFormat (..)
   , parseFormat
   , writeSpec
+    -- * Spec serialisation
+  , vlJson
   ) where
 
 import Control.Exception (SomeException, try)
@@ -27,20 +35,16 @@ import System.IO (hFlush, hClose, hPutStrLn, stderr)
 import System.IO.Temp (withSystemTempFile)
 import System.Process (callCommand, callProcess)
 
--- | Common plot configuration.
-data PlotConfig = PlotConfig
-  { plotTitle  :: Text
-  , plotWidth  :: Double
-  , plotHeight :: Double
-  } deriving (Show)
+import Hanalyze.Viz.PlotConfig (PlotConfig (..), defaultConfig)
 
--- | Default 600 × 400 'PlotConfig' with the given title.
-defaultConfig :: Text -> PlotConfig
-defaultConfig t = PlotConfig
-  { plotTitle  = t
-  , plotWidth  = 600
-  , plotHeight = 400
-  }
+-- | Serialise a 'VegaLite' spec to its canonical JSON 'Text'. Convenient
+-- for downstream consumers (e.g. HPotfire's @/api/viz@) that need to
+-- ship the spec over the wire instead of writing to disk.
+--
+-- Equivalent to @decodeUtf8 . toStrict . encode . fromVL@; provided here
+-- so every @Viz.*@ module can re-export a single canonical spelling.
+vlJson :: VegaLite -> Text
+vlJson = decodeUtf8 . toStrict . encode . fromVL
 
 -- | Output format for generated plots.
 data OutputFormat = HTML | PNG | SVG deriving (Show, Eq)
