@@ -15,7 +15,8 @@ import System.Random.MWC (createSystemRandom)
 import Hanalyze.Optim.NSGA   (Solution (..), NSGAConfig (..), defaultNSGAConfig,
                      nsga2)
 import Hanalyze.Optim.Pareto (hypervolume)
-import Hanalyze.Viz.Pareto   (parallelCoordinatesFile, paretoPairFile)
+import Hanalyze.Viz.Pareto   (parallelCoordinatesFile, paretoPairFile,
+                              solutionsToPlotData)
 import Hanalyze.Viz.Core     (defaultConfig, OutputFormat (..), PlotConfig (..))
 
 -- 材料科学シナリオ: x ∈ [0, 1] (合金中の銅含有率)
@@ -80,12 +81,15 @@ main = do
   putStrLn "[3] 可視化"
   let vCfg t = (defaultConfig t)
                  { plotWidth = 700, plotHeight = 350 }
+  -- 130 規約: Solution → PlotData に変換してから Viz に渡す
+  let labels = ["-strength", "cost", "weight"]
+      pdFront = solutionsToPlotData labels front
   parallelCoordinatesFile HTML "materials-parallel.html"
     (vCfg "材料 Pareto front — 並行座標 (-strength / cost / weight)")
-    ["-strength", "cost", "weight"] front
+    labels pdFront
   paretoPairFile HTML "materials-pair.html"
     (vCfg "材料 Pareto front — ペア散布")
-    ["-strength", "cost", "weight"] front
+    labels pdFront
   putStrLn "  → materials-parallel.html / materials-pair.html"
   putStrLn ""
 

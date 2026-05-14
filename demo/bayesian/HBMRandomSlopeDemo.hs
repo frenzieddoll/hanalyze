@@ -245,8 +245,8 @@ runHBM label htmlPath m mainParams initP allParams cfg = do
               , fromMaybe 0 (posteriorQuantile 0.975 n chain))
             | n <- allParams ]
         }
-      diagCfg = PlotConfig "MCMC 診断 (KDE + トレース)" 760 320
-      acfCfg  = PlotConfig "自己相関 (lag 0..40)" 760 220
+      diagCfg = PlotConfig "MCMC 診断 (KDE + トレース)" 760 320 Nothing Nothing Nothing
+      acfCfg  = PlotConfig "自己相関 (lag 0..40)" 760 220 Nothing Nothing Nothing
       diagPlot = NamedPlot "vl-diag" "MCMC 診断"
                    (mcmcDiagnostics diagCfg mainParams chain)
       acfPlot  = NamedPlot "vl-acf"  "自己相関"

@@ -11,8 +11,12 @@ import System.Random.MWC (createSystemRandom)
 import Hanalyze.Optim.NSGA   (Solution (..), NSGAConfig (..), defaultNSGAConfig,
                      nsga2)
 import Hanalyze.Optim.Pareto (hypervolume, igd)
-import Hanalyze.Viz.Pareto   (paretoCompareFile, parallelCoordinatesFile)
-import Hanalyze.Viz.Core     (defaultConfig, OutputFormat (..), PlotConfig (..))
+import Hanalyze.Viz.Pareto    (paretoCompareFile, parallelCoordinatesFile,
+                               solutionsToPlotData)
+import Hanalyze.Viz.PlotData  (PlotData (..), fromMixedColumns)
+import Hanalyze.Viz.Core      (defaultConfig, OutputFormat (..), PlotConfig (..))
+import qualified Data.Vector  as V
+import qualified Data.Text    as T
 
 -- ---------------------------------------------------------------------------
 -- ZDT1 (Zitzler-Deb-Thiele 2000):
@@ -91,21 +95,38 @@ main = do
          (show (round2 (last (sortBy12 objs2))))
   putStrLn ""
 
-  -- ── 可視化 ──
+  -- ── 可視化 (130 規約: PlotData 経由) ──
   let cmpCfg t = (defaultConfig t)
                    { plotWidth = 600, plotHeight = 400 }
+      -- estimated front + true front を 1 つの PlotData に束ね、"src" 列で分ける
+      buildCompare estObjs trueFront =
+        let f1s = [ head o | o <- estObjs ]
+                ++ [ head p | p <- trueFront ]
+            f2s = [ o !! 1  | o <- estObjs ]
+                ++ [ p !! 1  | p <- trueFront ]
+            srcs = replicate (length estObjs) (T.pack "estimated")
+                ++ replicate (length trueFront) (T.pack "true")
+        in fromMixedColumns
+             [ (T.pack "f1", V.fromList f1s)
+             , (T.pack "f2", V.fromList f2s)
+             ]
+             [ (T.pack "src", V.fromList srcs) ]
+
   paretoCompareFile HTML "nsga-schaffer.html"
     (cmpCfg "Schaffer — NSGA-II 推定 vs 真の Pareto front")
-    (schafferTrueFront 100) front1
+    ("f1", "f2") "src"
+    (buildCompare objs1 (schafferTrueFront 100))
+
   paretoCompareFile HTML "nsga-zdt1.html"
     (cmpCfg "ZDT1 (10D) — NSGA-II 推定 vs 真の Pareto front")
-    (zdt1TrueFront 200) front2
+    ("f1", "f2") "src"
+    (buildCompare objs2 (zdt1TrueFront 200))
   putStrLn "  → nsga-schaffer.html / nsga-zdt1.html"
 
   parallelCoordinatesFile HTML "nsga-zdt1-parallel.html"
     ((defaultConfig "ZDT1 final population — parallel coordinates")
        { plotWidth = 700, plotHeight = 350 })
-    ["f1", "f2"] front2
+    ["f1", "f2"] (solutionsToPlotData ["f1", "f2"] front2)
   putStrLn "  → nsga-zdt1-parallel.html (並行座標)"
   putStrLn ""
 

@@ -317,8 +317,8 @@ reportHBM = do
              }
       paramNames = ["mu_alpha", "sigma_alpha", "beta", "sigma",
                     "alpha_A", "alpha_B", "alpha_C"]
-      diagCfg = PlotConfig "MCMC 診断 (KDE + トレース)" 760 320
-      acfCfg  = PlotConfig "自己相関 (lag 0..40)" 760 220
+      diagCfg = PlotConfig "MCMC 診断 (KDE + トレース)" 760 320 Nothing Nothing Nothing
+      acfCfg  = PlotConfig "自己相関 (lag 0..40)" 760 220 Nothing Nothing Nothing
       diagPlot = NamedPlot "vl-hbm-diag" "MCMC 診断 (β / α_g / σ)"
                    (mcmcDiagnostics diagCfg ["beta", "alpha_A", "alpha_B", "alpha_C", "sigma"] chain)
       acfPlot  = NamedPlot "vl-hbm-acf" "パラメータ別 自己相関"

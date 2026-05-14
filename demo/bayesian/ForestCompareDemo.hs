@@ -72,7 +72,7 @@ main = do
 
   -- ── Forest plot ──
   putStrLn "[2] Forest plot 出力 (forest_compare.html)"
-  let fcfg = PlotConfig "Posterior 95% CI per model" 600 400
+  let fcfg = PlotConfig "Posterior 95% CI per model" 600 400 Nothing Nothing Nothing
       -- 各モデルを別 chain として渡すと色分けされる
       chs  = [ch1, ch2, ch3]
   forestPlotFile HTML "forest_compare.html" fcfg ["mu", "sigma"] chs
