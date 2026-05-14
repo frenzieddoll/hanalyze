@@ -15,6 +15,9 @@ module Hanalyze.Model.GLMM
   , GLMMResultMulti (..)
   , fitLMEMulti
   , fitGLMMMulti
+    -- * Standard errors (request/100)
+  , glmmFixedSE
+  , glmmBLUPSE
   ) where
 
 import qualified DataFrame.Internal.DataFrame as DXD
@@ -433,3 +436,90 @@ fitGLMMMulti family link x y idx labels sizes =
       fits  = [fitGLMM family link x (yCol j) idx labels sizes
               | j <- [0 .. q - 1]]
   in GLMMResultMulti fits labels
+
+-- ---------------------------------------------------------------------------
+-- Standard errors (request/100)
+-- ---------------------------------------------------------------------------
+
+-- | Standard errors of the fixed-effect coefficients @β@.
+--
+-- For LME (Gaussian, Identity link) this is /exact/: it inverts
+-- @Xᵀ V⁻¹ X@ where @V = σ² I + σ²_u Z Zᵀ@ is the marginal covariance
+-- under the random-intercept model. The block structure of @V@ is
+-- exploited so this stays @O(n p² + q p²)@ instead of forming a
+-- dense @n × n@ matrix:
+--
+-- > Xᵀ V⁻¹ X = (1/σ²) Xᵀ X − Σ_j (α_j / σ²) s_j s_jᵀ
+-- > α_j     = σ²_u / (σ² + n_j σ²_u)
+-- > s_j     = Σ_{i ∈ group j} x_i           (column sums of X within group j)
+--
+-- For non-Gaussian families this returns a Gaussian-approximation
+-- (treats @σ² = 1@) — adequate for /relative/ ordering of coefficients
+-- but absolute values are off; matching lme4-style non-Gaussian SE
+-- requires the converged IRLS weights which are not currently exposed
+-- by 'fitGLMM'.
+glmmFixedSE
+  :: LA.Matrix Double      -- ^ Design matrix @X@ (n × p, intercept inclusive).
+  -> V.Vector Int          -- ^ Group index per observation (length n; same as
+                           --   the @idx@ produced by 'buildGroups').
+  -> GLMMResult
+  -> LA.Vector Double      -- ^ Length @p@; coefficient SEs in column order.
+glmmFixedSE x groupIdx res =
+  let n       = LA.rows x
+      p       = LA.cols x
+      sig2u   = glmmRandVar  res
+      sig2RAW = glmmResidVar res
+      sig2    = if sig2RAW > 0 then sig2RAW else 1.0   -- non-Gaussian fallback
+      q       = V.length (glmmGroups res)
+
+      -- per-group n_j
+      nj :: Map.Map Int Int
+      nj = V.foldl' (\acc j -> Map.insertWith (+) j 1 acc) Map.empty groupIdx
+
+      -- per-group column sum s_j = Σ_{i ∈ group j} x_i  (length p)
+      groupSum :: Map.Map Int (LA.Vector Double)
+      groupSum =
+        V.foldl' (\acc i ->
+                    let j = groupIdx V.! i
+                        xi = LA.flatten (x LA.? [i])
+                    in Map.insertWith (+) j xi acc)
+                 Map.empty
+                 (V.enumFromN 0 n)
+
+      xtxFull = LA.tr x LA.<> x
+
+      correction :: LA.Matrix Double
+      correction =
+        Map.foldlWithKey'
+          (\acc j s ->
+              let nj_j = Map.findWithDefault 0 j nj
+                  alpha = sig2u / (sig2 + fromIntegral nj_j * sig2u)
+              in acc + LA.scale alpha (LA.outer s s))
+          (LA.konst 0 (p, p))
+          groupSum
+
+      xvtinvX = LA.scale (1 / sig2) (xtxFull - correction)
+      cov     = LA.inv xvtinvX
+      _ = q  -- kept to make q's role explicit in the docstring
+  in LA.fromList [ sqrt (max 0 (LA.atIndex cov (i, i))) | i <- [0 .. p - 1] ]
+
+-- | Posterior standard errors of the BLUPs @û_j@ under the
+-- random-intercept model:
+--
+-- > Var(u_j | data) = (1 / σ²_u + n_j / σ²)⁻¹
+--
+-- (For non-Gaussian families this uses @σ² = 1@; same caveat as
+-- 'glmmFixedSE'.) Length matches 'glmmGroups'.
+glmmBLUPSE :: V.Vector Int -> GLMMResult -> V.Vector Double
+glmmBLUPSE groupIdx res =
+  let q       = V.length (glmmGroups res)
+      sig2u   = glmmRandVar  res
+      sig2RAW = glmmResidVar res
+      sig2    = if sig2RAW > 0 then sig2RAW else 1.0
+      njMap   = V.foldl' (\acc j -> Map.insertWith (+) j 1 acc)
+                         Map.empty groupIdx
+      ng j    = Map.findWithDefault 0 j njMap
+  in V.generate q (\j ->
+       let nDouble = fromIntegral (ng j) :: Double
+           varInv  = 1.0 / sig2u + nDouble / sig2
+       in sqrt (1.0 / varInv))

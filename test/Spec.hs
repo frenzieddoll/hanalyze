@@ -2359,3 +2359,59 @@ main = hspec $ do
       GLM.gpLo ci `shouldSatisfy` (\v -> v >= 0)
       GLM.gpHi ci `shouldSatisfy` (\v -> v <= 1)
       GLM.gpLo ci `shouldSatisfy` (< GLM.gpHi ci)
+
+  describe "Hanalyze.Model.GLMM SE (request/100)" $ do
+    -- Same fixture as the GLMM tests above (3 groups × 4 obs).
+    -- design X = [1, x] over the same 12 rows.
+    let xMat12 = LA.matrix 2
+                   ( concatMap (\v -> [1, v])
+                       [1,2,3,4,1,2,3,4,1,2,3,4 :: Double] )
+        yVec12 = LA.fromList
+                   [7.1,6.9,7.0,7.0, 5.0,4.9,5.1,5.0, 3.0,2.9,3.1,3.0]
+        gVec12 = V.fromList
+                   ["A","A","A","A","B","B","B","B","C","C","C","C" :: T.Text]
+        -- Inline group construction (mirrors Hanalyze.Model.GLMM.buildGroups
+        -- which is currently internal).
+        gLabels12 = V.fromList ["A", "B", "C"] :: V.Vector T.Text
+        gIdx12    = V.map
+                      (\g -> case V.elemIndex g gLabels12 of
+                               Just i  -> i
+                               Nothing -> 0)
+                      gVec12
+        gSizes12  = V.fromList [4, 4, 4]
+        glmmRes   = fitLME xMat12 yVec12 gIdx12 gLabels12 gSizes12
+        idx12     = gIdx12
+
+    it "glmmFixedSE: returns one SE per coefficient (length p)" $ do
+      let ses = glmmFixedSE xMat12 idx12 glmmRes
+      LA.size ses `shouldBe` LA.cols xMat12
+
+    it "glmmFixedSE: all SEs are positive" $ do
+      let ses = glmmFixedSE xMat12 idx12 glmmRes
+      mapM_ (\v -> v `shouldSatisfy` (> 0)) (LA.toList ses)
+
+    it "glmmFixedSE: σ_u → 0 reduces to OLS SE within tolerance" $ do
+      -- Force σ²_u to 0 (no random effects → OLS).
+      let resOLS = glmmRes { glmmRandVar = 0 }
+          sesG   = glmmFixedSE xMat12 idx12 resOLS
+          -- Reference OLS SE from σ² (XᵀX)⁻¹.
+          xtx   = LA.tr xMat12 LA.<> xMat12
+          covOLS = LA.scale (glmmResidVar resOLS) (LA.inv xtx)
+          sesOLS = LA.fromList
+                     [ sqrt (LA.atIndex covOLS (i, i))
+                     | i <- [0 .. LA.cols xMat12 - 1] ]
+      LA.norm_Inf (sesG - sesOLS) `shouldSatisfy` (< 1e-9)
+
+    it "glmmBLUPSE: one entry per group, all positive" $ do
+      let ses = glmmBLUPSE idx12 glmmRes
+      V.length ses `shouldBe` V.length (glmmGroups glmmRes)
+      mapM_ (\v -> v `shouldSatisfy` (> 0)) (V.toList ses)
+
+    it "glmmBLUPSE: shrinkage formula (1/σ²_u + n_j/σ²)⁻¹^½" $ do
+      let ses    = glmmBLUPSE idx12 glmmRes
+          sig2u  = glmmRandVar  glmmRes
+          sig2   = glmmResidVar glmmRes
+          -- Group sizes: A=4, B=4, C=4 (balanced design)
+          expected = sqrt (1.0 / (1.0 / sig2u + 4.0 / sig2))
+      mapM_ (\(_, v) -> abs (v - expected) `shouldSatisfy` (< 1e-9))
+            (zip [0 :: Int ..] (V.toList ses))
