@@ -9,13 +9,17 @@ module Hanalyze.Viz.Histogram
   , histogramPlotFile
   , histogramWithDensity
   , histogramWithDensityFile
+    -- * 130: PlotData ベースの汎用 spec API
+  , histSpec
   ) where
 
 import Hanalyze.Stat.Distribution (Distribution, isContinuous, supportRange, distributionName)
 import qualified Hanalyze.Stat.Distribution as Dist
-import Hanalyze.Viz.Core          (PlotConfig (..), OutputFormat, writeSpec)
+import Hanalyze.Viz.Core        (PlotConfig (..), OutputFormat, writeSpec)
+import Hanalyze.Viz.PlotData    (PlotData, numericColumn)
 
 import Data.Text (Text)
+import qualified Data.Vector as V
 import Graphics.Vega.VegaLite
 
 -- ---------------------------------------------------------------------------
@@ -130,3 +134,21 @@ binStepVal mBins xs =
       hi   = maximum xs
       bins = maybe (sturgesBins xs) id mBins
   in (hi - lo) / fromIntegral bins
+
+-- ---------------------------------------------------------------------------
+-- 130: PlotData ベースの汎用 spec API
+-- ---------------------------------------------------------------------------
+
+-- | Build a Vega-Lite histogram spec from a 'PlotData' source.
+--
+-- @maxBins@ overrides Sturges' rule when provided. Returns an empty
+-- (zero-row) spec if the column is missing from 'pdNumeric'.
+histSpec
+  :: PlotConfig
+  -> Text          -- ^ numeric column name
+  -> Maybe Int     -- ^ max bin count (Nothing = Sturges)
+  -> PlotData
+  -> VegaLite
+histSpec cfg col mBins pd =
+  let vals = maybe [] V.toList (numericColumn col pd)
+  in histogramPlot cfg col vals mBins

@@ -19,13 +19,16 @@ module Hanalyze.Viz.Scatter
   , scatterWithGroupsFile
   , predictedVsActual
   , predictedVsActualFile
+    -- * 130: PlotData ベースの汎用 spec API (HPotfire Vega 移行用)
+  , scatterSpec
   ) where
 
 import qualified DataFrame.Internal.DataFrame as DXD
 import Hanalyze.DataIO.Convert (getDoubleVec)
 import Hanalyze.Model.Core  (FitResult, fittedList)
 import Hanalyze.Model.LM    (CIBand (..), SmoothFit (..))
-import Hanalyze.Viz.Core    (PlotConfig (..), OutputFormat, writeSpec)
+import Hanalyze.Viz.Core       (PlotConfig (..), OutputFormat, writeSpec)
+import Hanalyze.Viz.PlotData   (PlotData, numericColumn, textColumn)
 
 import Data.List (sortBy)
 import Data.Ord (comparing)
@@ -361,3 +364,84 @@ scatterWithGroupsFile
   -> [(Text, Double, Double)] -> [(Text, Double, Double)] -> IO ()
 scatterWithGroupsFile fmt path cfg xCol yCol ptData lnData =
   writeSpec fmt path (scatterWithGroups cfg xCol yCol ptData lnData)
+
+-- ---------------------------------------------------------------------------
+-- 130: PlotData ベースの汎用 spec API
+-- ---------------------------------------------------------------------------
+
+-- | Build a Vega-Lite scatter spec from a 'PlotData' source.
+--
+-- The third argument is an optional grouping column used for colour
+-- encoding. If the column lives in 'pdText' it is treated as nominal,
+-- if in 'pdNumeric' as quantitative; if absent, no colour encoding is
+-- emitted. 'plotColorScheme' / 'plotFacetColumn' / 'plotLegendPos' on
+-- 'PlotConfig' are honoured.
+scatterSpec
+  :: PlotConfig
+  -> (Text, Text)        -- ^ (xCol, yCol)
+  -> Maybe Text          -- ^ optional colour / group column
+  -> PlotData
+  -> VegaLite
+scatterSpec cfg (xCol, yCol) mColor pd =
+  toVegaLite
+    [ title (plotTitle cfg) []
+    , dataSpec
+    , mark Point [MTooltip TTEncoding]
+    , encSpec
+    , width  (plotWidth  cfg)
+    , height (plotHeight cfg)
+    ]
+  where
+    xVals = maybe [] V.toList (numericColumn xCol pd)
+    yVals = maybe [] V.toList (numericColumn yCol pd)
+
+    mColorTextVals = mColor >>= \c -> V.toList <$> textColumn    c pd
+    mColorNumVals  = mColor >>= \c -> V.toList <$> numericColumn c pd
+    mFacetVals     = plotFacetColumn cfg
+                       >>= \c -> V.toList <$> textColumn c pd
+
+    addColorCol cols = case (mColor, mColorTextVals, mColorNumVals) of
+      (Just c, Just txts, _)        -> dataColumn c (Strings txts) cols
+      (Just c, Nothing,   Just nms) -> dataColumn c (Numbers nms)  cols
+      _                             -> cols
+    addFacetCol cols = case (plotFacetColumn cfg, mFacetVals) of
+      (Just c, Just txts) -> dataColumn c (Strings txts) cols
+      _                   -> cols
+
+    dataSpec = dataFromColumns []
+                . dataColumn xCol (Numbers xVals)
+                . dataColumn yCol (Numbers yVals)
+                . addColorCol
+                . addFacetCol
+                $ []
+
+    schemeOpts = case plotColorScheme cfg of
+      Just sch -> [MScale [SScheme sch []]]
+      Nothing  -> []
+    legendOpts = case plotLegendPos cfg of
+      Just "none" -> [MLegend []]
+      Just pos    -> [MLegend [LOrient (parseLegendOrient pos)]]
+      Nothing     -> []
+
+    addColorEnc encs = case (mColor, mColorTextVals, mColorNumVals) of
+      (Just c, Just _, _) ->
+        color ([MName c, MmType Nominal]      ++ schemeOpts ++ legendOpts) encs
+      (Just c, Nothing, Just _) ->
+        color ([MName c, MmType Quantitative] ++ schemeOpts ++ legendOpts) encs
+      _ -> encs
+    addFacetEnc encs = case plotFacetColumn cfg of
+      Just c  -> column [FName c, FmType Nominal] encs
+      Nothing -> encs
+
+    encSpec = encoding
+                . position X [PName xCol, PmType Quantitative, PAxis [AxTitle xCol]]
+                . position Y [PName yCol, PmType Quantitative, PAxis [AxTitle yCol]]
+                . addColorEnc
+                . addFacetEnc
+                $ []
+
+    parseLegendOrient "right"  = LORight
+    parseLegendOrient "left"   = LOLeft
+    parseLegendOrient "top"    = LOTop
+    parseLegendOrient "bottom" = LOBottom
+    parseLegendOrient _        = LORight

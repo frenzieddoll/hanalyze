@@ -12,12 +12,16 @@ module Hanalyze.Viz.Bar
   , stackedBar
   , groupedBar
   , barChartFile
+    -- * 130: PlotData ベースの汎用 spec API
+  , barSpec
   ) where
 
 import Data.Text (Text)
+import qualified Data.Vector as V
 import Graphics.Vega.VegaLite
 
-import Hanalyze.Viz.Core (PlotConfig (..), OutputFormat, writeSpec)
+import Hanalyze.Viz.Core     (PlotConfig (..), OutputFormat, writeSpec)
+import Hanalyze.Viz.PlotData (PlotData, numericColumn, textColumn)
 
 -- ---------------------------------------------------------------------------
 -- 縦棒グラフ (カテゴリ → 数値)
@@ -172,3 +176,22 @@ groupedBar cfg xLabel yLabel groupLabel xCats vals groupCats =
 -- | Write a bar-chart spec to disk in the given output format.
 barChartFile :: OutputFormat -> FilePath -> VegaLite -> IO ()
 barChartFile = writeSpec
+
+-- ---------------------------------------------------------------------------
+-- 130: PlotData ベースの汎用 spec API
+-- ---------------------------------------------------------------------------
+
+-- | Build a Vega-Lite bar chart spec from a 'PlotData' source.
+--
+-- The category column must live in 'pdText' and the value column in
+-- 'pdNumeric'. Returns 'barChart' empty-data spec if either is missing.
+barSpec
+  :: PlotConfig
+  -> Text          -- ^ category column (text)
+  -> Text          -- ^ value column (numeric)
+  -> PlotData
+  -> VegaLite
+barSpec cfg catCol valCol pd =
+  let cats = maybe [] V.toList (textColumn    catCol pd)
+      vals = maybe [] V.toList (numericColumn valCol pd)
+  in barChart cfg catCol valCol cats vals
