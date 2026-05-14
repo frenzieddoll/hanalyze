@@ -28,6 +28,13 @@ module Hanalyze.Model.GLM
   , linkFnOf
   , glmDeviance
   , glmLogLik
+  , glmVariance
+    -- * Residuals + predict SE (request/090-AB)
+  , glmPearsonResiduals
+  , glmDevianceResiduals
+  , GlmPredictCI (..)
+  , predictGlmEtaWithSE
+  , predictGlmMuWithCI
   ) where
 
 import qualified DataFrame.Internal.DataFrame as DXD
@@ -102,6 +109,12 @@ varOf :: Family -> Double -> Double
 varOf Gaussian _  = 1.0
 varOf Binomial mu = mu * (1 - mu)
 varOf Poisson  mu = mu
+
+-- | Public alias for the family variance @V(μ)@; see 'varOf'. Exposed
+-- so HPotfire diagnostics can compute Pearson-style standardisations
+-- without re-implementing the family table.
+glmVariance :: Family -> Double -> Double
+glmVariance = varOf
 
 -- | Clamp @μ@ to its valid range, avoiding boundary singularities.
 safeMu :: Family -> LA.Vector Double -> LA.Vector Double
@@ -552,6 +565,109 @@ glmDeviance Poisson y mu =
 xlogy :: Double -> Double -> Double
 xlogy 0 _ = 0
 xlogy x y = x * log y
+
+-- ---------------------------------------------------------------------------
+-- 090-A: Residuals (request/090-AB)
+-- ---------------------------------------------------------------------------
+
+-- | Pearson residuals @(y - μ) / sqrt(V(μ))@.
+glmPearsonResiduals
+  :: Family
+  -> LA.Vector Double   -- ^ Observations @y@.
+  -> LA.Vector Double   -- ^ Fitted means @μ@.
+  -> LA.Vector Double
+glmPearsonResiduals family y mu =
+  VS.zipWith (\yi mui ->
+                let v = varOf family mui
+                in if v <= 0 then 0 else (yi - mui) / sqrt v)
+             y mu
+
+-- | Deviance residuals @sign(y - μ) · sqrt(d_i)@ where @d_i@ is the
+-- per-observation contribution to the deviance @D = Σ d_i@.
+glmDevianceResiduals
+  :: Family
+  -> LA.Vector Double
+  -> LA.Vector Double
+  -> LA.Vector Double
+glmDevianceResiduals family y mu =
+  let perObs = pointwiseDeviance family y mu
+  in VS.zipWith3 (\yi mui di -> signum (yi - mui) * sqrt (max 0 di))
+                 y mu perObs
+  where
+    pointwiseDeviance Gaussian ys ms =
+      VS.zipWith (\yi mui -> let r = yi - mui in r * r) ys ms
+    pointwiseDeviance Binomial ys ms =
+      VS.zipWith
+        (\yi mui ->
+            let muC = max 1e-15 (min (1 - 1e-15) mui)
+            in 2 * ( xlogy yi (yi / muC)
+                   + xlogy (1 - yi) ((1 - yi) / (1 - muC)) ))
+        ys ms
+    pointwiseDeviance Poisson ys ms =
+      VS.zipWith
+        (\yi mui ->
+            let muC = max 1e-15 mui
+            in 2 * (xlogy yi (yi / muC) - (yi - muC)))
+        ys ms
+
+-- ---------------------------------------------------------------------------
+-- 090-B: Predict + SE (request/090-AB)
+-- ---------------------------------------------------------------------------
+
+-- | Prediction with Wald confidence interval on the response (μ) scale.
+data GlmPredictCI = GlmPredictCI
+  { gpMu :: !Double
+  , gpLo :: !Double
+  , gpHi :: !Double
+  } deriving (Show)
+
+-- | Linear-predictor prediction @η = xᵀβ@ with @SE = sqrt(xᵀ Σ x)@,
+-- where @Σ@ is @(XᵀWX)⁻¹@ from 'fitGLMFull'. The intercept must be
+-- present in @x@.
+predictGlmEtaWithSE
+  :: LA.Vector Double
+  -> LA.Matrix Double
+  -> LA.Vector Double
+  -> (Double, Double)
+predictGlmEtaWithSE beta sigma x =
+  let eta   = x `LA.dot` beta
+      sigX  = sigma LA.#> x
+      seEta = sqrt (max 0 (x `LA.dot` sigX))
+  in (eta, seEta)
+
+-- | Wald CI on the response scale: build CI in @η@ space then transform
+-- both endpoints through the inverse link.
+predictGlmMuWithCI
+  :: LinkFn
+  -> Double
+  -> LA.Vector Double
+  -> LA.Matrix Double
+  -> LA.Vector Double
+  -> GlmPredictCI
+predictGlmMuWithCI link level beta sigma x =
+  let (eta, se)  = predictGlmEtaWithSE beta sigma x
+      z          = waldZ level
+      (_, gInv, _) = linkFnOf link
+      mu  = gInv eta
+      lo  = gInv (eta - z * se)
+      hi  = gInv (eta + z * se)
+  in GlmPredictCI { gpMu = mu, gpLo = min lo hi, gpHi = max lo hi }
+
+-- | Two-sided Wald z: @z = √2 · erf⁻¹(level)@ (so @level=0.95@ →
+-- @1.95996…@). Uses Winitzki's rational approximation of @erf⁻¹@
+-- (~1e-3 accuracy) to keep @statistics@ out of this module.
+waldZ :: Double -> Double
+waldZ lvl
+  | lvl <= 0 || lvl >= 1 =
+      error "predictGlmMuWithCI: confidence level must lie in (0, 1)"
+  | otherwise            = sqrt 2 * inverfApprox lvl
+
+inverfApprox :: Double -> Double
+inverfApprox x =
+  let a   = 0.147
+      ln1 = log (1 - x * x)
+      term1 = 2 / (pi * a) + ln1 / 2
+  in signum x * sqrt (sqrt (term1 * term1 - ln1 / a) - term1)
 
 -- ---------------------------------------------------------------------------
 -- 多出力 GLM (列ごと IRLS)

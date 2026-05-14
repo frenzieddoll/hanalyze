@@ -2308,3 +2308,54 @@ main = hspec $ do
       let xs = LA.fromList [1.0, 1.2, 0.9, 1.1, 1.05, 0.95]
           cap = Quality.processCapabilityUpper 2.0 xs
       Quality.capCp cap `shouldBe` Quality.capCpk cap
+
+  describe "Hanalyze.Model.GLM diagnostics (request/090-AB)" $ do
+    let xsG = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] :: [Double]
+        ysG = [1.1, 2.9, 5.2, 6.8, 9.1, 11.0, 13.2, 14.8, 17.0, 19.1] :: [Double]
+        xMatG = LA.matrix 2 (concatMap (\x -> [1, x]) xsG)
+        yVecG = LA.fromList ysG
+        (frG, sigmaG) = GLM.fitGLMFull GLM.Gaussian GLM.Identity xMatG yVecG
+        betaG = head (LA.toColumns (Core.coefficients frG))
+        muVG  = head (LA.toColumns (Core.fitted frG))
+
+    it "glmPearsonResiduals (Gaussian, V=1) == raw residuals" $ do
+      let pr = GLM.glmPearsonResiduals GLM.Gaussian yVecG muVG
+          rr = yVecG - muVG
+      LA.norm_2 (pr - rr) `shouldSatisfy` (< 1e-9)
+
+    it "glmDevianceResiduals (Gaussian) == sign(y-μ)·|y-μ|" $ do
+      let dr  = GLM.glmDevianceResiduals GLM.Gaussian yVecG muVG
+          ref = LA.fromList
+                  [ signum (y - m) * abs (y - m)
+                  | (y, m) <- zip ysG (LA.toList muVG) ]
+      LA.norm_2 (dr - ref) `shouldSatisfy` (< 1e-9)
+
+    it "glmVariance: Binomial μ(1-μ); Poisson μ" $ do
+      GLM.glmVariance GLM.Binomial 0.3 `shouldBe` 0.3 * 0.7
+      GLM.glmVariance GLM.Poisson  4.0 `shouldBe` 4.0
+
+    it "predictGlmEtaWithSE: η = xᵀβ, SE > 0" $ do
+      let xNew = LA.fromList [1, 5.0]
+          (eta, se) = GLM.predictGlmEtaWithSE betaG sigmaG xNew
+      eta `shouldSatisfy` (\e -> abs (e - (1 + 2 * 5.0)) < 0.5)
+      se  `shouldSatisfy` (> 0)
+      se  `shouldSatisfy` (< 1)
+
+    it "predictGlmMuWithCI (Identity): half-width ≈ 1.96·SE" $ do
+      let xNew    = LA.fromList [1, 4.5]
+          ci      = GLM.predictGlmMuWithCI GLM.Identity 0.95 betaG sigmaG xNew
+          (_, se) = GLM.predictGlmEtaWithSE betaG sigmaG xNew
+          halfW   = (GLM.gpHi ci - GLM.gpLo ci) / 2
+      abs (halfW - 1.96 * se) `shouldSatisfy` (< 1e-2)
+
+    it "predictGlmMuWithCI (Logit): CI stays in (0,1)" $ do
+      let xs2  = LA.matrix 2 (concatMap (\i -> [1, fromIntegral (i :: Int)]) [0..9])
+          ys2  = LA.fromList [0,1,0,1,0,1,0,1,0,1]
+          (_, sigma2) = GLM.fitGLMFull GLM.Binomial GLM.Logit xs2 ys2
+          beta2 = LA.fromList [0.0, 0.05]
+          xNew  = LA.fromList [1, 5.0]
+          ci    = GLM.predictGlmMuWithCI GLM.Logit 0.95 beta2 sigma2 xNew
+      GLM.gpMu ci `shouldSatisfy` (\v -> v > 0 && v < 1)
+      GLM.gpLo ci `shouldSatisfy` (\v -> v >= 0)
+      GLM.gpHi ci `shouldSatisfy` (\v -> v <= 1)
+      GLM.gpLo ci `shouldSatisfy` (< GLM.gpHi ci)
