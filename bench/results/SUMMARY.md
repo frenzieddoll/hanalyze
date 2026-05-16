@@ -1,6 +1,45 @@
 # hanalyze vs Python benchmark summary
 
-最終更新: 2026-05-08 (P42 SA 改善後の全 14 suite 再計測)
+最終更新: 2026-05-15 (P1-P4 OOM + Q3 memory audit + 130/090/100 後の Tier 1
+suite 再計測)
+
+## 2026-05-15 再計測サマリ
+
+P1〜P4 (RFF / GP / Quantile / Preprocess) + Q3 memory audit
+(Stat.VI / Optim.Adam / Preprocess.collectInOrder) + 130/090/100 修正後の
+Tier 1 (regression / kernel / optim / mo / bo) 全 5 suite を再計測。
+
+### ★ bench-optim で max residency 1.99 GB / total alloc 1.32 TB を観測
+
+`bench-optim +RTS -s` で profile を取ると、1440 runs (8 testFn × 6 algo ×
+30 seeds) のシーケンシャル実行で **max residency 1.99 GB**、total alloc
+**1.32 TB** に到達 (RSS は 5.78 GB / WSL2 OOM 直前)。算術的な数値
+(`OptimResult.orHistory` 等の合計 ~50 MB) では説明不能で、leak 確実。
+
+SA inner LBFGS polish (`SA → LBFGS → twoLoop` の `foldl step1`) が疑い濃厚
+だが、profiling ビルドでの cost-center 特定はこれから (`feature/optim-mem-leak`
+ブランチで継続)。median 数値自体は前回 (2026-05-08) と概ね一致しているため、
+このレポートでは leak fix 後に更新する。
+
+### 数値の傾向 (5/15 計測)
+
+| Suite | hanalyze 主な変動 | コメント |
+|---|---|---|
+| regression | groupBy 系 (collectInOrder 修正) は bench に直接出ない。LM/GLM は前回と同等 (~1-3 ms) | Python 比 0.8〜11.5× の幅 |
+| kernel | KR_n2000 580 ms (前回 K6 で 586 ms) ≒ 同等。GP_fit_n2000 1.3 s も同等 | Python 比 0.13-0.30× の劣勢続く |
+| optim | SA は依然 0.15-0.40× の劣勢 (★ 上記 leak と関連) | LBFGS/CMAES/DE/NM/PSO は 4-100× 優位 |
+| mo | NSGA-II ~750 ms (前回 NF1+NF3+NF4 後と同等)、pymoo 0.5× | quality (HV/IGD) は前回同等 |
+| bo | Branin 0.88×, Hartmann6 1.52× | skopt vs hanalyze は前回と同じ |
+
+### release ステータス
+
+- P1-P4 + Q3 (VI/Adam/collectInOrder fix) + 130/090/100 は全て `develop` に
+  merge 済み (前回まで)
+- bench-optim leak 修正前に master tag は切らない方が良い
+
+---
+
+## 旧最終更新メモ (2026-05-08, P42 SA 改善後の全 14 suite 再計測)
 
 統一条件: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1`、single-thread、固定 seed。
 

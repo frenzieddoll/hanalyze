@@ -1,16 +1,16 @@
 system,suite,name,time_ms,acc_main,acc_aux,extra
-python,kernel,GramMV_n500_p5,1.9317,0,0,sklearn.rbf_kernel n=500
-python,kernel,GramMV_n1000_p5,7.06496,0,0,sklearn.rbf_kernel n=1000
-python,kernel,GramMV_n2000_p5,32.5485,0,0,sklearn.rbf_kernel n=2000
-python,kernel,GramMV_n4000_p5,183.771,0,0,sklearn.rbf_kernel n=4000
-python,kernel,KR_n500_p5,5.32939,1,0.000516808,sklearn.KernelRidge RBF
-python,kernel,KR_n1000_p5,25.928,1,0.000504223,sklearn.KernelRidge RBF
-python,kernel,KR_n2000_p5,195.083,0.999999,0.00076199,sklearn.KernelRidge RBF
-python,kernel,KR_n4000_p5,1203.45,0.999996,0.00201324,sklearn.KernelRidge RBF
-python,kernel,NW_n1000_p5,5.80018,0.905005,0.28354,manual NW via rbf_kernel
-python,kernel,RFF_n1000_D256_p5,3.79453,0.829019,0.380398,sklearn.RBFSampler+Ridge D=256
-python,kernel,RFF_n2000_D256_p5,6.3452,0.809634,0.428172,sklearn.RBFSampler+Ridge D=256
-python,kernel,GP_fit_n500_p5,8.54844,0.9994,0.0236266,sklearn.GaussianProcessRegressor RBF (HP fixed)
-python,kernel,GP_fit_n1000_p5,42.1236,0.999493,0.0207078,sklearn.GaussianProcessRegressor RBF (HP fixed)
-python,kernel,GP_fit_n2000_p5,367.388,0.999559,0.020606,sklearn.GaussianProcessRegressor RBF (HP fixed)
-python,kernel,GP_opt_n500_p5,520.729,0.997955,4.19144,sklearn GP fit + optimize (L-BFGS-B)
+python,kernel,GramMV_n500_p5,1.4945,0,0,sklearn.rbf_kernel n=500
+python,kernel,GramMV_n1000_p5,6.66171,0,0,sklearn.rbf_kernel n=1000
+python,kernel,GramMV_n2000_p5,30.8846,0,0,sklearn.rbf_kernel n=2000
+python,kernel,GramMV_n4000_p5,153.508,0,0,sklearn.rbf_kernel n=4000
+python,kernel,KR_n500_p5,5.26954,1,0.000516808,sklearn.KernelRidge RBF
+python,kernel,KR_n1000_p5,27.1986,1,0.000504223,sklearn.KernelRidge RBF
+python,kernel,KR_n2000_p5,156.383,0.999999,0.00076199,sklearn.KernelRidge RBF
+python,kernel,KR_n4000_p5,965.412,0.999996,0.00201324,sklearn.KernelRidge RBF
+python,kernel,NW_n1000_p5,4.4469,0.905005,0.28354,manual NW via rbf_kernel
+python,kernel,RFF_n1000_D256_p5,2.75344,0.829019,0.380398,sklearn.RBFSampler+Ridge D=256
+python,kernel,RFF_n2000_D256_p5,4.70489,0.809634,0.428172,sklearn.RBFSampler+Ridge D=256
+python,kernel,GP_fit_n500_p5,6.69157,0.9994,0.0236266,sklearn.GaussianProcessRegressor RBF (HP fixed)
+python,kernel,GP_fit_n1000_p5,34.0631,0.999493,0.0207078,sklearn.GaussianProcessRegressor RBF (HP fixed)
+python,kernel,GP_fit_n2000_p5,273.086,0.999559,0.020606,sklearn.GaussianProcessRegressor RBF (HP fixed)
+python,kernel,GP_opt_n500_p5,466.602,0.997955,4.19144,sklearn GP fit + optimize (L-BFGS-B)

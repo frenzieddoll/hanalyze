@@ -1,5 +1,5 @@
 system,suite,name,time_ms,acc_main,acc_aux,extra
-python,mo,ZDT1/NSGA-II,413.249,0.838832,0.0217773,"pymoo NSGA2 100 gen, HV/IGD via pymoo"
-python,mo,ZDT2/NSGA-II,428.571,0.48376,0.0335127,"pymoo NSGA2 100 gen, HV/IGD via pymoo"
-python,mo,ZDT3/NSGA-II,420.804,1.29109,0.0138481,"pymoo NSGA2 100 gen, HV/IGD via pymoo"
-python,mo,DTLZ2_3/NSGA-II,400.052,2.72163,0.0792277,"pymoo NSGA2 100 gen, HV/IGD via pymoo"
+python,mo,ZDT1/NSGA-II,407.358,0.838832,0.0217773,"pymoo NSGA2 100 gen, HV/IGD via pymoo"
+python,mo,ZDT2/NSGA-II,422.854,0.48376,0.0335127,"pymoo NSGA2 100 gen, HV/IGD via pymoo"
+python,mo,ZDT3/NSGA-II,416.269,1.29109,0.0138481,"pymoo NSGA2 100 gen, HV/IGD via pymoo"
+python,mo,DTLZ2_3/NSGA-II,401.607,2.72163,0.0792277,"pymoo NSGA2 100 gen, HV/IGD via pymoo"
