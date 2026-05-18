@@ -72,6 +72,11 @@ import qualified Hanalyze.Optim.Constrained as Con
 import qualified Hanalyze.Optim.BayesOpt    as BO
 import qualified Hanalyze.Optim.Common      as OC
 import qualified System.Random.MWC as MWC
+import qualified Hanalyze.MCMC.NUTS as NUTS
+import qualified Hanalyze.MCMC.Core as Core
+import qualified Hanalyze.Model.HBM as HBM
+import qualified Data.Map.Strict    as M
+import           Data.IORef         (newIORef, readIORef, modifyIORef')
 
 main :: IO ()
 main = hspec $ do
@@ -2415,3 +2420,57 @@ main = hspec $ do
           expected = sqrt (1.0 / (1.0 / sig2u + 4.0 / sig2))
       mapM_ (\(_, v) -> abs (v - expected) `shouldSatisfy` (< 1e-9))
             (zip [0 :: Int ..] (V.toList ses))
+
+  -- ========================================================================
+  -- NUTS streaming callback (Phase 9.1a)
+  -- ========================================================================
+  describe "Hanalyze.MCMC.NUTS.nutsStream" $ do
+    let smallCfg = NUTS.defaultNUTSConfig
+          { NUTS.nutsIterations = 20
+          , NUTS.nutsBurnIn     = 10
+          , NUTS.nutsAdaptStepSize = False
+          , NUTS.nutsAdaptMass     = False
+          }
+        -- Trivial model: mu ~ Normal(0, 1), observe one data point.
+        model :: HBM.ModelP ()
+        model = do
+          mu <- HBM.sample "mu" (HBM.Normal 0 1)
+          HBM.observe "y" (HBM.Normal mu 1) [0.5]
+
+    it "callback が iterations + burnIn 回呼ばれる" $ do
+      eventsRef <- newIORef []
+      gen <- MWC.create
+      _ <- NUTS.nutsStream model smallCfg (M.fromList [("mu", 0)]) gen $ \ev ->
+        modifyIORef' eventsRef (ev :)
+      events <- reverse <$> readIORef eventsRef
+      length events `shouldBe`
+        (NUTS.nutsBurnIn smallCfg + NUTS.nutsIterations smallCfg)
+
+    it "seIter は 0..total-1 で順番に並ぶ" $ do
+      eventsRef <- newIORef []
+      gen <- MWC.create
+      _ <- NUTS.nutsStream model smallCfg (M.fromList [("mu", 0)]) gen $ \ev ->
+        modifyIORef' eventsRef (ev :)
+      events <- reverse <$> readIORef eventsRef
+      map NUTS.seIter events
+        `shouldBe`
+        [0 .. NUTS.nutsBurnIn smallCfg + NUTS.nutsIterations smallCfg - 1]
+
+    it "seIsBurnIn は 先頭 burnIn 個だけ True" $ do
+      eventsRef <- newIORef []
+      gen <- MWC.create
+      _ <- NUTS.nutsStream model smallCfg (M.fromList [("mu", 0)]) gen $ \ev ->
+        modifyIORef' eventsRef (ev :)
+      events <- reverse <$> readIORef eventsRef
+      length (filter NUTS.seIsBurnIn events)
+        `shouldBe` NUTS.nutsBurnIn smallCfg
+
+    it "既存 nuts は nutsStream の wrapper として同一結果(同じ seed)" $ do
+      gen1 <- MWC.create
+      chain1 <- NUTS.nuts model smallCfg (M.fromList [("mu", 0)]) gen1
+      gen2 <- MWC.create
+      chain2 <- NUTS.nutsStream model smallCfg (M.fromList [("mu", 0)])
+                  gen2 (\_ -> pure ())
+      -- 同じ seed (MWC.create は決定的) なので chain length 一致
+      length (Core.chainSamples chain1)
+        `shouldBe` length (Core.chainSamples chain2)

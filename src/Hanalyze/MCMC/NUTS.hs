@@ -21,7 +21,9 @@ module Hanalyze.MCMC.NUTS
   ( NUTSConfig (..)
   , defaultNUTSConfig
   , nuts
+  , nutsStream
   , nutsChains
+  , SampleEvent (..)
   ) where
 
 import Control.Concurrent.Async (mapConcurrently)
@@ -220,13 +222,54 @@ buildTree gradFn logPiFn mInv eps theta r logU dir depth gen
           }
 
 -- ---------------------------------------------------------------------------
+-- Streaming hook
+-- ---------------------------------------------------------------------------
+
+-- | Per-iteration sample event emitted by 'nutsStream'.
+--
+-- Used by callers that want to observe MCMC progress as it happens
+-- (e.g. live trace plots, real-time R-hat / ESS updates over the wire).
+-- The callback receives one event per iteration of the outer loop,
+-- including burn-in iterations (distinguished by 'seIsBurnIn').
+--
+-- The 'seParams' values are in the **constrained** parameter space,
+-- matching the convention used in 'chainSamples'. Burn-in events are
+-- /not/ included in 'chainSamples', but are still streamed via the
+-- callback so the UI can show warmup progress and adaptation.
+data SampleEvent = SampleEvent
+  { seIter      :: !Int      -- ^ 0-based iteration index (burn-in inclusive).
+                              --   Ranges over @[0 .. nutsBurnIn + nutsIterations - 1]@.
+  , seIsBurnIn  :: !Bool     -- ^ True if @seIter < nutsBurnIn@.
+  , seParams    :: !Params   -- ^ Current sample (constrained space).
+  , seEnergy    :: !Double   -- ^ Hamiltonian H0 at the start of this iteration.
+  , seDivergent :: !Bool     -- ^ Whether this iteration's trajectory diverged.
+  , seAccepted  :: !Bool     -- ^ Whether the proposal was accepted
+                              --   (@proposedU /= currentU@).
+  , seStepSize  :: !Double   -- ^ Current ε (after this iteration's adaptation).
+  }
+
+-- ---------------------------------------------------------------------------
 -- NUTS サンプラー
 -- ---------------------------------------------------------------------------
 
 -- | NUTS sampler for a polymorphic HBM model ('ModelP').
 -- 軌道長は U-Turn 判定で自動決定。
+--
+-- This is a thin wrapper around 'nutsStream' with a no-op callback.
+-- Use 'nutsStream' directly if you want per-iteration progress
+-- (e.g. for live UI updates over a WebSocket / SSE channel).
 nuts :: ModelP r -> NUTSConfig -> Params -> GenIO -> IO Chain
-nuts m cfg initC gen = do
+nuts m cfg initC gen = nutsStream m cfg initC gen (\_ -> pure ())
+
+-- | NUTS sampler with a per-iteration callback. Identical to 'nuts'
+-- semantically; in addition, calls @onSample event@ once per outer
+-- loop iteration (burn-in inclusive). The callback runs synchronously
+-- inside the sampler loop, so it should return quickly (push events to
+-- a queue rather than do IO of unbounded latency).
+nutsStream :: ModelP r -> NUTSConfig -> Params -> GenIO
+           -> (SampleEvent -> IO ())
+           -> IO Chain
+nutsStream m cfg initC gen onSample = do
   let names      = sampleNames m
       trMap      = getTransforms m
       transList  = [Map.findWithDefault errT n trMap | n <- names]
@@ -376,14 +419,26 @@ nuts m cfg initC gen = do
                          then exp (daLogEpsBar da)
                          else eps
             return epsBar
+        let nextParams = toConstrained nextU
         if not isBurnIn
           then do
-            modifyIORef' samplesRef (toConstrained nextU :)
+            modifyIORef' samplesRef (nextParams :)
             modifyIORef' energyRef  (h0 :)
             when divergent $
               modifyIORef' divergenceRef
                 ((nutsIterations cfg - i) :)
           else return ()
+        -- Phase 9.1a: per-iteration callback for streaming UIs.
+        -- 0-based iter index running 0 .. total-1; isBurnIn for first nutsBurnIn.
+        onSample SampleEvent
+          { seIter      = total - i
+          , seIsBurnIn  = isBurnIn
+          , seParams    = nextParams
+          , seEnergy    = h0
+          , seDivergent = divergent
+          , seAccepted  = nextU /= currentU
+          , seStepSize  = eps'
+          }
         loop (i - 1) nextU eps'
 
   _ <- loop total initUV (nutsStepSize cfg)
