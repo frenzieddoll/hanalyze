@@ -142,7 +142,7 @@ binStepVal mBins xs =
 -- | Build a Vega-Lite histogram spec from a 'PlotData' source.
 --
 -- @maxBins@ overrides Sturges' rule when provided. Returns an empty
--- (zero-row) spec if the column is missing from 'pdNumeric'.
+-- (zero-row) spec if the column is missing from @pdNumeric@.
 histSpec
   :: PlotConfig
   -> Text          -- ^ numeric column name

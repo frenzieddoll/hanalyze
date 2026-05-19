@@ -17,6 +17,9 @@ and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
   callback (API and behaviour unchanged).
 - Use case: downstream apps (e.g. AelysceCanvas) can push live trace plots /
   R-hat / ESS over WebSocket / SSE without modifying NUTS internals.
+## [0.1.0.0] - 2026-05-19
+
+First public release on Hackage.
 
 ### Added (130: HPotfire Vega-Lite migration foundation)
 - `Hanalyze.Viz.PlotConfig`: `PlotConfig` moved out of `Viz.Core` and gained

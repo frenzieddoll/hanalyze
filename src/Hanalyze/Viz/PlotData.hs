@@ -40,8 +40,8 @@ import qualified Data.Vector     as V
 
 -- | A row-aligned, column-oriented snapshot of plot input.
 --
--- Each column in 'pdNumeric' / 'pdText' MUST have the same length
--- ('pdLength'); 'fromNumericColumns' / 'fromMixedColumns' enforce this.
+-- Each column in @pdNumeric@ / @pdText@ MUST have the same length
+-- (@pdLength@); 'fromNumericColumns' / 'fromMixedColumns' enforce this.
 -- Columns may live in either the numeric or text map but not both.
 data PlotData = PlotData
   { pdNumeric :: !(Map Text (V.Vector Double))

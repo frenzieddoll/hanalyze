@@ -6,8 +6,8 @@
 -- depend on @dataframe@; future backends (Parquet streaming, SQL, ...)
 -- can ship analogous adapter modules without touching the core.
 --
--- The instance copies all numeric columns into 'pdNumeric' and all
--- (parseable) text columns into 'pdText'. Columns that do not match
+-- The instance copies all numeric columns into @pdNumeric@ and all
+-- (parseable) text columns into @pdText@. Columns that do not match
 -- either projection are dropped silently — Vega specs only ever
 -- reference columns by name, so missing columns surface as runtime
 -- errors at the spec level rather than at conversion time.

@@ -110,7 +110,7 @@ varOf Gaussian _  = 1.0
 varOf Binomial mu = mu * (1 - mu)
 varOf Poisson  mu = mu
 
--- | Public alias for the family variance @V(μ)@; see 'varOf'. Exposed
+-- | Public alias for the family variance @V(μ)@; see @varOf@. Exposed
 -- so HPotfire diagnostics can compute Pearson-style standardisations
 -- without re-implementing the family table.
 glmVariance :: Family -> Double -> Double

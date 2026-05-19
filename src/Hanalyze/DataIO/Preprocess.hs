@@ -188,8 +188,8 @@ countMissing df =
 -- | Drop rows where any of the listed columns is null. NA strings in
 -- Text columns are also treated as missing.
 --
--- Phase 11b (2026-05-14): cache per-column Text 'Vector' once instead
--- of calling 'tryColumnAsList' + @xs !! i@ inside the inner row loop.
+-- Phase 11b (2026-05-14): cache per-column Text @Vector@ once instead
+-- of calling @tryColumnAsList@ + @xs !! i@ inside the inner row loop.
 -- The previous version was O(rows² × cols); the cached version is
 -- O(rows × cols).
 dropMissingRows :: [Text] -> DXD.DataFrame -> DXD.DataFrame
@@ -231,7 +231,7 @@ sliceColumn name df idxs = case DXD.getColumn name df of
           (tryAs @Int
             (tryAs @Text Nothing))))
   where
-    -- Phase 11b (2026-05-14): convert the column to a 'Vector' once and
+    -- Phase 11b (2026-05-14): convert the column to a @Vector@ once and
     -- use 'unsafeIndex'. The previous @xs !! i@ in a list-comprehension
     -- was O(i) per index, so 'sliceColumn' on n indices was O(n²).
     tryAs

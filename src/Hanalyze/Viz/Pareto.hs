@@ -75,7 +75,7 @@ txtCol n pd = maybe [] V.toList (textColumn n pd)
 
 -- | Pareto-front scatter plot for a two-objective problem on a single
 -- 'PlotData'. The optional third argument is the name of a text column
--- in 'pdText' carrying a categorical highlight (e.g. @"front"@ /
+-- in @pdText@ carrying a categorical highlight (e.g. @"front"@ /
 -- @"all"@); when supplied, points are coloured by that column. Without
 -- it, all points share a single colour.
 paretoScatter :: PlotConfig
@@ -120,7 +120,7 @@ paretoScatterFile fmt path cfg cols mHi pd =
 
 -- | For 3+ objectives, lay out all pairwise 2D scatter plots in a
 -- grid. Diagonal cells are omitted; only the upper triangle is drawn.
--- All @objCols@ must be present in 'pdNumeric'.
+-- All @objCols@ must be present in @pdNumeric@.
 paretoPair :: PlotConfig -> [Text] -> PlotData -> VegaLite
 paretoPair cfg objCols pd =
   let m       = length objCols
@@ -206,7 +206,7 @@ parallelCoordinatesFile fmt path cfg labels pd =
 -- ---------------------------------------------------------------------------
 
 -- | Convergence plot: per-generation hypervolume. @genCol@ and @hvCol@
--- must both live in 'pdNumeric'.
+-- must both live in @pdNumeric@.
 hypervolumeHistory :: PlotConfig
                    -> Text     -- ^ generation column name
                    -> Text     -- ^ hypervolume column name
