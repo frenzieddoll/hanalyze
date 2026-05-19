@@ -7,6 +7,16 @@ and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
 
 ## [Unreleased]
 
+### Added (NUTS streaming callback for live MCMC progress)
+- `Hanalyze.MCMC.NUTS.nutsStream` — new sampler entry point taking a
+  per-iteration callback `(SampleEvent -> IO ())`. Each event reports
+  iteration index, burn-in flag, current sample (constrained), Hamiltonian
+  energy, divergence / accept flags, and current step size.
+- `Hanalyze.MCMC.NUTS.SampleEvent` — exported record carrying the above.
+- Existing `nuts` is now a thin wrapper over `nutsStream` with a no-op
+  callback (API and behaviour unchanged).
+- Use case: downstream apps (e.g. AelysceCanvas) can push live trace plots /
+  R-hat / ESS over WebSocket / SSE without modifying NUTS internals.
 ## [0.1.0.1] - 2026-05-20
 
 ### Changed
