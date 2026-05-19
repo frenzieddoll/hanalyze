@@ -461,7 +461,7 @@ fitGLMMMulti family link x y idx labels sizes =
 glmmFixedSE
   :: LA.Matrix Double      -- ^ Design matrix @X@ (n × p, intercept inclusive).
   -> V.Vector Int          -- ^ Group index per observation (length n; same as
-                           --   the @idx@ produced by 'buildGroups').
+                           --   the @idx@ produced by @buildGroups@).
   -> GLMMResult
   -> LA.Vector Double      -- ^ Length @p@; coefficient SEs in column order.
 glmmFixedSE x groupIdx res =

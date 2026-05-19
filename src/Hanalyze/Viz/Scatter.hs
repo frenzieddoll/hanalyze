@@ -59,6 +59,7 @@ scatterPlot cfg df xCol yCol =
                . position Y [PName yCol, PmType Quantitative, PAxis [AxTitle yCol]]
                $ []
 
+-- | Render 'scatterPlot' to a file via 'writeSpec'.
 scatterPlotFile :: OutputFormat -> FilePath -> PlotConfig -> DXD.DataFrame -> Text -> Text -> IO ()
 scatterPlotFile fmt path cfg df xCol yCol =
   writeSpec fmt path (scatterPlot cfg df xCol yCol)
@@ -103,6 +104,7 @@ scatterWithLM cfg df xCol yCol res =
           $ []
       ]
 
+-- | Render 'scatterWithLM' to a file via 'writeSpec'.
 scatterWithLMFile :: OutputFormat -> FilePath -> PlotConfig -> DXD.DataFrame -> Text -> Text -> FitResult -> IO ()
 scatterWithLMFile fmt path cfg df xCol yCol res =
   writeSpec fmt path (scatterWithLM cfg df xCol yCol res)
@@ -167,6 +169,7 @@ scatterWithLMCI cfg df xCol yCol res ci =
           $ []
       ]
 
+-- | Render 'scatterWithLMCI' to a file via 'writeSpec'.
 scatterWithLMCIFile :: OutputFormat -> FilePath -> PlotConfig -> DXD.DataFrame -> Text -> Text -> FitResult -> CIBand -> IO ()
 scatterWithLMCIFile fmt path cfg df xCol yCol res ci =
   writeSpec fmt path (scatterWithLMCI cfg df xCol yCol res ci)
@@ -230,6 +233,7 @@ scatterWithSmooth cfg mEquation df xCol yCol sf =
 
     layers = (if sfHasBand sf then [ciLayer] else []) ++ [lineLayer, pointLayer]
 
+-- | Render 'scatterWithSmooth' to a file via 'writeSpec'.
 scatterWithSmoothFile :: OutputFormat -> FilePath -> PlotConfig -> Maybe Text -> DXD.DataFrame -> Text -> Text -> SmoothFit -> IO ()
 scatterWithSmoothFile fmt path cfg mEq df xCol yCol sf =
   writeSpec fmt path (scatterWithSmooth cfg mEq df xCol yCol sf)
@@ -262,6 +266,7 @@ scatterMultiY cfg df xCol yCols =
                . yData
                $ []
 
+-- | Render 'scatterMultiY' to a file via 'writeSpec'.
 scatterMultiYFile :: OutputFormat -> FilePath -> PlotConfig -> DXD.DataFrame -> Text -> [Text] -> IO ()
 scatterMultiYFile fmt path cfg df xCol yCols =
   writeSpec fmt path (scatterMultiY cfg df xCol yCols)
@@ -305,6 +310,7 @@ predictedVsActual cfg actuals preds =
           $ []
       ]
 
+-- | Render 'predictedVsActual' to a file via 'writeSpec'.
 predictedVsActualFile :: OutputFormat -> FilePath -> PlotConfig -> [Double] -> [Double] -> IO ()
 predictedVsActualFile fmt path cfg actuals preds =
   writeSpec fmt path (predictedVsActual cfg actuals preds)
@@ -359,6 +365,7 @@ scatterWithGroups cfg xCol yCol ptData lnData =
           $ []
       ]
 
+-- | Render 'scatterWithGroups' to a file via 'writeSpec'.
 scatterWithGroupsFile
   :: OutputFormat -> FilePath -> PlotConfig -> Text -> Text
   -> [(Text, Double, Double)] -> [(Text, Double, Double)] -> IO ()
@@ -372,8 +379,8 @@ scatterWithGroupsFile fmt path cfg xCol yCol ptData lnData =
 -- | Build a Vega-Lite scatter spec from a 'PlotData' source.
 --
 -- The third argument is an optional grouping column used for colour
--- encoding. If the column lives in 'pdText' it is treated as nominal,
--- if in 'pdNumeric' as quantitative; if absent, no colour encoding is
+-- encoding. If the column lives in @pdText@ it is treated as nominal,
+-- if in @pdNumeric@ as quantitative; if absent, no colour encoding is
 -- emitted. 'plotColorScheme' / 'plotFacetColumn' / 'plotLegendPos' on
 -- 'PlotConfig' are honoured.
 scatterSpec

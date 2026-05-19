@@ -183,8 +183,8 @@ barChartFile = writeSpec
 
 -- | Build a Vega-Lite bar chart spec from a 'PlotData' source.
 --
--- The category column must live in 'pdText' and the value column in
--- 'pdNumeric'. Returns 'barChart' empty-data spec if either is missing.
+-- The category column must live in @pdText@ and the value column in
+-- @pdNumeric@. Returns 'barChart' empty-data spec if either is missing.
 barSpec
   :: PlotConfig
   -> Text          -- ^ category column (text)
