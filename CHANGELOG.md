@@ -7,7 +7,15 @@ and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
 
 ## [Unreleased]
 
-## [0.1.0.0] - 2026-05-19
+## [0.1.0.1] - 2026-05-20
+
+### Changed
+- Tightened the `library` lower bound on `dataframe` from `>= 0.3` to `>= 1.3`.
+  hanalyze's data layer relies on the `qualified DX` / `DXC` / `DXD` API surface
+  introduced in `dataframe-1.3`; the previous range allowed cabal to pick an
+  ancient release that no longer builds against the library.
+
+
 
 First public release on Hackage.
 
