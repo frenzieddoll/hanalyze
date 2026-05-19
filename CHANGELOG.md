@@ -7,6 +7,10 @@ and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
 
 ## [Unreleased]
 
+## [0.1.0.0] - 2026-05-19
+
+First public release on Hackage.
+
 ### Added (130: HPotfire Vega-Lite migration foundation)
 - `Hanalyze.Viz.PlotConfig`: `PlotConfig` moved out of `Viz.Core` and gained
   optional fields `plotColorScheme` / `plotFacetColumn` / `plotLegendPos`.
