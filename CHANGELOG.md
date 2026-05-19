@@ -15,7 +15,7 @@ and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
   introduced in `dataframe-1.3`; the previous range allowed cabal to pick an
   ancient release that no longer builds against the library.
 
-
+## [0.1.0.0] - 2026-05-19
 
 First public release on Hackage.
 
