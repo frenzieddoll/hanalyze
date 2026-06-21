@@ -180,7 +180,11 @@ library
     , unordered-containers >= 0.2  && < 0.3
     , ad                   >= 4.4  && < 4.6
     , vector               >= 0.12 && < 0.14
-    , dataframe            >= 1.3  && < 2
+    , dataframe-core        ^>= 1.1
+    , dataframe-operations  >= 1.1.1 && < 1.2
+    , dataframe-csv         ^>= 1.0.2
+    , dataframe-json        ^>= 1.0
+    , dataframe-parquet     ^>= 1.1
     , deepseq              >= 1.4  && < 1.6
     , massiv               >= 1.0  && < 1.1
     , parallel             >= 3.2  && < 3.3
@@ -201,7 +205,9 @@ executable hanalyze
     , containers >= 0.6  && < 0.8
     , filepath   >= 1.4  && < 1.6
     , hvega      >= 0.12 && < 0.13
-    , dataframe  >= 1.3  && < 2
+    , dataframe-core        ^>= 1.1
+    , dataframe-operations  >= 1.1.1 && < 1.2
+    , dataframe-csv         ^>= 1.0.2
     , time       >= 1.11 && < 1.13
 
 executable glmm-demo
@@ -215,7 +221,7 @@ executable glmm-demo
     , vector   >= 0.12 && < 0.14
     , hmatrix  >= 0.20 && < 0.22
     , text     >= 1.2  && < 2.2
-    , dataframe  >= 1.3  && < 2
+    , dataframe-core        ^>= 1.1
 
 executable hbm-example
   import:           warnings, opt
@@ -298,7 +304,7 @@ executable regrid-bench-demo
   build-depends:
       base       >= 4.14 && < 5
     , hanalyze
-    , dataframe  >= 1.3  && < 2
+    , dataframe-core        ^>= 1.1
     , mwc-random >= 0.15 && < 0.16
     , text       >= 1.2  && < 2.2
 
@@ -344,7 +350,8 @@ executable preprocess-demo
     , text       >= 1.2  && < 2.2
     , containers >= 0.6  && < 0.8
     , vector     >= 0.12 && < 0.14
-    , dataframe  >= 1.3  && < 2
+    , dataframe-core        ^>= 1.1
+    , dataframe-operations  >= 1.1.1 && < 1.2
 
 executable dirty-data-demo
   import:           warnings, opt
@@ -355,7 +362,8 @@ executable dirty-data-demo
       base       >= 4.14 && < 5
     , hanalyze
     , text       >= 1.2  && < 2.2
-    , dataframe  >= 1.3  && < 2
+    , dataframe-core        ^>= 1.1
+    , dataframe-operations  >= 1.1.1 && < 1.2
 
 executable external-io-demo
   import:           warnings, opt
@@ -367,7 +375,8 @@ executable external-io-demo
     , hanalyze
     , text       >= 1.2  && < 2.2
     , vector     >= 0.12 && < 0.14
-    , dataframe  >= 1.3  && < 2
+    , dataframe-core        ^>= 1.1
+    , dataframe-operations  >= 1.1.1 && < 1.2
 
 executable analysis-compare-demo
   import:           warnings, opt
@@ -382,7 +391,8 @@ executable analysis-compare-demo
     , hmatrix    >= 0.20 && < 0.22
     , mwc-random >= 0.15 && < 0.16
     , containers >= 0.6  && < 0.8
-    , dataframe  >= 1.3  && < 2
+    , dataframe-core        ^>= 1.1
+    , dataframe-operations  >= 1.1.1 && < 1.2
 
 executable new-sections-demo
   import:           warnings, opt
@@ -940,7 +950,7 @@ executable hbm-random-slope
     , containers >= 0.6  && < 0.8
     , mwc-random >= 0.15 && < 0.16
     , vector     >= 0.12 && < 0.14
-    , dataframe  >= 1.3  && < 2
+    , dataframe-core        ^>= 1.1
 
 executable simpson-paradox
   import:           warnings, opt
@@ -955,7 +965,7 @@ executable simpson-paradox
     , mwc-random >= 0.15 && < 0.16
     , vector     >= 0.12 && < 0.14
     , hmatrix    >= 0.20 && < 0.22
-    , dataframe  >= 1.3  && < 2
+    , dataframe-core        ^>= 1.1
 
 executable hbm-regression
   import:           warnings, opt
@@ -969,7 +979,7 @@ executable hbm-regression
     , containers >= 0.6  && < 0.8
     , mwc-random >= 0.15 && < 0.16
     , vector     >= 0.12 && < 0.14
-    , dataframe  >= 1.3  && < 2
+    , dataframe-core        ^>= 1.1
 
 -- Bench data generator: produces deterministic CSVs that both the Haskell
 -- benchmarks and the Python comparison scripts read. (See bench/README.md.)
@@ -1124,7 +1134,8 @@ executable bench-mem-aggregate
   build-depends:
       base                 >= 4.14 && < 5
     , hanalyze
-    , dataframe            >= 0.3  && < 2
+    , dataframe-core        ^>= 1.1
+    , dataframe-operations  >= 1.1.1 && < 1.2
     , text                 >= 1.2  && < 2.2
     , time                 >= 1.9  && < 1.13
     , vector               >= 0.13 && < 0.14
@@ -1301,7 +1312,7 @@ executable bench-regrid
       base                 >= 4.14 && < 5
     , bytestring           >= 0.11 && < 0.13
     , cassava              >= 0.5  && < 0.6
-    , dataframe            >= 0.4
+    , dataframe-operations  >= 1.1.1 && < 1.2
     , hanalyze
     , hmatrix              >= 0.20 && < 0.22
     , time                 >= 1.9  && < 1.13
@@ -1453,7 +1464,8 @@ test-suite hanalyze-test
     , vector     >= 0.12 && < 0.14
     , mwc-random >= 0.15 && < 0.16
     , text       >= 1.2  && < 2.2
-    , dataframe  >= 1.3  && < 2
+    , dataframe-core        ^>= 1.1
+    , dataframe-operations  >= 1.1.1 && < 1.2
     , temporary  >= 1.3  && < 1.4
     , bytestring >= 0.11 && < 0.13
     , hmatrix    >= 0.20 && < 0.22

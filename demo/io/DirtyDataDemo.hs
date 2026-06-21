@@ -30,7 +30,8 @@ import Control.Monad (forM_, forM)
 import Data.List (sort)
 import Text.Printf (printf)
 
-import qualified DataFrame     as DX
+import qualified DataFrame.Internal.DataFrame  as DX
+import qualified DataFrame.Operations.Core     as DX
 import qualified Hanalyze.DataIO.CSV    as CSV
 import qualified Hanalyze.DataIO.Log    as Log
 

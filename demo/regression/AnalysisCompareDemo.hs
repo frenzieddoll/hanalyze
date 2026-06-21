@@ -14,7 +14,9 @@ import qualified Numeric.LinearAlgebra as LA
 import System.Random.MWC (createSystemRandom)
 import Text.Printf (printf)
 
-import qualified DataFrame                    as DX
+import qualified DataFrame.Internal.Column    as DX
+import qualified DataFrame.Internal.DataFrame  as DX
+import qualified DataFrame.Operations.Core     as DX
 import qualified DataFrame.Internal.DataFrame as DXD
 import Hanalyze.DataIO.Convert      (getDoubleVec, getTextVec)
 import Hanalyze.DataIO.CSV          (loadAuto)

@@ -20,7 +20,8 @@ import Data.Maybe (fromMaybe)
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import qualified DataFrame                    as DX
+import qualified DataFrame.Internal.Column    as DX
+import qualified DataFrame.Internal.DataFrame  as DX
 import qualified DataFrame.Internal.DataFrame as DXD
 import Hanalyze.Model.Core    (Band (..), coefficientsV)
 import Hanalyze.Model.LM      (fitPolyWithSmooth, SmoothFit (..), polyDesignMatrix)

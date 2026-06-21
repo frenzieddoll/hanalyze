@@ -12,7 +12,9 @@ import qualified Hanalyze.DataIO.Preprocess as Pp
 import qualified Hanalyze.Stat.Interpolate  as Interp
 import qualified Hanalyze.Stat.AdaptiveGrid as AG
 import Text.Read (readMaybe)
-import qualified DataFrame                    as DX
+import qualified DataFrame.Internal.DataFrame  as DX
+import qualified DataFrame.Operations.Core     as DX
+import qualified DataFrame.IO.CSV              as DX
 import qualified DataFrame.Internal.Column    as DXC
 import qualified DataFrame.Internal.DataFrame as DXD
 import Hanalyze.DataIO.Convert     (getDoubleVec, getTextVec, getMaybeTextVec)

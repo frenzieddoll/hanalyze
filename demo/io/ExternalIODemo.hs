@@ -9,7 +9,8 @@ import qualified Data.Text as T
 
 import Hanalyze.DataIO.CSV         (loadCSV)
 import Hanalyze.DataIO.Preprocess  (countMissing, imputeMean)
-import qualified DataFrame                 as DX
+import qualified DataFrame.Internal.DataFrame  as DX
+import qualified DataFrame.Operations.Core     as DX
 import qualified DataFrame.Internal.DataFrame as DXD
 import qualified DataFrame.Internal.Column as DXC
 import Text.Printf        (printf)

@@ -116,7 +116,7 @@ import Numeric (showFFloat)
 import qualified Data.Vector as V
 import Text.Printf (printf)
 
-import qualified DataFrame                    as DX
+import qualified DataFrame.Operations.Core     as DX
 import qualified DataFrame.Internal.DataFrame as DXD
 import Hanalyze.DataIO.Convert (getDoubleVec, getTextVec)
 import Hanalyze.MCMC.Core (Chain)

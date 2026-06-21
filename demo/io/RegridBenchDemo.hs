@@ -18,7 +18,8 @@ import           Text.Printf           (printf)
 import           Control.Monad         (forM)
 import           Data.List             (sort)
 
-import qualified DataFrame             as DX
+import qualified DataFrame.Internal.Column    as DX
+import qualified DataFrame.Internal.DataFrame  as DX
 import qualified Hanalyze.DataIO.Preprocess     as Pp
 import qualified Hanalyze.Stat.Interpolate      as Interp
 import qualified Hanalyze.Stat.AdaptiveGrid     as AG

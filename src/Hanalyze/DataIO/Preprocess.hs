@@ -63,7 +63,11 @@ module Hanalyze.DataIO.Preprocess
   , regridLong
   ) where
 
-import qualified DataFrame                    as DX
+import qualified DataFrame.Internal.Column    as DX
+import qualified DataFrame.Internal.DataFrame  as DX
+import qualified DataFrame.Operators           as DX
+import qualified DataFrame.Operations.Core     as DX
+import qualified DataFrame.Operations.Subset   as DX
 import qualified DataFrame.Internal.Column    as DXC
 import qualified DataFrame.Internal.DataFrame as DXD
 import qualified DataFrame.Internal.Types     as DXT

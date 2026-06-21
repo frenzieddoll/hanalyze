@@ -16,7 +16,8 @@ module Hanalyze.DataIO.Convert
   , getMaybeTextVec
   ) where
 
-import qualified DataFrame                    as DX
+import qualified DataFrame.Operators           as DX
+import qualified DataFrame.Operations.Core     as DX
 import qualified DataFrame.Internal.Column    as DXC
 import qualified DataFrame.Internal.DataFrame as DXD
 

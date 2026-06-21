@@ -11,7 +11,9 @@ module Main where
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 
-import qualified DataFrame                    as DX
+import qualified DataFrame.Internal.DataFrame  as DX
+import qualified DataFrame.Operators           as DX
+import qualified DataFrame.Operations.Core     as DX
 import qualified DataFrame.Internal.DataFrame as DXD
 import Hanalyze.DataIO.CSV         (loadCSV)
 import Hanalyze.DataIO.Preprocess

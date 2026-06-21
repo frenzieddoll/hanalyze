@@ -20,8 +20,7 @@ module Hanalyze.Viz.PlotData.DataFrame
 import qualified Data.Map.Strict          as Map
 import           Data.Text                (Text)
 import qualified Data.Vector              as V
-import qualified DataFrame                as DX
-
+import qualified DataFrame.Internal.DataFrame  as DX
 import           Hanalyze.DataIO.Convert  (getDoubleVec, getTextVec)
 import           Hanalyze.Viz.PlotData    (PlotData (..), ToPlotData (..),
                                            emptyPlotData)

@@ -9,7 +9,7 @@
 -- 出力: bench/results/haskell/regrid.csv
 module Main where
 
-import qualified DataFrame                  as DX
+import qualified DataFrame.Operations.Core     as DX
 import qualified Hanalyze.DataIO.Preprocess          as Pre
 import qualified Hanalyze.Stat.Interpolate           as IL
 import qualified Hanalyze.Stat.AdaptiveGrid          as AG

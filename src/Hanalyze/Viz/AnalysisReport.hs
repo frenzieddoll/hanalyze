@@ -54,7 +54,7 @@ import Numeric (showFFloat)
 import qualified Data.Vector as V
 import qualified Numeric.LinearAlgebra as LA
 
-import qualified DataFrame                    as DX
+import qualified DataFrame.Operations.Core     as DX
 import qualified DataFrame.Internal.DataFrame as DXD
 import Hanalyze.DataIO.Convert (getDoubleVec, getTextVec)
 import Hanalyze.MCMC.Core    (Chain, chainSamples, chainAccepted, chainTotal)

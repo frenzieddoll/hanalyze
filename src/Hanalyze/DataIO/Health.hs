@@ -39,7 +39,8 @@ module Hanalyze.DataIO.Health
   , detectRagged
   ) where
 
-import qualified DataFrame                    as DX
+import qualified DataFrame.Internal.DataFrame  as DX
+import qualified DataFrame.Operations.Core     as DX
 import qualified DataFrame.Internal.Column    as DXC
 import qualified DataFrame.Internal.DataFrame as DXD
 
