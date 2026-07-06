@@ -9,7 +9,7 @@ module Hanalyze.DataIO.External
   , loadJSON
   ) where
 
-import qualified DataFrame                    as DX
+import qualified DataFrame.IO.Parquet          as DX
 import qualified DataFrame.Internal.DataFrame as DXD
 import qualified DataFrame.IO.JSON            as DXJ
 

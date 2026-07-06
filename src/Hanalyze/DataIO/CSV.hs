@@ -24,7 +24,9 @@ module Hanalyze.DataIO.CSV
   , ParseError
   ) where
 
-import qualified DataFrame                    as DX
+import qualified DataFrame.Internal.Column    as DX
+import qualified DataFrame.Internal.DataFrame  as DX
+import qualified DataFrame.IO.CSV              as DX
 import qualified DataFrame.IO.CSV             as DXIO
 import qualified DataFrame.Internal.DataFrame as DXD
 

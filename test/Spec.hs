@@ -10,7 +10,10 @@ import qualified Data.Text   as T
 import qualified Numeric.LinearAlgebra as LA
 import Data.List (sort)
 
-import qualified DataFrame                    as DX
+import qualified DataFrame.Internal.Column    as DX
+import qualified DataFrame.Internal.DataFrame  as DX
+import qualified DataFrame.Operators           as DX
+import qualified DataFrame.Operations.Core     as DX
 import qualified Hanalyze.Design.Orthogonal as OA
 import qualified Hanalyze.Design.Quality    as Quality
 import qualified Hanalyze.Design.Taguchi as TG

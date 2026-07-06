@@ -45,7 +45,9 @@ module Hanalyze.DataIO.Clean
   , fillBlankNames
   ) where
 
-import qualified DataFrame                    as DX
+import qualified DataFrame.Internal.Column    as DX
+import qualified DataFrame.Internal.DataFrame  as DX
+import qualified DataFrame.Operations.Core     as DX
 import qualified DataFrame.Internal.DataFrame as DXD
 import qualified DataFrame.Internal.Column    as DXC
 

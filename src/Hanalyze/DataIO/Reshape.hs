@@ -22,7 +22,9 @@ module Hanalyze.DataIO.Reshape
 
 import qualified Data.Text             as T
 import qualified Data.Vector           as V
-import qualified DataFrame             as DX
+import qualified DataFrame.Internal.Column    as DX
+import qualified DataFrame.Internal.DataFrame  as DX
+import qualified DataFrame.Operations.Subset   as DX
 import qualified DataFrame.Internal.DataFrame as DXD
 import qualified Hanalyze.DataIO.Convert        as Conv
 import           Data.Maybe            (fromMaybe)

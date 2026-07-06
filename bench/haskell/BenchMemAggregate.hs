@@ -10,7 +10,9 @@ module Main where
 
 import qualified Data.Text                as T
 import qualified Data.Vector              as V
-import qualified DataFrame                as DX
+import qualified DataFrame.Internal.Column    as DX
+import qualified DataFrame.Internal.DataFrame  as DX
+import qualified DataFrame.Operations.Core     as DX
 import           Data.Time.Clock          (getCurrentTime, diffUTCTime)
 import           System.Environment       (getArgs)
 import           System.IO                (hSetBuffering, BufferMode (..), stdout)

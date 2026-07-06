@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import qualified DataFrame as DX
+import qualified DataFrame.Internal.Column    as DX
+import qualified DataFrame.Internal.DataFrame  as DX
 import Hanalyze.Model.GLMM
 import Hanalyze.Model.Core (coeffList, rSquared1, fittedList)
 import Hanalyze.Model.LM   (multiPolyDesignMatrix, fitLMVec)

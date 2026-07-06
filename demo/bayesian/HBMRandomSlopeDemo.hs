@@ -25,7 +25,8 @@ import Data.Maybe (fromMaybe)
 import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 
-import qualified DataFrame                    as DX
+import qualified DataFrame.Internal.Column    as DX
+import qualified DataFrame.Internal.DataFrame  as DX
 import qualified DataFrame.Internal.DataFrame as DXD
 
 import Hanalyze.MCMC.Core (Chain (..), chainVals, posteriorMean, posteriorSD,
