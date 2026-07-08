@@ -291,6 +291,10 @@ executable potential-gen
   main-is:          PotentialGen.hs
   hs-source-dirs:   demo demo/regression demo/doe-optim demo/bayesian demo/visualization demo/io
   default-language: GHC2021
+  -- PotentialGen.hs は git 管理外 (確認用、 ローカル限定 = 95f0a94)。
+  -- source が無い環境でも `cabal build all` が通るよう buildable: False。
+  -- ローカルで使う時だけ True に戻す。
+  buildable:        False
   build-depends:
       base       >= 4.14 && < 5
     , hanalyze
