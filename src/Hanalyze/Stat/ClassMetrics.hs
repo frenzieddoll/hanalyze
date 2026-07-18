@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Classification model evaluation metrics.
+-- |
+-- Module      : Hanalyze.Stat.ClassMetrics
+-- Description : 分類モデル評価指標 (混同行列・ROC/AUC・PR 曲線・logLoss 等)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Classification model evaluation metrics.
 --
 -- Two families:
 --

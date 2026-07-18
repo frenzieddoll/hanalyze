@@ -1,3 +1,9 @@
+-- |
+-- Module      : Hanalyze.Viz.GP
+-- Description : ガウス過程回帰結果 (訓練データ・事後平均・信用区間) の可視化
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
 {-# LANGUAGE OverloadedStrings #-}
 -- | Visualization of Gaussian-process regression results.
 --

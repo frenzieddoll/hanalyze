@@ -1,6 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BangPatterns #-}
--- | Time-series modelling.
+
+-- |
+-- Module      : Hanalyze.Model.TimeSeries
+-- Description : AR/MA/ARIMA・指数平滑・STL 分解を含む時系列モデリング一式
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Time-series modelling.
 --
 -- @
 -- import Hanalyze.Model.TimeSeries

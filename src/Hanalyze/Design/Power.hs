@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Power analysis: sample-size determination and power computation.
+-- |
+-- Module      : Hanalyze.Design.Power
+-- Description : 検出力分析 — サンプルサイズ決定と検出力計算 (t 検定・ANOVA・比率検定)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Power analysis: sample-size determination and power computation.
 --
 -- Main functions:
 --

@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Response Surface Methodology (RSM).
+-- |
+-- Module      : Hanalyze.Design.RSM
+-- Description : 応答曲面法 (RSM) — CCD/Box-Behnken 計画・二次モデル fit・極値の解析解
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Response Surface Methodology (RSM).
 --
 --   * 'centralComposite' — central composite design (CCD): @2^k@ factorial
 --     + axial points + center points.
@@ -20,8 +26,11 @@ module Hanalyze.Design.RSM
   , QuadFit (..)
   , fitQuadratic
   , optimumPoint
+  , quadBMatrix
+  , canonicalAnalysis
   ) where
 
+import Data.List (sortOn)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Numeric.LinearAlgebra as LA
@@ -177,16 +186,8 @@ optimumPoint fit =
       bMain = take k (drop 1 beta)
       bSq   = take k (drop (1 + k) beta)
       bInt  = drop (1 + 2 * k) beta
-      -- B 行列: 対角は β_sq、非対角は β_int / 2 (対称化)
-      bMat = LA.fromLists
-        [ [ if i == j then bSq !! i
-            else
-              let (lo, hi) = if i < j then (i, j) else (j, i)
-                  idx = pairIndex k lo hi
-              in (bInt !! idx) / 2
-          | j <- [0 .. k - 1] ]
-        | i <- [0 .. k - 1] ]
-      bVec = LA.fromList bMain
+      bMat  = quadBMatrix fit
+      bVec  = LA.fromList bMain
       xStar = LA.toList (LA.scale (-0.5) (LA.inv bMat LA.#> bVec))
       yStar = b0
             + sum (zipWith (*) bMain xStar)
@@ -198,3 +199,31 @@ optimumPoint fit =
   where
     -- (i, j) ペア (i < j) の β_int 配列内のインデックス
     pairIndex n i j = sum [n - 1 - p | p <- [0 .. i - 1]] + (j - i - 1)
+
+-- | 二次モデルの @B@ 行列 (@ŷ = b₀ + bᵀx + xᵀ B x@ の 2 次係数)。 対角は β_sq、
+--   非対角は β_int/2 で対称化。 canonical 解析 / 停留点計算の共通部品。
+quadBMatrix :: QuadFit -> LA.Matrix Double
+quadBMatrix fit =
+  let k     = qfK fit
+      beta  = LA.toList (qfBeta fit)
+      bSq   = take k (drop (1 + k) beta)
+      bInt  = drop (1 + 2 * k) beta
+  in LA.fromLists
+       [ [ if i == j then bSq !! i
+           else
+             let (lo, hi) = if i < j then (i, j) else (j, i)
+                 idx = pairIndex k lo hi
+             in (bInt !! idx) / 2
+         | j <- [0 .. k - 1] ]
+       | i <- [0 .. k - 1] ]
+  where pairIndex n i j = sum [n - 1 - p | p <- [0 .. i - 1]] + (j - i - 1)
+
+-- | Canonical 解析。 @B@ 行列の固有分解を返す (固有値, 固有ベクトル) のペア列。
+--   固有値の符号で応答曲面の性質が読める (全負=極大 / 全正=極小 / 混在=鞍点)、
+--   固有ベクトルは canonical 軸 (停留点周りで応答が最も急/緩に動く coded 方向)。
+--   ペアは固有値の昇順。 単位はモデルを当てた座標系 (通常 coded)。
+canonicalAnalysis :: QuadFit -> [(Double, [Double])]
+canonicalAnalysis fit =
+  let (vals, vecs) = LA.eigSH (LA.sym (quadBMatrix fit))
+      pairs = zip (LA.toList vals) (map LA.toList (LA.toColumns vecs))
+  in sortOn fst pairs

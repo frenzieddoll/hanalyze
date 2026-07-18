@@ -1,3 +1,9 @@
+-- |
+-- Module      : Hanalyze.Viz.AnalysisReport
+-- Description : 【非推奨】 LM/GLM/GLMM/GP/HBM 専用の sum-type ベース HTML レポート (ReportBuilder に移行済)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
 {-# LANGUAGE OverloadedStrings #-}
 -- | __DEPRECATED__ — sum-type-based HTML report dedicated to
 -- LM / GLM / GLMM / GP / HBM (~2000 lines). Superseded by
@@ -54,7 +60,7 @@ import Numeric (showFFloat)
 import qualified Data.Vector as V
 import qualified Numeric.LinearAlgebra as LA
 
-import qualified DataFrame                    as DX
+import qualified DataFrame.Operations.Core     as DX
 import qualified DataFrame.Internal.DataFrame as DXD
 import Hanalyze.DataIO.Convert (getDoubleVec, getTextVec)
 import Hanalyze.MCMC.Core    (Chain, chainSamples, chainAccepted, chainTotal)
@@ -966,6 +972,14 @@ gpKernelAppendix gf = T.unlines $
       [ "    <p><b>Periodic カーネル</b></p>"
       , "    <div class=\"formula\">k(x, x') = σ²_f · exp( −2 sin²(π|x−x'|/p) / ℓ² )</div>"
       ]
+    kernelDesc Linear =
+      [ "    <p><b>Linear (内積) カーネル</b></p>"
+      , "    <div class=\"formula\">k(x, x') = σ²_f · (x·x')</div>"
+      ]
+    kernelDesc (Poly d) =
+      [ "    <p><b>Polynomial カーネル (次数 " <> T.pack (show d) <> ")</b></p>"
+      , "    <div class=\"formula\">k(x, x') = (γ·(x·x') + 1)^" <> T.pack (show d) <> " &nbsp; (γ = 1/(2ℓ²))</div>"
+      ]
 
 lmAppendix :: Text -> Text
 lmAppendix link = T.unlines
@@ -1270,6 +1284,8 @@ jsKernelId :: Kernel -> Text
 jsKernelId RBF      = "rbf"
 jsKernelId Matern52 = "matern52"
 jsKernelId Periodic = "periodic"
+jsKernelId Linear   = "linear"
+jsKernelId (Poly _) = "poly"
 
 jsGPParams :: Kernel -> GPParams -> Text
 jsGPParams ker p =

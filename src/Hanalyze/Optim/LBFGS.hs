@@ -1,5 +1,10 @@
-{-# LANGUAGE StrictData #-}
--- | L-BFGS (Limited-memory BFGS) quasi-Newton method.
+-- |
+-- Module      : Hanalyze.Optim.LBFGS
+-- Description : L-BFGS (限定記憶 BFGS) 準ニュートン法
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- L-BFGS (Limited-memory BFGS) quasi-Newton method.
 --
 -- Liu & Nocedal (1989). The standard for local optimization of large,
 -- smooth objectives — practical at hundreds to tens of thousands of
@@ -16,12 +21,14 @@
 -- inner-loop arithmetic operation runs on @LA.Vector Double@ via BLAS.
 -- This eliminates the per-step Haskell list overhead that previously
 -- dominated the runtime (verified on the GLM bench in G2).
+{-# LANGUAGE StrictData #-}
 
 module Hanalyze.Optim.LBFGS
   ( LBFGSConfig (..)
   , defaultLBFGSConfig
   , runLBFGS
   , runLBFGSWith
+  , runLBFGSWithPure
   , runLBFGSNumeric
     -- * Vector-native variants (avoid list↔Vector conversion on every step)
   , runLBFGSWithV
@@ -70,7 +77,16 @@ runLBFGSWith :: LBFGSConfig
              -> ([Double] -> [Double])      -- ^ Gradient @∇f@.
              -> [Double]                    -- ^ Initial point @x₀@.
              -> IO OptimResult
-runLBFGSWith cfg fUser gUser x0 =
+runLBFGSWith cfg fUser gUser x0 = pure (runLBFGSWithPure cfg fUser gUser x0)
+
+-- | 純粋版 ('runLBFGSWith' は本体が完全に純粋 = @let … in pure result@ ゆえ IO は不要)。
+-- 乱数を使わない決定的最適化なので、 純粋に閉じられる ('fitSVMPure' 等が利用)。
+runLBFGSWithPure :: LBFGSConfig
+                 -> ([Double] -> Double)
+                 -> ([Double] -> [Double])
+                 -> [Double]
+                 -> OptimResult
+runLBFGSWithPure cfg fUser gUser x0 =
   let mbs          = lbBounds cfg
       sign         = case lbDir cfg of { Minimize -> 1; Maximize -> -1 :: Double }
       -- The internal objective and gradient operate on LA.Vector Double.
@@ -103,7 +119,7 @@ runLBFGSWith cfg fUser gUser x0 =
       histUser = case lbDir cfg of
                    Minimize -> reverse hist
                    Maximize -> map negate (reverse hist)
-  in pure $ OptimResult
+  in OptimResult
        { orBest      = LA.toList xEndV
        , orValue     = vUser
        , orHistory   = histUser
@@ -206,7 +222,15 @@ loop cfg f g iter x fx gx ss ys hist
   | gnorm < stTolFun (lbStop cfg)  = (x, fx, hist, iter, True)
   | otherwise =
       let d = twoLoop ss ys gx
-          (xN, fN, alpha) = lineSearch cfg f x fx gx d
+          -- 初回反復 (曲率履歴なし) は方向が未スケールの最急降下 (‖d‖=‖g‖)。
+          -- 勾配が大きい問題で α=1 の第1歩を打つと巨大にオーバーシュートし、
+          -- 平坦な退化解に嵌って勾配消失で誤収束する (GP 周辺尤度で実測:
+          -- ℓ が真の峰 105 を越えて 1e12 に飛ぶ)。Nocedal & Wright §3.5 に従い
+          -- 初回のみ α₀ = min(1, 1/‖g‖₁) に抑える (2 回目以降は quasi-Newton
+          -- 方向が自己スケールするので α=1 が適切)。
+          alpha0 | null ss   = min 1 (1 / max 1e-16 (LA.norm_1 gx))
+                 | otherwise = 1
+          (xN, fN, alpha) = lineSearch cfg f x fx gx d alpha0
       in if alpha < 1e-16
            then (x, fx, hist, iter, True)
            else
@@ -252,13 +276,15 @@ twoLoop ss ys q =
       r        = foldl step2 r0 triplesAlphas
   in LA.scale (-1) r
 
--- | backtracking + Armijo 条件 @f(x + αd) ≤ f(x) + c1 α gᵀd@.
+-- | backtracking + Armijo 条件 @f(x + αd) ≤ f(x) + c1 α gᵀd@。
+-- @alpha0@ = 初期ステップ幅 (通常 1.0、初回最急降下では 1/‖g‖₁ 等で抑える)。
 lineSearch :: LBFGSConfig
            -> (LA.Vector Double -> Double)
            -> LA.Vector Double -> Double
            -> LA.Vector Double -> LA.Vector Double
+           -> Double                                  -- ^ 初期ステップ幅 α₀
            -> (LA.Vector Double, Double, Double)
-lineSearch cfg f x fx g d =
+lineSearch cfg f x fx g d alpha0 =
   let gtd = LA.dot g d
       go alpha k
         | k >= lbLSMax cfg = (xCand, f xCand, alpha)
@@ -268,4 +294,4 @@ lineSearch cfg f x fx g d =
           xCand  = x + LA.scale alpha d
           fxCand = f xCand
           armijo = fxCand <= fx + lbLSC1 cfg * alpha * gtd
-  in go 1.0 0
+  in go alpha0 0

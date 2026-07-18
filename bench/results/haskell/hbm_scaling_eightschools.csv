@@ -1,0 +1,7 @@
+system,suite,name,time_ms,acc_main,acc_aux,extra
+haskell,hbm_scaling,eightschools_iter50,25.282061,4.079403,38.953814,iter=50 warmup=500 key=tau ess=39.0 ess_per_sec=1540.77 accept=0.855 tree_depth=3.04 time_ms=25.3
+haskell,hbm_scaling,eightschools_iter100,27.994034,4.166213,93.499397,iter=100 warmup=500 key=tau ess=93.5 ess_per_sec=3339.98 accept=0.865 tree_depth=3.09 time_ms=28.0
+haskell,hbm_scaling,eightschools_iter200,35.487095,4.273029,168.727453,iter=200 warmup=500 key=tau ess=168.7 ess_per_sec=4754.61 accept=0.876 tree_depth=3.12 time_ms=35.5
+haskell,hbm_scaling,eightschools_iter400,40.796559,3.969924,353.850165,iter=400 warmup=500 key=tau ess=353.9 ess_per_sec=8673.53 accept=0.899 tree_depth=3.11 time_ms=40.8
+haskell,hbm_scaling,eightschools_iter800,59.837493,3.816855,486.782282,iter=800 warmup=500 key=tau ess=486.8 ess_per_sec=8135.07 accept=0.916 tree_depth=3.12 time_ms=59.8
+haskell,hbm_scaling,eightschools_iter1600,121.639215,3.795430,1185.081579,iter=1600 warmup=500 key=tau ess=1185.1 ess_per_sec=9742.59 accept=0.932 tree_depth=3.13 time_ms=121.6

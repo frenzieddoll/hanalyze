@@ -1,3 +1,9 @@
+-- |
+-- Module      : Hanalyze.Viz.PlotData
+-- Description : プロットデータの入力元非依存な中間表現 (PlotData / ToPlotData)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
 {-# LANGUAGE OverloadedStrings #-}
 -- | Source-agnostic intermediate representation for plot data.
 --

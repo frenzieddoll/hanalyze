@@ -8,6 +8,13 @@
 > 関連: [04-spline.ja.md](04-spline.ja.md) (スプライン) / [04-gp.ja.md](04-gp.ja.md) (GP) /
 > 理論: [theory-regression-extensions.ja.md](theory-regression-extensions.ja.md)
 
+> 💡 **高レベルの入口**: Kernel Ridge (KRR) は GP・RFF と統合された 1 つの spec
+> `gp` / `gpMulti` の **`Krr` 象限** (点予測) として
+> `df |-> gp (GPConfig RBF Krr AutoMarginalLik) "x" "y"` で使える (KRR ≡ GP 事後平均)。
+> 4 象限の一覧と df 連携は
+> [04-gp.ja.md §0 統合 API](04-gp.ja.md#0-統合-api--gp--gpmulti-推奨の入口) を参照。
+> 本ページは局所加重平均 (Nadaraya-Watson) を含む低レベルリファレンス。
+
 ## 1. 用途
 - パラメトリックモデルを避けたい
 - 局所的な非線形性
@@ -16,7 +23,7 @@
 ## 2. API
 
 ```haskell
-import Model.Kernel
+import Hanalyze.Model.Kernel
 
 data Kernel = Gaussian | Epanechnikov | Triangular | Uniform | TriCube
 

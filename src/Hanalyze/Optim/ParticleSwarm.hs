@@ -1,5 +1,10 @@
-{-# LANGUAGE StrictData #-}
--- | Particle Swarm Optimization (PSO).
+-- |
+-- Module      : Hanalyze.Optim.ParticleSwarm
+-- Description : Particle Swarm Optimization (PSO) — Kennedy & Eberhart 1995
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Particle Swarm Optimization (PSO).
 --
 -- Kennedy & Eberhart (1995). A metaheuristic in which a swarm of particles
 -- updates velocity by being attracted to its personal best (pbest) and the
@@ -14,6 +19,7 @@
 --
 -- Here @w@ is inertia, @c_1@ the cognitive coefficient, @c_2@ the social
 -- coefficient, and @r_1, r_2 ~ U(0, 1)@.
+{-# LANGUAGE StrictData #-}
 module Hanalyze.Optim.ParticleSwarm
   ( PSOConfig (..)
   , defaultPSOConfig

@@ -1,11 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
--- | Safe extraction of numeric / Text vectors from a Hackage @dataframe@
+-- |
+-- Module      : Hanalyze.DataIO.Convert
+-- Description : Hackage dataframe から数値/Text 列を安全に Vector へ抽出する変換層
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Safe extraction of numeric / Text vectors from a Hackage @dataframe@
 -- ('DXD.DataFrame'). Used widely across @Model.*@ and @Viz.*@.
 --
---   * 'getDoubleVec' — normalize Double / Int / Maybe Double / Maybe Int /
---     Text columns to @V.Vector Double@. Text values are parsed; if any
+--   * 'getDoubleVec' — normalize Double / Int / Integer / Maybe Double /
+--     Maybe Int / Maybe Integer / Text columns to @V.Vector Double@. Text values are parsed; if any
 --     missing slot is present (null bitmap or NA string), returns
 --     'Nothing' so model fits cannot crash on missing data.
 --   * 'getTextVec'   — extract a Text column. Returns 'Nothing' on type
@@ -16,7 +22,8 @@ module Hanalyze.DataIO.Convert
   , getMaybeTextVec
   ) where
 
-import qualified DataFrame                    as DX
+import qualified DataFrame.Operators           as DX
+import qualified DataFrame.Operations.Core     as DX
 import qualified DataFrame.Internal.Column    as DXC
 import qualified DataFrame.Internal.DataFrame as DXD
 

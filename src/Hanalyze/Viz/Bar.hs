@@ -1,3 +1,9 @@
+-- |
+-- Module      : Hanalyze.Viz.Bar
+-- Description : 棒グラフ (縦・横・積み上げ・グループ化) の可視化
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
 {-# LANGUAGE OverloadedStrings #-}
 -- | Bar-chart visualizations.
 --

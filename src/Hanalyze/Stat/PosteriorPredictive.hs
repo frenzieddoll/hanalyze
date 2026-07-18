@@ -1,6 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
--- | Prior- and posterior-predictive sampling (analogous to PyMC's
+-- |
+-- Module      : Hanalyze.Stat.PosteriorPredictive
+-- Description : 事前/事後予測サンプリング (PyMC の sample_prior/posterior_predictive 相当)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Prior- and posterior-predictive sampling (analogous to PyMC's
 -- @sample_prior_predictive@ / @sample_posterior_predictive@).
 --
 -- @

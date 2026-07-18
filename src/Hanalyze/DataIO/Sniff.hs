@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Auto-detect a CSV's delimiter, comment lines, presence of header,
+-- |
+-- Module      : Hanalyze.DataIO.Sniff
+-- Description : CSV の delimiter・comment・header 有無・NA 候補を先頭 8KB から推測する
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Auto-detect a CSV's delimiter, comment lines, presence of header,
 -- and NA candidates by inspecting the first 8 KB. While @LoadOpts@ lets
 -- the user state these explicitly, this module adds a layer that guesses
 -- when nothing is specified.

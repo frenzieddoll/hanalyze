@@ -40,7 +40,7 @@ wrapper that lifts to a 1-column matrix and delegates.**
 When you also want the residual covariance Σ:
 
 ```haskell
-import Model.MultiLM
+import Hanalyze.Model.MultiLM
 
 let mf    = fitMultiLM xMat yMat   -- X (n×p), Y (n×q)
 let yPred = predictMultiLM mf xNewMat
@@ -53,6 +53,12 @@ API:
 - `predictMultiLM :: MultiFit -> Matrix -> Matrix`
 - `mfResidCov`, `mfResidCor`: residual covariance / correlation
 
+The residual correlation matrix `mfResidCor` reveals which outputs share unexplained
+structure after the linear fit. Visualising it as a heatmap makes the strongly
+correlated output pairs (bright off-diagonal cells) immediately apparent:
+
+![Residual correlation heatmap of a multi-output linear regression](../images/multilm-resid-corr.svg)
+
 ---
 
 ## 2. Multi-output Spline / Kernel / Regularized / RFF
@@ -61,11 +67,11 @@ All use a single matrix-form solve (Ridge/OLS) or shared computation +
 per-column iteration (Lasso/EN/IRLS):
 
 ```haskell
-import Model.Spline      (fitSplineMulti, predictSplineMulti, BSpline (..))
-import Model.Kernel      (kernelRidgeMulti, predictKernelRidgeMulti
+import Hanalyze.Model.Spline      (fitSplineMulti, predictSplineMulti, BSpline (..))
+import Hanalyze.Model.Kernel      (kernelRidgeMulti, predictKernelRidgeMulti
                          , autoTuneKernelRidgeMulti, defaultHGrid, defaultLamGrid)
-import Model.Regularized (fitRegularizedMulti, predictRegularizedMulti, Penalty (..))
-import Model.RFF         (rffRidgeMulti, predictRFFRidgeMulti, sampleRFFRBF)
+import Hanalyze.Model.Regularized (fitRegularizedMulti, predictRegularizedMulti, Penalty (..))
+import Hanalyze.Model.RFF         (rffRidgeMulti, predictRFFRidgeMulti, sampleRFFRBF)
 
 -- Spline (q outputs at once)
 let sf    = fitSplineMulti (BSpline 3) knots xs yMat
@@ -96,7 +102,7 @@ let yPred = predictRFFRidgeMulti mf xListNew
 ## 3. RRR / PLS / CCA (`Hanalyze.Model.Multivariate`)
 
 ```haskell
-import Model.Multivariate
+import Hanalyze.Model.Multivariate
 
 -- Reduced-rank regression
 let rrr = reducedRankRegression r xMat yMat
@@ -111,6 +117,35 @@ let ccaFit = cca xMat yMat
 -- ccaCorr ccaFit: canonical correlations
 -- ccaA, ccaB:    per-side bases (n × r)
 ```
+
+`pls k xMat yMat` returns a `PLSFit`, which is `Plottable`: the dedicated
+views `scoreView` / `loadingView` / `vipView` (`Hanalyze.Plot`) wrap it
+into an intermediate `PLSView` (itself `Plottable`), and `toPlot` turns each into
+one of the three figures below, drawn from the fit alone (no df needed):
+
+```haskell
+import Hanalyze.Plot (scoreView, loadingView, vipView, toPlot)
+import Hgg.Plot.Frame   ((|>>))
+import Hgg.Plot.Spec    (ColData)
+
+let noDf = [] :: [(Text, ColData)]
+    scorePlot   = noDf |>> toPlot (scoreView   pls')
+    loadingPlot = noDf |>> toPlot (loadingView pls')
+    vipPlot     = noDf |>> toPlot (vipView     pls')
+```
+
+A PLS score plot projects the samples onto the first few latent components,
+making clusters and trends in the latent space visible:
+
+![PLS score plot on the first two latent components](../images/pls-score.svg)
+
+The loading plot shows how each original variable contributes to the latent
+components, and the VIP (Variable Importance in Projection) ranks predictors by
+their overall contribution:
+
+![PLS loading plot](../images/pls-loading.svg)
+
+![PLS VIP (variable importance in projection)](../images/pls-vip.svg)
 
 ---
 
@@ -178,8 +213,8 @@ let res = fitMultiGPIndep RBF trainX trainYs testX
 StudentT / Cauchy observation likelihood for outlier robustness, per-column IRLS:
 
 ```haskell
-import qualified Model.GP as GP
-import qualified Model.GPRobust as GPR
+import qualified Hanalyze.Model.GP as GP
+import qualified Hanalyze.Model.GPRobust as GPR
 
 let mf = GPR.fitGPRobustMulti GP.RBF GP.defaultGPParams
                               (GPR.RStudentT 4 0.3) trainX trainYMat

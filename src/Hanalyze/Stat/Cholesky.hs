@@ -1,5 +1,11 @@
 {-# LANGUAGE StrictData #-}
--- | Cholesky-based linear solver for symmetric positive-definite (SPD)
+-- |
+-- Module      : Hanalyze.Stat.Cholesky
+-- Description : 対称正定値 (SPD) 系向け Cholesky 分解ベースの線形ソルバ
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Cholesky-based linear solver for symmetric positive-definite (SPD)
 -- systems.
 --
 -- Replaces the generic least-squares solve @LA.\<\\\>@ in code paths

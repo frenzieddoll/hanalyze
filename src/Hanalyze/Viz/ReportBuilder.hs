@@ -1,3 +1,9 @@
+-- |
+-- Module      : Hanalyze.Viz.ReportBuilder
+-- Description : 全モデル/解析種別共通の合成型 HTML レポートビルダー (ReportSection / Reportable)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
 {-# LANGUAGE OverloadedStrings #-}
 -- | Compositional HTML report builder.
 --
@@ -116,7 +122,7 @@ import Numeric (showFFloat)
 import qualified Data.Vector as V
 import Text.Printf (printf)
 
-import qualified DataFrame                    as DX
+import qualified DataFrame.Operations.Core     as DX
 import qualified DataFrame.Internal.DataFrame as DXD
 import Hanalyze.DataIO.Convert (getDoubleVec, getTextVec)
 import Hanalyze.MCMC.Core (Chain)

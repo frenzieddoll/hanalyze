@@ -1,6 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BangPatterns #-}
--- | Survival analysis.
+
+-- |
+-- Module      : Hanalyze.Model.Survival
+-- Description : 打ち切りを伴う生存時間解析 (Kaplan-Meier / Nelson-Aalen / log-rank / Cox PH)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Survival analysis.
 --
 -- Time-to-event analysis under right censoring. Implements:
 --
@@ -82,17 +89,18 @@ kaplanMeier samples =
   let !sorted = sortBy (comparing ssTime) samples
       !n0     = length sorted
       groups  = runLengthGroups sorted
-      go _    [] = ([], [], [], [], [])
-      go !nAt ((t, dj, cj) : rest) =
+      -- 累積生存は **先頭から** 積む: Ŝ(tᵢ) = ∏_{j ≤ i} (1 − dⱼ/nⱼ)。
+      -- (旧実装は rest を先に再帰して右から積んでおり、 最終時点の (1−dⱼ/nⱼ)=0 が
+      --  全時点を 0 に潰す逆順バグだった。 計測で確認・修正。)
+      go _    _     [] = ([], [], [], [], [])
+      go !nAt !sAcc ((t, dj, cj) : rest) =
         let !sFactor = if nAt > 0
                          then 1 - fromIntegral dj / fromIntegral nAt
                          else 1
-            (ts, ss, ns, ds, cs) = go (nAt - dj - cj) rest
-            !sNew = case ss of
-                      []      -> sFactor
-                      (s : _) -> s * sFactor
+            !sNew = sAcc * sFactor
+            (ts, ss, ns, ds, cs) = go (nAt - dj - cj) sNew rest
         in (t : ts, sNew : ss, nAt : ns, dj : ds, cj : cs)
-      (ts, ss, ns, ds, cs) = go n0 groups
+      (ts, ss, ns, ds, cs) = go n0 1.0 groups
   in KMResult ts ss ns ds cs
 
 -- | Walk a list pre-sorted by 'ssTime' and return per-distinct-time

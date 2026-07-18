@@ -1,5 +1,10 @@
-{-# LANGUAGE StrictData #-}
--- | Differential Evolution (DE/rand/1/bin) — Storn & Price 1997.
+-- |
+-- Module      : Hanalyze.Optim.DifferentialEvolution
+-- Description : Differential Evolution (DE/rand/1/bin) — Storn & Price 1997
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Differential Evolution (DE/rand/1/bin) — Storn & Price 1997.
 --
 -- A gradient-free, global, simple-to-implement and empirically robust
 -- evolutionary algorithm. Best suited to continuous non-convex problems,
@@ -17,6 +22,7 @@
 --
 -- Cost: @N@ function evaluations per generation (population size). Easily
 -- parallelizable, but this implementation is sequential.
+{-# LANGUAGE StrictData #-}
 module Hanalyze.Optim.DifferentialEvolution
   ( DEConfig (..)
   , DEStrategy (..)

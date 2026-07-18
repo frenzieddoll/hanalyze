@@ -1,0 +1,5 @@
+system,suite,name,time_ms,acc_main,acc_aux,extra
+python,hbm_scaling,radon_iter50,8458.09,-0.61,22,iter=50 warmup=500 key=beta[1] ess=22.0 ess_per_sec=2.60 tree_depth=4.08 time_ms=8458.1
+python,hbm_scaling,radon_iter100,4576.88,-0.61,88,iter=100 warmup=500 key=beta[1] ess=88.0 ess_per_sec=19.23 tree_depth=4.04 time_ms=4576.9
+python,hbm_scaling,radon_iter200,4745.31,-0.61,149,iter=200 warmup=500 key=beta[1] ess=149.0 ess_per_sec=31.40 tree_depth=4.02 time_ms=4745.3
+python,hbm_scaling,radon_iter400,4831.34,-0.61,271,iter=400 warmup=500 key=beta[1] ess=271.0 ess_per_sec=56.09 tree_depth=4.01 time_ms=4831.3

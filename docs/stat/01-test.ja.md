@@ -67,7 +67,7 @@ data TestResult = TestResult
 ## 3. 使用例
 
 ```haskell
-import qualified Stat.Test as ST
+import qualified Hanalyze.Stat.Test as ST
 import qualified Numeric.LinearAlgebra as LA
 
 -- A/B テストの平均差
@@ -97,7 +97,7 @@ let normRes = ST.shapiroWilk groupA
 複数検定を行う場合は `Hanalyze.Stat.MultipleTesting` で補正:
 
 ```haskell
-import qualified Stat.MultipleTesting as MT
+import qualified Hanalyze.Stat.MultipleTesting as MT
 
 let pVals = [ST.trPValue (ST.tTestWelch g1 g2 ST.TwoSided) | (g1, g2) <- pairs]
     adjusted = MT.benjaminiHochberg pVals
@@ -130,6 +130,12 @@ p-value だけでなく effect size を併記する習慣を:
 - `tTest*` は `trEffect` に Cohen's d を返却
 - `anovaOneWay` は η² を返却
 - 詳細・Power 解析は [`Hanalyze.Stat.Effect`](09-effect.ja.md) 参照
+
+複数の検定結果を比較する際は、効果量・平均差とその 95% CI を forest plot で
+一覧化すると、各検定の効果の大きさと不確実性を一目で把握できます (0 を跨ぐ
+CI は有意でないことを示します)。
+
+![検定の効果量・平均差と 95% CI を 1 行ずつ並べた forest plot (0 基準線付き)](../images/test-forest.svg)
 
 ## 7. 参考文献
 

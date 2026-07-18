@@ -1,6 +1,6 @@
 # 直交表とタグチメソッド
 
-> 🌐 [English](03-orthogonal-taguchi.md) | **日本語**
+> 🌐 [English](02-orthogonal-taguchi.md) | **日本語**
 
 > 関連: [01-doe.ja.md](01-doe.ja.md) (DOE 全般), [theory-doe.ja.md](theory-doe.ja.md)
 
@@ -9,11 +9,11 @@
 1. [はじめに — 何のために使うか](#1-はじめに--何のために使うか)
 2. [直交表とタグチメソッドの違い](#2-直交表とタグチメソッドの違い)
 3. [直交表 Lₙ の理論](#3-直交表-lₙ-の理論)
-4. [`Hanalyze.Design.Orthogonal` の使い方](#4-designorthogonal-の使い方)
+4. [`Hanalyze.Design.Orthogonal` の使い方](#4-hanalyzedesignorthogonal-の使い方)
 5. [タグチメソッドの理論](#5-タグチメソッドの理論)
-6. [`Hanalyze.Design.Taguchi` の使い方](#6-designtaguchi-の使い方)
+6. [`Hanalyze.Design.Taguchi` の使い方](#6-hanalyzedesigntaguchi-の使い方)
 7. [CLI からの一連のワークフロー](#7-cli-からの一連のワークフロー)
-8. [HTML レポート (`Hanalyze.Viz.Taguchi`)](#8-html-レポート-viztaguchi)
+8. [HTML レポート (`Hanalyze.Viz.Taguchi`)](#8-html-レポート-hanalyzeviztaguchi)
 9. [実例: 化学プロセス最適化](#9-実例-化学プロセス最適化)
 10. [よくある落とし穴](#10-よくある落とし穴)
 11. [参考文献](#11-参考文献)
@@ -36,7 +36,7 @@
 |---|---|
 | 因子の主効果を最少試行で評価したい (探索) | 直交表 + ANOVA |
 | 雑音条件下でも安定する **ロバスト設計** を見つけたい | タグチメソッド |
-| 連続パラメータの最適化 (応答曲面) | 直交表ではなく [RSM](01-doe.ja.md#6-応答曲面法-designrsm) を使う |
+| 連続パラメータの最適化 (応答曲面) | 直交表ではなく [RSM](01-doe.ja.md#6-応答曲面法-hanalyzedesignrsm) を使う |
 | 工場での試作回数を 1/10 以下に削減したい | 直交表 + 部分要因 |
 
 ---
@@ -136,7 +136,7 @@ L9, L12, L18 は単純な部分集合積で生成できないため、`Hanalyze.
 ### 4.1 主要 API
 
 ```haskell
-import qualified Design.Orthogonal as OA
+import qualified Hanalyze.Design.Orthogonal as OA
 
 -- 標準表 (定数)
 OA.l4    :: OA.OA   -- L4(2^3)
@@ -293,7 +293,7 @@ $$ \hat\eta_{\text{opt}} = \bar\eta_{\text{all}} + \sum_j (\bar\eta_{j, k^*_j} -
 ### 6.1 SN 比
 
 ```haskell
-import qualified Design.Taguchi as TG
+import qualified Hanalyze.Design.Taguchi as TG
 
 TG.snRatio TG.SmallerBetter         [1.2, 1.5, 0.9, 1.1]
 -- → -1.5458 (dB)
@@ -360,8 +360,8 @@ UI / レポート向けに「平均・分散込みの SN」「range と寄与率
 「Cp / Cpk」を 1 構造で取れるヘルパ。
 
 ```haskell
-import qualified Design.Taguchi as TG
-import qualified Design.Quality as Quality
+import qualified Hanalyze.Design.Taguchi as TG
+import qualified Hanalyze.Design.Quality as Quality
 
 -- 平均 / 分散 / N 込みの SN
 let det = TG.snRatioWithDetails TG.NominalBest [12.1, 12.3, 11.9, 12.0]
@@ -492,7 +492,7 @@ Predicted SN at optimum (additive model): -3.687 dB
 ### ライブラリ API
 
 ```haskell
-import qualified Viz.Taguchi as VTG
+import qualified Hanalyze.Viz.Taguchi as VTG
 
 let tr = VTG.TaguchiReport
            { VTG.trTitle     = "My experiment"
@@ -511,7 +511,7 @@ VTG.renderTaguchiReport "report.html" tr
 汎用 `ReportBuilder` でも同様のレポートを作れる (より柔軟):
 
 ```haskell
-import qualified Viz.ReportBuilder as RB
+import qualified Hanalyze.Viz.ReportBuilder as RB
 
 let cfg = RB.defaultReportConfig "Taguchi (custom)"
     sections =

@@ -1,6 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
--- | Column-level cleaning DSL.
+-- |
+-- Module      : Hanalyze.DataIO.Clean
+-- Description : Health check の警告を数値化ルールへ変換する列単位クリーニング DSL
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Column-level cleaning DSL.
 --
 -- Health checks ('Hanalyze.DataIO.Health') only emit warnings for columns
 -- containing currency symbols, thousands separators, units, or alternate
@@ -45,7 +51,9 @@ module Hanalyze.DataIO.Clean
   , fillBlankNames
   ) where
 
-import qualified DataFrame                    as DX
+import qualified DataFrame.Internal.Column    as DX
+import qualified DataFrame.Internal.DataFrame  as DX
+import qualified DataFrame.Operations.Core     as DX
 import qualified DataFrame.Internal.DataFrame as DXD
 import qualified DataFrame.Internal.Column    as DXC
 

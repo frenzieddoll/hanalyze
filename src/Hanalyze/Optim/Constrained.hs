@@ -1,4 +1,10 @@
--- | Constrained optimization via the **Augmented Lagrangian** method.
+-- |
+-- Module      : Hanalyze.Optim.Constrained
+-- Description : 拡張ラグランジュ法による制約付き最適化
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Constrained optimization via the **Augmented Lagrangian** method.
 --
 -- Internalizes equality constraints @g_i(x) = 0@ and inequality constraints
 -- @h_j(x) ≤ 0@ via Lagrange multipliers + a quadratic penalty, exposing an

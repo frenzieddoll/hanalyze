@@ -19,7 +19,7 @@ data Event = Censored | Observed
 ## 2. Kaplan-Meier 推定
 
 ```haskell
-import qualified Model.Survival as Surv
+import qualified Hanalyze.Model.Survival as Surv
 
 let samples =
       [ Surv.SurvSample 5 Surv.Observed
@@ -37,6 +37,10 @@ Surv.kmrAtRisk km     -- risk set 数
 Surv.kmrEvents km     -- events 数
 Surv.kmrCensored km   -- censored 数
 ```
+
+推定された生存関数 Ŝ(t) はイベント時点で下方へジャンプする階段関数になる。下図は Kaplan-Meier 生存曲線の例で、各段差がそのイベント時点での生存確率の減少を表す。
+
+![Kaplan-Meier 生存曲線](../images/km-survival.svg)
 
 ## 3. Nelson-Aalen 累積ハザード
 
@@ -87,6 +91,10 @@ let baselineH = Surv.coxBaselineHazard fit xs ys
 ```
 
 実際の生存関数: S(t | x) = exp(-H_0(t) × exp(β·x))
+
+複数の競合する事象 (例: 異なる死因) がある場合は、単一の生存関数ではなく事象ごとの累積発生関数 (CIF; cumulative incidence function) で各事象の発生確率を表す。下図は競合リスク下での CIF の例で、各曲線が時間とともに増加する事象別の累積発生確率を示す。
+
+![競合リスクの累積発生関数 (CIF)](../images/cif-competing.svg)
 
 ## 7. アルゴリズム
 

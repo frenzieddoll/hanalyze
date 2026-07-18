@@ -1,3 +1,9 @@
+-- |
+-- Module      : Hanalyze.Viz.Pareto
+-- Description : パレートフロント可視化 (散布・pairs・parallel coordinates・hypervolume 推移・比較)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
 {-# LANGUAGE OverloadedStrings #-}
 -- | Pareto-front visualizations (130 規約: PlotData ベース).
 --

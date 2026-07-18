@@ -1,0 +1,31 @@
+system,suite,name,time_ms,acc_main,acc_aux,extra
+haskell,tier12,PLS_n100_p10,0.148208,2.469411e-3,0.000000,k=3
+haskell,tier12,PLS_n500_p10,0.359492,6.089319e-5,0.000000,k=3
+haskell,tier12,LDA_n90_p5_k3,2.663500e-2,0.988889,0.000000,
+haskell,tier12,LDA_n300_p5_k3,4.415100e-2,0.953333,0.000000,
+haskell,tier12,QDA_n90_p5_k3,1.024100e-2,0.988889,0.000000,
+haskell,tier12,QDA_n300_p5_k3,1.956000e-2,0.956667,0.000000,
+haskell,tier12,HClusterWard_n20,0.270326,5.940219,0.000000,
+haskell,tier12,HClusterWard_n50,1.689172,8.366441,0.000000,
+haskell,tier12,Friedman_n10,4.668000e-3,20.000000,4.539993e-5,
+haskell,tier12,Friedman_n30,1.496700e-2,60.000000,9.359180e-14,
+haskell,tier12,Friedman_n100,0.114293,200.000000,0.000000,
+haskell,tier12,RFC_n90_p5_k3,6.221757,0.944444,0.000000,trees=50
+haskell,tier12,RFC_n300_p5_k3,33.554018,0.933333,0.000000,trees=50
+haskell,tier12,MLPRegressor_n100_p10,17.294668,1.146543e-3,0.000000,hidden=16 epochs=100
+haskell,tier12,MLPRegressor_n500_p10,129.655705,1.519841e-3,0.000000,hidden=16 epochs=100
+haskell,tier12,TOSTWelch_n50,4.413000e-3,9.681447e-3,2.377733,no_python_equivalent
+haskell,tier12,TOSTWelch_n200,3.220000e-3,8.059062e-7,4.870189,no_python_equivalent
+haskell,tier12,AFTLogNormal_n50,1.850000e-4,0.296296,0.000000,no_python_equivalent
+haskell,tier12,AFTLogNormal_n200,4.000000e-4,0.303497,0.000000,no_python_equivalent
+haskell,tier12,EWMA_n100,1.088000e-3,-0.259834,0.000000,no_python_equivalent
+haskell,tier12,EWMA_n500,5.112000e-3,-0.509131,0.000000,no_python_equivalent
+haskell,tier12,CUSUM_n100,9.140000e-4,0.000000,0.000000,no_python_equivalent
+haskell,tier12,CUSUM_n500,3.896000e-3,0.000000,0.000000,no_python_equivalent
+haskell,tier12,GaugeRRCrossed_3p3o3r,3.554000e-3,0.390237,0.000000,no_python_equivalent
+haskell,tier12,ProcCapWeibull,6.500000e-5,1.144535,0.920526,no_python_equivalent
+haskell,tier12,DoEDiagnostics_n9p6,2.723900e-2,0.462241,0.311688,no_python_equivalent
+haskell,tier12,IOptimal_n9_6,0.134468,18.000000,0.000000,no_python_equivalent
+haskell,tier12,EOptimal_n9_6,0.107216,21.000000,0.000000,no_python_equivalent
+haskell,tier12,KalmanFilter_T50,0.158880,-22.081335,0.000000,no_python_equivalent
+haskell,tier12,KalmanFilter_T200,0.573731,-91.612095,0.000000,no_python_equivalent

@@ -77,7 +77,7 @@ Kucukelbir et al. (2017)。任意のモデルに自動適用:
 ### 1.5 hanalyze での使い方
 
 ```haskell
-import Stat.VI (advi, defaultVIConfig, VIConfig (..), VIResult (..))
+import Hanalyze.Stat.VI (advi, defaultVIConfig, VIConfig (..), VIResult (..))
 
 result <- advi model defaultVIConfig
                   { viIterations = 5000, viLearningRate = 0.05 }
@@ -140,7 +140,7 @@ $$ p(y_i \mid y_{-i}) \approx \frac{\sum_s w_i^{(s)} p(y_i \mid \theta^{(s)})}{\
 ### 2.5 hanalyze での使用
 
 ```haskell
-import Stat.ModelSelect (waic, loo, compareModels, ModelInfo (..))
+import Hanalyze.Stat.ModelSelect (waic, loo, compareModels, ModelInfo (..))
 
 let waicResult = waic loglikMatrix    -- loglik :: [[Double]]  (S × N)
 let looResult  = loo  loglikMatrix
@@ -239,7 +239,7 @@ $$ p(R) \propto |R|^{\eta - 1} $$
 ### 4.3 hanalyze の実装
 
 ```haskell
-import Model.HBM (lkjCorrCholesky)
+import Hanalyze.Model.HBM (lkjCorrCholesky)
 
 l <- lkjCorrCholesky "R" 3 1.0  -- K=3, η=1
 -- l :: [[a]] は L (R = L Lᵀ の Cholesky factor)
@@ -345,7 +345,7 @@ $$ p_T(t \mid t > 1) = \frac{\lambda e^{-\lambda t}}{e^{-\lambda}} = \lambda e^{
 ### 6.4 hanalyze での使い方
 
 ```haskell
-import Model.HBM (Distribution (..), observe)
+import Hanalyze.Model.HBM (Distribution (..), observe)
 
 -- 例: 生存時間が観測期間 [0, 5] 内に切り詰められた指数分布
 truncatedSurvival :: ModelP ()
@@ -420,7 +420,7 @@ Truncated 補正あり: rate ≈ 0.5  ✓
 ### 7.4 hanalyze の `Censored`
 
 ```haskell
-import Model.HBM (Distribution (..), observe)
+import Hanalyze.Model.HBM (Distribution (..), observe)
 
 -- 例: 検出下限 1.0 のセンサーで Normal 観測
 censoredSensor :: ModelP ()

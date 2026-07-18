@@ -8,6 +8,13 @@
 > 関連: [04-spline.ja.md](04-spline.ja.md) (非線形) / [04-kernel.ja.md](04-kernel.ja.md) (カーネル) /
 > 理論: [theory-regression-extensions.ja.md](theory-regression-extensions.ja.md)
 
+> 💡 **高レベルの入口**: 7 種の罰則回帰 (Ridge/Lasso/EN/MCP/SCAD/Adaptive/Group) は
+> 統合 spec `df |-> regularized cfg ["x1","x2"] "y"` (+近道 `ridge`/`lasso`/`elasticNet`)
+> で当てられる。λ は CV / LOOCV (Ridge) / 1-SE rule で自動選択、X は内部標準化、係数は
+> 元スケール。一覧と図は
+> [api-guide 02-regression](../api-guide/02-regression.ja.md) の「罰則付き回帰」節を参照。
+> 本ページは `fitRegularized` などの低レベル行列 API リファレンス。
+
 ## 1. 用途
 - p (列数) が n に近い、または p > n
 - 多重共線性
@@ -17,7 +24,7 @@
 ## 2. API (Haskell 流: 単一関数 + sum-type)
 
 ```haskell
-import Model.Regularized
+import Hanalyze.Model.Regularized
 
 data Penalty = NoPen
              | L2 Double                 -- Ridge: 0.5 λ ||β||²
@@ -44,7 +51,7 @@ unstandardizeBeta :: V.Vector Double -> Vector Double -> Vector Double
 ## 3. ミニマル例
 
 ```haskell
-import Model.Regularized
+import Hanalyze.Model.Regularized
 
 let (xStd, _means, sds) = standardize xMat
 
@@ -57,6 +64,12 @@ let fitOLS    = fitRegularized NoPen                     xStd y
 -- 標準化空間の β を元のスケールに戻す
 let bOrigLasso = unstandardizeBeta sds (rfBeta fitLasso)
 ```
+
+λ を変えながら `fitRegularized (L1 λ)` を繰り返すと、正則化パスが得られる。
+λ を大きくするほど多くの係数が厳密に 0 へ縮小され、Lasso の変数選択効果が
+視覚的に確認できる。
+
+![LASSO 正則化パス (λ 横軸・係数ごとの軌跡)](../images/lasso-path.svg)
 
 ## 4. ペナルティの選び方
 

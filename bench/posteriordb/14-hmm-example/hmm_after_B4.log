@@ -1,0 +1,19 @@
+- cabal.project.plot
+勾配経路 = HMM forward-backward 閉形式随伴 (Phase 92)
+sampling wall = 5293.4 ms (draws only, no dashboard/startup)
+param           mean        sd   hdi_3%..hdi_97%  ess_bulk    r_hat mcse_mean
+mu_1          3.0172    0.2205 [ 2.626,  3.435]    3143.3   1.0010   0.00393
+mu_2          8.8291    0.1064 [ 8.637,  9.039]    5354.7   1.0000   0.00145
+gap           5.8119    0.2441 [ 5.387,  6.293]    3084.5   1.0011   0.00440
+theta1_0      0.6690    0.0999 [ 0.484,  0.852]    4433.3   0.9994   0.00150
+theta1_1      0.3310    0.0999 [ 0.148,  0.516]    4433.3   0.9994   0.00150
+theta2_0      0.0735    0.0280 [ 0.022,  0.122]    4210.2   0.9994   0.00043
+theta2_1      0.9265    0.0280 [ 0.878,  0.978]    4210.2   0.9994   0.00043
+
+== per-chain NUTS diagnostics (depth = post-warmup) ==
+chain 0: mean_depth=3.04  est_leapfrog/draw=9.2  div=0  accept(incl-warmup)=0.932
+chain 1: mean_depth=3.05  est_leapfrog/draw=9.2  div=0  accept(incl-warmup)=0.924
+chain 2: mean_depth=3.09  est_leapfrog/draw=9.5  div=0  accept(incl-warmup)=0.934
+chain 3: mean_depth=3.28  est_leapfrog/draw=10.9  div=0  accept(incl-warmup)=0.942
+depth histogram (all chains): 1:53, 2:635, 3:2120, 4:1180, 5:12
+draws CSV -> bench/posteriordb/14-hmm-example/hmm_draws_postwarmup.csv

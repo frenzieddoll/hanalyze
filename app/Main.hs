@@ -12,7 +12,9 @@ import qualified Hanalyze.DataIO.Preprocess as Pp
 import qualified Hanalyze.Stat.Interpolate  as Interp
 import qualified Hanalyze.Stat.AdaptiveGrid as AG
 import Text.Read (readMaybe)
-import qualified DataFrame                    as DX
+import qualified DataFrame.Internal.DataFrame  as DX
+import qualified DataFrame.Operations.Core     as DX
+import qualified DataFrame.IO.CSV              as DX
 import qualified DataFrame.Internal.Column    as DXC
 import qualified DataFrame.Internal.DataFrame as DXD
 import Hanalyze.DataIO.Convert     (getDoubleVec, getTextVec, getMaybeTextVec)
@@ -41,7 +43,7 @@ import qualified Hanalyze.Viz.ReportInstances as RI
 import qualified Hanalyze.Viz.ModelGraph
 import qualified Graphics.Vega.VegaLite as VL
 import Graphics.Vega.VegaLite (VegaLite, VLProperty, VLSpec)
-import qualified Hanalyze.Model.Kernel as Kern
+import qualified Hanalyze.Model.KernelRegression as Kern
 import qualified Hanalyze.Model.MultiLM as MLM
 import qualified Hanalyze.Model.Regularized as Reg
 import qualified Hanalyze.Model.GAM as GAM
@@ -2597,7 +2599,7 @@ doKernel file xColStr yColStr opts lopts = do
           ++ " (unknown method)"
 
 -- | Multi-input Kernel Ridge (Phase K5) — fit and report training metrics.
--- 多次元 X (n×p) を取り、Hanalyze.Model.Kernel.kernelRidgeMV で fit。
+-- 多次元 X (n×p) を取り、Hanalyze.Model.KernelRegression.kernelRidgeMV で fit。
 -- 予測図は生成しない (多次元のため)、R² と RMSE をログ出力。
 runKernelMVKR
   :: [T.Text] -> T.Text -> [V.Vector Double] -> V.Vector Double
@@ -3568,7 +3570,7 @@ doRF file xColsStr yColStr opts lopts = do
       let n     = V.length yVec
           rows  = [ [ xv V.! i | xv <- xVecs ] | i <- [0 .. n - 1] ]
           ys    = V.toList yVec
-          cfg   = RF.defaultRFConfig
+          cfg   = RF.defaultRandomForest
                     { RF.rfTrees      = roTrees opts
                     , RF.rfMaxDepth   = roMaxDepth opts
                     , RF.rfMinSamples = roMinSamples opts

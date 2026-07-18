@@ -1,6 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BangPatterns #-}
--- | Hypothesis tests with a unified result format.
+-- |
+-- Module      : Hanalyze.Stat.Test
+-- Description : 統一結果形式を持つ仮説検定群 (パラメトリック/ノンパラ/適合度/正規性/分散)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Hypothesis tests with a unified result format.
 --
 -- Most tests delegate to the @statistics@ package internals
 -- (@Statistics.Test.*@) and add hanalyze-specific niceties: a single
@@ -25,12 +31,16 @@ module Hanalyze.Stat.Test
   , tTest1Sample
   , tTestPaired
   , tTestWelch
+  , tostWelch
   , tTestStudent
   , anovaOneWay
     -- * Non-parametric (location / rank)
   , mannWhitneyU
   , wilcoxonSignedRank
   , kruskalWallis
+  , friedmanTest
+  , MultiCompareResult (..)
+  , dunnTest
     -- * Goodness-of-fit / independence
   , chiSquareGOF
   , chiSquareIndep
@@ -42,6 +52,10 @@ module Hanalyze.Stat.Test
   , leveneTest
   , bartlettTest
   , fTestVariance
+    -- * Multivariate (Phase 4.3、 request/140)
+  , hotellingsT2
+  , hotellingsT2TwoSample
+  , manova
   ) where
 
 import qualified Data.List                      as L
@@ -202,6 +216,58 @@ tTestWelch xs ys alt =
                     Nothing
                     t
 
+-- | TOST (Two One-Sided Tests) for equivalence using Welch's degrees of freedom.
+--
+-- Tests whether @|μ_A − μ_B| < Δ@ (i.e. the two groups are equivalent within
+-- the margin Δ). Implements two one-sided t-tests:
+--
+--   * Lower: @H₀: μ_A − μ_B ≤ −Δ@ vs @H₁: μ_A − μ_B > −Δ@
+--   * Upper: @H₀: μ_A − μ_B ≥ +Δ@ vs @H₁: μ_A − μ_B < +Δ@
+--
+-- @p_TOST = max(p_lower, p_upper)@. Equivalence is concluded at level α if
+-- @p_TOST < α@. The returned 'trCI' is the @(1 − 2α)@ confidence interval
+-- (here α = 0.05 → 90% CI), which is the standard TOST CI convention.
+tostWelch
+  :: LA.Vector Double  -- ^ Sample A
+  -> LA.Vector Double  -- ^ Sample B
+  -> Double            -- ^ Equivalence margin Δ (must be > 0)
+  -> TestResult
+tostWelch xs ys delta
+  | delta <= 0 =
+      noResultTRR "TOST (Welch)" TwoSided "delta must be > 0"
+  | LA.size xs < 2 || LA.size ys < 2 =
+      noResultTRR "TOST (Welch)" TwoSided "insufficient samples"
+  | otherwise =
+      let n1 = fromIntegral (LA.size xs) :: Double
+          n2 = fromIntegral (LA.size ys) :: Double
+          m1 = LA.sumElements xs / n1
+          m2 = LA.sumElements ys / n2
+          v1 = LA.sumElements ((xs - LA.scalar m1) ^ (2 :: Int)) / (n1 - 1)
+          v2 = LA.sumElements ((ys - LA.scalar m2) ^ (2 :: Int)) / (n2 - 1)
+          se = sqrt (v1 / n1 + v2 / n2)
+          diff = m1 - m2
+          df = (v1/n1 + v2/n2) ^ (2 :: Int)
+               / ((v1/n1)^(2::Int)/(n1-1) + (v2/n2)^(2::Int)/(n2-1))
+          tDist = StuT.studentT df
+          tLower = (diff - (-delta)) / se   -- want > 0 (upper-tail rejects H0_lower)
+          tUpper = (diff -   delta)  / se   -- want < 0 (lower-tail rejects H0_upper)
+          pLower = pFromT TRight tLower tDist
+          pUpper = pFromT TLeft  tUpper tDist
+          pTost  = max pLower pUpper
+          -- 90% CI (α = 0.05 each side)
+          tCrit = SD.quantile tDist 0.95
+          ci = (diff - tCrit * se, diff + tCrit * se)
+      in TestResult
+           { trMethod      = "TOST (Welch)"
+           , trStatistic   = min (abs tLower) (abs tUpper)
+           , trDf          = Just (df, Nothing)
+           , trPValue      = pTost
+           , trEffect      = Just ("Delta", delta)
+           , trCI          = Just ci
+           , trAlternative = TwoSided
+           , trNote        = Just "Equivalence demonstrated if p < alpha"
+           }
+
 -- | Student's two-sample t-test (assumes equal variance).
 tTestStudent
   :: LA.Vector Double
@@ -337,6 +403,118 @@ kruskalWallis groups
            , trAlternative = TwoSided
            , trNote        = Just "chi-square approximation"
            }
+
+-- | Friedman test — non-parametric two-way ANOVA without replication.
+--
+-- 入力: n × k 行列。 行 = block (被験者)、 列 = treatment。
+-- 各 block 内で treatment を順位付け (1..k) し、 列ごとの平均順位の分散から
+-- 検定統計量 Q を構成 (χ²(k-1) 近似)。
+friedmanTest :: LA.Matrix Double -> TestResult
+friedmanTest mat
+  | LA.rows mat < 2 || LA.cols mat < 2 =
+      noResultTRR "Friedman" TwoSided "need ≥ 2 blocks × ≥ 2 treatments"
+  | otherwise =
+      let n = LA.rows mat
+          k = LA.cols mat
+          nD = fromIntegral n :: Double
+          kD = fromIntegral k :: Double
+          -- 各行を順位化 (tie は midrank)
+          rankedRows =
+            [ midrank (LA.toList (LA.flatten (mat LA.? [i])))
+            | i <- [0 .. n - 1] ]
+          colSums = [ sum [ rankedRows !! i !! j | i <- [0 .. n - 1] ]
+                    | j <- [0 .. k - 1] ]
+          q = (12 / (nD * kD * (kD + 1)))
+              * sum [ s * s | s <- colSums ]
+              - 3 * nD * (kD + 1)
+          df = kD - 1
+          p  = SD.complCumulative (ChiSq.chiSquared (k - 1)) q
+      in TestResult
+           { trMethod      = "Friedman"
+           , trStatistic   = q
+           , trDf          = Just (df, Nothing)
+           , trPValue      = p
+           , trEffect      = Nothing
+           , trCI          = Nothing
+           , trAlternative = TwoSided
+           , trNote        = Just "chi-square approximation"
+           }
+
+-- | 多重比較の結果。 ペアごとの z 値と raw / adjusted p-value。
+data MultiCompareResult = MultiCompareResult
+  { mcrPairs :: ![(Int, Int)]
+  , mcrZ     :: ![Double]
+  , mcrPRaw  :: ![Double]
+  , mcrPAdj  :: ![Double]   -- Holm correction
+  } deriving (Show)
+
+-- | Dunn 多重比較 (Kruskal-Wallis post-hoc)。
+--   各グループの平均順位 R̄_i / R̄_j の差を SE で標準化:
+--
+--     z_{ij} = (R̄_i - R̄_j) / √( (N(N+1)/12) (1/n_i + 1/n_j) )
+--
+--   p_raw = 2 (1 - Φ(|z|))、 Holm 補正で族別 p_adj。
+dunnTest :: [LA.Vector Double] -> MultiCompareResult
+dunnTest groups =
+  let k      = length groups
+      sizes  = map LA.size groups
+      allRanks = midrank (concatMap LA.toList groups)
+      -- 各グループの平均順位
+      starts = scanl (+) 0 sizes
+      grpRanks = [ take (sizes !! i)
+                     (drop (starts !! i) allRanks)
+                 | i <- [0 .. k - 1] ]
+      meanR i = sum (grpRanks !! i) / fromIntegral (sizes !! i)
+      n      = sum sizes
+      nD     = fromIntegral n :: Double
+      se i j =
+        sqrt (nD * (nD + 1) / 12
+              * (1 / fromIntegral (sizes !! i) + 1 / fromIntegral (sizes !! j)))
+      pairs = [ (i, j) | i <- [0 .. k - 2], j <- [i + 1 .. k - 1] ]
+      zs    = [ (meanR i - meanR j) / se i j | (i, j) <- pairs ]
+      pRaw  = [ 2 * (1 - SD.cumulative Normal.standard (abs z)) | z <- zs ]
+      pAdj  = holmAdjust pRaw
+  in MultiCompareResult
+       { mcrPairs = pairs
+       , mcrZ     = zs
+       , mcrPRaw  = pRaw
+       , mcrPAdj  = pAdj
+       }
+
+-- | Holm-Bonferroni p-value adjustment.
+holmAdjust :: [Double] -> [Double]
+holmAdjust ps =
+  let m     = length ps
+      idx   = zip [0 ..] ps
+      sorted = L.sortBy (comparing snd) idx
+      stepwise = zipWith
+        (\rank (origIdx, p) ->
+            (origIdx, min 1 (p * fromIntegral (m - rank))))
+        [0 ..] sorted
+      -- monotone increasing enforcement
+      mono = scanl1 (\(_, prev) (i, p) -> (i, max prev p)) stepwise
+  in map snd (L.sortBy (comparing fst) mono)
+
+-- | midrank: 同順位は順位平均。 入力: list of values, 出力: 同 length の rank list。
+midrank :: [Double] -> [Double]
+midrank xs =
+  let indexed = zip [0 :: Int ..] xs
+      sorted  = L.sortBy (comparing snd) indexed
+      n       = length xs
+      -- グループ化: 同値を 1 グループに
+      go _ [] = []
+      go pos (g:gs) =
+        let len = length g
+            avgRank = fromIntegral (sum [pos .. pos + len - 1]) / fromIntegral len + 1
+        in [(i, avgRank) | (i, _) <- g] ++ go (pos + len) gs
+      grouped = groupBy (\(_, a) (_, b) -> a == b) sorted
+      ranked  = go 0 grouped
+  in map snd (L.sortBy (comparing fst) ranked)
+  where
+    groupBy _ [] = []
+    groupBy eq (x:xs') =
+      let (same, rest) = span (eq x) xs'
+      in (x : same) : groupBy eq rest
 
 -- ---------------------------------------------------------------------------
 -- Goodness-of-fit / independence
@@ -728,4 +906,217 @@ wilcoxonManual xs ys alt =
         Less     -> SD.cumulative Normal.standard z
         Greater  -> SD.complCumulative Normal.standard z
   in (wPlus, wMinus, p)
+
+-- ===========================================================================
+-- 多変量検定 (Phase 4.3、 request/140)
+-- ===========================================================================
+
+-- | 1 サンプル Hotelling T² 検定 (H_0: μ = μ_0)。
+--
+-- 入力:
+--
+--   * X (n × p): 各行が 1 観測の多変量ベクトル
+--   * μ_0 (長さ p): 仮説の平均
+--
+-- 統計量と分布:
+--
+-- > T² = n · (μ̂ − μ_0)ᵀ S⁻¹ (μ̂ − μ_0)
+-- > F  = ((n − p) / ((n − 1) · p)) · T²,    df = (p, n − p)
+--
+-- 戻り値の 'trStatistic' は F 値、 'trEffect' に @("T²", T²)@ を格納。
+hotellingsT2 :: LA.Matrix Double -> LA.Vector Double -> TestResult
+hotellingsT2 x mu0
+  | n < 2 = noResultTRR "Hotelling T² (1-sample)" TwoSided "need ≥ 2 observations"
+  | p < 1 = noResultTRR "Hotelling T² (1-sample)" TwoSided "need ≥ 1 variable"
+  | LA.size mu0 /= p =
+      noResultTRR "Hotelling T² (1-sample)" TwoSided "μ_0 length mismatch"
+  | n <= p =
+      noResultTRR "Hotelling T² (1-sample)" TwoSided "need n > p (covariance singular)"
+  | otherwise =
+      let nD     = fromIntegral n :: Double
+          pD     = fromIntegral p :: Double
+          xMean  = columnMeans x
+          diff   = xMean - mu0
+          sCov   = sampleCovariance x
+          maybeT2 = do
+            sInv <- LA.linearSolve sCov (LA.asColumn diff)
+            return $! nD * LA.sumElements (diff * LA.flatten sInv)
+      in case maybeT2 of
+           Nothing -> noResultTRR "Hotelling T² (1-sample)" TwoSided
+                                  "covariance matrix singular"
+           Just t2 ->
+             let df1   = pD
+                 df2   = nD - pD
+                 fStat = (df2 / ((nD - 1) * pD)) * t2
+                 pVal  = SD.complCumulative
+                           (FDist.fDistribution (round df1) (round df2))
+                           fStat
+             in TestResult
+                  { trMethod      = "Hotelling T² (1-sample)"
+                  , trStatistic   = fStat
+                  , trDf          = Just (df1, Just df2)
+                  , trPValue      = pVal
+                  , trEffect      = Just ("T²", t2)
+                  , trCI          = Nothing
+                  , trAlternative = TwoSided
+                  , trNote        = Nothing
+                  }
+  where
+    n = LA.rows x
+    p = LA.cols x
+
+-- | 2 サンプル Hotelling T² 検定 (等分散仮定、 H_0: μ_X = μ_Y)。
+--
+-- 入力: X (n_1 × p)、 Y (n_2 × p)。 両標本の次元 p は一致が必要。
+--
+-- 統計量:
+--
+-- > T² = (n_1·n_2 / (n_1+n_2)) · (μ̂_1 − μ̂_2)ᵀ S_p⁻¹ (μ̂_1 − μ̂_2)
+-- > F  = ((n_1+n_2−p−1) / ((n_1+n_2−2)·p)) · T²,  df = (p, n_1+n_2−p−1)
+hotellingsT2TwoSample :: LA.Matrix Double -> LA.Matrix Double -> TestResult
+hotellingsT2TwoSample x y
+  | n1 < 2 || n2 < 2 =
+      noResultTRR "Hotelling T² (2-sample)" TwoSided "each group needs ≥ 2 observations"
+  | LA.cols x /= LA.cols y =
+      noResultTRR "Hotelling T² (2-sample)" TwoSided "dimension mismatch (p_X ≠ p_Y)"
+  | n1 + n2 - p - 1 <= 0 =
+      noResultTRR "Hotelling T² (2-sample)" TwoSided "need n_1 + n_2 > p + 1"
+  | otherwise =
+      let n1D   = fromIntegral n1 :: Double
+          n2D   = fromIntegral n2 :: Double
+          pD    = fromIntegral p :: Double
+          m1    = columnMeans x
+          m2    = columnMeans y
+          s1    = sampleCovariance x
+          s2    = sampleCovariance y
+          sP    = LA.scale ((n1D - 1) / (n1D + n2D - 2)) s1
+                + LA.scale ((n2D - 1) / (n1D + n2D - 2)) s2
+          diff  = m1 - m2
+          maybeT2 = do
+            sInv <- LA.linearSolve sP (LA.asColumn diff)
+            return $! (n1D * n2D / (n1D + n2D))
+                    * LA.sumElements (diff * LA.flatten sInv)
+      in case maybeT2 of
+           Nothing -> noResultTRR "Hotelling T² (2-sample)" TwoSided
+                                  "pooled covariance singular"
+           Just t2 ->
+             let df1   = pD
+                 df2   = n1D + n2D - pD - 1
+                 fStat = (df2 / ((n1D + n2D - 2) * pD)) * t2
+                 pVal  = SD.complCumulative
+                           (FDist.fDistribution (round df1) (round df2))
+                           fStat
+             in TestResult
+                  { trMethod      = "Hotelling T² (2-sample)"
+                  , trStatistic   = fStat
+                  , trDf          = Just (df1, Just df2)
+                  , trPValue      = pVal
+                  , trEffect      = Just ("T²", t2)
+                  , trCI          = Nothing
+                  , trAlternative = TwoSided
+                  , trNote        = Nothing
+                  }
+  where
+    n1 = LA.rows x
+    n2 = LA.rows y
+    p  = LA.cols x
+
+-- | 1 元配置 MANOVA (H_0: 全群の μ が等しい)。
+--
+-- 入力: 各群の観測行列リスト @[X_1, X_2, ..., X_k]@、 各 X_i は @n_i × p@。
+--
+-- 統計量: Wilks' Λ = det(W) / det(W + B)。
+--   B = between-group SSCP、 W = within-group SSCP。
+-- p-value は Rao の F 近似:
+--
+-- > s = sqrt((p²·q² − 4) / (p² + q² − 5))     (q = k − 1)
+-- > m = N − 1 − (p + q + 1) / 2
+-- > df1 = p · q,   df2 = m·s − (p·q − 2) / 2
+-- > F   = ((1 − Λ^(1/s)) / Λ^(1/s)) · (df2 / df1)
+--
+-- 'trStatistic' に F 値、 'trEffect' に @("Wilks Λ", Λ)@。
+manova :: [LA.Matrix Double] -> TestResult
+manova groups
+  | k < 2 = noResultTRR "MANOVA (one-way)" TwoSided "need ≥ 2 groups"
+  | any (\g -> LA.rows g < 2) groups =
+      noResultTRR "MANOVA (one-way)" TwoSided "each group needs ≥ 2 observations"
+  | not (all ((== p) . LA.cols) groups) =
+      noResultTRR "MANOVA (one-way)" TwoSided "dimension mismatch across groups"
+  | otherwise =
+      let nis      = map (fromIntegral . LA.rows) groups :: [Double]
+          totalN   = sum nis
+          pD       = fromIntegral p :: Double
+          q        = fromIntegral (k - 1) :: Double
+          groupMs  = map columnMeans groups
+          allMean  = LA.scale (1 / totalN)
+                     (foldr1 (+) (zipWith LA.scale nis groupMs))
+          mkOuter v = LA.outer v v
+          bMat     = foldr1 (+)
+                       [ LA.scale ni (mkOuter (m - allMean))
+                       | (ni, m) <- zip nis groupMs ]
+          wMat     = foldr1 (+) [ withinSSCP g (groupMs !! i)
+                                | (i, g) <- zip [0 ..] groups ]
+          detW     = LA.det wMat
+          detTot   = LA.det (wMat + bMat)
+      in if detTot == 0
+           then noResultTRR "MANOVA (one-way)" TwoSided
+                            "W+B is singular"
+           else
+             let wilks = detW / detTot
+                 -- Rao F approximation
+                 numS  = pD*pD * q*q - 4
+                 denS  = pD*pD + q*q - 5
+                 s | denS > 0 && numS > 0 = sqrt (numS / denS)
+                   | otherwise            = 1
+                 mAdj  = totalN - 1 - (pD + q + 1) / 2
+                 df1   = pD * q
+                 df2   = mAdj * s - (pD * q - 2) / 2
+                 lam1s = wilks ** (1 / s)
+                 fStat = ((1 - lam1s) / lam1s) * (df2 / df1)
+                 df1i  = max 1 (round df1)
+                 df2i  = max 1 (round df2)
+                 pVal  = if df2 > 0 && fStat > 0
+                           then SD.complCumulative
+                                  (FDist.fDistribution df1i df2i) fStat
+                           else 1.0
+             in TestResult
+                  { trMethod      = "MANOVA (one-way, Wilks' Λ)"
+                  , trStatistic   = fStat
+                  , trDf          = Just (df1, Just df2)
+                  , trPValue      = pVal
+                  , trEffect      = Just ("Wilks Λ", wilks)
+                  , trCI          = Nothing
+                  , trAlternative = TwoSided
+                  , trNote        = Nothing
+                  }
+  where
+    k = length groups
+    p = if null groups then 0 else LA.cols (head groups)
+
+-- ---------------------------------------------------------------------------
+-- 多変量 helper
+-- ---------------------------------------------------------------------------
+
+-- | 列ごとの平均 (= サンプル平均ベクトル)。
+columnMeans :: LA.Matrix Double -> LA.Vector Double
+columnMeans m =
+  let n = fromIntegral (LA.rows m) :: Double
+  in LA.scale (1 / n) (LA.fromList [ LA.sumElements (m LA.¿ [j])
+                                    | j <- [0 .. LA.cols m - 1] ])
+
+-- | 標本共分散行列 (n - 1 分母)。
+sampleCovariance :: LA.Matrix Double -> LA.Matrix Double
+sampleCovariance m =
+  let n      = fromIntegral (LA.rows m) :: Double
+      means  = columnMeans m
+      meanRow = LA.asRow means
+      centered = m - LA.fromRows (replicate (LA.rows m) means)
+      _ = meanRow  -- silence unused warning
+  in LA.scale (1 / (n - 1)) (LA.tr centered LA.<> centered)
+
+-- | 群内 SSCP: Σ (x_{ij} − x̄_i)(x_{ij} − x̄_i)ᵀ
+withinSSCP :: LA.Matrix Double -> LA.Vector Double -> LA.Matrix Double
+withinSSCP g groupMean =
+  let centered = g - LA.fromRows (replicate (LA.rows g) groupMean)
+  in LA.tr centered LA.<> centered
 

@@ -1,10 +1,13 @@
-{-# LANGUAGE StrictData #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
--- | Hamiltonian Monte Carlo (HMC) sampler.
+-- |
+-- Module      : Hanalyze.MCMC.HMC
+-- Description : Hamiltonian Monte Carlo (HMC) サンプラー
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Hamiltonian Monte Carlo (HMC) sampler.
 --
 -- Computes exact gradients of polymorphic 'Hanalyze.Model.HBM' models ('ModelP') via
--- 'Numeric.AD.Mode.Forward'. Constrained parameters (@PositiveT@,
+-- 'Numeric.AD.Mode.Reverse.Double' (Phase 53). Constrained parameters (@PositiveT@,
 -- @UnitIntervalT@) are detected automatically from the prior distribution.
 --
 -- @
@@ -19,6 +22,9 @@
 --
 -- chain <- hmc myModel defaultHMCConfig (Map.fromList [("mu",0),("sigma",1)]) gen
 -- @
+{-# LANGUAGE StrictData #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 module Hanalyze.MCMC.HMC
   ( -- * Configuration
     HMCConfig (..)
@@ -39,16 +45,23 @@ module Hanalyze.MCMC.HMC
     -- * Sampler
   , hmc
   , hmcChains
+  , hmcPure
+  , hmcChainsPure
   ) where
 
 import Control.Concurrent.Async (mapConcurrently)
 import Control.Monad (forM, replicateM, when)
-import Data.IORef
+import Control.Monad.Primitive (PrimMonad, PrimState)
+import Control.Monad.ST (runST)
+import Control.Parallel.Strategies (parList, rdeepseq, using)
+import Data.Primitive.MutVar
+import Data.Word (Word32)
+import qualified Data.Vector as V
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import Data.Text (Text)
 import qualified Data.Vector.Storable         as VS
-import System.Random.MWC (GenIO, uniform)
+import System.Random.MWC (Gen, GenIO, uniform, initialize)
 import System.Random.MWC.Distributions (standard)
 
 import Hanalyze.Model.HBM (ModelP, Params, sampleNames, getTransforms,
@@ -211,15 +224,19 @@ leapfrogWithMVS
 leapfrogWithMVS gradFn mInv eps steps theta0 r0 = go steps theta0 r0
   where
     !halfEps = eps * 0.5
+    -- Phase 54.7b: SCC で勾配呼出 (= compiled カーネル) と VS 更新を分離計測。
     go !n theta r
       | n <= 0    = (theta, r)
       | otherwise =
-          let g      = gradFn theta
-              rHalf  = VS.zipWith (\ri gi -> ri - halfEps * gi) r g
-              theta' = VS.zipWith3 (\ti m_inv ri -> ti + eps * m_inv * ri)
+          let g      = {-# SCC "leapfrog_grad1" #-} gradFn theta
+              rHalf  = {-# SCC "leapfrog_vec_rhalf" #-}
+                       VS.zipWith (\ri gi -> ri - halfEps * gi) r g
+              theta' = {-# SCC "leapfrog_vec_pos" #-}
+                       VS.zipWith3 (\ti m_inv ri -> ti + eps * m_inv * ri)
                                    theta mInv rHalf
-              g'     = gradFn theta'
-              r'     = VS.zipWith (\ri gi -> ri - halfEps * gi) rHalf g'
+              g'     = {-# SCC "leapfrog_grad2" #-} gradFn theta'
+              r'     = {-# SCC "leapfrog_vec_rfull" #-}
+                       VS.zipWith (\ri gi -> ri - halfEps * gi) rHalf g'
           in go (n - 1) theta' r'
 
 -- ---------------------------------------------------------------------------
@@ -228,10 +245,10 @@ leapfrogWithMVS gradFn mInv eps steps theta0 r0 = go steps theta0 r0
 
 -- | HMC sampler for a polymorphic HBM model ('ModelP').
 --
--- Uses AD gradients ('Numeric.AD.Mode.Forward'), so it is more accurate
+-- Uses AD gradients ('Numeric.AD.Mode.Reverse.Double'), so it is more accurate
 -- and faster than numeric differentiation. Constraint transforms are
 -- detected automatically from the priors via 'getTransforms'.
-hmc :: ModelP r -> HMCConfig -> Params -> GenIO -> IO Chain
+hmc :: PrimMonad m => ModelP r -> HMCConfig -> Params -> Gen (PrimState m) -> m Chain
 hmc m cfg initC gen = do
   let names      = sampleNames m
       trMap      = getTransforms m
@@ -253,9 +270,9 @@ hmc m cfg initC gen = do
         let xs = [Map.findWithDefault 0 n paramsU | n <- ns]
         in map negate (gradADU m names transList xs)
 
-  samplesRef  <- newIORef []
-  energyRef   <- newIORef ([] :: [Double])
-  acceptedRef <- newIORef (0 :: Int)
+  samplesRef  <- newMutVar []
+  energyRef   <- newMutVar ([] :: [Double])
+  acceptedRef <- newMutVar (0 :: Int)
 
   let step currentU = do
         r <- forM names (\_ -> standard gen)
@@ -268,7 +285,7 @@ hmc m cfg initC gen = do
                      - (logJU currentU  - kinetic r)
         u <- uniform gen
         nextU <- if log (u :: Double) < logAlpha
-          then do modifyIORef' acceptedRef (+1); return proposedU
+          then do modifyMutVar' acceptedRef (+1); return proposedU
           else return currentU
         return (nextU, h0)
 
@@ -280,20 +297,21 @@ hmc m cfg initC gen = do
       loop i currentU = do
         (nextU, h0) <- step currentU
         when (i <= hmcIterations cfg) $ do
-          modifyIORef' samplesRef (toConstrained nextU :)
-          modifyIORef' energyRef  (h0 :)
+          modifyMutVar' samplesRef (toConstrained nextU :)
+          modifyMutVar' energyRef  (h0 :)
         loop (i - 1) nextU
 
   _ <- loop total initU
-  samples  <- fmap reverse (readIORef samplesRef)
-  energies <- fmap reverse (readIORef energyRef)
-  accepted <- readIORef acceptedRef
+  samples  <- fmap reverse (readMutVar samplesRef)
+  energies <- fmap reverse (readMutVar energyRef)
+  accepted <- readMutVar acceptedRef
   return Chain
     { chainSamples  = samples
     , chainAccepted = accepted
     , chainTotal    = total
     , chainEnergy   = energies
     , chainDivergences = []
+    , chainTreeDepths  = []
     }
 
 -- | Run 'hmc' on @numChains@ parallel chains (use @+RTS -N@ for CPU
@@ -302,3 +320,18 @@ hmcChains :: ModelP r -> HMCConfig -> Int -> Params -> GenIO -> IO [Chain]
 hmcChains m cfg numChains initC baseGen = do
   gens <- replicateM numChains (spawnGen baseGen)
   mapConcurrently (\g -> hmc m cfg initC g) gens
+
+-- | Phase 50: 純粋・決定的な HMC (seed → 確定 Chain)。
+hmcPure :: ModelP r -> HMCConfig -> Params -> Word32 -> Chain
+hmcPure m cfg initC seed =
+  runST (initialize (V.singleton seed) >>= hmc m cfg initC)
+
+-- | Phase 50: 純粋・決定的な multi-chain HMC。 子 seed を純粋導出し @parList rdeepseq@ で並列。
+hmcChainsPure :: ModelP r -> HMCConfig -> Int -> Params -> Word32 -> [Chain]
+hmcChainsPure m cfg numChains initC seed =
+  let childSeeds :: [Word32]
+      childSeeds = runST $ do
+        g <- initialize (V.singleton seed)
+        replicateM numChains (uniform g)
+      chains = [ hmcPure m cfg initC s | s <- childSeeds ]
+  in chains `using` parList rdeepseq

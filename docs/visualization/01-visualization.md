@@ -1,13 +1,13 @@
-# Visualization guide (Viz.*)
+# Visualization guide (Hanalyze.Viz.*)
 
 > 🌐 **English** | [日本語](01-visualization.ja.md)
 
 > Related demos:
-> - [`hbm-example`](../demo/HBMExample.hs) — `Hanalyze.Viz.Report` (KDE / trace / DAG / pair scatter)
-> - [`hbm-regression`](../demo/HBMRegressionDemo.hs) — HBM regression HTML report (DAG + MCMC + credible-interval predictions; report builder is migrating from deprecated `Hanalyze.Viz.AnalysisReport` to standard `Hanalyze.Viz.ReportBuilder`)
-> - [`simpson-paradox`](../demo/SimpsonParadoxDemo.hs) — multi-model side-by-side via `writeComparisonReport`
-> - [`bar-demo`](../demo/BarDemo.hs) — `Hanalyze.Viz.Bar` + PNG/SVG export
-> - [`gp-demo`](../demo/GPDemo.hs) — GP-specific report
+> - [`hbm-example`](../../demo/bayesian/HBMExample.hs) — `Hanalyze.Viz.Report` (KDE / trace / DAG / pair scatter)
+> - [`hbm-regression`](../../demo/bayesian/HBMRegressionDemo.hs) — HBM regression HTML report (DAG + MCMC + credible-interval predictions; report builder is migrating from deprecated `Hanalyze.Viz.AnalysisReport` to standard `Hanalyze.Viz.ReportBuilder`)
+> - [`simpson-paradox`](../../demo/bayesian/SimpsonParadoxDemo.hs) — multi-model side-by-side via `writeComparisonReport`
+> - [`bar-demo`](../../demo/visualization/BarDemo.hs) — `Hanalyze.Viz.Bar` + PNG/SVG export
+> - [`gp-demo`](../../demo/regression/GPDemo.hs) — GP-specific report
 >
 > CLI: `--report` builds an HTML report (`regress` uses legacy `Hanalyze.Viz.AnalysisReport`; other subcommands use the standard `Hanalyze.Viz.ReportBuilder`); `--format png|svg` renders individual plots as images.
 
@@ -32,7 +32,7 @@ If PNG/SVG generation fails, the function automatically falls back to HTML.
 statistics into a **single self-contained HTML file**.
 
 ```haskell
-import Viz.Report
+import Hanalyze.Viz.Report
 
 data MCMCReport = MCMCReport
   { reportTitle    :: Text
@@ -84,8 +84,8 @@ renderReport "report_multi.html" report
 When you want individual plots without going through `Hanalyze.Viz.Report`:
 
 ```haskell
-import Viz.MCMC
-import Viz.Core (defaultConfig, OutputFormat (..))
+import Hanalyze.Viz.MCMC
+import Hanalyze.Viz.Core (defaultConfig, OutputFormat (..))
 
 -- Single-chain diagnostics (KDE + trace stacked vertically)
 mcmcDiagnosticsFile HTML "diag.html" (defaultConfig "Model") names chain
@@ -111,8 +111,8 @@ posteriorPlotFile HTML "kde.html" (defaultConfig "KDE") names chain
 ## Viz.Bar — bar charts
 
 ```haskell
-import Viz.Bar
-import Viz.Core (defaultConfig, OutputFormat (..))
+import Hanalyze.Viz.Bar
+import Hanalyze.Viz.Core (defaultConfig, OutputFormat (..))
 ```
 
 ### Vertical bar chart
@@ -159,7 +159,7 @@ groupedBarFile HTML "grouped.html" (defaultConfig "Grouped") "Month" "Sales" "Pr
 ## Viz.Histogram — histograms
 
 ```haskell
-import Viz.Histogram
+import Hanalyze.Viz.Histogram
 
 -- Plain histogram
 histogramPlotFile HTML "hist.html"
@@ -181,8 +181,8 @@ The CLI in `app/Main.hs` generates these automatically, but they can also
 be invoked directly as library functions.
 
 ```haskell
-import Viz.Scatter
-import Viz.Core (defaultConfig)
+import Hanalyze.Viz.Scatter
+import Hanalyze.Viz.Core (defaultConfig)
 
 -- Scatter + regression curve
 scatterWithSmooth :: PlotConfig -> Text -> Text -> [Double] -> [Double] -> SmoothFit -> VegaLite
@@ -200,7 +200,7 @@ predictedVsActual :: PlotConfig -> Text -> [Double] -> [Double] -> VegaLite
 ## Viz.ModelGraph — model-structure DAG
 
 ```haskell
-import Viz.ModelGraph
+import Hanalyze.Viz.ModelGraph
 
 buildModelGraph :: Model a -> [(Text, Text)] -> ModelGraph
 modelGraphFile  :: OutputFormat -> FilePath -> ModelGraph -> IO ()
@@ -223,7 +223,7 @@ modelGraphFile HTML "graph.html" graph
 ## PlotConfig
 
 ```haskell
-import Viz.Core
+import Hanalyze.Viz.Core
 
 data PlotConfig = PlotConfig
   { plotTitle  :: Text

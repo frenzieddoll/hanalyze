@@ -1,6 +1,6 @@
 # Orthogonal arrays and the Taguchi method
 
-> 🌐 **English** | [日本語](03-orthogonal-taguchi.ja.md)
+> 🌐 **English** | [日本語](02-orthogonal-taguchi.ja.md)
 
 > Related: [01-doe.md](01-doe.md) (DOE in general), [theory-doe.md](theory-doe.md)
 
@@ -9,11 +9,11 @@
 1. [Introduction — what they are for](#1-introduction--what-they-are-for)
 2. [Orthogonal arrays vs. the Taguchi method](#2-orthogonal-arrays-vs-the-taguchi-method)
 3. [Theory of orthogonal arrays Lₙ](#3-theory-of-orthogonal-arrays-lₙ)
-4. [Using `Hanalyze.Design.Orthogonal`](#4-using-designorthogonal)
+4. [Using `Hanalyze.Design.Orthogonal`](#4-using-hanalyzedesignorthogonal)
 5. [Theory of the Taguchi method](#5-theory-of-the-taguchi-method)
-6. [Using `Hanalyze.Design.Taguchi`](#6-using-designtaguchi)
+6. [Using `Hanalyze.Design.Taguchi`](#6-using-hanalyzedesigntaguchi)
 7. [End-to-end CLI workflow](#7-end-to-end-cli-workflow)
-8. [HTML reports (`Hanalyze.Viz.Taguchi`)](#8-html-reports-viztaguchi)
+8. [HTML reports (`Hanalyze.Viz.Taguchi`)](#8-html-reports-hanalyzeviztaguchi)
 9. [Worked example: chemical-process optimisation](#9-worked-example-chemical-process-optimisation)
 10. [Common pitfalls](#10-common-pitfalls)
 11. [References](#11-references)
@@ -36,7 +36,7 @@ operate stably under noise (temperature, humidity, part variability, ageing).
 |---|---|
 | Evaluate factor main effects in the fewest trials (exploration) | OA + ANOVA |
 | Find a **robust design** that is stable under noise | Taguchi method |
-| Continuous-parameter optimisation (response surface) | use [RSM](01-doe.md#6-response-surface-method-designrsm) instead |
+| Continuous-parameter optimisation (response surface) | use [RSM](01-doe.md#6-response-surface-methodology-hanalyzedesignrsm) instead |
 | Reduce factory prototype runs to 1/10 or less | OA + fractional factorial |
 
 ---
@@ -135,7 +135,7 @@ Taguchi standard tables.
 ### 4.1 Main API
 
 ```haskell
-import qualified Design.Orthogonal as OA
+import qualified Hanalyze.Design.Orthogonal as OA
 
 -- Standard tables (constants)
 OA.l4    :: OA.OA   -- L4(2^3)
@@ -290,7 +290,7 @@ with $k^*_j$ the best level of factor j. Assumes per-factor effects are **additi
 ### 6.1 SN ratios
 
 ```haskell
-import qualified Design.Taguchi as TG
+import qualified Hanalyze.Design.Taguchi as TG
 
 TG.snRatio TG.SmallerBetter         [1.2, 1.5, 0.9, 1.1]
 -- → -1.5458 (dB)
@@ -359,8 +359,8 @@ contribution, or the process capability indices, the following helpers
 return everything in one struct:
 
 ```haskell
-import qualified Design.Taguchi as TG
-import qualified Design.Quality as Quality
+import qualified Hanalyze.Design.Taguchi as TG
+import qualified Hanalyze.Design.Quality as Quality
 
 -- SN ratio bundled with mean / variance / N
 let det = TG.snRatioWithDetails TG.NominalBest [12.1, 12.3, 11.9, 12.0]
@@ -491,7 +491,7 @@ Predicted SN at optimum (additive model): -3.687 dB
 ### Library API
 
 ```haskell
-import qualified Viz.Taguchi as VTG
+import qualified Hanalyze.Viz.Taguchi as VTG
 
 let tr = VTG.TaguchiReport
            { VTG.trTitle     = "My experiment"
@@ -510,7 +510,7 @@ VTG.renderTaguchiReport "report.html" tr
 The general `ReportBuilder` can produce a similar report (more flexible):
 
 ```haskell
-import qualified Viz.ReportBuilder as RB
+import qualified Hanalyze.Viz.ReportBuilder as RB
 
 let cfg = RB.defaultReportConfig "Taguchi (custom)"
     sections =

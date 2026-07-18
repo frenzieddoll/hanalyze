@@ -1,6 +1,12 @@
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE OverloadedStrings #-}
--- | Generalized Linear Models fit by Iteratively Reweighted Least Squares.
+-- |
+-- Module      : Hanalyze.Model.GLM
+-- Description : IRLS による一般化線形モデル (Generalized Linear Models)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Generalized Linear Models fit by Iteratively Reweighted Least Squares.
 --
 -- Provides Gaussian, Binomial and Poisson families with identity, log,
 -- logit and sqrt link functions. 'runIRLS' returns both a 'FitResult' and
@@ -380,19 +386,24 @@ runIRLS family linkFn x y = (mkResult betaFinal muFinal, fisherInvFromMu muFinal
     -- lagged from the standard ll(β_{k+1}) vs ll(β_k) form, which is
     -- equivalent in steady state and avoids any extra μ pass in the
     -- inner loop.
-    (betaFinal, muFinal) = converge maxIter beta0 (glmLogLik family y (muOf beta0))
+    (betaFinal, muFinal) = converge maxIter True beta0 (glmLogLik family y (muOf beta0))
 
-    converge 0 beta _  = (beta, muOf beta)
-    converge n beta llP =
+    -- ★初回反復だけ dLL 判定を無効化する: 'irlsStep' が返す @llHere@ は入力 β での
+    -- @ll(β_k)@ なので、 初回は seed @llP = ll(β0)@ と一致し @dLL = 0 < tol@ で
+    -- IRLS が 1 ステップで早期停止してしまう (= 28d1feb7 の per-iter ll 再利用
+    -- リライトで混入した回帰)。 dB (β-norm) 判定は初回も正しいので残し、 dLL は
+    -- 2 反復目以降 @ll(β_k) vs ll(β_{k-1})@ が揃ってから使う。
+    converge 0 _     beta _  = (beta, muOf beta)
+    converge n first beta llP =
       let (betaNew, _muHere, llHere) = step beta
       in if any notFinite (LA.toList betaNew)
          then (beta, muOf beta)          -- divergence; keep last good β
          else
            let dB  = LA.norm_2 (betaNew - beta)
                dLL = abs (llHere - llP) / max (abs llP) 1
-           in if dB < tol || dLL < tol
+           in if dB < tol || (not first && dLL < tol)
                 then (betaNew, muOf betaNew)   -- final μ pass once
-                else converge (n - 1) betaNew llHere
+                else converge (n - 1) False betaNew llHere
 
     notFinite b = isNaN b || isInfinite b
 
@@ -510,18 +521,24 @@ fitGLMWithSmooth family linkFn colDegs band nGrid df yCol = do
           PI level ->
             -- Gaussian only: add s²·1 term to CI variance
             let dfStat = fromIntegral (n - p) :: Double
-                s2     = let resV = residualsV res
-                         in (resV `LA.dot` resV) / dfStat
-                tVal   = quantile (studentT dfStat) ((1 + level) / 2)
-                xtxi   = LA.inv (LA.tr dm LA.<> dm)
-                halfW xi = tVal * sqrt (s2 * (1 + xi `LA.dot` (xtxi LA.#> xi)))
                 etaL  = LA.toList etaG
-                lowers = zipWith (\eta xi -> gInv (eta - halfW xi)) etaL gRows
-                uppers = zipWith (\eta xi -> gInv (eta + halfW xi)) etaL gRows
-            in SmoothFit (V.toList xGrid) yGrid lowers uppers True
+            -- df<=0 (飽和) は s²=0/0・studentT が例外 → 帯を線に潰す (lo=hi=ĝ⁻¹(η))。
+            in if dfStat <= 0
+                 then SmoothFit (V.toList xGrid) yGrid (map gInv etaL) (map gInv etaL) True
+                 else
+                   let s2     = let resV = residualsV res
+                                in (resV `LA.dot` resV) / dfStat
+                       tVal   = quantile (studentT dfStat) ((1 + level) / 2)
+                       xtxi   = LA.inv (LA.tr dm LA.<> dm)
+                       halfW xi = tVal * sqrt (s2 * (1 + xi `LA.dot` (xtxi LA.#> xi)))
+                       lowers = zipWith (\eta xi -> gInv (eta - halfW xi)) etaL gRows
+                       uppers = zipWith (\eta xi -> gInv (eta + halfW xi)) etaL gRows
+                   in SmoothFit (V.toList xGrid) yGrid lowers uppers True
 
       ciQuantile level = case family of
-        Gaussian -> quantile (studentT (fromIntegral (n - p))) ((1 + level) / 2)
+        -- 飽和 (df=n-p<=0) は studentT が例外 → 分位点 0 = CI 幅ゼロ (帯を線に潰す)。
+        Gaussian | n - p <= 0 -> 0
+                 | otherwise  -> quantile (studentT (fromIntegral (n - p))) ((1 + level) / 2)
         _        -> quantile (normalDistr 0 1) ((1 + level) / 2)
 
   return (res, mSmooth)

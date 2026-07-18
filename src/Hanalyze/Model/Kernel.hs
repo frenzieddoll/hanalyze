@@ -1,475 +1,279 @@
 {-# LANGUAGE StrictData #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
--- | Kernel regression — Nadaraya-Watson and kernel ridge regression.
+-- |
+-- Module      : Hanalyze.Model.Kernel
+-- Description : GP/SVM/カーネル法で共通のカーネル語彙 (RBF/Matern52/Periodic/Linear/Poly)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
 --
---   * 'Kernel'        — RBF / Matérn / triangular / Epanechnikov kernel
---     functions.
---   * 'nwRegression'  — Nadaraya-Watson (kernel-weighted moving average).
---   * 'kernelRidge'   — kernel ridge regression
---     @ŷ(x*) = k(x*)ᵀ (K + λI)⁻¹ y@.
+-- 共有カーネル語彙 (GP / SVM / カーネル法で共通) — Phase 75.18 で 'Model.GP'
+-- から分離。
 --
--- Both are non-parametric smooth nonlinear regressors. Unlike 'Hanalyze.Model.GP',
--- they do not produce uncertainty estimates.
+-- GP 族の定常/内積カーネル ('RBF' / 'Matern52' / 'Periodic' / 'Linear' / 'Poly') と
+-- そのハイパーパラメータ 'KernelParams' (ℓ / σ_f² / period / ARD per-dim ℓ) を集約する。
+-- 'GPParams' (= 'KernelParams' + 観測ノイズ σ_n²) に依存しないので、 SVM 等
+-- ノイズを持たないカーネル法はこのモジュールだけを import すればよい
+-- ('Model.GP' を import しない)。
+--
+-- 評価関数:
+--
+--   * 'kernelFn'            — 1D 入力の @k(x, x')@。
+--   * 'buildKernelMatrix'   — 1D の Gram 行列 @K(xs, xs')@。
+--   * 'applyKernel'         — 二乗距離行列 → カーネル行列 (距離カーネル専用)。
+--   * 'kernelOfParams'      — 固定パラメータの @s ↦ k(s)@ (距離カーネル専用・INLINE)。
+--   * 'ardScaleXY'          — ARD 列スケーリング。
+--   * 'buildKernelMatrixMV' — 多入力 Gram 行列 (全カーネル)。
+--   * 'kEvalMV'             — 多入力の点対点評価 @k(a, b)@ (全カーネル・SVM 等の汎用経路)。
+--
+-- 距離カーネル (RBF/Matern52/Periodic) は二乗距離から、 内積カーネル
+-- (Linear/Poly) は内積から評価する。 'applyKernel' / 'kernelOfParams' は距離専用で、
+-- 内積カーネルを渡すと error (multi-input gram は 'buildKernelMatrixMV' が内積経路へ
+-- 分岐するためそこには到達しない)。
 module Hanalyze.Model.Kernel
-  ( Kernel (..)
-  , kernelEval
-  , kernelFromSqDist
-  , nwRegression
-  , nwRegressionMulti
-  , KernelRidgeFit (..)
-  , kernelRidge
-  , predictKernelRidge
-  , gridSearchBandwidth
-  , autoBandwidthBrent
-    -- * Multi-output (1D input, multiple Y columns)
-  , KernelRidgeFitMulti (..)
-  , kernelRidgeMulti
-  , predictKernelRidgeMulti
-  , fittedKernelRidgeMulti
-  , r2Multi
-  , autoTuneKernelRidgeMulti
-  , defaultHGrid
-  , defaultLamGrid
-    -- * Multi-input (primary API; X is @n × p@, Y is @n × q@)
-  , gramMatrixMV
-  , gramMatrixMVXY
-  , KernelRidgeFitMV (..)
-  , kernelRidgeMV
-  , predictKernelRidgeMV
-  , fittedKernelRidgeMV
-  , nwRegressionMV
+  ( -- * カーネル型
+    Kernel (..)
+  , kernelName
+    -- * カーネルハイパーパラメータ
+  , KernelParams (..)
+  , defaultKernelParams
+    -- * 評価
+  , kernelFn
+  , buildKernelMatrix
+  , applyKernel
+  , kernelOfParams
+  , ardScaleXY
+  , buildKernelMatrixMV
+  , kEvalMV
   ) where
 
-import qualified Data.Vector as V
-import qualified Numeric.LinearAlgebra as LA
-import qualified Hanalyze.Optim.LineSearch as LS
-import qualified Hanalyze.Optim.Common     as OC
-import qualified Hanalyze.Stat.KernelDist  as KD
-import qualified Hanalyze.Stat.Cholesky    as Chol
+import           Data.Text (Text)
+import qualified Data.Text                    as T
+import qualified Numeric.LinearAlgebra        as LA
+import qualified Hanalyze.Stat.KernelDist as KD
+import qualified Data.Vector.Storable         as VS
+import qualified Data.Vector.Storable.Mutable as VSM
+import           Control.Monad.ST             (runST)
 
 -- ---------------------------------------------------------------------------
--- カーネル関数
+-- 型
 -- ---------------------------------------------------------------------------
 
--- | Supported kernels. The bandwidth @h@ is passed separately at the
--- call site.
+-- | GP / SVM 族のカーネル種別。
 data Kernel
-  = Gaussian       -- ^ @exp(-u²/2)@ (= RBF, infinite support).
-  | Epanechnikov   -- ^ @0.75 (1-u²)@ on @|u| ≤ 1@.
-  | Triangular     -- ^ @1 - |u|@ on @|u| ≤ 1@.
-  | Uniform        -- ^ @0.5@ on @|u| ≤ 1@ (coarsest).
-  | TriCube        -- ^ @(1-|u|³)³@ on @|u| ≤ 1@.
+  = RBF
+    -- ^ Squared exponential: @k(x,x') = σ_f² exp(−r²/(2ℓ²))@.
+    --   Best for smooth functions; the most commonly used kernel.
+  | Matern52
+    -- ^ Matérn 5/2: @k(x,x') = σ_f²(1+√5 r/ℓ+5r²/(3ℓ²)) exp(−√5 r/ℓ)@.
+    --   Slightly rougher than RBF; common in physical systems.
+  | Periodic
+    -- ^ Periodic: @k(x,x') = σ_f² exp(−2 sin²(π r/p)/ℓ²)@.
+    --   For periodic patterns; set 'kpPeriod' appropriately.
+  | Linear
+    -- ^ Linear (dot-product): @k(x,x') = σ_f² (x·x')@. A non-stationary
+    --   kernel; with SVM gives a linear decision boundary. (Phase 75.14)
+  | Poly !Int
+    -- ^ Polynomial of degree @d@: @k(x,x') = (γ (x·x') + 1)^d@ with
+    --   @γ = 1/(2ℓ²)@ (shared with the SVM γ convention). A
+    --   non-stationary kernel. (Phase 75.14)
   deriving (Show, Eq)
 
--- | Evaluate the kernel at scaled squared distance @s = ‖x − x'‖² / h²@.
--- Generalizes 'kernelEval' to multivariate inputs: every supported
--- kernel is radially symmetric, so the kernel value depends only on
--- @‖x − x'‖ / h@.
---
--- For the Gaussian kernel this avoids the redundant @sqrt@; for kernels
--- with bounded support (Epanechnikov / Triangular / Uniform / TriCube)
--- the boundary check uses @s ≤ 1@.
-kernelFromSqDist :: Kernel -> Double -> Double
-kernelFromSqDist k s = case k of
-  Gaussian     -> exp (-0.5 * s) / sqrt (2 * pi)
-  Epanechnikov -> if s <= 1 then 0.75 * (1 - s) else 0
-  Triangular   -> if s <= 1 then 1 - sqrt s else 0
-  Uniform      -> if s <= 1 then 0.5 else 0
-  TriCube      -> if s <= 1
-                    then let u = sqrt s
-                             t = 1 - u * u * u
-                         in t * t * t
-                    else 0
+-- | Display name of a kernel.
+kernelName :: Kernel -> Text
+kernelName RBF       = "RBF"
+kernelName Matern52  = "Mat\xe9rn 5/2"
+kernelName Periodic  = "Periodic"
+kernelName Linear    = "Linear"
+kernelName (Poly d)  = "Poly(" <> T.pack (show d) <> ")"
 
--- | Evaluate the kernel at @u = (x - x_i) / h@.
-kernelEval :: Kernel -> Double -> Double
-kernelEval k u = case k of
-  Gaussian     -> exp (-0.5 * u * u) / sqrt (2 * pi)
-  Epanechnikov -> if abs u <= 1 then 0.75 * (1 - u * u) else 0
-  Triangular   -> if abs u <= 1 then 1 - abs u else 0
-  Uniform      -> if abs u <= 1 then 0.5 else 0
-  TriCube      -> if abs u <= 1
-                    then let t = 1 - (abs u)^(3::Int)
-                         in t * t * t
-                    else 0
-
--- ---------------------------------------------------------------------------
--- Nadaraya-Watson
--- ---------------------------------------------------------------------------
-
--- | Single-output Nadaraya-Watson kernel regression.
---
--- @ŷ(x*) = Σᵢ K_h(x* - xᵢ) yᵢ / Σᵢ K_h(x* - xᵢ)@
---
--- Delegates to 'nwRegressionMulti' by promoting @y@ to a one-column
--- matrix.
-nwRegression :: Kernel
-             -> Double             -- ^ Bandwidth @h@ (@> 0@).
-             -> V.Vector Double    -- ^ Training inputs.
-             -> V.Vector Double    -- ^ Training targets.
-             -> V.Vector Double    -- ^ Prediction inputs.
-             -> V.Vector Double    -- ^ Predictions.
-nwRegression kern h xs ys xNew =
-  let yMat = LA.asColumn (LA.fromList (V.toList ys))
-      mat  = nwRegressionMulti kern h xs yMat xNew
-  in V.fromList (LA.toList (LA.flatten (mat LA.¿ [0])))
-
--- | Multi-output Nadaraya-Watson: reuse the same weight matrix across
--- every output column. With @W@ of shape @m × n@ and @Y@ of shape
--- @n × q@, the result is the row-normalized product @W · Y@ of shape
--- @m × q@.
-nwRegressionMulti :: Kernel
-                  -> Double               -- ^ Bandwidth @h@.
-                  -> V.Vector Double      -- ^ Training inputs (length @n@).
-                  -> LA.Matrix Double     -- ^ Training response @Y@ (@n × q@).
-                  -> V.Vector Double      -- ^ Prediction inputs (length @m@).
-                  -> LA.Matrix Double     -- ^ Predictions (@m × q@).
-nwRegressionMulti kern h xs ys xNew =
-  let n  = V.length xs
-      m  = V.length xNew
-      q  = LA.cols ys
-      wMat = LA.fromLists
-               [ [ kernelEval kern ((xStar - xi) / h)
-                 | xi <- V.toList xs ]
-               | xStar <- V.toList xNew ]   -- (m × n)
-      num  = wMat LA.<> ys                  -- (m × q)
-      dens = LA.toList (wMat LA.#> LA.konst 1 n)
-      rows = [ if d == 0 then replicate q 0
-                 else [ (num `LA.atIndex` (i, j)) / d | j <- [0 .. q - 1] ]
-             | (i, d) <- zip [0 .. m - 1] dens ]
-  in LA.fromLists rows
-
--- ---------------------------------------------------------------------------
--- Kernel Ridge regression
--- ---------------------------------------------------------------------------
-
--- | Kernel ridge regression fit; carries everything needed to predict.
-data KernelRidgeFit = KernelRidgeFit
-  { krKernel :: Kernel
-  , krH      :: Double
-  , krLambda :: Double
-  , krXs     :: V.Vector Double   -- ^ Training inputs.
-  , krAlpha  :: LA.Vector Double  -- ^ Solution @α = (K + λI)⁻¹ y@.
+-- | カーネルハイパーパラメータ (観測ノイズ σ_n² は含まない)。
+data KernelParams = KernelParams
+  { kpLengthScale  :: Double
+    -- ^ Isotropic length scale @ℓ@; larger means smoother. Used unless
+    --   'kpLengthScales' is 'Just' (= ARD), in which case the per-dim
+    --   vector overrides this for multi-input kernel evaluation.
+  , kpSignalVar    :: Double
+    -- ^ Signal variance @σ_f²@; the variability of the function values.
+  , kpPeriod       :: Double
+    -- ^ Period @p@ (only used by the @Periodic@ kernel).
+  , kpLengthScales :: Maybe (LA.Vector Double)
+    -- ^ Per-dim length scales for ARD (Automatic Relevance
+    --   Determination). When 'Just' v, the multi-input kernel uses
+    --   @D_ARD[i,j] = Σ_d (X[i,d] − X'[j,d])² / ℓ_d²@ instead of the
+    --   isotropic distance / ℓ². Has no effect on the 1D 'kernelFn'
+    --   path. 'Nothing' = isotropic (default).
   } deriving (Show)
 
--- | Build the Gram matrix @K_{ij} = K_h(x_i - x_j)@.
-gramMatrix :: Kernel -> Double -> V.Vector Double -> LA.Matrix Double
-gramMatrix kern h xs =
-  let n = V.length xs
-      xv = V.toList xs
-  in (n LA.>< n)
-       [ kernelEval kern ((xi - xj) / h)
-       | xi <- xv, xj <- xv ]
-
--- | Single-output kernel ridge regression. Delegates to
--- 'kernelRidgeMulti' by promoting @y@ to a one-column matrix and taking
--- column 0 of the resulting @α@ matrix.
-kernelRidge :: Kernel
-            -> Double             -- ^ Bandwidth @h@.
-            -> Double             -- ^ Ridge penalty @λ@.
-            -> V.Vector Double    -- ^ Training inputs.
-            -> V.Vector Double    -- ^ Training targets.
-            -> KernelRidgeFit
-kernelRidge kern h lam xs ys =
-  let yMat = LA.asColumn (LA.fromList (V.toList ys))
-      mf   = kernelRidgeMulti kern h lam xs yMat
-      a    = LA.flatten (krmAlpha mf LA.¿ [0])
-  in KernelRidgeFit kern h lam xs a
-
--- | Predict at new inputs from a 'KernelRidgeFit'.
-predictKernelRidge :: KernelRidgeFit -> V.Vector Double -> V.Vector Double
-predictKernelRidge fit xNew =
-  V.map predict xNew
-  where
-    xs    = krXs fit
-    h     = krH fit
-    kern  = krKernel fit
-    alpha = krAlpha fit
-    predict xStar =
-      let kVec = LA.fromList
-                   [ kernelEval kern ((xStar - xi) / h)
-                   | xi <- V.toList xs ]
-      in kVec LA.<.> alpha
+-- | Default kernel hyperparameters: @ℓ = σ_f² = p = 1@, isotropic.
+defaultKernelParams :: KernelParams
+defaultKernelParams = KernelParams 1.0 1.0 1.0 Nothing
 
 -- ---------------------------------------------------------------------------
--- Bandwidth selection
+-- 1D 評価
 -- ---------------------------------------------------------------------------
 
--- | Pick the bandwidth @h@ by leave-one-out cross-validation. Simple
--- grid search: returns the candidate with the smallest LOO RMSE.
-gridSearchBandwidth
-  :: Kernel
-  -> V.Vector Double      -- ^ Training inputs.
-  -> V.Vector Double      -- ^ Training targets.
-  -> [Double]             -- ^ Candidate bandwidths.
-  -> (Double, Double)     -- ^ @(best h, best LOO RMSE)@.
-gridSearchBandwidth kern xs ys hs =
-  let results = [(h, looErrNW kern xs ys h) | h <- hs]
-      best = head [ pair | pair <- results
-                         , snd pair == minimum (map snd results) ]
-  in best
+-- | Evaluate the kernel function @k(x, x')@ for scalar inputs.
+kernelFn :: Kernel -> KernelParams -> Double -> Double -> Double
+kernelFn RBF p x x' =
+  let d = x - x'
+      l = kpLengthScale p
+  in kpSignalVar p * exp (-(d * d) / (2 * l * l))
+kernelFn Matern52 p x x' =
+  let d = abs (x - x')
+      l = kpLengthScale p
+      s = sqrt 5 * d / l
+  in kpSignalVar p * (1 + s + s * s / 3) * exp (-s)
+kernelFn Periodic p x x' =
+  let d = abs (x - x')
+      l = kpLengthScale p
+      s = sin (pi * d / kpPeriod p)
+  in kpSignalVar p * exp (-2 * s * s / (l * l))
+kernelFn Linear p x x' =
+  -- 内積カーネル: 1D では x·x' = x*x'。
+  kpSignalVar p * (x * x')
+kernelFn (Poly d) p x x' =
+  -- (γ x·x' + 1)^d, γ = 1/(2ℓ²)。1D では x·x' = x*x'。
+  let l = kpLengthScale p
+      g = 1 / (2 * l * l)
+  in (g * (x * x') + 1) ^^ d
 
--- | NW LOO-CV loss as a continuous function of @h@; shared with
--- 'autoBandwidthBrent'.
-looErrNW :: Kernel -> V.Vector Double -> V.Vector Double -> Double -> Double
-looErrNW kern xs ys h =
-  let n = V.length xs
-      yPred = V.imap
-        (\i _ ->
-          let xs'  = V.ifilter (\j _ -> j /= i) xs
-              ys'  = V.ifilter (\j _ -> j /= i) ys
-              xi   = xs V.! i
-              pred = nwRegression kern h xs' ys' (V.singleton xi)
-          in V.head pred)
-        xs
-      err = V.zipWith (\y yh -> (y - yh)^(2::Int)) ys yPred
-  in sqrt (V.sum err / fromIntegral n)
-
--- | Continuously optimize the bandwidth @h@ with Brent's method
--- (minimizing the LOO-CV loss). Assumes the bracket @[h_lo, h_hi]@ is
--- unimodal. Avoids enumerating discrete candidates the way
--- 'gridSearchBandwidth' does.
+-- | Build the kernel matrix @K(xs, xs')@ of shape @|xs| × |xs'|@.
 --
--- Returns @(best h, best LOO RMSE)@.
-autoBandwidthBrent
-  :: Kernel
-  -> V.Vector Double    -- ^ Training inputs.
-  -> V.Vector Double    -- ^ Training targets.
-  -> Double             -- ^ Lower bound @h_lo@.
-  -> Double             -- ^ Upper bound @h_hi@.
-  -> (Double, Double)
-autoBandwidthBrent kern xs ys hLo hHi =
-  let cfg = LS.defaultBrentConfig { LS.bcMaxIter = 80, LS.bcTol = 1e-6 }
-      result = LS.brent cfg (\[h] -> looErrNW kern xs ys h) hLo hHi
-      hStar  = head (OC.orBest result)
-  in (hStar, OC.orValue result)
+-- Phase 11b (2026-05-14): fill a flat 'Storable.Vector' via @runST +
+-- MVector@ instead of materialising the @|xs|·|xs'|@ lazy @[Double]@
+-- list (one allocation per kernel call). 'kernelFn' itself is unchanged
+-- so 'Periodic' (signed-difference dependent) keeps working.
+buildKernelMatrix :: Kernel -> KernelParams -> [Double] -> [Double] -> LA.Matrix Double
+buildKernelMatrix ker p xs xs' =
+  let xv = VS.fromList xs
+      yv = VS.fromList xs'
+      n  = VS.length xv
+      m  = VS.length yv
+      out = runST $ do
+        v <- VSM.unsafeNew (n * m)
+        let go !i !j
+              | i >= n    = pure ()
+              | j >= m    = go (i + 1) 0
+              | otherwise = do
+                  let xi = VS.unsafeIndex xv i
+                      yj = VS.unsafeIndex yv j
+                  VSM.unsafeWrite v (i * m + j) (kernelFn ker p xi yj)
+                  go i (j + 1)
+        go 0 0
+        VS.unsafeFreeze v
+  in LA.reshape m out
 
 -- ---------------------------------------------------------------------------
--- 多出力 Kernel Ridge (Phase T2)
+-- 多入力 (multivariate) 評価
 -- ---------------------------------------------------------------------------
 
--- | Multi-output kernel ridge regression. With @Y@ of shape @n × q@,
--- solves each column independently but shares the Gram matrix @K@.
-data KernelRidgeFitMulti = KernelRidgeFitMulti
-  { krmKernel :: Kernel
-  , krmH      :: Double
-  , krmLambda :: Double
-  , krmXs     :: V.Vector Double
-  , krmAlpha  :: LA.Matrix Double   -- α (n × q)
-  } deriving (Show)
+-- | Apply the kernel function to an @m × n@ matrix of squared distances.
+-- 距離カーネル (RBF/Matern52/Periodic) 専用。 内積カーネル (Linear/Poly) は
+-- 二乗距離から復元できないため error (multi-input gram は 'buildKernelMatrixMV'
+-- が内積経路へ分岐するためここには到達しない)。
+applyKernel :: Kernel -> KernelParams -> LA.Matrix Double -> LA.Matrix Double
+applyKernel RBF p d2 =
+  let l2 = kpLengthScale p ** 2
+      sf = kpSignalVar p
+  in KD.mapMatrix (\s -> sf * exp (- s / (2 * l2))) d2
+applyKernel Matern52 p d2 =
+  let l  = kpLengthScale p
+      sf = kpSignalVar p
+  in KD.mapMatrix (\s -> let r = sqrt (max 0 s)
+                             u = sqrt 5 * r / l
+                         in sf * (1 + u + u * u / 3) * exp (- u)) d2
+applyKernel Periodic p d2 =
+  let l  = kpLengthScale p
+      sf = kpSignalVar p
+      pr = kpPeriod p
+  in KD.mapMatrix (\s -> let r = sqrt (max 0 s)
+                             ss = sin (pi * r / pr)
+                         in sf * exp (- 2 * ss * ss / (l * l))) d2
+applyKernel Linear   _ _ = error "applyKernel: Linear は内積カーネル。buildKernelMatrixMV/kEvalMV を使うこと"
+applyKernel (Poly _) _ _ = error "applyKernel: Poly は内積カーネル。buildKernelMatrixMV/kEvalMV を使うこと"
 
--- | Solve @(K + λI)⁻¹ Y@ once and reuse for every column (fast).
-kernelRidgeMulti :: Kernel -> Double -> Double
-                 -> V.Vector Double -> LA.Matrix Double
-                 -> KernelRidgeFitMulti
-kernelRidgeMulti kern h lam xs ys =
-  let n     = V.length xs
-      kMat  = gramMatrix kern h xs
-      regK  = kMat + LA.scale lam (LA.ident n)
-      -- regK is SPD (K is PSD, λI is PD). Use Cholesky-based solve;
-      -- jitter retry handles ill-conditioned bandwidths.
-      alpha = Chol.cholSolveJitter regK ys
-  in KernelRidgeFitMulti kern h lam xs alpha
+-- | Apply ARD scaling to (X, X') if 'kpLengthScales' is 'Just'. Returns
+-- the (possibly rescaled) matrices and a 'KernelParams' with @ℓ = 1@ so
+-- that 'applyKernel' divides by 1 (the per-dim ℓ_d already absorbed into
+-- the column scaling). 'Nothing' = isotropic, returns inputs and params
+-- unchanged. The 'Periodic' kernel does not support ARD.
+ardScaleXY
+  :: Kernel -> KernelParams -> LA.Matrix Double -> LA.Matrix Double
+  -> (LA.Matrix Double, LA.Matrix Double, KernelParams)
+ardScaleXY Periodic p x y = (x, y, p)
+ardScaleXY _        p x y = case kpLengthScales p of
+  Nothing -> (x, y, p)
+  Just ls ->
+    let p_     = LA.cols x
+        lsExt  = if LA.size ls == p_
+                   then ls
+                   else LA.konst (kpLengthScale p) p_  -- safety fallback
+        invL   = LA.cmap (1 /) lsExt                 -- 1 / ℓ_d
+        scaleCols m = m LA.<> LA.diag invL
+        x'     = scaleCols x
+        y'     = scaleCols y
+        p'     = p { kpLengthScale = 1.0 }
+    in (x', y', p')
 
--- | Predict @Ŷ@ for new inputs from a 'KernelRidgeFitMulti'.
-predictKernelRidgeMulti :: KernelRidgeFitMulti -> V.Vector Double
-                        -> LA.Matrix Double
-predictKernelRidgeMulti fit xNew =
-  let xs    = krmXs fit
-      h     = krmH fit
-      kern  = krmKernel fit
-      alpha = krmAlpha fit
-      kMat  = LA.fromLists
-                [ [ kernelEval kern ((xStar - xi) / h)
-                  | xi <- V.toList xs ]
-                | xStar <- V.toList xNew ]
-  in kMat LA.<> alpha
-
--- | Fitted values at the training inputs (= @ŷ_train@).
-fittedKernelRidgeMulti :: KernelRidgeFitMulti -> LA.Matrix Double
-fittedKernelRidgeMulti fit = predictKernelRidgeMulti fit (krmXs fit)
-
--- | Multi-output R² returned as a length-@q@ vector. @Y@ observed and
--- @Ŷ@ predicted both have shape @n × q@.
-r2Multi :: LA.Matrix Double -> LA.Matrix Double -> V.Vector Double
-r2Multi ys yhat =
-  let n  = LA.rows ys
-      q  = LA.cols ys
-      colR2 j =
-        let yc  = LA.toList (LA.flatten (ys     LA.¿ [j]))
-            yhc = LA.toList (LA.flatten (yhat   LA.¿ [j]))
-            mu  = sum yc / fromIntegral n
-            sst = sum [(y - mu)^(2::Int) | y <- yc]
-            sse = sum [(y - p)^(2::Int) | (y, p) <- zip yc yhc]
-        in if sst == 0 then 0 else 1 - sse / sst
-  in V.fromList [ colR2 j | j <- [0 .. q - 1] ]
-
--- | Joint @(h, λ)@ grid search using the closed-form LOOCV. Computes the
--- hat-matrix diagonal once per
--- 全 q 出力の LOO 残差を一括評価。
+-- | Build the kernel matrix @K(X, X')@ of shape @|X| × |X'|@ from
+-- multi-input matrices. @X@ is @n × p@; @X'@ is @m × p@.
 --
--- 戻り値: (best fit, best h, best λ, best mean LOO MSE)
-autoTuneKernelRidgeMulti
-  :: Kernel
-  -> V.Vector Double      -- xs (n)
-  -> LA.Matrix Double     -- ys (n × q)
-  -> [Double]             -- h candidates
-  -> [Double]             -- λ candidates
-  -> (KernelRidgeFitMulti, Double, Double, Double)
-autoTuneKernelRidgeMulti kern xs ys hs lams =
-  let n   = V.length xs
-      q   = LA.cols ys
-      tot = fromIntegral (n * q) :: Double
-      score h lam =
-        let kMat = gramMatrix kern h xs
-            regK = kMat + LA.scale lam (LA.ident n)
-            ainv = LA.inv regK
-            hat  = kMat LA.<> ainv          -- (n × n)
-            diagH = LA.takeDiag hat
-            yhat = hat LA.<> ys             -- (n × q)
-            res  = ys - yhat                -- (n × q)
-            -- LOO 残差: r_i / (1 - H_ii)、列方向ブロードキャスト
-            denom = LA.cmap (\h_ii -> 1 - h_ii) diagH
-            invDenom = LA.cmap (\d -> if abs d < 1e-10 then 0 else 1/d) denom
-            scaler = LA.fromColumns (replicate q invDenom)
-            looR  = res * scaler
-            sse   = LA.sumElements (looR * looR)
-        in sse / tot
-      grid = [ (h, lam, score h lam) | h <- hs, lam <- lams ]
-      best@(bestH, bestL, bestS) = head [ p | p@(_,_,s) <- grid
-                                             , s == minimum (map (\(_,_,x) -> x) grid) ]
-      _ = best
-      fit  = kernelRidgeMulti kern bestH bestL xs ys
-  in (fit, bestH, bestL, bestS)
+-- When 'kpLengthScales' is 'Just', uses ARD: each input dimension is
+-- scaled by @1 / ℓ_d@ before computing pairwise squared distances.
+buildKernelMatrixMV
+  :: Kernel -> KernelParams -> LA.Matrix Double -> LA.Matrix Double
+  -> LA.Matrix Double
+buildKernelMatrixMV Linear p x x' =
+  -- 内積カーネル: K = σ_f² X X'ᵀ (距離経路を通さない)。
+  LA.scale (kpSignalVar p) (x LA.<> LA.tr x')
+buildKernelMatrixMV (Poly d) p x x' =
+  -- (γ X X'ᵀ + 1)^d, γ = 1/(2ℓ²)。
+  let l = kpLengthScale p
+      g = 1 / (2 * l * l)
+  in LA.cmap (\ip -> (g * ip + 1) ^^ d) (x LA.<> LA.tr x')
+buildKernelMatrixMV ker p x x' =
+  let (xs, ys, p') = ardScaleXY ker p x x'
+  in applyKernel ker p' (KD.pairwiseSqDistXY xs ys)
 
--- | Log-spaced bandwidth candidates. @defaultHGrid xs@ produces 30
--- candidates spanning the range of @xs@.
-defaultHGrid :: V.Vector Double -> [Double]
-defaultHGrid xs =
-  let xv  = V.toList xs
-      mn  = minimum xv
-      mx  = maximum xv
-      rng = mx - mn
-      lo  = max 1e-3 (rng / 100)
-      hi  = max (lo * 10) rng
-      n   = 30
-      lLo = log lo
-      lHi = log hi
-      step = (lHi - lLo) / fromIntegral (n - 1)
-  in [ exp (lLo + fromIntegral i * step) | i <- [0 .. n - 1 :: Int] ]
+-- | 多入力カーネル評価 @k(a, b)@ (全カーネル対応・SVM 等の汎用経路)。
+-- 距離カーネル (RBF/Matern52/Periodic) は二乗距離、 内積カーネル (Linear/Poly)
+-- は内積から評価する。 (Phase 75.14)
+kEvalMV :: Kernel -> KernelParams -> LA.Vector Double -> LA.Vector Double -> Double
+kEvalMV Linear   p a b = kpSignalVar p * (a LA.<.> b)
+kEvalMV (Poly d) p a b =
+  let l = kpLengthScale p
+      g = 1 / (2 * l * l)
+  in (g * (a LA.<.> b) + 1) ^^ d
+kEvalMV ker      p a b =
+  let d = a - b
+  in kernelOfParams ker p (d LA.<.> d)   -- 距離カーネル: s = ‖a−b‖²
 
--- | Log-spaced ridge-penalty candidates (10 values from 1e-6 to 1).
-defaultLamGrid :: [Double]
-defaultLamGrid =
-  let n = 10
-      lLo = log 1e-6
-      lHi = log 1e0
-      step = (lHi - lLo) / fromIntegral (n - 1)
-  in [ exp (lLo + fromIntegral i * step) | i <- [0 .. n - 1 :: Int] ]
-
--- ---------------------------------------------------------------------------
--- Multi-input (multivariate X) API
---
--- These functions take @X@ as an @n × p@ matrix (rows = samples) and use a
--- single shared bandwidth @h@ across every input dimension. Distance
--- matrices are computed via 'Hanalyze.Stat.KernelDist' (BLAS GEMM) and the kernel
--- function is applied element-wise via 'LA.cmap'; no list traversals over
--- the @O(n²)@ pair set.
---
--- For axis-specific bandwidths, scale columns of @X@ by @1 / h_d@ before
--- calling these functions.
--- ---------------------------------------------------------------------------
-
--- | Multi-input Gram matrix @K[i, j] = κ(‖X[i,:] − X[j,:]‖ / h)@.
-gramMatrixMV :: Kernel -> Double -> LA.Matrix Double -> LA.Matrix Double
-gramMatrixMV kern h x =
-  let h2 = h * h
-      d2 = KD.pairwiseSqDist x
-  in LA.cmap (\s -> kernelFromSqDist kern (s / h2)) d2
-
--- | Multi-input cross Gram matrix @K[i, j] = κ(‖X[i,:] − Y[j,:]‖ / h)@.
-gramMatrixMVXY
-  :: Kernel -> Double
-  -> LA.Matrix Double   -- ^ Query @X_*@ (@m × p@).
-  -> LA.Matrix Double   -- ^ Training @X@ (@n × p@).
-  -> LA.Matrix Double   -- ^ Result (@m × n@).
-gramMatrixMVXY kern h xs ts =
-  let h2 = h * h
-      d2 = KD.pairwiseSqDistXY xs ts
-  in LA.cmap (\s -> kernelFromSqDist kern (s / h2)) d2
-
--- | Multi-input kernel ridge fit. Holds the training matrix and the
--- solution coefficients; @α@ has shape @n × q@.
-data KernelRidgeFitMV = KernelRidgeFitMV
-  { krmvKernel :: Kernel
-  , krmvH      :: Double
-  , krmvLambda :: Double
-  , krmvXs     :: LA.Matrix Double  -- ^ Training inputs (@n × p@).
-  , krmvAlpha  :: LA.Matrix Double  -- ^ @(K + λI)⁻¹ Y@ (@n × q@).
-  } deriving (Show)
-
--- | Multi-input multi-output kernel ridge regression.
---
--- @α = (K + λI)⁻¹ Y@ with @K = gramMatrixMV kern h X@. Solving once and
--- reusing across the @q@ output columns.
-kernelRidgeMV
-  :: Kernel
-  -> Double                 -- ^ Bandwidth @h@.
-  -> Double                 -- ^ Ridge penalty @λ@.
-  -> LA.Matrix Double       -- ^ Training inputs @X@ (@n × p@).
-  -> LA.Matrix Double       -- ^ Training response @Y@ (@n × q@).
-  -> KernelRidgeFitMV
-kernelRidgeMV kern h lam x y =
-  let n     = LA.rows x
-      kMat  = gramMatrixMV kern h x
-      regK  = kMat + LA.scale lam (LA.ident n)
-      -- SPD: K + λI. Use Cholesky-based solve.
-      alpha = Chol.cholSolveJitter regK y
-  in KernelRidgeFitMV kern h lam x alpha
-
--- | Predict @Ŷ = K_* α@ for new query inputs (@m × p@). Output shape is
--- @m × q@.
-predictKernelRidgeMV :: KernelRidgeFitMV -> LA.Matrix Double -> LA.Matrix Double
-predictKernelRidgeMV fit xNew =
-  gramMatrixMVXY (krmvKernel fit) (krmvH fit) xNew (krmvXs fit)
-    LA.<> krmvAlpha fit
-
--- | Fitted values at the training inputs.
-fittedKernelRidgeMV :: KernelRidgeFitMV -> LA.Matrix Double
-fittedKernelRidgeMV fit = predictKernelRidgeMV fit (krmvXs fit)
-
--- | Multi-input multi-output Nadaraya-Watson regression.
---
--- @ŷ(x*) = (Σⱼ K_h(x* − xⱼ) yⱼ) / Σⱼ K_h(x* − xⱼ)@, computed for every
--- query row in one pass via @W = K(X_*, X)@ then @W Y / row-sums@.
-nwRegressionMV
-  :: Kernel
-  -> Double                 -- ^ Bandwidth @h@.
-  -> LA.Matrix Double       -- ^ Training inputs @X@ (@n × p@).
-  -> LA.Matrix Double       -- ^ Training response @Y@ (@n × q@).
-  -> LA.Matrix Double       -- ^ Query inputs @X_*@ (@m × p@).
-  -> LA.Matrix Double       -- ^ Predictions (@m × q@).
-nwRegressionMV kern h xs ys xNew =
-  -- P35a (2026-05-07): replace @LA.diag safe LA.<> num@ (m×m dense
-  -- diag matrix + GEMM) with broadcast outer product → elementwise.
-  --
-  -- P35b explored further: fusing the @num@ and @denom@ GEMVs into a
-  -- single GEMM via @yAug = [ys | onesN]@ to traverse the 8 MB
-  -- weight matrix only once (it exceeds typical L3). It /regressed/
-  -- at q=1 (33.8 → 37 ms) because (a) @LA.|||@ allocates a fresh
-  -- 8 MB matrix, and (b) BLAS GEMM with k=2 RHS columns has higher
-  -- block-tiling overhead than two GEMV calls. For q ≫ 1 the fusion
-  -- would win, but the bench is q=1 so the unfused form stays.
-  --
-  -- The remaining bottleneck is @LA.cmap kernelFromSqDist@ over the
-  -- 1M-cell weight matrix — a per-element Haskell function call per
-  -- exp(). FFI'd vectorized exp (libmvec / SLEEF) would close the
-  -- 3.6× gap to sklearn but is out of scope here.
-  let !wMat   = gramMatrixMVXY kern h xNew xs           -- m × n
-      !num    = wMat LA.<> ys                           -- m × q
-      !onesN  = LA.konst 1 (LA.cols wMat) :: LA.Vector Double
-      !denom  = wMat LA.#> onesN                        -- m
-      !safe   = LA.cmap (\d -> if d == 0 then 1 else 1 / d) denom
-      !onesQ  = LA.konst 1 (LA.cols num) :: LA.Vector Double
-      !safeBc = LA.outer safe onesQ                     -- m × q
-  in safeBc * num
+-- | Specialized kernel function for a fixed parameter set, returning a
+-- monomorphic @Double -> Double@ that GHC can inline tightly into the
+-- @mkNoiseKernelFromD2@ inner loop (in 'Model.GP'). 距離カーネル専用。
+{-# INLINE kernelOfParams #-}
+kernelOfParams :: Kernel -> KernelParams -> (Double -> Double)
+kernelOfParams RBF p =
+  let !l2 = kpLengthScale p ** 2
+      !sf = kpSignalVar p
+      !inv2L2 = 1 / (2 * l2)
+  in \s -> sf * exp (- s * inv2L2)
+kernelOfParams Matern52 p =
+  let !l  = kpLengthScale p
+      !sf = kpSignalVar p
+      !invL = sqrt 5 / l
+  in \s -> let r = sqrt (max 0 s)
+               u = invL * r
+           in sf * (1 + u + u * u / 3) * exp (- u)
+kernelOfParams Periodic p =
+  let !l  = kpLengthScale p
+      !sf = kpSignalVar p
+      !pr = kpPeriod p
+      !invL2 = 1 / (l * l)
+      !invPr = pi / pr
+  in \s -> let r  = sqrt (max 0 s)
+               ss = sin (invPr * r)
+           in sf * exp (- 2 * ss * ss * invL2)
+kernelOfParams Linear   _ = error "kernelOfParams: Linear は内積カーネル。kEvalMV を使うこと"
+kernelOfParams (Poly _) _ = error "kernelOfParams: Poly は内積カーネル。kEvalMV を使うこと"

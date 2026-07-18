@@ -1,6 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BangPatterns #-}
--- | Random forest for regression (CART + bagging + random feature subset).
+-- |
+-- Module      : Hanalyze.Model.RandomForest
+-- Description : 回帰用 Random Forest (CART + bagging + random feature subset、行インデックス置換方式)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Random forest for regression (CART + bagging + random feature subset).
 --
 -- /Performance/: this module was ported in B9b from a list-based
 -- implementation to a row-index permutation scheme, mirroring the
@@ -18,27 +24,35 @@ module Hanalyze.Model.RandomForest
   ( -- * Single regression tree
     Tree (..)
   , RFConfig (..)
-  , defaultRFConfig
+  , defaultRandomForest
   , buildTree
+  , buildTreeV
   , predictTree
     -- * Forest
   , RandomForest (..)
   , fitRF
   , fitRFV
+  , fitRFPure
+  , fitRFVPure
   , predictRF
   , featureImportance
+  , rfPermutationImportance
+  , defaultFeatureNames
   ) where
 
 import qualified Data.Vector                  as V
+import qualified Data.Vector.Mutable          as VM
 import qualified Data.Vector.Unboxed          as VU
 import qualified Data.Vector.Unboxed.Mutable  as VUM
 import qualified Data.Vector.Algorithms.Intro as Intro
 import qualified Numeric.LinearAlgebra        as LA
 import qualified System.Random.MWC            as MWC
 import           Control.Monad                (replicateM)
+import           Control.Monad.Primitive      (PrimMonad, PrimState)
 import           Control.Monad.ST             (runST)
-import           Data.IORef                   (IORef, newIORef, readIORef,
-                                               modifyIORef')
+import           Data.Word                    (Word32)
+import           Data.Text                    (Text)
+import qualified Data.Text                    as T
 
 -- ---------------------------------------------------------------------------
 -- Types
@@ -59,8 +73,8 @@ data RFConfig = RFConfig
   , rfBootstrap  :: !Bool
   } deriving (Show)
 
-defaultRFConfig :: RFConfig
-defaultRFConfig = RFConfig
+defaultRandomForest :: RFConfig
+defaultRandomForest = RFConfig
   { rfTrees      = 100
   , rfMaxDepth   = 12
   , rfMinSamples = 3
@@ -69,43 +83,83 @@ defaultRFConfig = RFConfig
   }
 
 data RandomForest = RandomForest
-  { rfTreesV     :: ![Tree]
-  , rfNFeatures  :: !Int
-  , rfImportance :: !(V.Vector Double)
+  { rfTreesV         :: ![Tree]
+  , rfNFeatures      :: !Int
+  , rfImportance     :: !(V.Vector Double)  -- ^ impurity/split ベース (MDI 相当・R IncNodePurity)。
+  , rfPermImportance :: !(V.Vector Double)  -- ^ permutation ベース (MSE 増加・R %IncMSE・sklearn permutation_importance)。
+  , rfFeatureNames   :: ![Text]             -- ^ 特徴列名。 df|-> 経路が実列名を設定、 低レベル行列 fit は 'defaultFeatureNames' ("f1"..)。
   } deriving (Show)
+
+-- | 名前を持たない行列入力の既定特徴名 ("f1", "f2", …・1 始まり = R/sklearn 慣例)。
+defaultFeatureNames :: Int -> [Text]
+defaultFeatureNames d = [ "f" <> T.pack (show k) | k <- [1 .. d] ]
 
 -- ---------------------------------------------------------------------------
 -- Vector-based fit (primary)
 -- ---------------------------------------------------------------------------
 
+-- | IO ラッパ。 ロジックは 'PrimMonad' 汎用の 'fitRFVM' を共有
+-- (mwc は 'PrimMonad' 汎用ゆえ ST/IO 両経路で同コード)。
 fitRFV :: RFConfig
        -> LA.Matrix Double
        -> VU.Vector Double
        -> MWC.GenIO
        -> IO RandomForest
-fitRFV cfg x y gen = do
+fitRFV = fitRFVM
+
+-- | 'PrimMonad' 汎用の forest 本体。 'fitRFV' (IO) / 'fitRFVPure' (ST) が共有。
+-- 乱数 (gen) は bootstrap index のみで使う。 木構築 'buildTreeV' と feature
+-- importance は純粋ゆえ ST/IO でビット同一。
+fitRFVM :: PrimMonad m
+        => RFConfig
+        -> LA.Matrix Double
+        -> VU.Vector Double
+        -> MWC.Gen (PrimState m)
+        -> m RandomForest
+fitRFVM cfg x y gen = do
   let !n = VU.length y
       !d = LA.cols x
-  impRef <- newIORef (V.replicate d 0.0)
   trees <- replicateM (rfTrees cfg) $ do
     !idx <- if rfBootstrap cfg
-              then bootstrapIdx n gen
+              then bootstrapIdxM n gen
               else pure (VU.enumFromN 0 n)
-    let !t = buildTreeV cfg x y idx 0
-    accumulateImportance impRef t
-    pure t
-  imp <- readIORef impRef
+    pure $! buildTreeV cfg x y idx 0
+  -- permutation importance は列シャッフルに gen を使う (bootstrap の後・seed 決定的)。
+  !perm <- permImportanceRegM x y trees gen
   pure RandomForest
-    { rfTreesV     = trees
-    , rfNFeatures  = d
-    , rfImportance = imp
+    { rfTreesV         = trees
+    , rfNFeatures      = d
+    , rfImportance     = importanceOf d trees
+    , rfPermImportance = perm
+    , rfFeatureNames   = defaultFeatureNames d
     }
 
 -- | Backwards-compatible list-based fit.
 fitRF :: RFConfig -> [[Double]] -> [Double] -> MWC.GenIO -> IO RandomForest
 fitRF cfg xs ys gen
-  | null xs   = pure (RandomForest [] 0 V.empty)
+  | null xs   = pure emptyForest
   | otherwise = fitRFV cfg (LA.fromLists xs) (VU.fromList ys) gen
+
+-- | 純粋・決定的な行列入力 forest。 同じ @seed@ なら必ず同じ 'RandomForest'。
+-- 'fitRFVM' を 'ST' で走らせ 'runST' で閉じる
+-- ([[phase-50-mcmc-purification-status]] の 'nutsPure' と同方針)。
+fitRFVPure :: RFConfig
+           -> LA.Matrix Double
+           -> VU.Vector Double
+           -> Word32
+           -> RandomForest
+fitRFVPure cfg x y seed =
+  runST (MWC.initialize (V.singleton seed) >>= fitRFVM cfg x y)
+
+-- | 純粋・決定的な list 入力 forest (list 版 'fitRF' の seed 純粋版)。
+fitRFPure :: RFConfig -> [[Double]] -> [Double] -> Word32 -> RandomForest
+fitRFPure cfg xs ys seed
+  | null xs   = emptyForest
+  | otherwise = fitRFVPure cfg (LA.fromLists xs) (VU.fromList ys) seed
+
+-- | 空データ時の forest (全フィールド空)。
+emptyForest :: RandomForest
+emptyForest = RandomForest [] 0 V.empty V.empty []
 
 -- | Single-tree builder kept for the symmetry of the old API. Most
 -- callers should use 'fitRFV'.
@@ -117,12 +171,12 @@ buildTree cfg rows ys gen
           !y = VU.fromList ys
           !n = VU.length y
       idx <- if rfBootstrap cfg
-               then bootstrapIdx n gen
+               then bootstrapIdxM n gen
                else pure (VU.enumFromN 0 n)
       pure (buildTreeV cfg x y idx 0)
 
-bootstrapIdx :: Int -> MWC.GenIO -> IO (VU.Vector Int)
-bootstrapIdx n gen =
+bootstrapIdxM :: PrimMonad m => Int -> MWC.Gen (PrimState m) -> m (VU.Vector Int)
+bootstrapIdxM n gen =
   VU.replicateM n (MWC.uniformR (0, n - 1) gen)
 
 -- ---------------------------------------------------------------------------
@@ -300,17 +354,83 @@ featureImportance rf =
       tot = V.sum raw
   in if tot <= 0 then raw else V.map (/ tot) raw
 
+-- | Permutation importance (= 列を無作為置換したときの MSE 増加) を正の総和で
+-- 正規化して返す。 全て非正なら raw のまま (負 = その特徴が予測に無寄与)。
+-- R @randomForest %IncMSE@ / sklearn @permutation_importance@ 同方式。
+rfPermutationImportance :: RandomForest -> V.Vector Double
+rfPermutationImportance rf =
+  let raw = rfPermImportance rf
+      tot = V.sum (V.filter (> 0) raw)
+  in if tot <= 0 then raw else V.map (/ tot) raw
+
+-- ---------------------------------------------------------------------------
+-- Permutation importance (MSE 増加ベース)
+-- ---------------------------------------------------------------------------
+
+-- | 各特徴列を無作為置換し、 forest の MSE 増加量を測る (純粋・'PrimMonad')。
+-- gen は列シャッフルにのみ使う。 同 seed → ビット同一。
+permImportanceRegM :: PrimMonad m
+                   => LA.Matrix Double -> VU.Vector Double -> [Tree]
+                   -> MWC.Gen (PrimState m) -> m (V.Vector Double)
+permImportanceRegM x y trees gen
+  | LA.rows x == 0 || null trees = pure (V.replicate (LA.cols x) 0)
+  | otherwise = do
+      let !base = forestMSE x y trees
+      scores <- mapM (\j -> do
+                         xp <- permuteColM j x gen
+                         pure $! forestMSE xp y trees - base)
+                     [0 .. LA.cols x - 1]
+      pure (V.fromList scores)
+
+-- | forest の平均二乗誤差 (行毎に木予測を平均)。
+forestMSE :: LA.Matrix Double -> VU.Vector Double -> [Tree] -> Double
+forestMSE x y trees =
+  let !n = LA.rows x
+      !k = length trees
+      rowPred i =
+        let row   = LA.toList (LA.flatten (x LA.? [i]))
+            preds = map (`predictTree` row) trees
+        in if k == 0 then 0 else sum preds / fromIntegral k
+      sse = sum [ (rowPred i - y VU.! i) ^ (2 :: Int) | i <- [0 .. n - 1] ]
+  in if n == 0 then 0 else sse / fromIntegral n
+
+-- | 列 j を Fisher-Yates で置換した行列を返す (他列は不変)。
+permuteColM :: PrimMonad m
+            => Int -> LA.Matrix Double -> MWC.Gen (PrimState m) -> m (LA.Matrix Double)
+permuteColM j x gen = do
+  let cols0 = LA.toColumns x
+      colj  = VU.fromList (LA.toList (cols0 !! j))
+  shuf <- fisherYatesM gen colj
+  let newCols = [ if kk == j then LA.fromList (VU.toList shuf) else cols0 !! kk
+                | kk <- [0 .. length cols0 - 1] ]
+  pure (LA.fromColumns newCols)
+
+-- | 可変ベクトル上の Fisher-Yates シャッフル ('PrimMonad'・gen 決定的)。
+fisherYatesM :: PrimMonad m
+             => MWC.Gen (PrimState m) -> VU.Vector Double -> m (VU.Vector Double)
+fisherYatesM gen v0 = do
+  mv <- VU.thaw v0
+  let go i | i <= 0    = pure ()
+           | otherwise = do
+               j <- MWC.uniformR (0, i) gen
+               VUM.swap mv i j
+               go (i - 1)
+  go (VUM.length mv - 1)
+  VU.freeze mv
+
 -- ---------------------------------------------------------------------------
 -- Importance accumulation (per split, simple count)
 -- ---------------------------------------------------------------------------
 
-accumulateImportance :: IORef (V.Vector Double) -> Tree -> IO ()
-accumulateImportance ref = walk
-  where
-    walk (Leaf _)       = pure ()
-    walk (Node j _ l r) = do
-      modifyIORef' ref (\v ->
-        let !cur = v V.! j
-        in v V.// [(j, cur + 1.0)])
-      walk l
-      walk r
+-- | 全木の split 特徴を 1 回の可変ベクトル走査で集計 (純粋)。 旧 'IORef'
+-- 版を 'runST' + 可変ベクトルへ置換 (count の和は可換ゆえ木順不問で同値)。
+importanceOf :: Int -> [Tree] -> V.Vector Double
+importanceOf d trees = runST $ do
+  v <- VM.replicate d 0.0
+  let walk (Leaf _)       = pure ()
+      walk (Node j _ l r) = do
+        VM.modify v (+ 1.0) j
+        walk l
+        walk r
+  mapM_ walk trees
+  V.freeze v

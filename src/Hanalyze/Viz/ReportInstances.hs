@@ -1,3 +1,9 @@
+-- |
+-- Module      : Hanalyze.Viz.ReportInstances
+-- Description : 各種フィット結果型に対する Reportable インスタンス集
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 -- | 'Hanalyze.Viz.ReportBuilder.Reportable' instances for the various fit types.
@@ -19,7 +25,7 @@
 -- 提供されるインスタンス:
 -- - 'RegFit'         (Hanalyze.Model.Regularized) — 正則化線形回帰
 -- - 'SplineFit'      (Hanalyze.Model.Spline)      — B-spline / Natural cubic
--- - 'KernelRidgeFit' (Hanalyze.Model.Kernel)      — Kernel Ridge regression
+-- - 'KernelRidgeFit' (Hanalyze.Model.KernelRegression)      — Kernel Ridge regression
 -- - 'RFFRidgeFit'    (Hanalyze.Model.RFF)         — Random Fourier Features Ridge
 -- - 'RobustGPFit'    (Hanalyze.Model.GPRobust)    — ロバスト GP
 --
@@ -56,7 +62,7 @@ import Hanalyze.Model.LM        (SmoothFit (..))
 import Hanalyze.Model.GLM       (Family (..), LinkFn (..))
 import Hanalyze.Model.Regularized (RegFit (..), Penalty (..), predictRegularized)
 import Hanalyze.Model.Spline     (SplineFit (..), SplineKind (..), predictSpline, sfBeta)
-import Hanalyze.Model.Kernel     (KernelRidgeFit (..), predictKernelRidge)
+import Hanalyze.Model.KernelRegression     (KernelRidgeFit (..), predictKernelRidge)
 import Hanalyze.Model.RFF        (RFFRidgeFit (..), predictRFFRidge, rffrFeatures,
                          rffSigmaF, rffLengthScale, rffOmegas,
                          RFFRidgeFitMV (..), RFFFeaturesMV (..),

@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="490" font-family="DejaVu Sans, sans-serif">
+<rect width="920" height="490" fill="#ffffff"/>
+<text x="20" y="28" font-size="18" font-weight="bold">NUTS (M2, p=12) コストセンタ別 %time — reverse(Reverse.Double) 後</text>
+<text x="20" y="50" font-size="12" fill="#555">個別 %time 上位 15 件 (GHC -prof / ProfNUTS.prof)。 バー長 ∝ %time、 右に (%time / %alloc)</text>
+<text x="352" y="87" font-size="12" text-anchor="end">logDensityObs · Hanalyze.Model.HBM</text>
+<rect x="360" y="73" width="470.0" height="17" fill="#c0392b"/>
+<text x="836.0" y="87" font-size="11" fill="#333">36.3 / 37.7</text>
+<text x="352" y="113" font-size="12" text-anchor="end">glmmRandomIntercept.\.eta · Hanalyze.Model.HBM</text>
+<rect x="360" y="99" width="191.6" height="17" fill="#c0392b"/>
+<text x="557.6" y="113" font-size="11" fill="#333">14.8 / 16.6</text>
+<text x="352" y="139" font-size="12" text-anchor="end">partials · Numeric.AD.Internal.Reverse.Double</text>
+<rect x="360" y="125" width="93.2" height="17" fill="#c0392b"/>
+<text x="459.2" y="139" font-size="11" fill="#333">7.2 / 7.3</text>
+<text x="352" y="165" font-size="12" text-anchor="end">m2Model · Main</text>
+<rect x="360" y="151" width="89.3" height="17" fill="#c0392b"/>
+<text x="455.3" y="165" font-size="11" fill="#333">6.9 / 3.9</text>
+<text x="352" y="191" font-size="12" text-anchor="end">logDensity · Hanalyze.Model.HBM</text>
+<rect x="360" y="177" width="66.0" height="17" fill="#e67e22"/>
+<text x="432.0" y="191" font-size="11" fill="#333">5.1 / 4.1</text>
+<text x="352" y="217" font-size="12" text-anchor="end">logJoint.go · Hanalyze.Model.HBM</text>
+<rect x="360" y="203" width="58.3" height="17" fill="#e67e22"/>
+<text x="424.3" y="217" font-size="11" fill="#333">4.5 / 5.5</text>
+<text x="352" y="243" font-size="12" text-anchor="end">obsLogSum · Hanalyze.Model.HBM</text>
+<rect x="360" y="229" width="51.8" height="17" fill="#e67e22"/>
+<text x="417.8" y="243" font-size="11" fill="#333">4.0 / 4.3</text>
+<text x="352" y="269" font-size="12" text-anchor="end">logDensityObs.yA · Hanalyze.Model.HBM</text>
+<rect x="360" y="255" width="41.4" height="17" fill="#e67e22"/>
+<text x="407.4" y="269" font-size="11" fill="#333">3.2 / 1.5</text>
+<text x="352" y="295" font-size="12" text-anchor="end">&gt;&gt;= · Hanalyze.Model.HBM</text>
+<rect x="360" y="281" width="28.5" height="17" fill="#e67e22"/>
+<text x="394.5" y="295" font-size="11" fill="#333">2.2 / 2.1</text>
+<text x="352" y="321" font-size="12" text-anchor="end">primal · Numeric.AD.Internal.Reverse.Double</text>
+<rect x="360" y="307" width="19.4" height="17" fill="#3498db"/>
+<text x="385.4" y="321" font-size="11" fill="#333">1.5 / 1.2</text>
+<text x="352" y="347" font-size="12" text-anchor="end">glmmRandomIntercept.\ · Hanalyze.Model.HBM</text>
+<rect x="360" y="333" width="16.8" height="17" fill="#3498db"/>
+<text x="382.8" y="347" font-size="11" fill="#333">1.3 / 2.7</text>
+<text x="352" y="373" font-size="12" text-anchor="end">bind · Numeric.AD.Internal.Reverse.Double</text>
+<rect x="360" y="359" width="15.5" height="17" fill="#3498db"/>
+<text x="381.5" y="373" font-size="11" fill="#333">1.2 / 0.9</text>
+<text x="352" y="399" font-size="12" text-anchor="end">fmap · Hanalyze.Model.HBM</text>
+<rect x="360" y="385" width="15.5" height="17" fill="#3498db"/>
+<text x="381.5" y="399" font-size="11" fill="#333">1.2 / 1.9</text>
+<text x="352" y="425" font-size="12" text-anchor="end">glmmRandomIntercept.\.xa · Hanalyze.Model.HBM</text>
+<rect x="360" y="411" width="14.2" height="17" fill="#3498db"/>
+<text x="380.2" y="425" font-size="11" fill="#333">1.1 / 2.6</text>
+<text x="352" y="451" font-size="12" text-anchor="end">glmmRandomIntercept · Hanalyze.Model.HBM</text>
+<rect x="360" y="437" width="12.9" height="17" fill="#3498db"/>
+<text x="378.9" y="451" font-size="11" fill="#333">1.0 / 1.5</text>
+</svg>

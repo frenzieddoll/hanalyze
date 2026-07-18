@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Orthogonal arrays (Taguchi-style @Lₙ@ tables).
+-- |
+-- Module      : Hanalyze.Design.Orthogonal
+-- Description : 直交表 (Taguchi 流 @Lₙ@ 表) の標準表・因子割付・出力レンダリング
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Orthogonal arrays (Taguchi-style @Lₙ@ tables).
 --
 --   * 'OA'              — orthogonal-array representation (name / run
 --     count / factor count / column levels / body).
@@ -24,6 +30,7 @@ module Hanalyze.Design.Orthogonal
   , l12
   , l16
   , l18
+  , l27
   , standardArrays
   , lookupOA
   , listArrays
@@ -151,6 +158,27 @@ l18 = OA "L18(2^1*3^7)" 18 8 (2 : replicate 7 3)
   , [2,3,3,2,1,2,3,1]
   ]
 
+-- | L27(3¹³) — 27 runs, up to 13 three-level factors.
+--
+-- GF(3) 上の線形形式で生成する (手写しの転記ミスを避ける)。 27 run を
+-- @(a,b,c) ∈ {0,1,2}³@ で添字し、 13 列は 3 次元 GF(3) の相異なる 1 次元部分空間
+-- を代表する係数ベクトル (先頭非零 = 1 に正規化) で @α·a+β·b+γ·c mod 3@ を取る。
+-- 相異なる 1 次元部分空間ゆえ任意の 2 列は強度 2 直交 (各水準組が均等出現)。
+-- 列順は標準タグチ L27 の配置 (col1,2 = 基本、 3,4 = その交互作用、 5 = 第3基本…)。
+l27 :: OA
+l27 = OA "L27(3^13)" 27 13 (replicate 13 3) table
+  where
+    coeffs :: [(Int, Int, Int)]
+    coeffs =
+      [ (1,0,0), (0,1,0), (1,1,0), (1,2,0), (0,0,1), (1,0,1), (1,0,2)
+      , (0,1,1), (0,1,2), (1,1,1), (1,1,2), (1,2,1), (1,2,2) ]
+    table =
+      [ [ 1 + ((al*a + be*b + ga*c) `mod` 3) | (al, be, ga) <- coeffs ]
+      | r <- [0 .. 26 :: Int]
+      , let a = r `div` 9
+            b = (r `div` 3) `mod` 3
+            c = r `mod` 3 ]
+
 -- ---------------------------------------------------------------------------
 -- 2 水準系の生成
 -- ---------------------------------------------------------------------------
@@ -191,7 +219,7 @@ l16 = mkL2k 4
 
 -- | The standard arrays bundled with the library.
 standardArrays :: [OA]
-standardArrays = [l4, l8, l9, l12, l16, l18]
+standardArrays = [l4, l8, l9, l12, l16, l18, l27]
 
 -- | Look up a standard array by short name (e.g. @\"L9\"@).
 lookupOA :: Text -> Maybe OA
@@ -202,6 +230,7 @@ lookupOA name0 = case T.toUpper name0 of
   "L12" -> Just l12
   "L16" -> Just l16
   "L18" -> Just l18
+  "L27" -> Just l27
   _     -> Nothing
 
 -- | List of available orthogonal arrays (used by CLI @doe list@).

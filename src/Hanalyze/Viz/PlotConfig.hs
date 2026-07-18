@@ -1,3 +1,9 @@
+-- |
+-- Module      : Hanalyze.Viz.PlotConfig
+-- Description : 全 Viz.* モジュール共有のプロット設定 (PlotConfig / defaultConfig) を定義
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
 {-# LANGUAGE OverloadedStrings #-}
 -- | Common plot configuration shared by every @Hanalyze.Viz.*@ module.
 --

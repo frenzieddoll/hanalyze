@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Multi-output Gaussian processes.
+-- |
+-- Module      : Hanalyze.Model.MultiGP
+-- Description : Multi-output Gaussian processes (共有 HP / per-output 独立 HP の 2 戦略)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Multi-output Gaussian processes.
 --
 -- Two strategies are offered; pick by how outputs should share
 -- hyperparameters:

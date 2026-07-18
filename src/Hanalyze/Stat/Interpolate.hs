@@ -1,4 +1,10 @@
--- | One-dimensional interpolation (Linear / natural cubic spline / PCHIP).
+-- |
+-- Module      : Hanalyze.Stat.Interpolate
+-- Description : 一次元補間 (線形 / 自然三次スプライン / PCHIP)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- One-dimensional interpolation (Linear / natural cubic spline / PCHIP).
 --
 -- Builds a continuous @Double -> Double@ function from observed points
 -- @[(x_i, y_i)]@ (sorted ascending, distinct in x). Out-of-range queries

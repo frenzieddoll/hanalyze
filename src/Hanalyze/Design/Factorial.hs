@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Factorial designs.
+-- |
+-- Module      : Hanalyze.Design.Factorial
+-- Description : 要因計画 (完全/2 水準/3 水準/一部実施/混合水準) の生成
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Factorial designs.
 --
 --   * 'fullFactorial'        — full factorial with @k@ factors each at
 --     @levels[i]@ levels.

@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | External data-format loaders (Parquet / JSON) via the Hackage
+-- |
+-- Module      : Hanalyze.DataIO.External
+-- Description : Hackage dataframe 経由の Parquet / JSON 外部フォーマットローダ
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- External data-format loaders (Parquet / JSON) via the Hackage
 -- @dataframe@ library.
 --
 -- Returns Hackage's 'DataFrame.Internal.DataFrame.DataFrame' directly.
@@ -9,7 +15,7 @@ module Hanalyze.DataIO.External
   , loadJSON
   ) where
 
-import qualified DataFrame                    as DX
+import qualified DataFrame.IO.Parquet          as DX
 import qualified DataFrame.Internal.DataFrame as DXD
 import qualified DataFrame.IO.JSON            as DXJ
 

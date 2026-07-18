@@ -1,5 +1,11 @@
 {-# LANGUAGE StrictData #-}
--- | BLAS-backed pairwise distance helpers.
+-- |
+-- Module      : Hanalyze.Stat.KernelDist
+-- Description : BLAS を使った行列間ペアワイズ距離の高速計算
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- BLAS-backed pairwise distance helpers.
 --
 -- Computes the @n × n@ (or @m × n@) matrix of squared Euclidean
 -- distances between rows of input matrices via the identity

@@ -1,3 +1,9 @@
+-- |
+-- Module      : Hanalyze.Viz.Assets
+-- Description : オフライン HTML レポート用に Vega/Vega-Lite/Vega-Embed の JS 本体を同梱する自動生成モジュール
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
 {-# LANGUAGE OverloadedStrings #-}
 -- Auto-generated from assets/ — do not edit by hand.
 -- Bundles Vega v5, Vega-Lite v5, Vega-Embed v6 for offline HTML reports.

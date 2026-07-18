@@ -1,3 +1,9 @@
+-- |
+-- Module      : Hanalyze.Viz.Histogram
+-- Description : ヒストグラム描画 (基本ヒストグラム + 理論分布密度の重ね描き)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
 {-# LANGUAGE OverloadedStrings #-}
 -- | Histogram plotting.
 --

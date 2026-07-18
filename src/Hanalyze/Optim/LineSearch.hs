@@ -1,5 +1,10 @@
-{-# LANGUAGE StrictData #-}
--- | One-dimensional optimization: Brent's method + golden-section search.
+-- |
+-- Module      : Hanalyze.Optim.LineSearch
+-- Description : 1 次元最適化 (Brent 法・黄金分割探索)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- One-dimensional optimization: Brent's method + golden-section search.
 --
 -- Both find a local minimum on a unimodal interval @[a, b]@ to high
 -- precision.
@@ -13,6 +18,7 @@
 -- Both are gradient-free. They need an initial bracket
 -- @a < x < b@ with @f(x) < f(a), f(b)@; use 'bracketMinimum' to find one
 -- automatically.
+{-# LANGUAGE StrictData #-}
 module Hanalyze.Optim.LineSearch
   ( BrentConfig (..)
   , defaultBrentConfig

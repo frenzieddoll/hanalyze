@@ -60,6 +60,11 @@ A `Hanalyze.Viz.ReportBuilder.SecInteractiveMultiOut` section is embedded:
 - **Predicted curve** (red): JS recomputes all q outputs at the slider value and renders via Vega-Lite.
 - **Observed points** (coloured scatter): each observed dose's `y_z*` overlaid on the z axis.
 
+The underlying model predicts every output as its own curve. Below, a multi-output GP
+yields per-output mean curves with credible bands (each output drawn in a distinct colour):
+
+![Multi-output GP: per-output mean curves with credible bands](../images/multigp-curves.svg)
+
 ## Internal stack
 
 | Layer | API | Role |

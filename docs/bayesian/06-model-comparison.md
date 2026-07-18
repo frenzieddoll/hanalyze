@@ -1,11 +1,11 @@
-# Model comparison (Stat.ModelSelect)
+# Model comparison (Hanalyze.Stat.ModelSelect)
 
 > 🌐 **English** | [日本語](06-model-comparison.ja.md)
 
 > Related demos:
-> - [`gibbs-demo`](../demo/GibbsDemo.hs) — compares two models with WAIC / LOO
-> - [`simpson-paradox`](../demo/SimpsonParadoxDemo.hs) — places LM/GLMM/HBM WAICs side by side in one HTML
-> - [`hbm-random-slope`](../demo/HBMRandomSlopeDemo.hs) — ΔWAIC between random-intercept-only vs. + random-slope
+> - [`gibbs-demo`](../../demo/bayesian/GibbsDemo.hs) — compares two models with WAIC / LOO
+> - [`simpson-paradox`](../../demo/bayesian/SimpsonParadoxDemo.hs) — places LM/GLMM/HBM WAICs side by side in one HTML
+> - [`hbm-random-slope`](../../demo/bayesian/HBMRandomSlopeDemo.hs) — ΔWAIC between random-intercept-only vs. + random-slope
 >
 > CLI: pass `--waic` to embed WAIC/LOO into LM / GLM / GLMM / HBM reports.
 
@@ -20,6 +20,12 @@
 
 **Both: smaller is better** (−2 × elpd scale).
 
+Model comparison is needed because different model families can fit the same data quite
+differently. The figure below overlays a linear model, a Poisson GLM, and a spline on a
+single dataset — WAIC / LOO quantify which of these the data actually supports.
+
+![LM / Poisson GLM / spline fitted to the same data](../images/model-comparison.svg)
+
 ---
 
 ## WAIC (Widely Applicable Information Criterion)
@@ -32,7 +38,7 @@
 ### API
 
 ```haskell
-import Stat.ModelSelect
+import Hanalyze.Stat.ModelSelect
 
 data WAICResult = WAICResult
   { waicValue :: Double  -- WAIC = −2(lppd − p_waic)
@@ -54,8 +60,8 @@ chainLogLikMatrix :: Model a -> Chain -> [[Double]]
 ### Example: comparing two models
 
 ```haskell
-import Stat.ModelSelect
-import MCMC.NUTS (nuts, defaultNUTSConfig)
+import Hanalyze.Stat.ModelSelect
+import Hanalyze.MCMC.NUTS (nuts, defaultNUTSConfig)
 
 -- Model A: weakly informative prior
 modelA :: Model ()
@@ -181,3 +187,54 @@ khatLabel k | k < 0.5   = "good"
 - ΔWAIC = -11.4 is more than 2× the SE → model A is statistically significantly better.
 - A weakly informative prior concentrates the posterior near the truth μ=3, while the
   informative prior on model B pulls toward μ=5 and disagrees more with the data.
+
+---
+
+## Applying to hierarchical models
+
+WAIC / LOO are not restricted to flat models — they apply directly to **hierarchical
+models** as well. Because `perObsLogLiks` returns the **per-observation** log-likelihood
+(no marginalisation required), group-level parameters are aggregated naturally.
+
+### Example: random intercept only vs. + random slope
+
+A typical comparison of `y_ij ~ Normal(α_j + β · x_ij, σ)` (M1: shared β) against
+`y_ij ~ Normal(α_j + β_j · x_ij, σ)` (M2: group-specific β_j):
+
+```haskell
+import Hanalyze.MCMC.NUTS       (nuts, defaultNUTSConfig)
+import Hanalyze.Model.HBM       (perObsLogLiks)
+import Hanalyze.Stat.ModelSelect (waic, loo, waicValue, looValue)
+import Hanalyze.MCMC.Core       (chainSamples)
+
+-- Fit M1 (random intercept only) and M2 (random intercept + random slope) to
+-- the same data. `chainSamples ch :: [Params]` is the posterior sample sequence.
+compareSlopeModels = do
+  ch1 <- nuts modelM1 cfg init1 gen
+  ch2 <- nuts modelM2 cfg init2 gen
+  let ll1 = [perObsLogLiks modelM1 ps | ps <- chainSamples ch1]
+      ll2 = [perObsLogLiks modelM2 ps | ps <- chainSamples ch2]
+  let w1 = waicValue (waic ll1)
+      w2 = waicValue (waic ll2)
+      l1 = looValue  (loo  ll1)
+      l2 = looValue  (loo  ll2)
+  -- ΔWAIC = w2 − w1. Negative → M2 is supported.
+  return (w1, w2, l1, l2)
+```
+
+A fully working implementation lives in [`hbm-random-slope`](../../demo/bayesian/HBMRandomSlopeDemo.hs).
+On data with 3 groups that genuinely have different slopes, M2 (random slope) yields
+smaller WAIC / LOO in practice.
+
+### Caveats specific to hierarchical models
+
+- **Group-level parameters contribute to p_waic**: with a large number of groups J,
+  `p_waic` inflates and the complexity penalty can dominate over fit.
+- **PSIS-LOO k̂ diagnostics are per group**: groups with small within-group N tend to
+  produce k̂ > 0.7, signalling that observations in that group are not exchangeable.
+- **Three-way comparison — complete pooling vs. hierarchical vs. no pooling**: lining
+  up WAIC across the three quantifies the in-between behaviour (shrinkage) of the
+  hierarchical model.
+- **Compare only against the same observed y**: even with identical data, if form A
+  and form B use different `observe` names the decomposition unit of the log-likelihood
+  changes, so always compare under the same conditions.

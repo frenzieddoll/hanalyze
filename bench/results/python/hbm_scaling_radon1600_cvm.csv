@@ -1,0 +1,2 @@
+system,suite,name,time_ms,acc_main,acc_aux,extra
+python,hbm_scaling,radon_iter1600,7847.86,-0.622,1540,iter=1600 warmup=500 key=beta[1] ess=1540.0 ess_per_sec=196.23 tree_depth=4.00 time_ms=7847.9

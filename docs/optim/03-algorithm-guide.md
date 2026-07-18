@@ -59,7 +59,7 @@ flowchart TD
 ### Level 0 — Unconstrained
 
 ```haskell
-import qualified Optim.LBFGS as LBFGS
+import qualified Hanalyze.Optim.LBFGS as LBFGS
 r <- LBFGS.runLBFGS f gradF x0
 ```
 
@@ -81,8 +81,8 @@ config (R5 refactor). Passing `Just bs` enables automatic constraint handling.
 | `Hanalyze.Optim.BayesOpt`           | `boBounds`  | required. Search range for acquisition maximisation |
 
 ```haskell
-import Optim.Common (Bounds)
-import qualified Optim.LBFGS as LBFGS
+import Hanalyze.Optim.Common (Bounds)
+import qualified Hanalyze.Optim.LBFGS as LBFGS
 
 let bs :: Bounds
     bs = [(0, 10), (-1, 1), (-100, 100)]
@@ -94,7 +94,7 @@ For population-based algorithms (DE / NSGA / BO), bounds are required for
 initialisation and so are passed positionally:
 
 ```haskell
-import qualified Optim.DifferentialEvolution as DE
+import qualified Hanalyze.Optim.DifferentialEvolution as DE
 let cfg = DE.defaultDEConfig (replicate 5 (-5.12, 5.12))
 r <- DE.runDEWith cfg rastrigin gen
 ```
@@ -102,7 +102,7 @@ r <- DE.runDEWith cfg rastrigin gen
 ### Level 2 — Equality constraints g(x) = 0
 
 ```haskell
-import qualified Optim.Constrained as Con
+import qualified Hanalyze.Optim.Constrained as Con
 let cs = Con.ConstraintSet
            { Con.csEq   = [\xs -> head xs + xs !! 1 - 1]   -- x1+x2 = 1
            , Con.csIneq = []
@@ -174,7 +174,7 @@ In practice it is often simpler to **absorb box constraints in each algorithm's
 `Hanalyze.Optim.NSGA` handles constrained multi-objective problems via **constraint dominance**:
 
 ```haskell
-import qualified Optim.NSGA as NSGA
+import qualified Hanalyze.Optim.NSGA as NSGA
 let cfg = NSGA.defaultNSGAConfig
             { NSGA.nsgaBounds      = [(0, 10), (0, 10)]
             , NSGA.nsgaConstraints = [\xs -> head xs + xs !! 1 - 5]
@@ -191,7 +191,7 @@ See [02-multi-objective.md](02-multi-objective.md) for details.
 
 ```haskell
 -- declare box constraints
-import Optim.Common (Bounds, clipToBounds, boundsPenalty)
+import Hanalyze.Optim.Common (Bounds, clipToBounds, boundsPenalty)
 
 let bs :: Bounds = [(0, 1), (-1, 1)]
 

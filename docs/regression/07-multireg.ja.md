@@ -61,6 +61,10 @@ hanalyze multireg data/io/potential_wide.csv dose 'y_z*' \
   Vega-Lite で描画
 - **観測点** (色分け散布): 各観測 dose の y_z\* を z 軸上に重ね描き
 
+背後のモデルは各出力をそれぞれ独立した曲線として予測する。下図は多出力 GP の例で、出力ごとの平均曲線と信用区間の帯を (出力ごとに色分けして) 描いている:
+
+![多出力 GP: 出力ごとの平均曲線と信用区間の帯](../images/multigp-curves.svg)
+
 ## 内部構造
 
 | レイヤ | API | 役割 |

@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Robust GP (heavy-tailed observation likelihoods).
+-- |
+-- Module      : Hanalyze.Model.GPRobust
+-- Description : ロバストガウス過程 (重尾観測尤度: Student-t / Cauchy)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Robust GP (heavy-tailed observation likelihoods).
 --
 -- A closed-form Gaussian-likelihood GP is sensitive to outliers. This
 -- module replaces the observation likelihood with Student-t or Cauchy and
@@ -47,6 +53,7 @@ import qualified Hanalyze.Stat.KernelDist      as KD
 import Hanalyze.Model.GP
   ( Kernel
   , GPParams (..)
+  , gpKernelParams
   , kernelFn
   , buildKernelMatrix
   , buildKernelMatrixMV
@@ -116,7 +123,7 @@ fitGPRobust
   -> RobustGPFit
 fitGPRobust ker params lik trainX trainY =
   let n         = length trainX
-      kMatrix   = buildKernelMatrix ker params trainX trainX  -- K (n×n)
+      kMatrix   = buildKernelMatrix ker (gpKernelParams params) trainX trainX  -- K (n×n)
       yV        = LA.fromList trainY
       sigEff2   = likelihoodScale2 lik
       -- 1 反復: f, w を更新
@@ -179,10 +186,10 @@ predictGPRobust fit testX =
   let ker     = rgpKernel fit
       params  = rgpParams fit
       trainX  = rgpTrainX fit
-      kStar   = buildKernelMatrix ker params testX trainX     -- (m, n)
+      kStar   = buildKernelMatrix ker (gpKernelParams params) testX trainX     -- (m, n)
       means   = LA.toList (kStar LA.#> rgpAlpha fit)
       kyInv   = rgpKyInv fit
-      diagKss = [ kernelFn ker params x x | x <- testX ]
+      diagKss = [ kernelFn ker (gpKernelParams params) x x | x <- testX ]
       ws      = kStar LA.<> kyInv                              -- (m, n)
       -- F1: vectorise per-row dots.
       rowDots = LA.toList (KD.rowDotsAB kStar ws)
@@ -256,7 +263,7 @@ fitGPRobustMV
   -> RobustGPFitMV
 fitGPRobustMV ker params lik trainX yV =
   let n         = LA.rows trainX
-      kMatrix   = buildKernelMatrixMV ker params trainX trainX
+      kMatrix   = buildKernelMatrixMV ker (gpKernelParams params) trainX trainX
       sigEff2   = likelihoodScale2 lik
       step (f, w, _iter) =
         let r          = LA.toList (yV - f)
@@ -311,7 +318,7 @@ predictGPRobustMV fit testX =
   let ker     = rgpmvKernel fit
       params  = rgpmvParams fit
       trainX  = rgpmvTrainX fit
-      kStar   = buildKernelMatrixMV ker params testX trainX  -- m × n
+      kStar   = buildKernelMatrixMV ker (gpKernelParams params) testX trainX  -- m × n
       means   = kStar LA.#> rgpmvAlpha fit
       kyInv   = rgpmvKyInv fit
       sf      = gpSignalVar params

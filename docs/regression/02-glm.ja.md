@@ -141,8 +141,8 @@ runIRLS family linkFn x y = ...
 ### 5.1 主要 API
 
 ```haskell
-import Model.GLM
-import Model.Core (FitResult)
+import Hanalyze.Model.GLM
+import Hanalyze.Model.Core (FitResult)
 
 -- ファミリ型
 data Family = Gaussian | Binomial | Poisson
@@ -167,9 +167,25 @@ fitGLMWithSmooth :: Family -> LinkFn -> [(Text, Int)] -> Band -> Int
 
 ### 5.2 最小例: ロジスティック回帰
 
+**高レベル (`df |-> glm`)** — データ源から学習し、当てはめ曲線 + 帯を散布図に
+重畳する (万能動詞・[../io/04-fit-api.md](../io/04-fit-api.ja.md) 参照):
+
 ```haskell
-import Model.GLM
-import Model.Core (coefficientsV)
+import Hanalyze.Plot     (glm, (|->), toPlot)
+import Hgg.Plot.Spec        (layer, scatter)
+import Hgg.Plot.Frame       ((|>>))
+import Hgg.Plot.Backend.SVG (saveSVGBound)
+import Hanalyze.Model.GLM (Family (..), LinkFn (..))
+
+let fit = df |-> glm Binomial Logit "x" "y"   -- GLMModel (canonical link = Logit)
+saveSVGBound "logit.svg" (df |>> (layer (scatter "x" "y") <> toPlot fit))
+```
+
+**低レベル (行列 API)**:
+
+```haskell
+import Hanalyze.Model.GLM
+import Hanalyze.Model.Core (coefficientsV)
 
 let xs   = ...                                -- 計画行列 (1 列目は切片の 1)
     ys   = LA.fromList [0, 1, 1, 0, 1, ...]   -- 0/1 応答
@@ -179,6 +195,10 @@ let xs   = ...                                -- 計画行列 (1 列目は切片
 ```
 
 ### 5.3 ポアソン回帰 (カウントデータ)
+
+**高レベル**: `df |-> glm Poisson Log "x" "y"` (重畳は上と同じパイプライン)。
+
+**低レベル (行列 API)**:
 
 ```haskell
 let cnt  = LA.fromList [3, 5, 0, 2, 7, ...]   -- 非負整数
@@ -277,6 +297,11 @@ $\beta_j = 0.3$ なら:
 
 - $x_j$ が 1 単位増えると **log expected count が +0.3**
 - 等価に **expected count が $e^{0.3} ≈ 1.35$ 倍** (= 35% 増)
+
+ポアソン GLM の当てはめを `toPlot` で可視化すると、生のカウント・
+予測曲線 $\lambda = e^{X\beta}$・区間をまとめて確認できます:
+
+![ポアソン GLM の当てはめ: カウント・予測曲線・区間](../images/glm-poisson-ci.svg)
 
 #### 6.3.3 オフセット (Exposure)
 

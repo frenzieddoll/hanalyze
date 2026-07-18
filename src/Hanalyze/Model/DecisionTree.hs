@@ -1,6 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BangPatterns #-}
--- | Decision tree classifier (CART, classification).
+-- |
+-- Module      : Hanalyze.Model.DecisionTree
+-- Description : 決定木分類器 (CART, classification)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Decision tree classifier (CART, classification).
 --
 -- Pairs with the existing regression-oriented 'Hanalyze.Model.RandomForest';
 -- this module focuses on classification. Splits use Gini impurity as
@@ -9,7 +15,7 @@
 -- @
 -- import Hanalyze.Model.DecisionTree
 --
--- let cfg  = defaultDTConfig
+-- let cfg  = defaultDecisionTree
 --     tree = fitDT cfg xs ys           -- xs :: [[Double]], ys :: [Int]
 --     yhat = map (predictDT tree) xs
 -- @
@@ -24,13 +30,17 @@
 module Hanalyze.Model.DecisionTree
   ( -- * Tree types
     DTree (..)
+  , DTFit (..)
   , DTConfig (..)
-  , defaultDTConfig
+  , defaultDecisionTree
     -- * Fit / predict
   , fitDT
   , fitDTV
   , predictDT
   , predictDTProbs
+    -- * Text export (R @print.rpart@ 相当)
+  , printRpart
+  , printRpartRaw
     -- * Helpers
   , giniImpurity
   ) where
@@ -43,24 +53,47 @@ import qualified Data.Vector.Algorithms.Intro as Intro
 import qualified Numeric.LinearAlgebra       as LA
 import           Control.Monad.ST            (runST)
 import           Data.List                   (foldl')
+import           Data.Text                   (Text)
+import qualified Data.Text                   as T
+import           Numeric                     (showFFloat)
 
 -- ---------------------------------------------------------------------------
 -- Types
 -- ---------------------------------------------------------------------------
 
 -- | Classification decision tree node.
+-- | 決定木。 Phase 75.23 で各ノードに **サンプル数 n / gini 不純度 / クラス分布 /
+-- 多数決クラス** を保持するよう拡張 (rpart.plot / sklearn plot_tree 水準の樹形図・
+-- ルールテキスト出力のため)。 予測 (predict) の数値は不変。
 data DTree
   = DLeaf
-      { dlClassProbs :: !(Map.Map Int Double)
-      , dlMajority   :: !Int
+      { dlClassProbs :: !(Map.Map Int Double)  -- ^ クラス割合。
+      , dlMajority   :: !Int                   -- ^ 多数決クラス (予測)。
+      , dlN          :: !Int                   -- ^ このノードのサンプル数。
+      , dlImpurity   :: !Double                -- ^ gini 不純度。
       }
   | DNode
       { dnFeature :: !Int
       , dnThr     :: !Double
       , dnLeft    :: !DTree
       , dnRight   :: !DTree
+      , dnN        :: !Int                     -- ^ このノードのサンプル数。
+      , dnImpurity :: !Double                  -- ^ 分割前の gini 不純度。
+      , dnProbs    :: !(Map.Map Int Double)    -- ^ 分割前のクラス割合。
+      , dnMajority :: !Int                     -- ^ 分割前の多数決クラス。
       }
   deriving (Show)
+
+-- | 学習済み決定木 + 表示メタ (特徴量名・クラス名)。 高レベル @df |-> decisionTree@
+--   ('Hanalyze.Fit') が fit 時に手元の実列名とクラス列の levels を載せて返す
+--   ('RandomForestClassifier.RFClassifierFit' と同型のラッパ)。 これにより 'treePlot' /
+--   'printRpart' は名前を手渡しせず @DTFit@ 一つで済む。 クラス番号 (0..K-1) は
+--   @dtClassNames !! k@ で名前が引ける。
+data DTFit = DTFit
+  { dtTree         :: !DTree    -- ^ 学習済み木。
+  , dtFeatureNames :: ![Text]   -- ^ 特徴量名 (fit に使った列順)。
+  , dtClassNames   :: ![Text]   -- ^ クラス名 (label 0..K-1 に対応する levels)。
+  } deriving (Show)
 
 -- | Decision tree configuration.
 data DTConfig = DTConfig
@@ -72,8 +105,8 @@ data DTConfig = DTConfig
 
 -- | Defaults (sklearn-compatible): unlimited depth, min split 2,
 -- min leaf 1, min impurity 0.
-defaultDTConfig :: DTConfig
-defaultDTConfig = DTConfig
+defaultDecisionTree :: DTConfig
+defaultDecisionTree = DTConfig
   { dtMaxDepth        = Nothing
   , dtMinSamplesSplit = 2
   , dtMinSamplesLeaf  = 1
@@ -96,7 +129,7 @@ fitDTV cfg x y =
 -- | Backwards-compatible list-based fit.
 fitDT :: DTConfig -> [[Double]] -> [Int] -> DTree
 fitDT cfg xs ys
-  | null xs   = DLeaf Map.empty 0
+  | null xs   = DLeaf Map.empty 0 0 0
   | otherwise = fitDTV cfg (LA.fromLists xs) (VU.fromList ys)
 
 -- ---------------------------------------------------------------------------
@@ -114,17 +147,16 @@ buildNodeV cfg x y idx depth =
   let !nIdx     = VU.length idx
       !sublabs  = VU.map (y VU.!) idx
       !probs    = classProbsV sublabs
-      !majority = case sortByValDescV probs of
-                    ((c, _) : _) -> c
-                    []           -> 0
-      leaf      = DLeaf probs majority
+      !gini     = giniFromCounts probs
+      !majority = argMaxClass probs
+      leaf      = DLeaf probs majority nIdx gini
 
       depthLimit = case dtMaxDepth cfg of
                      Just d  -> depth >= d
                      Nothing -> False
       stop = depthLimit
           || nIdx < dtMinSamplesSplit cfg
-          || giniFromCounts probs < dtMinImpurity cfg
+          || gini < dtMinImpurity cfg
           || allSameV sublabs
   in if stop
        then leaf
@@ -140,6 +172,10 @@ buildNodeV cfg x y idx depth =
                        , dnThr     = thr
                        , dnLeft    = buildNodeV cfg x y lIdx (depth + 1)
                        , dnRight   = buildNodeV cfg x y rIdx (depth + 1)
+                       , dnN        = nIdx
+                       , dnImpurity = gini
+                       , dnProbs    = probs
+                       , dnMajority = majority
                        }
 
 -- | Partition row indices by a feature threshold.
@@ -185,14 +221,22 @@ giniImpurity ys  =
                       Map.empty ys
   in 1 - foldl' (\acc c -> acc + (c / n) ^ (2 :: Int)) 0 (Map.elems counts)
 
-sortByValDescV :: Map.Map Int Double -> [(Int, Double)]
-sortByValDescV =
-  -- Map.toList is ascending key; we want descending by value.
-  reverse . sortByVal . Map.toList
+-- | 多数決 (予測) クラス = 確率最大のクラス。 同点は **最小クラス index** を選ぶ
+--   (rpart / sklearn 慣例)。 'Map.toList' は昇順 key なので、 @foldl'@ で「厳密に
+--   大きい確率でだけ更新」すれば先勝ち = 最小 index の同点タイブレークになる。
+--
+--   ⚠ 旧 @sortByValDescV@ は名前に反して昇順を返し (@reverse . 降順ソート@)、
+--   @head@ が **最小確率クラス (argmin)** を拾っていた。 深さ無制限で葉が純粋な間は
+--   露見しないが、 depth/min_samples で止まった混在葉で予測が少数派に化ける実バグ
+--   だった (Phase 75.26 で樹形図を目視して発覚・修正)。
+argMaxClass :: Map.Map Int Double -> Int
+argMaxClass m = case Map.toList m of
+  []       -> 0
+  (x : xs) -> fst (foldl' better x xs)
   where
-    sortByVal = foldr ins []
-    ins p []     = [p]
-    ins p (q:qs) = if snd p > snd q then p : q : qs else q : ins p qs
+    better acc@(_, av) cur@(_, cv)
+      | cv > av   = cur   -- 厳密に大きい確率のときだけ更新。
+      | otherwise = acc   -- 同点は据置き = 昇順 key で先に来た小さい index が勝つ。
 
 -- ---------------------------------------------------------------------------
 -- Best split: per-feature O(n log n) sweep with running counts
@@ -324,17 +368,116 @@ giniFromIntCountsRO numClasses labels =
 
 -- | Predict the majority class label for one sample.
 predictDT :: DTree -> [Double] -> Int
-predictDT (DLeaf _ m) _ = m
-predictDT (DNode i thr l r) x
+predictDT DLeaf{dlMajority = m} _ = m
+predictDT DNode{dnFeature = i, dnThr = thr, dnLeft = l, dnRight = r} x
   | x !! i <= thr = predictDT l x
   | otherwise     = predictDT r x
 
 -- | Predict class probabilities for one sample.
 predictDTProbs :: DTree -> [Double] -> Map.Map Int Double
-predictDTProbs (DLeaf p _) _ = p
-predictDTProbs (DNode i thr l r) x
+predictDTProbs DLeaf{dlClassProbs = p} _ = p
+predictDTProbs DNode{dnFeature = i, dnThr = thr, dnLeft = l, dnRight = r} x
   | x !! i <= thr = predictDTProbs l x
   | otherwise     = predictDTProbs r x
+
+-- ---------------------------------------------------------------------------
+-- Text export (R print.rpart 相当)
+-- ---------------------------------------------------------------------------
+
+-- | 決定木のルールを R @print.rpart@ 形式のテキストで出力する。
+--
+-- R の rpart オブジェクトを @print@ したときと同じ体裁:
+--
+-- @
+-- n= &lt;total&gt;
+--
+-- node), split, n, loss, yval, (yprob)
+--       * denotes terminal node
+--
+-- 1) root 12 8 setosa (0.3333 0.3333 0.3333)
+--   2) petal_width< 0.80 4 0 setosa (1.0000 0.0000 0.0000) *
+--   3) petal_width>=0.80 8 4 versicolor (0.0000 0.5000 0.5000)
+--     6) petal_width< 1.65 4 0 versicolor (0.0000 1.0000 0.0000) *
+--     7) petal_width>=1.65 4 0 virginica (0.0000 0.0000 1.0000) *
+-- @
+--
+-- 各行 = @&lt;node#&gt;) &lt;split&gt; &lt;n&gt; &lt;loss&gt; &lt;yval&gt; (&lt;yprob…&gt;) [*]@。
+-- ノード番号は R 同様 root=1・子は @2k@/@2k+1@。 @loss@ = 誤分類数
+-- (n − 多数決クラス件数)、 @yval@ = 予測クラス、 @yprob@ = 木に現れる全クラスの
+-- 確率 (クラス index 昇順)、 @*@ = 終端 (葉)。 分岐は R の固定幅表記に忠実に
+-- 左 = @name&lt; thr@ (≤・条件成立)、 右 = @name&gt;=thr@ とする (dtreeToDag と同じ
+-- 左 ≤ / 右 > 慣例)。
+--
+-- 第 1 引数 = 特徴量名、 第 2 引数 = クラス名 (yval に使う factor 水準)。
+-- いずれも index に対し長さ不足・空文字なら @f{i}@ / 生の整数へフォールバックする
+-- (行列 fit で名無しの木でも動く)。 75.23 で各ノードに載せた n / gini / クラス分布
+-- から純粋計算し、 予測 (predict) の数値には非依存。
+-- | 高レベル版 — 'DTFit' からノード規則テキストを出す ('df |-> decisionTree' の返り値
+--   をそのまま渡せる)。 名前を手渡ししたい低レベルは 'printRpartRaw'。
+printRpart :: DTFit -> Text
+printRpart (DTFit tree feats classes) = printRpartRaw feats classes tree
+
+-- | 行列 fit 用の低レベル版 — 特徴量名・クラス名を明示的に渡す。
+printRpartRaw :: [Text] -> [Text] -> DTree -> Text
+printRpartRaw featNames classNames tree =
+  T.intercalate "\n" (header ++ go 1 0 "root" tree)
+  where
+    classes = Map.keys (labelSet tree)          -- 木に現れる全クラス (昇順)。
+    header =
+      [ "n= " <> tShow (nodeN tree)
+      , ""
+      , "node), split, n, loss, yval, (yprob)"
+      , "      * denotes terminal node"
+      , "" ]
+
+    go :: Int -> Int -> Text -> DTree -> [Text]
+    go num d split node =
+      let n     = nodeN node
+          probs = nodeProbs node
+          maj   = nodeMajority node
+          loss  = n - round (Map.findWithDefault 0 maj probs * fromIntegral n) :: Int
+          yprob = "(" <> T.intercalate " "
+                    [ fmt4 (Map.findWithDefault 0 c probs) | c <- classes ] <> ")"
+          term  = case node of DLeaf{} -> " *"; _ -> ""
+          line  = T.concat (replicate d "  ") <> tShow num <> ") " <> split
+                    <> " " <> tShow n <> " " <> tShow loss <> " " <> classLabel maj
+                    <> " " <> yprob <> term
+      in case node of
+           DLeaf{}                -> [line]
+           DNode f thr l r _ _ _ _ ->
+             let fn = featName f
+                 lb = fn <> "< "  <> fmt2 thr
+                 rb = fn <> ">="  <> fmt2 thr
+             in line : go (2 * num) (d + 1) lb l ++ go (2 * num + 1) (d + 1) rb r
+
+    featName i  = pick i featNames  ("f" <> tShow i)
+    classLabel i = pick i classNames (tShow i)
+    pick i xs dflt = case drop i xs of
+      (nm : _) | not (T.null nm) -> nm
+      _                          -> dflt
+
+    tShow  = T.pack . show
+    fmt2 x = T.pack (showFFloat (Just 2) x "")
+    fmt4 x = T.pack (showFFloat (Just 4) x "")
+
+-- | 木に現れる全クラス label を集めた集合 (値は () のダミー)。 'Map.keys' で昇順。
+labelSet :: DTree -> Map.Map Int ()
+labelSet (DLeaf p m _ _)          = Map.insert m () (() <$ p)
+labelSet (DNode _ _ l r _ _ p m)  =
+  Map.unions [Map.insert m () (() <$ p), labelSet l, labelSet r]
+
+-- ノードアクセサ (葉 / 分岐 共通)。
+nodeN :: DTree -> Int
+nodeN (DLeaf _ _ n _)         = n
+nodeN (DNode _ _ _ _ n _ _ _) = n
+
+nodeProbs :: DTree -> Map.Map Int Double
+nodeProbs (DLeaf p _ _ _)         = p
+nodeProbs (DNode _ _ _ _ _ _ p _) = p
+
+nodeMajority :: DTree -> Int
+nodeMajority (DLeaf _ m _ _)         = m
+nodeMajority (DNode _ _ _ _ _ _ _ m) = m
 
 -- Silence unused-import warning for V (keeps import slot for future
 -- variants without re-touching imports).

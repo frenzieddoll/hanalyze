@@ -1,0 +1,19 @@
+system,suite,name,time_ms,acc_main,acc_aux,extra
+haskell,hbm_scaling,M7_pois_iter50,44.658811,0.785518,44.464847,iter=50 warmup=500 key=b ess=44.5 ess_per_sec=995.66 accept=0.842 time_ms=44.7
+haskell,hbm_scaling,M7_pois_iter100,46.465782,0.790343,95.826701,iter=100 warmup=500 key=b ess=95.8 ess_per_sec=2062.31 accept=0.850 time_ms=46.5
+haskell,hbm_scaling,M7_pois_iter200,54.271953,0.786966,160.838541,iter=200 warmup=500 key=b ess=160.8 ess_per_sec=2963.57 accept=0.869 time_ms=54.3
+haskell,hbm_scaling,M7_pois_iter400,70.479017,0.785919,332.747557,iter=400 warmup=500 key=b ess=332.7 ess_per_sec=4721.23 accept=0.894 time_ms=70.5
+haskell,hbm_scaling,M7_pois_iter800,94.829186,0.785086,594.596372,iter=800 warmup=500 key=b ess=594.6 ess_per_sec=6270.18 accept=0.916 time_ms=94.8
+haskell,hbm_scaling,M7_pois_iter1600,149.662854,0.785668,1338.833213,iter=1600 warmup=500 key=b ess=1338.8 ess_per_sec=8945.66 accept=0.932 time_ms=149.7
+haskell,hbm_scaling,M8_logit_iter50,76.268494,1.216388,50.000000,iter=50 warmup=500 key=b ess=50.0 ess_per_sec=655.58 accept=0.853 time_ms=76.3
+haskell,hbm_scaling,M8_logit_iter100,80.133814,1.242051,73.970372,iter=100 warmup=500 key=b ess=74.0 ess_per_sec=923.09 accept=0.865 time_ms=80.1
+haskell,hbm_scaling,M8_logit_iter200,86.568988,1.271205,114.836561,iter=200 warmup=500 key=b ess=114.8 ess_per_sec=1326.53 accept=0.883 time_ms=86.6
+haskell,hbm_scaling,M8_logit_iter400,112.309630,1.270934,345.199064,iter=400 warmup=500 key=b ess=345.2 ess_per_sec=3073.64 accept=0.904 time_ms=112.3
+haskell,hbm_scaling,M8_logit_iter800,149.207518,1.285726,719.361494,iter=800 warmup=500 key=b ess=719.4 ess_per_sec=4821.21 accept=0.928 time_ms=149.2
+haskell,hbm_scaling,M8_logit_iter1600,236.883148,1.283007,1376.984710,iter=1600 warmup=500 key=b ess=1377.0 ess_per_sec=5812.93 accept=0.947 time_ms=236.9
+haskell,hbm_scaling,M9_negbin_iter50,191.628511,0.803317,50.000000,iter=50 warmup=500 key=b ess=50.0 ess_per_sec=260.92 accept=0.915 time_ms=191.6
+haskell,hbm_scaling,M9_negbin_iter100,241.271908,0.797672,100.000000,iter=100 warmup=500 key=b ess=100.0 ess_per_sec=414.47 accept=0.913 time_ms=241.3
+haskell,hbm_scaling,M9_negbin_iter200,256.414298,0.802899,200.000000,iter=200 warmup=500 key=b ess=200.0 ess_per_sec=779.99 accept=0.917 time_ms=256.4
+haskell,hbm_scaling,M9_negbin_iter400,320.822013,0.806457,400.000000,iter=400 warmup=500 key=b ess=400.0 ess_per_sec=1246.80 accept=0.926 time_ms=320.8
+haskell,hbm_scaling,M9_negbin_iter800,452.467060,0.811702,800.000000,iter=800 warmup=500 key=b ess=800.0 ess_per_sec=1768.08 accept=0.935 time_ms=452.5
+haskell,hbm_scaling,M9_negbin_iter1600,692.074060,0.809966,1600.000000,iter=1600 warmup=500 key=b ess=1600.0 ess_per_sec=2311.89 accept=0.938 time_ms=692.1

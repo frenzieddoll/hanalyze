@@ -1,3 +1,9 @@
+-- |
+-- Module      : Hanalyze.Viz.PlotData.DataFrame
+-- Description : Hackage dataframe 用の ToPlotData インスタンス (数値/テキスト列を PlotData に変換)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 -- | 'ToPlotData' instance for Hackage @dataframe@.
@@ -20,7 +26,7 @@ module Hanalyze.Viz.PlotData.DataFrame
 import qualified Data.Map.Strict          as Map
 import           Data.Text                (Text)
 import qualified Data.Vector              as V
-import qualified DataFrame                as DX
+import qualified DataFrame.Internal.DataFrame  as DX
 
 import           Hanalyze.DataIO.Convert  (getDoubleVec, getTextVec)
 import           Hanalyze.Viz.PlotData    (PlotData (..), ToPlotData (..),

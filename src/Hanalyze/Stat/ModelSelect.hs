@@ -1,6 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
--- | MCMC-based model comparison criteria.
+-- |
+-- Module      : Hanalyze.Stat.ModelSelect
+-- Description : MCMC ベースのモデル比較基準 (WAIC / PSIS-LOO / pseudo-BMA)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- MCMC-based model comparison criteria.
 --
 -- Provides WAIC (Widely Applicable Information Criterion) and PSIS-LOO
 -- (Pareto-Smoothed Importance Sampling LOO-CV), plus a @pm.compare@-style

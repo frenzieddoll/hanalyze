@@ -1,0 +1,8 @@
+system,suite,name,time_ms,acc_main,acc_aux,extra
+haskell,hbm_scaling,M9_negbin_iter400,301.194024,0.806457,400.000000,iter=400 warmup=500 key=b ess=400.0 ess_per_sec=1328.05 accept=0.926 time_ms=301.2
+haskell,hbm_scaling,M9_negbin_iter800,674.792694,0.811702,800.000000,iter=800 warmup=500 key=b ess=800.0 ess_per_sec=1185.55 accept=0.935 time_ms=674.8
+haskell,hbm_scaling,M9_negbin_iter1600,762.563496,0.809966,1600.000000,iter=1600 warmup=500 key=b ess=1600.0 ess_per_sec=2098.19 accept=0.938 time_ms=762.6
+haskell,hbm_scaling,M9_negbin_iter3200,1297.279375,0.810824,3200.000000,iter=3200 warmup=500 key=b ess=3200.0 ess_per_sec=2466.70 accept=0.943 time_ms=1297.3
+haskell,hbm_scaling,M9_negbin_iter6400,2311.317472,0.809686,6400.000000,iter=6400 warmup=500 key=b ess=6400.0 ess_per_sec=2768.98 accept=0.944 time_ms=2311.3
+haskell,hbm_scaling,M9_negbin_iter12800,4727.935696,0.811147,12800.000000,iter=12800 warmup=500 key=b ess=12800.0 ess_per_sec=2707.31 accept=0.949 time_ms=4727.9
+haskell,hbm_scaling,M9_negbin_iter25600,9641.727132,0.811888,25600.000000,iter=25600 warmup=500 key=b ess=25600.0 ess_per_sec=2655.13 accept=0.953 time_ms=9641.7

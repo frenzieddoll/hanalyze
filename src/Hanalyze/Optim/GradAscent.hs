@@ -1,5 +1,10 @@
-{-# LANGUAGE OverloadedStrings #-}
--- | Vanilla gradient ascent / descent.
+-- |
+-- Module      : Hanalyze.Optim.GradAscent
+-- Description : 素朴な勾配上昇 / 下降法
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Vanilla gradient ascent / descent.
 --
 -- The numeric-gradient implementation that used to live in
 -- @Hanalyze.Model.GP.optimizeGP@, extracted as a shared foundation. The learning
@@ -11,6 +16,7 @@
 --   * 'Hanalyze.Optim.Adam.runAdam' — momentum-based, robust, recommended default.
 -- - 'Hanalyze.Optim.GradAscent.gradientAscent' — シンプル、軽量、デバッグ容易
 -- - 'Hanalyze.Optim.GradAscent.gradientDescent' — 上の符号反転版
+{-# LANGUAGE OverloadedStrings #-}
 module Hanalyze.Optim.GradAscent
   ( GradConfig (..)
   , defaultGradConfig

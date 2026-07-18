@@ -1,6 +1,12 @@
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE OverloadedStrings #-}
--- | Random Fourier Features (RFF) — kernel approximation.
+-- |
+-- Module      : Hanalyze.Model.RFF
+-- Description : Random Fourier Features (RFF) — Bochner の定理に基づく kernel の明示的特徴写像近似
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Random Fourier Features (RFF) — kernel approximation.
 --
 -- By Bochner's theorem, a stationary kernel
 -- @k(x, x') = ∫ p(ω) e^{iω(x-x')} dω@ admits an explicit feature map
@@ -33,6 +39,8 @@ module Hanalyze.Model.RFF
     -- * Feature generation
   , sampleRFFRBF
   , sampleRFFMatern52
+  , sampleRFFRBFPure
+  , sampleRFFMatern52Pure
   , rffFeatures
   , rffApproxKernel
     -- * RFF ridge regression (primary API: multi-output)
@@ -50,10 +58,15 @@ module Hanalyze.Model.RFF
   , RFFFeaturesMV (..)
   , sampleRFFRBFMV
   , sampleRFFMatern52MV
+  , sampleRFFRBFMVPure
+  , sampleRFFMatern52MVPure
   , rffFeaturesMV
   , RFFRidgeFitMV (..)
   , rffRidgeMV
   , predictRFFRidgeMV
+  , RFFGPFitMV (..)
+  , rffGPMV
+  , predictRFFGPMV
   , RFFRidgeFitMVMO (..)
   , rffRidgeMVMulti
   , predictRFFRidgeMVMulti
@@ -63,13 +76,18 @@ module Hanalyze.Model.RFF
   , maximizeMarginalLikRBFMV_DE
   , MLikResult (..)
     -- * LOOCV closed form (faster HP auto-tuning)
+  , loocvFromPhi
   , loocvRFFRidgeMV
   , gridSearchLOOCVRBFMV
   , gridSearchLOOCVRBFMV_DE
+  , bayesOptLOOCVRBFMV
+  , lbfgsLOOCVRBFMV
   , LOOCVResult (..)
   ) where
 
 import Control.Exception (SomeException, try, evaluate)
+import           Control.Monad.Primitive      (PrimMonad, PrimState)
+import           Data.Word                    (Word32)
 import qualified Data.Vector as V
 import qualified Data.Vector.Storable         as VS
 import qualified Data.Vector.Storable.Mutable as VSM
@@ -78,10 +96,12 @@ import qualified Numeric.LinearAlgebra as LA
 import qualified System.IO.Unsafe
 import System.IO.Unsafe (unsafePerformIO)
 import qualified System.Random.MWC
-import System.Random.MWC (GenIO, uniformR)
+import System.Random.MWC (GenIO, Gen, uniformR, initialize)
 import qualified System.Random.MWC.Distributions as MWCD
 import qualified Hanalyze.Optim.DifferentialEvolution as DEM
 import qualified Hanalyze.Optim.Common as OCM
+import qualified Hanalyze.Optim.BayesOpt as BO
+import qualified Hanalyze.Optim.LBFGS as LBFGS
 import qualified Hanalyze.Stat.Cholesky as Chol
 import qualified Hanalyze.Stat.KernelDist as KD
 import qualified Data.Vector.Algorithms.Intro as Intro
@@ -113,10 +133,16 @@ rffDim = V.length . rffOmegas
 
 -- | Sample RFF features for the RBF kernel: @ω_j ~ N(0, 1/ℓ²)@,
 -- @b_j ~ U(0, 2π)@.
-sampleRFFRBF :: Int      -- ^ Feature dimension @D@.
+--
+-- 'PrimMonad' 汎用 (mwc は 'PrimMonad' 汎用ゆえ ST/IO 両経路で同コード)。
+-- IO 呼び出しは @GenIO = Gen (PrimState IO)@ ゆえ従来どおり。 純粋 (seed) 経路は
+-- 'sampleRFFRBFPure' (Phase 70.5 = 'gp' spec の RFF 近似象限を pure 'fitWith' で完結
+-- させるため・[[kMeansPure]]/[[fitRFVPure]] と一貫)。
+sampleRFFRBF :: PrimMonad m
+             => Int      -- ^ Feature dimension @D@.
              -> Double   -- ^ Length scale @ℓ@.
              -> Double   -- ^ Signal SD @σ_f@.
-             -> GenIO -> IO RFFFeatures
+             -> Gen (PrimState m) -> m RFFFeatures
 sampleRFFRBF d ell sf gen = do
   ws <- V.replicateM d (MWCD.normal 0 (1/ell) gen)
   bs <- V.replicateM d (uniformR (0, 2*pi) gen)
@@ -132,7 +158,8 @@ sampleRFFRBF d ell sf gen = do
 -- @ω = z/√u@ where @z ~ N(0, 1/ℓ²)@ and @u ~ Gamma(ν, ν)@ with @ν = 5/2@.
 -- This is a scaled @df = 5@ Student-t distribution, matching the
 -- spectral density.
-sampleRFFMatern52 :: Int -> Double -> Double -> GenIO -> IO RFFFeatures
+sampleRFFMatern52 :: PrimMonad m
+                  => Int -> Double -> Double -> Gen (PrimState m) -> m RFFFeatures
 sampleRFFMatern52 d ell sf gen = do
   let nu = 2.5 :: Double
   ws <- V.replicateM d $ do
@@ -149,6 +176,17 @@ sampleRFFMatern52 d ell sf gen = do
     , rffSigmaF      = sf
     , rffLengthScale = ell
     }
+
+-- | 純粋 (seed) 版 'sampleRFFRBF'。 同 seed → 同 'RFFFeatures' (ST/IO ビット一致)。
+-- 'gp' spec の @GpRff@/@RidgeRff@ 象限を pure 'fitWith' で完結させる継ぎ目。
+sampleRFFRBFPure :: Int -> Double -> Double -> Word32 -> RFFFeatures
+sampleRFFRBFPure d ell sf seed =
+  runST (initialize (V.singleton seed) >>= sampleRFFRBF d ell sf)
+
+-- | 純粋 (seed) 版 'sampleRFFMatern52'。
+sampleRFFMatern52Pure :: Int -> Double -> Double -> Word32 -> RFFFeatures
+sampleRFFMatern52Pure d ell sf seed =
+  runST (initialize (V.singleton seed) >>= sampleRFFMatern52 d ell sf)
 
 -- ---------------------------------------------------------------------------
 -- 特徴写像
@@ -317,7 +355,8 @@ data RFFFeaturesMV = RFFFeaturesMV
 -- | Sample multivariate RFF features for the RBF kernel.
 -- Each component @ω_j[k] ~ N(0, 1/ℓ²)@ independently.
 sampleRFFRBFMV
-  :: Int -> Int -> Double -> Double -> GenIO -> IO RFFFeaturesMV
+  :: PrimMonad m
+  => Int -> Int -> Double -> Double -> Gen (PrimState m) -> m RFFFeaturesMV
 sampleRFFRBFMV p d ell sf gen = do
   let total = p * d
   ws <- V.replicateM total (MWCD.normal 0 (1/ell) gen)
@@ -334,7 +373,8 @@ sampleRFFRBFMV p d ell sf gen = do
 
 -- | Sample multivariate RFF features for the Matérn 5/2 kernel.
 sampleRFFMatern52MV
-  :: Int -> Int -> Double -> Double -> GenIO -> IO RFFFeaturesMV
+  :: PrimMonad m
+  => Int -> Int -> Double -> Double -> Gen (PrimState m) -> m RFFFeaturesMV
 sampleRFFMatern52MV p d ell sf gen = do
   let nu = 2.5 :: Double
   ws <- V.replicateM (p * d) $ do
@@ -350,6 +390,16 @@ sampleRFFMatern52MV p d ell sf gen = do
     , rffmvSigmaF      = sf
     , rffmvLengthScale = ell
     }
+
+-- | 純粋 (seed) 版 'sampleRFFRBFMV'。
+sampleRFFRBFMVPure :: Int -> Int -> Double -> Double -> Word32 -> RFFFeaturesMV
+sampleRFFRBFMVPure p d ell sf seed =
+  runST (initialize (V.singleton seed) >>= sampleRFFRBFMV p d ell sf)
+
+-- | 純粋 (seed) 版 'sampleRFFMatern52MV'。
+sampleRFFMatern52MVPure :: Int -> Int -> Double -> Double -> Word32 -> RFFFeaturesMV
+sampleRFFMatern52MVPure p d ell sf seed =
+  runST (initialize (V.singleton seed) >>= sampleRFFMatern52MV p d ell sf)
 
 -- | Multivariate feature matrix: @X (n × p) → Φ (n × D)@.
 -- @φ_j(x) = σ_f √(2/D) cos(ω_jᵀ x + b_j)@.
@@ -410,6 +460,46 @@ predictRFFRidgeMV :: RFFRidgeFitMV -> LA.Matrix Double -> [Double]
 predictRFFRidgeMV fit xNew =
   let phi = rffFeaturesMV (rffrmvFeatures fit) xNew
   in LA.toList (phi LA.#> rffrmvWeights fit)
+
+-- | Multivariate-input RFF GP (Bayesian linear regression on RFF features).
+-- The multi-input analogue of 'rffGP': same posterior algebra
+-- (@Σ⁻¹ = ΦᵀΦ/σ_n² + I@, @μ = Σ Φᵀy/σ_n²@) but @Φ@ comes from
+-- 'rffFeaturesMV'. Used by the @GpRff@ quadrant of the unified @gpMulti@
+-- spec to provide a posterior-variance band under RFF approximation.
+data RFFGPFitMV = RFFGPFitMV
+  { rffgpmvFeatures :: RFFFeaturesMV
+  , rffgpmvSigma    :: LA.Matrix Double   -- ^ Posterior covariance @Σ@ (@D × D@).
+  , rffgpmvMean     :: LA.Vector Double   -- ^ Posterior mean @μ@ (length @D@).
+  , rffgpmvSigmaN   :: Double             -- ^ Observation noise SD @σ_n@.
+  } deriving (Show)
+
+-- | Fit a multivariate-input RFF Bayesian-linear-regression GP.
+rffGPMV :: RFFFeaturesMV -> LA.Matrix Double -> [Double] -> Double -> RFFGPFitMV
+rffGPMV rff x ys sigmaN =
+  let phi    = rffFeaturesMV rff x
+      d      = LA.cols (rffmvOmegas rff)
+      sigN2  = sigmaN ^ (2 :: Int)
+      yV     = LA.fromList ys
+      sigInv = LA.scale (1 / sigN2) (LA.tr phi LA.<> phi) `LA.add` LA.ident d
+      sigma  = LA.inv sigInv
+      mu     = sigma LA.#> LA.scale (1 / sigN2) (LA.tr phi LA.#> yV)
+  in RFFGPFitMV
+       { rffgpmvFeatures = rff
+       , rffgpmvSigma    = sigma
+       , rffgpmvMean     = mu
+       , rffgpmvSigmaN   = sigmaN
+       }
+
+-- | Per-test-point @(mean, variance of f)@ for an 'RFFGPFitMV'. The
+-- observation-noise term @σ_n²@ is /not/ added (matching 'predictRFFGP').
+predictRFFGPMV :: RFFGPFitMV -> LA.Matrix Double -> [(Double, Double)]
+predictRFFGPMV fit xNew =
+  let phi   = rffFeaturesMV (rffgpmvFeatures fit) xNew
+      mu    = rffgpmvMean fit
+      sigma = rffgpmvSigma fit
+      means = LA.toList (phi LA.#> mu)
+      vars  = [ max 0 (LA.dot p (sigma LA.#> p)) | p <- LA.toRows phi ]
+  in zip means vars
 
 -- | Multivariate-input multi-output RFF ridge fit. @X@ is @n × p@,
 -- @Y@ is @n × q@, weights @W@ are @D × q@.
@@ -829,4 +919,133 @@ gridSearchLOOCVRBFMV_DE p d x y nGen gen = do
     , lcLambda = bestLam
     , lcLOOCV  = bestL
     , lcGridPts = OCM.orIters r * DEM.dePopSize cfg
+    }
+
+-- | Bayesian-optimization variant of 'gridSearchLOOCVRBFMV'
+-- (金子流: 初期点 + GP 代理モデル + 獲得関数で評価回数を削減)。
+--
+-- グリッドの 160 点 (8 ℓ × 20 λ) に対し、 既定 30 評価 (init 8 + iter 22) で
+-- 同等の @(ℓ, λ)@ を (log ℓ, log λ) の 2 次元 BO ('BO.bayesOptND') で求める。
+--
+-- **RFF + BO の肝**: RFF の周波数 ω~N(0, 1/ℓ) はランダムなので、 同じ @(ℓ,λ)@ でも
+-- 引き直すと LOOCV が変わる (stochastic)。 BO は決定的目的関数を仮定するため、
+-- ここでは **基底 ω₀~N(0,1) と bias b を 1 度だけ引いて固定**し、 ℓ ごとに
+-- @ω = ω₀ / ℓ@ とスケールする。 これで LOOCV(ℓ,λ) は ℓ の決定的関数になり、 GP 代理
+-- が綺麗に乗る。 ℓ ごとに ω を引き直す grid / DE 版 (上記) より MC ノイズが小さく
+-- **むしろ安定**。 D を上げるほど RFF の分散は減る。
+bayesOptLOOCVRBFMV
+  :: Int                               -- ^ p (入力次元)
+  -> Int                               -- ^ D (特徴次元)
+  -> LA.Matrix Double                  -- ^ X
+  -> LA.Vector Double                  -- ^ y
+  -> Maybe (Int, Int)                  -- ^ (initPoints, iterations) default (8, 22) = 30 評価
+  -> System.Random.MWC.GenIO
+  -> IO LOOCVResult
+bayesOptLOOCVRBFMV p d x y mBudget gen = do
+  let (nInit, nIter) = case mBudget of { Just b -> b; Nothing -> (8, 22) }
+      yStd  = sampleStd (LA.toList y)
+      sf    = max 1e-9 yStd
+      ellM  = max 1e-3 (medianPairwiseDist x)
+      bounds =
+        [ (log (ellM * 0.05), log (ellM * 20))      -- log ℓ
+        , (log (yStd * 1e-6), log (yStd * 10))      -- log λ
+        ]
+  -- 基底周波数 ω₀~N(0,1) + bias b を 1 度だけ引いて固定 (= 決定的目的関数化)。
+  ws0 <- V.replicateM (p * d) (MWCD.normal 0 1 gen)
+  bs  <- V.replicateM d (uniformR (0, 2 * pi) gen)
+  let omega0 = LA.reshape d (LA.fromList (V.toList ws0))   -- p × d (ℓ=1 相当)
+      featsAt ell =
+        RFFFeaturesMV
+          { rffmvKernel      = RFFRBF
+          , rffmvDim         = p
+          , rffmvOmegas      = LA.scale (1 / ell) omega0   -- ω = ω₀ / ℓ
+          , rffmvBs          = bs
+          , rffmvSigmaF      = sf
+          , rffmvLengthScale = ell
+          }
+      objective [le, llam] =
+        let ell = exp le
+            lam = exp llam
+            phi = rffFeaturesMV (featsAt ell) x
+        in pure (loocvFromPhi phi y lam)
+      objective _ = pure (1 / 0)   -- 次元不一致は +∞ (起き得ないが total に)
+      cfg = BO.defaultBayesOptConfig
+              { BO.boInitPoints = nInit, BO.boIterations = nIter }
+  (_history, (bestXs, bestL)) <- BO.bayesOptND cfg 8 objective bounds gen
+  let (bestEll, bestLam) = case bestXs of
+        (le : llam : _) -> (exp le, exp llam)
+        _               -> (ellM, yStd * 1e-3)
+  return LOOCVResult
+    { lcEll = max 1e-6 bestEll
+    , lcSigmaF = sf
+    , lcLambda = max 1e-8 bestLam
+    , lcLOOCV  = bestL
+    , lcGridPts = nInit + nIter
+    }
+
+-- | L-BFGS variant of 'gridSearchLOOCVRBFMV' (固定基底 + 数値勾配 L-BFGS の多始点)。
+--
+-- 'bayesOptLOOCVRBFMV' と同じく **基底 ω₀~N(0,1) を 1 度引いて固定**し ℓ で
+-- スケールすることで LOOCV(log ℓ, log λ) を決定的・微分可能化し、 数値勾配 L-BFGS
+-- ('LBFGS.runLBFGSNumeric'、 GP の 'optimizeGP' と同じ engine) を複数始点から回して
+-- LOOCV 最小を採る。 GP の多始点 L-BFGS の RFF 版で、 評価は O(D³) なので大 n でも
+-- スケーラブル (厳密 GP marginal likelihood の O(n³) を回避)。 grid の離散性も BO の
+-- 粗いサロゲートも避け、 連続最適化で (ℓ,λ) を精密に当てる。
+lbfgsLOOCVRBFMV
+  :: Int                               -- ^ p (入力次元)
+  -> Int                               -- ^ D (特徴次元)
+  -> LA.Matrix Double                  -- ^ X
+  -> LA.Vector Double                  -- ^ y
+  -> Maybe Int                         -- ^ multi-start 数 (default 4)
+  -> System.Random.MWC.GenIO
+  -> IO LOOCVResult
+lbfgsLOOCVRBFMV p d x y mStarts gen = do
+  let nStarts = max 1 (case mStarts of { Just n -> n; Nothing -> 3 })
+      yStd    = sampleStd (LA.toList y)
+      sf      = max 1e-9 yStd
+      ellM    = max 1e-3 (medianPairwiseDist x)
+      logEll0 = log ellM
+      logLam0 = log (max 1e-12 (yStd * 1e-3))
+  -- 基底 ω₀ + bias を 1 度だけ引いて固定 (= 決定的・微分可能化)。
+  ws0 <- V.replicateM (p * d) (MWCD.normal 0 1 gen)
+  bs  <- V.replicateM d (uniformR (0, 2 * pi) gen)
+  let omega0 = LA.reshape d (LA.fromList (V.toList ws0))
+      featsAt ell =
+        RFFFeaturesMV
+          { rffmvKernel      = RFFRBF
+          , rffmvDim         = p
+          , rffmvOmegas      = LA.scale (1 / ell) omega0
+          , rffmvBs          = bs
+          , rffmvSigmaF      = sf
+          , rffmvLengthScale = ell
+          }
+      -- LOOCV (最小化対象、 lbDir 既定 = Minimize)。
+      obj [le, llam] = loocvFromPhi (rffFeaturesMV (featsAt (exp le)) x) y (exp llam)
+      obj _          = 1 / 0
+      -- 2D 目的なので maxIter は控えめで十分収束 (数値勾配が高 D で高コストなため
+      -- 評価数を抑える)。 multi-start で局所性をカバー。
+      cfg = LBFGS.defaultLBFGSConfig
+              { LBFGS.lbStop = OCM.defaultStopCriteria
+                                 { OCM.stMaxIter = 40, OCM.stTolFun = 1e-8 } }
+  -- 多始点: base + (nStarts-1) ランダム摂動 (log 空間 正規)。
+  perturbs <- mapM (\_ -> do
+                      ze <- MWCD.normal 0 1.5 gen
+                      zl <- MWCD.normal 0 2.0 gen
+                      pure [logEll0 + ze, logLam0 + zl])
+                   [1 .. nStarts - 1]
+  results <- mapM (LBFGS.runLBFGSNumeric cfg obj) ([logEll0, logLam0] : perturbs)
+  let isFin v = not (isNaN v || isInfinite v)
+      scored  = [ (OCM.orBest r, OCM.orValue r) | r <- results, isFin (OCM.orValue r) ]
+      (bestX, bestVal) = case scored of
+        [] -> ([logEll0, logLam0], obj [logEll0, logLam0])
+        _  -> foldr1 (\a b -> if snd a <= snd b then a else b) scored
+      (bLe, bLlam) = case bestX of
+        (a : b : _) -> (a, b)
+        _           -> (logEll0, logLam0)
+  return LOOCVResult
+    { lcEll     = max 1e-6 (exp bLe)
+    , lcSigmaF  = sf
+    , lcLambda  = max 1e-8 (exp bLlam)
+    , lcLOOCV   = bestVal
+    , lcGridPts = nStarts
     }

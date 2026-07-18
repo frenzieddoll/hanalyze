@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Model interpretability tools.
+-- |
+-- Module      : Hanalyze.Stat.Interpret
+-- Description : モデル解釈ツール (permutation importance / partial dependence / ICE)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Model interpretability tools.
 --
 -- Model-agnostic explanations of predictions:
 --

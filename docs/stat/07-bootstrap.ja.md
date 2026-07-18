@@ -6,7 +6,7 @@
 ## 1. Bootstrap
 
 ```haskell
-import qualified Stat.Bootstrap as Boot
+import qualified Hanalyze.Stat.Bootstrap as Boot
 import qualified System.Random.MWC as MWC
 
 gen <- MWC.createSystemRandom

@@ -1,5 +1,10 @@
-{-# LANGUAGE StrictData #-}
--- | CMA-ES (Covariance Matrix Adaptation Evolution Strategy) — Hansen 2001.
+-- |
+-- Module      : Hanalyze.Optim.CMAES
+-- Description : CMA-ES 簡易版 (対角共分散のみ) — 非凸連続最適化
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- CMA-ES (Covariance Matrix Adaptation Evolution Strategy) — Hansen 2001.
 --
 -- The de-facto state of the art for non-convex continuous optimization.
 -- This module implements a **simplified single-stage** version of the
@@ -15,6 +20,7 @@
 --   (no path cumulation). Sufficient for problems up to Rastrigin 5D.
 --
 -- For the full-rank tutorial CMA-ES (Hansen 2016), see 'Hanalyze.Optim.CMAESFull'.
+{-# LANGUAGE StrictData #-}
 module Hanalyze.Optim.CMAES
   ( CMAESConfig (..)
   , defaultCMAESConfig
