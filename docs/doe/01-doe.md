@@ -24,7 +24,7 @@
 ## 1. Full factorial (`Hanalyze.Design.Factorial`)
 
 ```haskell
-import Design.Factorial
+import Hanalyze.Design.Factorial
 
 -- 2-level × k factors: each factor takes ±1
 twoLevelFactorial :: Int -> [[Double]]
@@ -59,7 +59,7 @@ mixedFactorial :: [Int] -> [[Double]]
 ## 2. Block designs (`Hanalyze.Design.Block`)
 
 ```haskell
-import Design.Block
+import Hanalyze.Design.Block
 
 -- 4×4 Latin square (1..n appears once per row and column)
 latinSquare :: Int -> [[Int]]
@@ -78,7 +78,7 @@ randomizedBlock :: Int -> Int -> Int -> [[Int]]
 ## 3. ANOVA (`Hanalyze.Design.Anova`)
 
 ```haskell
-import Design.Anova
+import Hanalyze.Design.Anova
 
 oneWayAnova :: [Text] -> [Double] -> AnovaTable
 twoWayAnova :: [Text] -> [Text] -> [Double] -> AnovaTable
@@ -151,7 +151,7 @@ let n = sampleSizeTTest 0.5 0.8 0.05  -- → 64
 ## 5. Design quality metrics (`Hanalyze.Design.Quality`)
 
 ```haskell
-import Design.Quality
+import Hanalyze.Design.Quality
 
 isOrthogonal       :: Double -> [[Double]] -> Bool        -- tolerance ε
 orthogonalityScore :: [[Double]] -> Double                -- 0..1
@@ -175,7 +175,7 @@ vifList            :: [[Double]] -> [Double]              -- VIF per column
 Designs and analyses to find the optimum of a quadratic response surface.
 
 ```haskell
-import Design.RSM
+import Hanalyze.Design.RSM
 
 -- Central composite design (CCD)
 data CCDType = CCC Double | CCF | CCI Double
@@ -204,6 +204,19 @@ let fit = fitQuadratic design ys
 -- All eigs < 0 → x* is a local maximum
 ```
 
+The fitted quadratic model is best understood as a surface. The figure below
+shows the estimated second-order response surface in 3D, with a contour map
+projected on the floor and the CCD design points overlaid as the actual
+observations.
+
+![Estimated quadratic response surface with floor contour and CCD design points](../images/rsm-surface-3d.svg)
+
+Rotating the same surface helps confirm its three-dimensional shape and locate
+the curvature. The four panels below show the surface viewed from azimuths of
+0°, 45°, 90°, and 135°.
+
+![The same response surface rotated through azimuths 0/45/90/135°](../images/rsm-rotation.svg)
+
 ---
 
 ## 6.5 Orthogonal arrays Lₙ (`Hanalyze.Design.Orthogonal`)
@@ -213,7 +226,7 @@ number of runs; the **parenthesized expression** describes the level
 structure (e.g. L18(2¹×3⁷) = 1 factor × 2 levels + 7 factors × 3 levels).
 
 ```haskell
-import qualified Design.Orthogonal as OA
+import qualified Hanalyze.Design.Orthogonal as OA
 
 -- Standard arrays
 OA.l4    -- L4(2^3)        4 runs × 3 columns (2 levels)
@@ -279,7 +292,7 @@ A robust-design analysis layer built on top of `Hanalyze.Design.Orthogonal`.
 ### Four SN ratios
 
 ```haskell
-import qualified Design.Taguchi as TG
+import qualified Hanalyze.Design.Taguchi as TG
 
 TG.snRatio TG.SmallerBetter        ys   -- η = -10 log10(Σ y²/n)
 TG.snRatio TG.LargerBetter         ys   -- η = -10 log10(Σ (1/y²)/n)
@@ -331,7 +344,7 @@ hanalyze taguchi cross L9 L4 \
 Pick the best-of-size subset from a candidate set via Fedorov exchange.
 
 ```haskell
-import Design.Optimal
+import Hanalyze.Design.Optimal
 
 data OptCriterion = DOpt | AOpt
 
@@ -389,3 +402,9 @@ let nA = sampleSizeOneWayAnova 0.25 3 0.8 0.05
 - Theory: [docs/doe/theory-doe.md](theory-doe.md)
 - Demos: `doe-demo`, `rsm-demo`, `optimaldoe-demo`
 - Related regression: fit factor effects with `Hanalyze.Model.LM`
+- **Custom Design extensions (Phase 23-26, JMP-equivalent advanced features)**:
+  → [docs/doe/manual-custom-design.md](manual-custom-design.md) (integrated manual)
+  - [usage-classic-extensions.ja.md](usage-classic-extensions.ja.md) (Phase 23: G-opt / Compound / Constraint / non-normal Cp / multivariate Cp; ja primary)
+  - [usage-custom-design.md](usage-custom-design.md) (Phase 24: Custom Design Core)
+  - [usage-augment-splitplot.md](usage-augment-splitplot.md) (Phase 25: SplitPlot + Augment)
+  - [usage-bayesian-d.md](usage-bayesian-d.md) (Phase 26: Bayesian-D)

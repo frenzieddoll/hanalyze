@@ -39,7 +39,7 @@ hanalyze の主要回帰モデルはすべて **「多出力 (Y :: Matrix n×q) 
 残差共分散 Σ も推定したい場合の専用 API:
 
 ```haskell
-import Model.MultiLM
+import Hanalyze.Model.MultiLM
 
 let mf    = fitMultiLM xMat yMat   -- X (n×p), Y (n×q)
 let yPred = predictMultiLM mf xNewMat
@@ -52,6 +52,10 @@ API:
 - `predictMultiLM :: MultiFit -> Matrix -> Matrix`
 - `mfResidCov`, `mfResidCor`: 残差の共分散 / 相関
 
+残差相関行列 `mfResidCor` は、線形当てはめ後にどの出力同士が説明しきれない構造を共有しているかを表す。これをヒートマップで可視化すると、強く相関する出力の組 (非対角の明るいセル) が一目で分かる:
+
+![多出力線形回帰の残差相関ヒートマップ](../images/multilm-resid-corr.svg)
+
 ---
 
 ## 2. 多出力 Spline / Kernel / Regularized / RFF
@@ -59,11 +63,11 @@ API:
 すべて行列形式 1 回求解 (Ridge/OLS) または共有計算 + 列ごと反復 (Lasso/EN/IRLS):
 
 ```haskell
-import Model.Spline      (fitSplineMulti, predictSplineMulti, BSpline (..))
-import Model.Kernel      (kernelRidgeMulti, predictKernelRidgeMulti
+import Hanalyze.Model.Spline      (fitSplineMulti, predictSplineMulti, BSpline (..))
+import Hanalyze.Model.Kernel      (kernelRidgeMulti, predictKernelRidgeMulti
                          , autoTuneKernelRidgeMulti, defaultHGrid, defaultLamGrid)
-import Model.Regularized (fitRegularizedMulti, predictRegularizedMulti, Penalty (..))
-import Model.RFF         (rffRidgeMulti, predictRFFRidgeMulti, sampleRFFRBF)
+import Hanalyze.Model.Regularized (fitRegularizedMulti, predictRegularizedMulti, Penalty (..))
+import Hanalyze.Model.RFF         (rffRidgeMulti, predictRFFRidgeMulti, sampleRFFRBF)
 
 -- Spline (q 出力同時)
 let sf    = fitSplineMulti (BSpline 3) knots xs yMat
@@ -94,7 +98,7 @@ let yPred = predictRFFRidgeMulti mf xListNew
 ## 3. RRR / PLS / CCA (`Hanalyze.Model.Multivariate`)
 
 ```haskell
-import Model.Multivariate
+import Hanalyze.Model.Multivariate
 
 -- RRR (rank 制約)
 let rrr = reducedRankRegression r xMat yMat
@@ -109,6 +113,32 @@ let ccaFit = cca xMat yMat
 -- ccaCorr ccaFit: 各 canonical correlation
 -- ccaA, ccaB:    各サイドの基底 (n × r)
 ```
+
+`pls k xMat yMat` は `PLSFit` を返し、 これは `Plottable` です。 専用抽出子
+`plsScorePlot` / `plsLoadingPlot` / `plsVipPlot` (`Hanalyze.Plot`) が、 当てはめ
+だけから (データ不要で) 下記 3 図を生成します:
+
+```haskell
+import Hanalyze.Plot (plsScorePlot, plsLoadingPlot, plsVipPlot)
+import Hgg.Plot.Frame   ((|>>))
+import Hgg.Plot.Spec    (ColData)
+
+let noDf = [] :: [(Text, ColData)]
+    scorePlot   = noDf |>> plsScorePlot   pls'
+    loadingPlot = noDf |>> plsLoadingPlot pls'
+    vipPlot     = noDf |>> plsVipPlot     pls'
+```
+
+PLS のスコアプロットは、サンプルを最初の数個の潜在成分に射影したもので、潜在空間上のクラスタや傾向を可視化できる:
+
+![PLS スコアプロット (第 1・第 2 潜在成分)](../images/pls-score.svg)
+
+ローディングプロットは各元変数が潜在成分にどう寄与するかを示し、VIP (Variable
+Importance in Projection) は予測子を総合的な寄与度で順位付けする:
+
+![PLS ローディングプロット](../images/pls-loading.svg)
+
+![PLS VIP (variable importance in projection)](../images/pls-vip.svg)
 
 ---
 
@@ -170,8 +200,8 @@ let res = fitMultiGPIndep RBF trainX trainYs testX
 StudentT / Cauchy 観測尤度で外れ値耐性、列ごと IRLS:
 
 ```haskell
-import qualified Model.GP as GP
-import qualified Model.GPRobust as GPR
+import qualified Hanalyze.Model.GP as GP
+import qualified Hanalyze.Model.GPRobust as GPR
 
 let mf = GPR.fitGPRobustMulti GP.RBF GP.defaultGPParams
                               (GPR.RStudentT 4 0.3) trainX trainYMat

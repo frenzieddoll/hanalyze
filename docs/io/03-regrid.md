@@ -3,7 +3,7 @@
 > 🌐 **English** | [日本語](03-regrid.ja.md)
 
 > Related: [01-dirty-data.md](01-dirty-data.md) (dirty-data defense),
-> [DataIO.Preprocess.meltLonger](../../src/DataIO/Preprocess.hs) (wide → long)
+> [DataIO.Preprocess.meltLonger](../../src/hanalyze/Analyze/DataIO/Preprocess.hs) (wide → long)
 
 For long-form data where the **z axis is slightly misaligned across ids and
 partially missing** (typical of "V-Z profiles per process condition" in
@@ -82,9 +82,9 @@ are honored just like in other subcommands.
 ## Library API
 
 ```haskell
-import qualified DataIO.Preprocess as Pp
-import qualified Stat.Interpolate  as Interp
-import qualified Stat.AdaptiveGrid as AG
+import qualified Hanalyze.DataIO.Preprocess as Pp
+import qualified Hanalyze.Stat.Interpolate  as Interp
+import qualified Hanalyze.Stat.AdaptiveGrid as AG
 
 let opts = Pp.defaultRegridOpts
              { Pp.roInterp      = Interp.PCHIP

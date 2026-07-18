@@ -50,7 +50,7 @@ $$ \hat{y}(x) = \beta_0 + \sum_j s_j(x_j) $$
 ## ライブラリ API
 
 ```haskell
-import Model.GAM
+import Hanalyze.Model.GAM
 
 data GAMFit = GAMFit
   { gamDegree    :: Int
@@ -82,7 +82,7 @@ predictGAMComponent :: GAMFit -> Int -> V.Vector Double -> V.Vector Double
 ```haskell
 {-# LANGUAGE OverloadedStrings #-}
 import qualified Data.Vector as V
-import Model.GAM
+import Hanalyze.Model.GAM
 
 main :: IO ()
 main = do
@@ -102,6 +102,11 @@ main = do
   putStrLn $ "s_1 range: " ++ show (V.minimum s1, V.maximum s1)
 ```
 
+`predictGAMComponent` で取り出した各 $s_j$ を描くと、その変数の非線形効果
+(加法平滑曲線) を散布図上で確認できる。これが GAM の解釈性の核となる出力。
+
+![GAM の加法平滑曲線 (散布図 + 平滑曲線)](../images/gam-smooth.svg)
+
 ## CLI
 
 ```bash
@@ -119,7 +124,7 @@ hanalyze gam data.csv "x1 x2 x3" y \
 現状 `Reportable GAMFit` 未提供。CLI ハンドラを参考に独自構築:
 
 ```haskell
-import qualified Viz.ReportBuilder as RB
+import qualified Hanalyze.Viz.ReportBuilder as RB
 
 let baseSec = [ RB.secDataOverview df xCols yCol
               , RB.secModelOverview "GAM" formula Nothing

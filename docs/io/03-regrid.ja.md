@@ -3,7 +3,7 @@
 > 🌐 [English](03-regrid.md) | **日本語**
 
 > 関連: [01-dirty-data.ja.md](01-dirty-data.ja.md) (汚いデータ防衛)、
-> [DataIO.Preprocess.meltLonger](../../src/DataIO/Preprocess.hs) (wide → long)
+> [DataIO.Preprocess.meltLonger](../../src/hanalyze/Analyze/DataIO/Preprocess.hs) (wide → long)
 
 「半導体プロセスの V-Z プロファイル」のように **id (条件) ごとに z 軸が
 微妙にズレ + 部分的に欠損** している long-form データを、**共通 z grid に
@@ -83,9 +83,9 @@ hanalyze regrid data/io/potential_long_jagged.csv \
 ## ライブラリ API
 
 ```haskell
-import qualified DataIO.Preprocess as Pp
-import qualified Stat.Interpolate  as Interp
-import qualified Stat.AdaptiveGrid as AG
+import qualified Hanalyze.DataIO.Preprocess as Pp
+import qualified Hanalyze.Stat.Interpolate  as Interp
+import qualified Hanalyze.Stat.AdaptiveGrid as AG
 
 let opts = Pp.defaultRegridOpts
              { Pp.roInterp      = Interp.PCHIP

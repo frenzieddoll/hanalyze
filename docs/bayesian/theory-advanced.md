@@ -83,7 +83,7 @@ Kucukelbir et al. (2017). Applies to any model automatically:
 ### 1.5 Usage in hanalyze
 
 ```haskell
-import Stat.VI (advi, defaultVIConfig, VIConfig (..), VIResult (..))
+import Hanalyze.Stat.VI (advi, defaultVIConfig, VIConfig (..), VIResult (..))
 
 result <- advi model defaultVIConfig
                   { viIterations = 5000, viLearningRate = 0.05 }
@@ -148,7 +148,7 @@ When the weight distribution has heavy tails it becomes unstable. **Smooth with 
 ### 2.5 Usage in hanalyze
 
 ```haskell
-import Stat.ModelSelect (waic, loo, compareModels, ModelInfo (..))
+import Hanalyze.Stat.ModelSelect (waic, loo, compareModels, ModelInfo (..))
 
 let waicResult = waic loglikMatrix    -- loglik :: [[Double]]  (S × N)
 let looResult  = loo  loglikMatrix
@@ -247,7 +247,7 @@ $$ p(R) \propto |R|^{\eta - 1} $$
 ### 4.3 hanalyze implementation
 
 ```haskell
-import Model.HBM (lkjCorrCholesky)
+import Hanalyze.Model.HBM (lkjCorrCholesky)
 
 l <- lkjCorrCholesky "R" 3 1.0  -- K=3, η=1
 -- l :: [[a]] is L (Cholesky factor; R = L Lᵀ)
@@ -355,7 +355,7 @@ Thanks to memorylessness this is a **shifted exponential**. Generally not so sim
 ### 6.4 Usage in hanalyze
 
 ```haskell
-import Model.HBM (Distribution (..), observe)
+import Hanalyze.Model.HBM (Distribution (..), observe)
 
 -- Survival times truncated to the observation window [0, 5] (Exp)
 truncatedSurvival :: ModelP ()
@@ -429,7 +429,7 @@ Embedding these correctly into the log-likelihood gives unbiased estimation.
 ### 7.4 hanalyze's `Censored`
 
 ```haskell
-import Model.HBM (Distribution (..), observe)
+import Hanalyze.Model.HBM (Distribution (..), observe)
 
 -- Normal observations with detection threshold 1.0
 censoredSensor :: ModelP ()

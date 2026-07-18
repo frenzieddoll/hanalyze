@@ -151,7 +151,7 @@ $\bar H_n$: 受容率の累積偏差。バーンイン後は固定。
 ### 4.4 hanalyze の実装
 
 ```haskell
-import MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
+import Hanalyze.MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
 
 ch <- nuts model
         defaultNUTSConfig
@@ -256,9 +256,12 @@ hanalyze の現状は $M = I$ (改善の余地あり)。
 | `src/MCMC/NUTS.hs` | `nuts`, `nutsChains`, `buildTree`, `uTurn`, dual averaging |
 | `src/MCMC/HMC.hs` | `hmc`, `leapfrogWith` (NUTS と共有), `gradUU` |
 | `src/Stat/Distribution.hs` | `Transform` 定義, `toUnconstrained`, `logJacobianAdj` |
-| `src/Model/HBM.hs` | `getTransforms`, `gradADU`, `logJointUnconstrained` |
+| `src/Model/HBM.hs` | `getTransforms`, `gradADU`, `logJointUnconstrained`, `compileGradUV`/`compileLogPUV` (Phase 54: 解析/ベクトル化カーネルへのコンパイル) |
 
-NUTS / HMC は AD で勾配を取るため `Numeric.AD.Mode.Forward` を使用。
+NUTS / HMC の勾配は `Numeric.AD.Mode.Reverse.Double` (reverse-mode・Phase 53 で
+forward から切替)。 さらに Phase 54 で勾配/値評価はモデルを 1 度静的解析した
+コンパイル済みクロージャ (`compileGradUV`/`compileLogPUV`) になり、 検出できない
+構造のみ AD walk に fallback する。
 
 ---
 

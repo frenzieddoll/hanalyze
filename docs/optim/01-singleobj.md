@@ -12,7 +12,7 @@ Five algorithms for minimising / maximising `f: ℝ^n → ℝ` exposed through a
 ## Common interface (`Hanalyze.Optim.Common`)
 
 ```haskell
-import Optim.Common
+import Hanalyze.Optim.Common
 
 data OptimResult = OptimResult
   { orBest      :: [Double]   -- best point x*
@@ -54,7 +54,7 @@ Gradient-free; effective for low-dimensional local optimisation. The standard fo
 R's `optim(method="Nelder-Mead")`.
 
 ```haskell
-import qualified Optim.NelderMead as NM
+import qualified Hanalyze.Optim.NelderMead as NM
 
 let f xs = sum [x*x | x <- xs]                    -- sphere
 r <- NM.runNelderMead f [3, -2, 1]
@@ -77,7 +77,7 @@ Quasi-Newton method (Liu-Nocedal 1989). Two-loop recursion for inverse Hessian �
 with history size m=10 (typical). **Gold standard for smooth MLE / GP HP optimisation.**
 
 ```haskell
-import qualified Optim.LBFGS as LBFGS
+import qualified Hanalyze.Optim.LBFGS as LBFGS
 
 -- Analytic gradient
 r <- LBFGS.runLBFGS f gradF x0
@@ -97,7 +97,7 @@ r <- LBFGS.runLBFGSNumeric LBFGS.defaultLBFGSConfig f x0
 - `goldenSection`: golden section (linear, robust).
 
 ```haskell
-import qualified Optim.LineSearch as LS
+import qualified Hanalyze.Optim.LineSearch as LS
 
 let r = LS.brent LS.defaultBrentConfig (\[x] -> (x - 2.5)^2 + 1) 0 5
 -- orBest = [2.5], orValue = 1.0
@@ -111,7 +111,7 @@ DE/rand/1/bin (Storn-Price 1997). Gradient-free, global, simple, and empirically
 Good fit for continuous 5–30-dim non-convex problems.
 
 ```haskell
-import qualified Optim.DifferentialEvolution as DE
+import qualified Hanalyze.Optim.DifferentialEvolution as DE
 import qualified System.Random.MWC as MWC
 
 gen <- MWC.createSystemRandom
@@ -139,7 +139,7 @@ handled more robustly. Reaches (1,1) within 0.1 on Rosenbrock 2D in 500 iteratio
 sphere 5D within 1e-3 in 300 iterations.
 
 ```haskell
-import qualified Optim.CMAES as CMAES
+import qualified Hanalyze.Optim.CMAES as CMAES
 
 gen <- MWC.createSystemRandom
 let cfg = CMAES.defaultCMAESConfig { CMAES.cmSigma0 = 1.0 }
@@ -155,7 +155,7 @@ Temperature `T_k = T_0 · α^k`; worse moves accepted with probability `exp(-Δf
 escaping local minima.
 
 ```haskell
-import qualified Optim.SimulatedAnnealing as SA
+import qualified Hanalyze.Optim.SimulatedAnnealing as SA
 
 gen <- MWC.createSystemRandom
 let bs = replicate 5 (-3, 3)
@@ -174,7 +174,7 @@ Kennedy & Eberhart 1995. A particle swarm pulled by personal best (pbest) and gl
   v_{t+1} = w · v_t + c_1 r_1 · (pbest - x) + c_2 r_2 · (gbest - x)
 
 ```haskell
-import qualified Optim.ParticleSwarm as PSO
+import qualified Hanalyze.Optim.ParticleSwarm as PSO
 
 gen <- MWC.createSystemRandom
 let bs = replicate 3 (-5.12, 5.12)
@@ -195,7 +195,7 @@ Handles equality constraints `g_i(x) = 0` and inequality constraints `h_j(x) ≤
   Simple but prone to ill-conditioning.
 
 ```haskell
-import qualified Optim.Constrained as Con
+import qualified Hanalyze.Optim.Constrained as Con
 
 let f xs = (head xs)^2 + (xs !! 1)^2
     cs = Con.ConstraintSet

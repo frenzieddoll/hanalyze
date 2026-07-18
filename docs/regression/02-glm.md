@@ -133,8 +133,8 @@ Returns the **inverse Fisher information** alongside the fit (used for confidenc
 ### 5.1 Main API
 
 ```haskell
-import Model.GLM
-import Model.Core (FitResult)
+import Hanalyze.Model.GLM
+import Hanalyze.Model.Core (FitResult)
 
 -- Family
 data Family = Gaussian | Binomial | Poisson
@@ -159,9 +159,25 @@ fitGLMWithSmooth :: Family -> LinkFn -> [(Text, Int)] -> Band -> Int
 
 ### 5.2 Minimal example: logistic regression
 
+**High-level (`df |-> glm`)** — fit from a data source and overlay the fitted
+curve + band on a scatter (the universal verb, see [../io/04-fit-api.md](../io/04-fit-api.md)):
+
 ```haskell
-import Model.GLM
-import Model.Core (coefficientsV)
+import Hanalyze.Plot     (glm, (|->), toPlot)
+import Hgg.Plot.Spec        (layer, scatter)
+import Hgg.Plot.Frame       ((|>>))
+import Hgg.Plot.Backend.SVG (saveSVGBound)
+import Hanalyze.Model.GLM (Family (..), LinkFn (..))
+
+let fit = df |-> glm Binomial Logit "x" "y"   -- GLMModel (canonical link = Logit)
+saveSVGBound "logit.svg" (df |>> (layer (scatter "x" "y") <> toPlot fit))
+```
+
+**Lower-level (matrix API)**:
+
+```haskell
+import Hanalyze.Model.GLM
+import Hanalyze.Model.Core (coefficientsV)
 
 let xs   = ...                                -- design matrix (column 0 = intercept)
     ys   = LA.fromList [0, 1, 1, 0, 1, ...]   -- 0/1 response
@@ -171,6 +187,10 @@ let xs   = ...                                -- design matrix (column 0 = inter
 ```
 
 ### 5.3 Poisson regression (counts)
+
+**High-level**: `df |-> glm Poisson Log "x" "y"` (same overlay pipeline as above).
+
+**Lower-level (matrix API)**:
 
 ```haskell
 let cnt  = LA.fromList [3, 5, 0, 2, 7, ...]   -- non-negative integers
@@ -270,6 +290,11 @@ If $\beta_j = 0.3$:
 
 - A unit increase in $x_j$ increases the **log expected count by +0.3**.
 - Equivalently the **expected count multiplies by $e^{0.3} \approx 1.35$** (a 35 % increase).
+
+Visualising a Poisson fit with `toPlot` shows the raw counts, the fitted
+expected-count curve $\lambda = e^{X\beta}$, and the surrounding interval:
+
+![Poisson GLM fit: counts, expected-count curve, and interval](../images/glm-poisson-ci.svg)
 
 #### 6.3.3 Offsets (exposure)
 

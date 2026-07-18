@@ -15,7 +15,7 @@ cabal run <demo-name> # 個別デモ
 
 バイナリを直接実行する場合 (cabal run が曖昧な時):
 ```
-dist-newstyle/build/x86_64-linux/ghc-9.6.7/hanalyze-0.1.0.0/x/<demo>/build/<demo>/<demo>
+dist-newstyle/build/x86_64-linux/ghc-9.6.7/hanalyze-0.1.0.1/x/<demo>/build/<demo>/<demo>
 ```
 
 CPU 並列化 (多チェーン MCMC など):
@@ -130,44 +130,89 @@ cabal run hanalyze -- regress data.csv x y LM --report    # 既存の回帰 (= b
 
 ## 最小の完全ワークフロー (Haskell から、4 タスク別)
 
-### A. 線形回帰 (3 行)
+### A. 線形回帰 → 描画 (3 行)
+
+万能動詞 `df |-> spec` で学習し、`toPlot` で散布図に重畳する
+(`(|->)` の全 API は [io/04-fit-api.md](io/04-fit-api.md) を参照):
 
 ```haskell
-import qualified Numeric.LinearAlgebra as LA
-import Model.LM (fitLMVec, designMatrix)
+{-# LANGUAGE OverloadedStrings #-}
+import qualified Data.Vector              as V
+import           Hanalyze.Plot     (lm, (|->), toPlot)
+import           Hgg.Plot.Spec        (ColData (..), layer, scatter)
+import           Hgg.Plot.Frame       ((|>>))
+import           Hgg.Plot.Backend.SVG (saveSVGBound)
 
-let dm    = designMatrix xs
-    fit   = fitLMVec dm ys     -- β, ŷ, residuals, R²
-    beta  = coefficientsV fit
+let df  = [ ("x", NumData (V.fromList xs))
+          , ("y", NumData (V.fromList ys)) ]   -- 任意の ColumnSource (CSV DataFrame でも可)
+    fit = df |-> lm "x" "y"                    -- LMModel: β, ŷ, residuals, R²
+saveSVGBound "lm.svg"                          -- 散布図 + OLS 回帰線 + 95% CI 帯
+  (df |>> (layer (scatter "x" "y") <> toPlot fit))
 ```
 
-### B. ベイズ階層モデル (NUTS + HTML レポート)
+**低レベル (行列 API)** — 既に `hmatrix` のベクトルを持っていて、数値の
+`FitResult` だけが要るとき:
 
 ```haskell
-import qualified Data.Map.Strict as Map
-import Model.HBM
-import MCMC.NUTS  (nuts, defaultNUTSConfig)
-import Viz.Report (defaultReport, renderReport)
+import Hanalyze.Model.LM   (fitLMVec, designMatrix)
+import Hanalyze.Model.Core (coefficientsV, rSquared1)
+
+let fit  = fitLMVec (designMatrix xs) ys   -- FitResult: β, ŷ, residuals, R²
+    beta = coefficientsV fit
+```
+
+### B. ベイズモデル (`df |-> hbm` + 事後 forest)
+
+同じ動詞で手書き HBM プログラムを学習する。データフレームの列がモデルの
+`dataNamed*` スロットに束縛され、`hbmModelPure` が走る (config の seed で決定的)。
+事後分布の図は抽出子 (`forestOf` / `tracesOf` / …) から得る:
+
+```haskell
+{-# LANGUAGE OverloadedStrings #-}
+import qualified Data.Vector              as V
+import           Hanalyze.Model.HBM (ModelP, sample, observe, dataNamedObs, Distribution (..))
+import           Hanalyze.Plot      (hbm, defaultHBM, (|->), toPlot, forestOf)
+import           Hgg.Plot.Spec         (ColData (..))
+import           Hgg.Plot.Frame        ((|>>))
+import           Hgg.Plot.Backend.SVG  (saveSVGBound)
+import           Data.Text                 (Text)
 
 myModel :: ModelP ()
 myModel = do
-  mu <- sample "mu" (Normal 0 10)
-  observe "y" (Normal mu 2) [1.2, 2.3, 3.1, 2.8, 1.9]
+  mu <- sample      "mu" (Normal 0 10)
+  ys <- dataNamedObs "y" []                 -- df の列 "y" から束縛
+  observe "y" (Normal mu 2) ys
 
 main :: IO ()
 main = do
-  gen <- createSystemRandom
-  chain <- nuts myModel defaultNUTSConfig
-                (Map.fromList [("mu", 0.0)]) gen
-  renderReport "report.html"
-               (defaultReport "My Model" chain ["mu"])
+  let df   = [ ("y", NumData (V.fromList [1.2, 2.3, 3.1, 2.8, 1.9])) ]
+      m    = df |-> hbm defaultHBM myModel  -- HBMModel: 純粋 NUTS・cfg の seed で決定的
+      noDf = [] :: [(Text, ColData)]        -- forest はデータ列不要
+  saveSVGBound "forest.svg" (noDf |>> toPlot (forestOf m))   -- mu の事後 forest
+```
+
+> 純粋動詞 `(|->)` は無音。 サンプリング中に進捗バーを出したいときは IO 版
+> `df |->! hbm defaultHBM myModel` を使う (結果はビット一致)。
+> [io/04-fit-api.md](io/04-fit-api.md) を参照。
+
+**低レベル (明示サンプラ + HTML レポート)** — 純粋 NUTS サンプラを直接呼び、
+従来の MCMC レポートを描画する:
+
+```haskell
+import qualified Data.Map.Strict as Map
+import Hanalyze.MCMC.NUTS  (nutsPure, defaultNUTSConfig)
+import Hanalyze.Viz.Report (defaultReport, renderReport)
+
+-- nutsPure は seed (Word32) を取り、純粋・決定的に Chain を返す
+let chain = nutsPure myModel defaultNUTSConfig (Map.fromList [("mu", 0.0)]) 42
+renderReport "report.html" (defaultReport "My Model" chain ["mu"])
 ```
 
 ### C. 実験計画 + ANOVA
 
 ```haskell
-import Design.Factorial (twoLevelFactorial)
-import Design.Anova     (oneWayAnova, printAnovaTable)
+import Hanalyze.Design.Factorial (twoLevelFactorial)
+import Hanalyze.Design.Anova     (oneWayAnova, printAnovaTable)
 
 let design = twoLevelFactorial 3   -- 2³ 完全要因 = 8 試行
 -- 観測 ys を集めた後:
@@ -177,7 +222,7 @@ printAnovaTable (oneWayAnova labels ys)
 ### D. 多目的最適化 (NSGA-II)
 
 ```haskell
-import Optim.NSGA (nsga2, defaultNSGAConfig)
+import Hanalyze.Optim.NSGA (nsga2, defaultNSGAConfig)
 
 let f xs = [head xs ^ 2, (head xs - 2) ^ 2]   -- 2 目的
 front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
@@ -249,8 +294,8 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 ### ベイズ統計 / MCMC
 | 用途 | モジュール | 主要関数 |
 |---|---|---|
-| 多相 DSL (27 分布) | `Hanalyze.Model.HBM` | `sample`, `observe`, `ModelP r` |
-| HMC / NUTS | `Hanalyze.MCMC.HMC` / `Hanalyze.MCMC.NUTS` | `hmc`, `nuts`, `nutsChains` |
+| 多相 DSL (40+ 分布) | `Hanalyze.Model.HBM` | `sample`, `observe`, `ModelP r` |
+| HMC / NUTS | `Hanalyze.MCMC.HMC` / `Hanalyze.MCMC.NUTS` | `nutsPure`, `nutsChainsPure` (純粋・推奨); `nuts`/`nutsChains` (IO・legacy) |
 | Gibbs / MH / Slice | `Hanalyze.MCMC.Gibbs` / `Hanalyze.MCMC.MH` / `Hanalyze.MCMC.Slice` | |
 | 変分推論 | `Hanalyze.Stat.VI` | `advi` |
 | WAIC / LOO / Pseudo-BMA | `Hanalyze.Stat.ModelSelect` | `waic`, `loo`, `compareModels` |

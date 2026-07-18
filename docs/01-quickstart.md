@@ -16,7 +16,7 @@ cabal run <demo-name> # individual demo
 
 To run a binary directly (when `cabal run` is ambiguous):
 ```
-dist-newstyle/build/x86_64-linux/ghc-9.6.7/hanalyze-0.1.0.0/x/<demo>/build/<demo>/<demo>
+dist-newstyle/build/x86_64-linux/ghc-9.6.7/hanalyze-0.1.0.1/x/<demo>/build/<demo>/<demo>
 ```
 
 CPU parallelism (multi-chain MCMC, etc.):
@@ -132,44 +132,89 @@ cabal run hanalyze -- regress data.csv x y LM --report    # regression (= bare f
 
 ## Minimal complete workflows (Haskell, by task)
 
-### A. Linear regression (3 lines)
+### A. Linear regression → plot (3 lines)
+
+Fit with the universal verb `df |-> spec`, then overlay the fit on a scatter
+with `toPlot` (see [io/04-fit-api.md](io/04-fit-api.md) for the full `(|->)` API):
 
 ```haskell
-import qualified Numeric.LinearAlgebra as LA
-import Model.LM (fitLMVec, designMatrix)
+{-# LANGUAGE OverloadedStrings #-}
+import qualified Data.Vector              as V
+import           Hanalyze.Plot     (lm, (|->), toPlot)
+import           Hgg.Plot.Spec        (ColData (..), layer, scatter)
+import           Hgg.Plot.Frame       ((|>>))
+import           Hgg.Plot.Backend.SVG (saveSVGBound)
 
-let dm    = designMatrix xs
-    fit   = fitLMVec dm ys     -- β, ŷ, residuals, R²
-    beta  = coefficientsV fit
+let df  = [ ("x", NumData (V.fromList xs))
+          , ("y", NumData (V.fromList ys)) ]   -- any ColumnSource (CSV DataFrame works too)
+    fit = df |-> lm "x" "y"                    -- LMModel: β, ŷ, residuals, R²
+saveSVGBound "lm.svg"                          -- scatter + OLS line + 95% CI band
+  (df |>> (layer (scatter "x" "y") <> toPlot fit))
 ```
 
-### B. Bayesian hierarchical model (NUTS + HTML report)
+**Lower-level (matrix API)** — when you already hold `hmatrix` vectors and only
+need the numeric `FitResult`:
 
 ```haskell
-import qualified Data.Map.Strict as Map
-import Model.HBM
-import MCMC.NUTS  (nuts, defaultNUTSConfig)
-import Viz.Report (defaultReport, renderReport)
+import Hanalyze.Model.LM   (fitLMVec, designMatrix)
+import Hanalyze.Model.Core (coefficientsV, rSquared1)
+
+let fit  = fitLMVec (designMatrix xs) ys   -- FitResult: β, ŷ, residuals, R²
+    beta = coefficientsV fit
+```
+
+### B. Bayesian model (`df |-> hbm` + posterior forest)
+
+The same verb fits a hand-written HBM program; the data-frame columns bind to the
+model's `dataNamed*` slots and `hbmModelPure` runs (deterministic by the seed in
+the config). Posterior figures come from the extractors (`forestOf` / `tracesOf` / …):
+
+```haskell
+{-# LANGUAGE OverloadedStrings #-}
+import qualified Data.Vector              as V
+import           Hanalyze.Model.HBM (ModelP, sample, observe, dataNamedObs, Distribution (..))
+import           Hanalyze.Plot      (hbm, defaultHBM, (|->), toPlot, forestOf)
+import           Hgg.Plot.Spec         (ColData (..))
+import           Hgg.Plot.Frame        ((|>>))
+import           Hgg.Plot.Backend.SVG  (saveSVGBound)
+import           Data.Text                 (Text)
 
 myModel :: ModelP ()
 myModel = do
-  mu <- sample "mu" (Normal 0 10)
-  observe "y" (Normal mu 2) [1.2, 2.3, 3.1, 2.8, 1.9]
+  mu <- sample      "mu" (Normal 0 10)
+  ys <- dataNamedObs "y" []                 -- bound from the df column "y"
+  observe "y" (Normal mu 2) ys
 
 main :: IO ()
 main = do
-  gen <- createSystemRandom
-  chain <- nuts myModel defaultNUTSConfig
-                (Map.fromList [("mu", 0.0)]) gen
-  renderReport "report.html"
-               (defaultReport "My Model" chain ["mu"])
+  let df   = [ ("y", NumData (V.fromList [1.2, 2.3, 3.1, 2.8, 1.9])) ]
+      m    = df |-> hbm defaultHBM myModel  -- HBMModel: pure NUTS, deterministic by cfg seed
+      noDf = [] :: [(Text, ColData)]        -- the forest needs no data columns
+  saveSVGBound "forest.svg" (noDf |>> toPlot (forestOf m))   -- posterior forest of mu
+```
+
+> The pure verb `(|->)` is silent; for a live progress bar during sampling use the
+> IO twin `df |->! hbm defaultHBM myModel` (bit-identical result). See
+> [io/04-fit-api.md](io/04-fit-api.md).
+
+**Lower-level (explicit sampler + HTML report)** — call the pure NUTS sampler
+directly and render the classic MCMC report:
+
+```haskell
+import qualified Data.Map.Strict as Map
+import Hanalyze.MCMC.NUTS  (nutsPure, defaultNUTSConfig)
+import Hanalyze.Viz.Report (defaultReport, renderReport)
+
+-- nutsPure takes a seed (Word32) and returns a Chain purely / deterministically
+let chain = nutsPure myModel defaultNUTSConfig (Map.fromList [("mu", 0.0)]) 42
+renderReport "report.html" (defaultReport "My Model" chain ["mu"])
 ```
 
 ### C. Design of experiments + ANOVA
 
 ```haskell
-import Design.Factorial (twoLevelFactorial)
-import Design.Anova     (oneWayAnova, printAnovaTable)
+import Hanalyze.Design.Factorial (twoLevelFactorial)
+import Hanalyze.Design.Anova     (oneWayAnova, printAnovaTable)
 
 let design = twoLevelFactorial 3   -- 2³ full factorial = 8 runs
 -- After collecting observations ys:
@@ -179,7 +224,7 @@ printAnovaTable (oneWayAnova labels ys)
 ### D. Multi-objective optimization (NSGA-II)
 
 ```haskell
-import Optim.NSGA (nsga2, defaultNSGAConfig)
+import Hanalyze.Optim.NSGA (nsga2, defaultNSGAConfig)
 
 let f xs = [head xs ^ 2, (head xs - 2) ^ 2]   -- 2 objectives
 front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
@@ -251,8 +296,8 @@ front <- nsga2 defaultNSGAConfig f [(0, 2)] gen
 ### Bayesian / MCMC
 | Use case | Module | Key functions |
 |---|---|---|
-| Polymorphic DSL (27 distributions) | `Hanalyze.Model.HBM` | `sample`, `observe`, `ModelP r` |
-| HMC / NUTS | `Hanalyze.MCMC.HMC` / `Hanalyze.MCMC.NUTS` | `hmc`, `nuts`, `nutsChains` |
+| Polymorphic DSL (40+ distributions) | `Hanalyze.Model.HBM` | `sample`, `observe`, `ModelP r` |
+| HMC / NUTS | `Hanalyze.MCMC.HMC` / `Hanalyze.MCMC.NUTS` | `nutsPure`, `nutsChainsPure` (pure, recommended); `nuts`/`nutsChains` (IO, legacy) |
 | Gibbs / MH / Slice | `Hanalyze.MCMC.Gibbs` / `Hanalyze.MCMC.MH` / `Hanalyze.MCMC.Slice` | |
 | Variational inference | `Hanalyze.Stat.VI` | `advi` |
 | WAIC / LOO / Pseudo-BMA | `Hanalyze.Stat.ModelSelect` | `waic`, `loo`, `compareModels` |

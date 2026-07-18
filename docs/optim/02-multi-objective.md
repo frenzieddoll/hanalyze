@@ -22,7 +22,7 @@
 ## 1. NSGA-II
 
 ```haskell
-import Optim.NSGA
+import Hanalyze.Optim.NSGA
 
 -- Example: minimize two objectives simultaneously
 let f xs = [x_1^2, (x_1 - 2)^2]
@@ -44,7 +44,7 @@ front <- nsga2WithConstraints cfg f constr bounds gen
 ## 2. Pareto utilities
 
 ```haskell
-import Optim.Pareto
+import Hanalyze.Optim.Pareto
 
 let pf = paretoFront points       -- non-dominated points only
 let hv = hypervolume refPt points -- hypervolume
@@ -56,7 +56,7 @@ let igdV = igd trueFront estFront
 ## 3. Bayesian Optimization
 
 ```haskell
-import Optim.BayesOpt
+import Hanalyze.Optim.BayesOpt
 
 -- Single-objective BO (1D)
 (history, best) <- bayesOpt cfg f (lo, hi) gen
@@ -70,7 +70,7 @@ hist <- bayesOptMOWithNSGA nIter nInit RBF f bounds gen
 ## 4. Desirability
 
 ```haskell
-import Optim.Desirability
+import Hanalyze.Optim.Desirability
 
 let dts = [Maximize 0 1, Minimize 1 0, Target 0.5 0 1]
 let d = overallDesirability dts ys   -- ys is the response vector
@@ -81,7 +81,7 @@ let d = overallDesirability dts ys   -- ys is the response vector
 ## 5. Visualisation
 
 ```haskell
-import Viz.Pareto
+import Hanalyze.Viz.Pareto
 
 paretoCompareFile HTML "out.html" cfg trueFront estFront
 parallelCoordinatesFile HTML "out.html" cfg labels front

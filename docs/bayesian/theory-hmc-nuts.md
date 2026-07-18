@@ -154,7 +154,7 @@ with $\bar H_n$ the cumulative deviation from the target. Fixed after burn-in.
 ### 4.4 hanalyze implementation
 
 ```haskell
-import MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
+import Hanalyze.MCMC.NUTS (nuts, defaultNUTSConfig, NUTSConfig (..))
 
 ch <- nuts model
         defaultNUTSConfig
@@ -259,9 +259,13 @@ hanalyze currently uses $M = I$ (room for improvement).
 | `src/MCMC/NUTS.hs` | `nuts`, `nutsChains`, `buildTree`, `uTurn`, dual averaging |
 | `src/MCMC/HMC.hs` | `hmc`, `leapfrogWith` (shared with NUTS), `gradUU` |
 | `src/Stat/Distribution.hs` | `Transform` definition, `toUnconstrained`, `logJacobianAdj` |
-| `src/Model/HBM.hs` | `getTransforms`, `gradADU`, `logJointUnconstrained` |
+| `src/Model/HBM.hs` | `getTransforms`, `gradADU`, `logJointUnconstrained`, `compileGradUV`/`compileLogPUV` (Phase 54: compilation onto closed-form / vectorized kernels) |
 
-NUTS / HMC use AD, namely `Numeric.AD.Mode.Forward`.
+NUTS / HMC gradients use `Numeric.AD.Mode.Reverse.Double` (reverse-mode;
+switched from forward in Phase 53). Since Phase 54 the gradient/value
+evaluations are compiled closures (`compileGradUV`/`compileLogPUV`) built from
+a one-time static analysis of the model; only undetected structures fall back
+to the plain AD walk.
 
 ---
 

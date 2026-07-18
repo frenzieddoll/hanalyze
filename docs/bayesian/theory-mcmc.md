@@ -118,7 +118,7 @@ In particular, in high dimensions aim for ~23.4 % (Roberts 1997).
 ### 3.5 In hanalyze
 
 ```haskell
-import MCMC.MH (metropolis, defaultMCMCConfig)
+import Hanalyze.MCMC.MH (metropolis, defaultMCMCConfig)
 
 ch <- metropolis model
         (defaultMCMCConfig ["mu", "sigma"])
@@ -161,7 +161,7 @@ Update non-conjugate parameters with MH; conjugate ones with Gibbs.
 ### 4.4 In hanalyze
 
 ```haskell
-import MCMC.Gibbs (gibbsMH, defaultGibbsConfig)
+import Hanalyze.MCMC.Gibbs (gibbsMH, defaultGibbsConfig)
 
 -- Conjugacy is auto-detected from the prior/likelihood pairing
 ch <- gibbsMH model defaultGibbsConfig init0 gen

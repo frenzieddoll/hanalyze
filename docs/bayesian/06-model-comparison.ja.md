@@ -1,11 +1,11 @@
-# モデル比較 (Stat.ModelSelect)
+# モデル比較 (Hanalyze.Stat.ModelSelect)
 
 > 🌐 [English](06-model-comparison.md) | **日本語**
 
 > 関連デモ:
-> - [`gibbs-demo`](../demo/GibbsDemo.hs) — WAIC/LOO で 2 モデル比較
-> - [`simpson-paradox`](../demo/SimpsonParadoxDemo.hs) — LM/GLMM/HBM の WAIC を 1 つの HTML に並列表示
-> - [`hbm-random-slope`](../demo/HBMRandomSlopeDemo.hs) — ランダム切片 vs +ランダム傾きの ΔWAIC 比較
+> - [`gibbs-demo`](../../demo/bayesian/GibbsDemo.hs) — WAIC/LOO で 2 モデル比較
+> - [`simpson-paradox`](../../demo/bayesian/SimpsonParadoxDemo.hs) — LM/GLMM/HBM の WAIC を 1 つの HTML に並列表示
+> - [`hbm-random-slope`](../../demo/bayesian/HBMRandomSlopeDemo.hs) — ランダム切片 vs +ランダム傾きの ΔWAIC 比較
 >
 > CLI: `--waic` フラグで LM / GLM / GLMM / HBM レポートに WAIC/LOO を埋め込み。
 
@@ -20,6 +20,12 @@
 
 どちらも **小さい値ほど良い** (−2×elpd スケール)。
 
+モデル比較が必要なのは、同じデータでもモデル族が違えば当てはまり方が大きく変わる
+からです。下の図は 1 つのデータセットに線形モデル・Poisson GLM・スプラインを重ねて
+当てはめたものです。WAIC / LOO はこのうちどれをデータが支持しているかを定量化します。
+
+![同一データに当てはめた LM / Poisson GLM / spline](../images/model-comparison.svg)
+
 ---
 
 ## WAIC (広義適用情報量規準)
@@ -32,7 +38,7 @@
 ### API
 
 ```haskell
-import Stat.ModelSelect
+import Hanalyze.Stat.ModelSelect
 
 data WAICResult = WAICResult
   { waicValue :: Double  -- WAIC = −2(lppd − p_waic)
@@ -54,8 +60,8 @@ chainLogLikMatrix :: Model a -> Chain -> [[Double]]
 ### 例: 2モデルの比較
 
 ```haskell
-import Stat.ModelSelect
-import MCMC.NUTS (nuts, defaultNUTSConfig)
+import Hanalyze.Stat.ModelSelect
+import Hanalyze.MCMC.NUTS (nuts, defaultNUTSConfig)
 
 -- モデル A: 弱情報事前分布
 modelA :: Model ()
@@ -181,3 +187,53 @@ khatLabel k | k < 0.5   = "良好"
 - ΔWAIC = -11.4 は SE の 2 倍以上 → モデル A が統計的に有意に良い
 - 弱情報事前分布は真値 μ=3 周辺に事後分布を集中させられるが、
   情報事前分布のモデル B は μ=5 への強い引力でデータとの乖離が大きくなる
+
+---
+
+## 階層モデルへの適用
+
+WAIC / LOO は flat なモデルだけでなく、 **階層モデル** にもそのまま適用できます。
+`perObsLogLiks` が **観測 1 つあたり** の log-likelihood (周辺化不要) を返す
+ので、 群別パラメータが入っていても自然に集計されます。
+
+### 例: ランダム切片のみ vs +ランダム傾き
+
+`y_ij ~ Normal(α_j + β · x_ij, σ)` (M1: 共通 β) と
+`y_ij ~ Normal(α_j + β_j · x_ij, σ)` (M2: 群別 β_j) を比べる典型例:
+
+```haskell
+import Hanalyze.MCMC.NUTS       (nuts, defaultNUTSConfig)
+import Hanalyze.Model.HBM       (perObsLogLiks)
+import Hanalyze.Stat.ModelSelect (waic, loo, waicValue, looValue)
+import Hanalyze.MCMC.Core       (chainSamples)
+
+-- M1 (random intercept のみ) と M2 (random intercept + random slope) を
+-- 同じデータに fit。 chainSamples ch :: [Params] が事後サンプル列。
+compareSlopeModels = do
+  ch1 <- nuts modelM1 cfg init1 gen
+  ch2 <- nuts modelM2 cfg init2 gen
+  let ll1 = [perObsLogLiks modelM1 ps | ps <- chainSamples ch1]
+      ll2 = [perObsLogLiks modelM2 ps | ps <- chainSamples ch2]
+  let w1 = waicValue (waic ll1)
+      w2 = waicValue (waic ll2)
+      l1 = looValue  (loo  ll1)
+      l2 = looValue  (loo  ll2)
+  -- ΔWAIC = w2 − w1。 負なら M2 が支持される
+  return (w1, w2, l1, l2)
+```
+
+完全動作する実装は [`hbm-random-slope`](../../demo/bayesian/HBMRandomSlopeDemo.hs) に。
+3 群で各群の真の傾きが異なるデータでは M2 (ランダム傾き) が WAIC / LOO 共に
+小さくなることが実測できます。
+
+### 階層モデル特有の注意点
+
+- **群別パラメータも WAIC の p_waic に寄与する**: 群数 J が大きいと
+  `p_waic` が膨らみ、 適合度より複雑さペナルティが支配的になることがある
+- **PSIS-LOO の k̂ 診断は群別**: 群内 N が小さい群で k̂ > 0.7 が出やすい。
+  その群の観測が exchangeable でないサイン
+- **完全プーリング vs 階層 vs 完全分離 の 3 段階比較**: WAIC を 3 モデル
+  で並べると階層モデルの中間性 (shrinkage) が定量化できる
+- **モデル比較は同じ観測 y に対してのみ**: 形式 A と形式 B で同じデータでも
+  `observe` 名が違えば log-likelihood の分解単位が変わるので、 同条件で比較
+  すること

@@ -6,7 +6,7 @@
 ## 1. ACF / PACF (探索的解析)
 
 ```haskell
-import qualified Model.TimeSeries as TS
+import qualified Hanalyze.Model.TimeSeries as TS
 
 let y = LA.fromList [1.0, 1.2, 1.5, 1.8, 1.6, 1.4, 1.7, ...]
 
@@ -31,6 +31,11 @@ TS.arResidVar fit    -- innovation variance
 -- 予測
 let fc = TS.forecastAR fit y 10  -- 10-step ahead
 ```
+
+履歴系列に AR 予測を継ぎ足すと、予測区間の帯が地平線 (予測ステップ) と
+ともに広がっていく様子が見える:
+
+![時系列の履歴 + AR 予測 + 予測区間帯](../images/ts-forecast.svg)
 
 ## 3. MA (moving average)
 

@@ -16,7 +16,7 @@
 5. [Per-model usage](#5-per-model-usage)
 6. [CLI usage](#6-cli-usage)
 7. [Custom reports](#7-custom-reports)
-8. [Relationship to legacy `Hanalyze.Viz.AnalysisReport`](#8-relationship-to-legacy-vizanalysisreport)
+8. [Relationship to legacy `Hanalyze.Viz.AnalysisReport`](#8-relationship-to-legacy-hanalyzevizanalysisreport)
 9. [Common patterns and pitfalls](#9-common-patterns-and-pitfalls)
 
 ---
@@ -149,7 +149,7 @@ defaultReportConfig :: Text -> ReportConfig
 
 ```haskell
 {-# LANGUAGE OverloadedStrings #-}
-import Viz.ReportBuilder
+import Hanalyze.Viz.ReportBuilder
 
 main :: IO ()
 main = do
@@ -199,11 +199,11 @@ class Reportable a where
 import qualified Numeric.LinearAlgebra as LA
 import qualified Data.Vector as V
 
-import DataIO.CSV         (loadAuto)
+import Hanalyze.DataIO.CSV         (loadAuto)
 import DataFrame.Core     (getNumeric)
-import Model.Regularized  (Penalty (..), fitRegularized)
-import Viz.ReportBuilder
-import Viz.ReportInstances ()  -- pull instances into scope
+import Hanalyze.Model.Regularized  (Penalty (..), fitRegularized)
+import Hanalyze.Viz.ReportBuilder
+import Hanalyze.Viz.ReportInstances ()  -- pull instances into scope
 
 main :: IO ()
 main = do
@@ -303,7 +303,7 @@ a private Vega-Lite spec:
 
 ```haskell
 {-# LANGUAGE OverloadedStrings #-}
-import Viz.ReportBuilder
+import Hanalyze.Viz.ReportBuilder
 import Graphics.Vega.VegaLite (VegaLite)
 
 myReport :: IO ()

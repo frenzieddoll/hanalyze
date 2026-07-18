@@ -10,7 +10,7 @@
 `meltLonger` の逆: long → wide 変形。
 
 ```haskell
-import qualified DataIO.Reshape as Reshape
+import qualified Hanalyze.DataIO.Reshape as Reshape
 import qualified DataFrame as DX
 
 -- long-form
