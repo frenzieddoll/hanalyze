@@ -5,7 +5,7 @@
 [![License: BSD-3](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](LICENSE)
 [![GHC](https://img.shields.io/badge/GHC-9.6.7-blueviolet.svg)](https://www.haskell.org/ghc/)
 
-**hanalyze** is a Haskell-native statistical engineering toolkit: regression, GLMM, Bayesian inference (HMC/NUTS/Gibbs/ADVI), Gaussian processes, design of experiments, multi-objective optimisation, and HTML reporting integrated under one API.
+**hanalyze** is a Haskell-native statistical engineering toolkit: regression, GLMM, Bayesian inference (HMC/NUTS/Gibbs/ADVI/SMC), Gaussian processes, machine learning (SVM / gradient boosting / neural networks), survival analysis (KM / Cox / AFT / competing risks), time series (ARIMA / GARCH / state space), causal discovery (LiNGAM) and treatment-effect estimation, design of experiments (classical + custom optimal design), multi-objective optimisation, native plotting, and HTML reporting integrated under one API.
 Core modelling and optimisation logic is implemented in Haskell, with numerical linear algebra delegated to hmatrix/BLAS/LAPACK. **No R/Stan/Python bridge required**.
 Benchmarks (see below) show competitive accuracy with Python/R references in the tested cases. Performance varies by domain: optimisation and small-to-medium MCMC workloads are often faster in these benchmarks, while large-scale ML/GLM workloads are currently slower than sklearn.
 
@@ -15,15 +15,32 @@ Benchmarks (see below) show competitive accuracy with Python/R references in the
 
 - **Haskell-native**: types catch many dtype/API mismatches; shape checks happen at runtime where needed
 - **Algorithms in Haskell, BLAS for numerics**: hmatrix/BLAS/LAPACK powers linear algebra; no R/Stan/Python bridge
+- **Native plotting**: 90+ documented figure types through the [hgg](https://github.com/frenzieddoll/hgg) grammar-of-graphics integration (`plot-integration` flag) — pure-Haskell SVG output, no browser required (see [Gallery](#gallery))
 - **HTML reporting**: MathJax/Mermaid + Vega-Lite visualisations in one call; PNG/SVG export available for supported plots
 - **Dirty-data defence**: 8 warning codes + auto-sniff (delim/header/encoding) + cleaning DSL
 - **Hackage `dataframe`**: Polars-like DataFrame used directly; CSV native, Parquet/JSON support through `dataframe`
 
 ---
 
+## Gallery
+
+Every figure below (and 90+ more across [`docs/`](docs/)) is generated straight
+from analysis results via the hgg integration — pure Haskell, SVG out.
+
+| | |
+|:--:|:--:|
+| ![Linear regression with CI band](docs/images/lm-scatter-ci.svg)<br>Linear regression — fit + 95% CI ([docs](docs/regression/01-lm.md)) | ![HBM MCMC dashboard](docs/images/hbm-dashboard.svg)<br>Bayesian MCMC dashboard — trace / density / R̂ / ESS ([docs](docs/bayesian/viz-diagnostics.md)) |
+| ![Gaussian process mean and credible band](docs/images/gp-mean-ci.svg)<br>Gaussian process — mean + credible band ([docs](docs/regression/04-gp.md)) | ![Kernel SVM decision boundary](docs/images/svm-rbf-boundary.svg)<br>Kernel SVM (RBF) — decision boundary + support vectors ([docs](docs/ml/usage-ml-extensions.md)) |
+| ![DOE prediction profiler](docs/images/doe-profiler.svg)<br>DOE prediction profiler — response vs each factor + CI ([docs](docs/api-guide/09-doe.md)) | ![RSM 3D response surface](docs/images/rsm-surface-3d.svg)<br>RSM response surface (3D) ([docs](docs/doe/01-doe.md)) |
+| ![DirectLiNGAM causal DAG](docs/images/lingam-dag.svg)<br>DirectLiNGAM causal discovery — estimated DAG ([docs](docs/api-guide/08-causal.md)) | ![Kaplan-Meier survival curves](docs/images/km-survival.svg)<br>Kaplan-Meier survival curves ([docs](docs/regression/10-survival.md)) |
+| ![Time-series forecast](docs/images/ts-forecast.svg)<br>Time-series forecast ([docs](docs/regression/09-timeseries.md)) | ![k-means clusters with 95% ellipses](docs/images/kmeans-ellipse.svg)<br>k-means clusters + 95% ellipses ([docs](docs/stat/05-cluster.md)) |
+
+---
+
 ## Capabilities
 
 Features grouped by category. Each capability links to a usage doc and (where relevant) a theory doc.
+The full API reference lives in [`docs/api-guide/`](docs/api-guide/README.md) (12 chapters).
 
 ### Statistical inference (`Hanalyze.Stat.*`)
 
@@ -39,12 +56,14 @@ Features grouped by category. Each capability links to a usage doc and (where re
 
 | Feature | Module | Usage | Theory |
 |---|---|---|---|
+| Formula DSL (declare models as `"y x = b0 + b1*x + bg ! group"` or R `"y ~ x + C(g)"`; `ModelFrame` / `designMatrixF` / `fitLMF` + missing policy / contrast `C(g, Sum)` / WLS `fitWLSF` / nonlinear `fitNLS` / random effects `(1+x|g)` via `fitMixedLME`/`fitMixedGLMM`) | `Hanalyze.Model.Formula` / `.Frame` / `.Design` / `.RFormula` / `.Nonlinear` / `.Mixed` | [regression/11-formula-dsl.md](docs/regression/11-formula-dsl.md) | — |
 | Linear regression (LM) + inference stats (SE/t/p, F, AIC/BIC, leverage, Cook's) | `Hanalyze.Model.LM` / `Hanalyze.Model.LM.Diagnostics` | [regression/01-lm.md](docs/regression/01-lm.md) | [principles/lm.md](docs/principles/lm.md) |
 | GLM (Binomial / Poisson / Gaussian) | `Hanalyze.Model.GLM` | [regression/02-glm.md](docs/regression/02-glm.md) | [principles/glm.md](docs/principles/glm.md) |
 | GLMM / mixed-effects model (LME) | `Hanalyze.Model.GLMM` | [regression/03-glmm.md](docs/regression/03-glmm.md) | [principles/glmm.md](docs/principles/glmm.md) |
 | Spline regression (B-spline / NaturalCubic) | `Hanalyze.Model.Spline` | [regression/04-spline.md](docs/regression/04-spline.md) | [regression/theory-regression-extensions.md](docs/regression/theory-regression-extensions.md) |
 | Kernel regression (NW / Kernel Ridge) + multi-D inputs | `Hanalyze.Model.Kernel` | [regression/04-kernel.md](docs/regression/04-kernel.md) | same |
 | Regularised (Ridge / Lasso / ElasticNet) | `Hanalyze.Model.Regularized` | [regression/04-regularized.md](docs/regression/04-regularized.md) | same |
+| Robust regression (Huber / Tukey biweight M-estimators, IRLS) | `Hanalyze.Model.Robust` | [regression/usage-regularized-advanced.md](docs/regression/usage-regularized-advanced.md) | — |
 | Gaussian process (RBF / Matérn / Periodic + ARD + multi-input) | `Hanalyze.Model.GP` | [regression/04-gp.md](docs/regression/04-gp.md) | [principles/gp.md](docs/principles/gp.md) |
 | Random Fourier Features (large-scale GP approximation) | `Hanalyze.Model.RFF` | [regression/04-rff.md](docs/regression/04-rff.md) | [regression/theory-regression-extensions.md](docs/regression/theory-regression-extensions.md) |
 | Multivariate regression / Multi-output GP | `Hanalyze.Model.{Multivariate,MultiGP,MultiOutput}` | [regression/05-multivariate.md](docs/regression/05-multivariate.md) | [regression/theory-multivariate.md](docs/regression/theory-multivariate.md) |
@@ -52,6 +71,9 @@ Features grouped by category. Each capability links to a usage doc and (where re
 | Generalized additive model (GAM) | `Hanalyze.Model.GAM` | [regression/06-gam.md](docs/regression/06-gam.md) | same |
 | Random forest (regression) | `Hanalyze.Model.RandomForest` | [regression/06-randomforest.md](docs/regression/06-randomforest.md) | same |
 | Multi-output regression + interactive HTML | `Hanalyze.Model.MultiOutput` | [regression/07-multireg.md](docs/regression/07-multireg.md) | [regression/theory-multivariate.md](docs/regression/theory-multivariate.md) |
+| Partial Least Squares (PLS) regression — NIPALS + VIP + CV component selection | `Hanalyze.Model.PLS` | — | — |
+| Linear / Quadratic Discriminant Analysis (LDA / QDA) | `Hanalyze.Model.Discriminant` | — | — |
+| Gauge R&R (Measurement System Analysis, ANOVA-based crossed / nested) | `Hanalyze.Design.GaugeRR` | — | — |
 
 ### Machine learning (`Hanalyze.Model.*` / `Hanalyze.Stat.*`)
 
@@ -60,10 +82,39 @@ Features grouped by category. Each capability links to a usage doc and (where re
 | PCA + cumulative variance + standardisation | `Hanalyze.Model.PCA` | [stat/02-pca.md](docs/stat/02-pca.md) | — |
 | Clustering (K-means + k-means++ + silhouette) | `Hanalyze.Model.Cluster` | [stat/05-cluster.md](docs/stat/05-cluster.md) | — |
 | Decision tree (CART classifier) | `Hanalyze.Model.DecisionTree` | [regression/08-decisiontree.md](docs/regression/08-decisiontree.md) | — |
+| Kernel SVM (C-SVC, SMO dual solver) + CV hyperparameter tuning | `Hanalyze.Model.SVM` | [ml/usage-ml-extensions.md](docs/ml/usage-ml-extensions.md) | — |
+| Gradient boosting (regression + binary classification) | `Hanalyze.Model.GradientBoosting` | [ml/usage-ml-extensions.md](docs/ml/usage-ml-extensions.md) | — |
+| k-NN / Naive Bayes (Gaussian + Multinomial) / MLP neural network (mini-batch SGD + Adam) | `Hanalyze.Model.{KNN,NaiveBayes,NeuralNetwork}` | [ml/usage-ml-extensions.md](docs/ml/usage-ml-extensions.md) + [api-guide/05-ml.md](docs/api-guide/05-ml.md) | — |
+| Random forest classifier (+ permutation importance) | `Hanalyze.Model.RandomForestClassifier` | [api-guide/05-ml.md](docs/api-guide/05-ml.md) | — |
+| MDS (classical / Sammon) | `Hanalyze.Model.MDS` | [ml/usage-ml-extensions.md](docs/ml/usage-ml-extensions.md) | — |
+| Hierarchical clustering (agglomerative + dendrogram) | `Hanalyze.Model.HierarchicalCluster` | [stat/05-cluster.md](docs/stat/05-cluster.md) | — |
+| Latent class analysis (EM) + graphical-lasso correlation network | `Hanalyze.Model.LatentClassAnalysis` / `Hanalyze.Stat.CorrelationNetwork` | [stat/usage-misc-stat.md](docs/stat/usage-misc-stat.md) | — |
+| Functional data analysis (basis smoothing + FPCA) | `Hanalyze.Model.FDA` | [fda/usage-fda.md](docs/fda/usage-fda.md) | — |
 | Time series (ARIMA / Holt-Winters / STL / ACF / PACF) | `Hanalyze.Model.TimeSeries` | [regression/09-timeseries.md](docs/regression/09-timeseries.md) | — |
+| GARCH(1,1) volatility / linear-Gaussian state space (Kalman filter + RTS smoother) / VAR(p) | `Hanalyze.Model.{GARCH,StateSpace,VAR}` | [timeseries/usage-ts-surv-advanced.md](docs/timeseries/usage-ts-surv-advanced.md) | — |
 | Survival analysis (Kaplan-Meier / Nelson-Aalen / Log-rank / Cox PH) | `Hanalyze.Model.Survival` | [regression/10-survival.md](docs/regression/10-survival.md) | — |
+| Parametric survival (AFT) + competing risks (CIF) | `Hanalyze.Model.{AFT,CompetingRisks}` | [api-guide/07-survival.md](docs/api-guide/07-survival.md) | — |
 | Classification metrics (Confusion / AUC / F1 / MCC / log-loss / Brier) | `Hanalyze.Stat.ClassMetrics` | [stat/03-classmetrics.md](docs/stat/03-classmetrics.md) | — |
 | Model interpretation (Permutation imp / PDP / ICE) | `Hanalyze.Stat.Interpret` | [stat/13-interpret.md](docs/stat/13-interpret.md) | — |
+| SPC control charts (X̄-R / I-MR / p / np / c / u) + Western Electric / Nelson 8-rule sets | `Hanalyze.Stat.SPC` | — | — |
+| Weibull MLE (censored / uncensored) + B_p life + Wald CI | `Hanalyze.Model.Weibull` | — | — |
+| Accelerated-life models (Arrhenius / Eyring / Inverse Power Law) | `Hanalyze.Model.Reliability` | — | — |
+| NSGA-II all-fronts (rank ≥ 1 alternatives) + per-generation progress callback | `Hanalyze.Optim.NSGA` | — | — |
+| Good vs Bad parallel comparison (Welch t + Cohen's d ranking) | `Hanalyze.Stat.GroupComparison` | — | — |
+| Hotelling T² (1-/2-sample) + one-way MANOVA (Wilks' Λ + Rao F) | `Hanalyze.Stat.Test` | — | — |
+| Lasso/Ridge/ElasticNet λ auto-selection via k-fold CV + 1-SE rule | `Hanalyze.Model.Regularized` | — | — |
+| D-optimal Augment Design (sequential addition with fixed existing rows) | `Hanalyze.Design.Optimal` | — | — |
+| Space-filling designs (LHS / Maximin LHS / Halton) | `Hanalyze.Design.SpaceFilling` | — | — |
+| Definitive Screening Design (k=4 verified, others structural) | `Hanalyze.Design.DSD` | — | — |
+| Mixture design (Simplex Lattice / Simplex Centroid) | `Hanalyze.Design.Mixture` | — | — |
+| Sequential RSM (steepest ascent + next CCD placement) | `Hanalyze.Design.Sequential` | — | — |
+
+### Causal inference (`Hanalyze.Model.LiNGAM.*` / `Hanalyze.Stat.Causal.*`)
+
+| Feature | Module | Usage | Theory |
+|---|---|---|---|
+| LiNGAM causal discovery (DirectLiNGAM / ICA-LiNGAM / Pairwise / VAR-LiNGAM / MultiGroup / ParceLiNGAM + bootstrap edge confidence) | `Hanalyze.Model.LiNGAM.*` | [api-guide/08-causal.md](docs/api-guide/08-causal.md) | — |
+| Treatment effects (propensity score / IPW / doubly robust AIPW / CATE S-T-X meta-learners) | `Hanalyze.Stat.Causal.*` | [causal/usage-causal.md](docs/causal/usage-causal.md) | — |
 
 ### Bayesian (`Hanalyze.MCMC.*` / `Hanalyze.Stat.*` / `Hanalyze.Model.HBM`)
 
@@ -71,11 +122,15 @@ Features grouped by category. Each capability links to a usage doc and (where re
 |---|---|---|---|
 | 27 probability distributions (Truncated/Censored/MvNormal/LKJ/Multinomial/...) | `Hanalyze.Stat.Distribution` | [bayesian/01-distributions.md](docs/bayesian/01-distributions.md) | [bayesian/theory-distributions.md](docs/bayesian/theory-distributions.md) |
 | Probabilistic model DSL (HBM polymorphic free monad, incl. `deterministic` / `dataNamed`) | `Hanalyze.Model.HBM` | [bayesian/02-probabilistic-model.md](docs/bayesian/02-probabilistic-model.md) | [principles/hbm.md](docs/principles/hbm.md) |
-| MCMC samplers (MH / HMC / NUTS / Slice) | `Hanalyze.MCMC.{MH,HMC,NUTS,Slice}` | [bayesian/03-mcmc-samplers.md](docs/bayesian/03-mcmc-samplers.md) | [bayesian/theory-mcmc.md](docs/bayesian/theory-mcmc.md) / [theory-hmc-nuts.md](docs/bayesian/theory-hmc-nuts.md) |
+| MCMC samplers (MH / HMC / NUTS / Slice / tempered SMC) | `Hanalyze.MCMC.{MH,HMC,NUTS,Slice,SMC}` | [bayesian/03-mcmc-samplers.md](docs/bayesian/03-mcmc-samplers.md) | [bayesian/theory-mcmc.md](docs/bayesian/theory-mcmc.md) / [theory-hmc-nuts.md](docs/bayesian/theory-hmc-nuts.md) |
+| Sampling progress display (aggregate one-liner; IO verb `df \|->! spec`, bit-identical to the pure verb) | `Hanalyze.MCMC.Progress` | [io/04-fit-api.md](docs/io/04-fit-api.md) | — |
 | Gibbs sampling (auto-conjugate detection + hybrid) | `Hanalyze.MCMC.Gibbs` | [bayesian/04-gibbs.md](docs/bayesian/04-gibbs.md) | [bayesian/theory-mcmc.md](docs/bayesian/theory-mcmc.md) |
 | Variational inference (ADVI mean-field Adam) | `Hanalyze.Stat.VI` | [bayesian/05-vi.md](docs/bayesian/05-vi.md) | [bayesian/theory-advanced.md](docs/bayesian/theory-advanced.md) |
 | Model comparison (WAIC / PSIS-LOO / Pseudo-BMA) | `Hanalyze.Stat.ModelSelect` | [bayesian/06-model-comparison.md](docs/bayesian/06-model-comparison.md) | [bayesian/theory-bayesian-basics.md](docs/bayesian/theory-bayesian-basics.md) |
 | Posterior predictive checks; selected PyMC-style modelling features | `Hanalyze.Stat.PosteriorPredictive` | [02-pymc-comparison.md](docs/02-pymc-comparison.md) | — |
+| Marginal likelihood (bridge sampling) / Bayes factors / Bayesian model averaging | `Hanalyze.Stat.{BridgeSampling,BayesFactor,BayesianModelAveraging}` | — | — |
+| Bayesian A/B test (mean difference via NUTS + ROPE/HDI decision) | `Hanalyze.MCMC.BayesianTest` | — | — |
+| Chain diagnostics (R̂, ESS incl. arviz-compatible `essBulk`, HDI, BFMI, rank histogram, KDE, autocorrelation) | `Hanalyze.Stat.MCMC` | [bayesian/viz-diagnostics.md](docs/bayesian/viz-diagnostics.md) | — |
 
 ### Optimisation (`Hanalyze.Optim.*`)
 
@@ -94,6 +149,8 @@ Features grouped by category. Each capability links to a usage doc and (where re
 |---|---|---|---|
 | DoE (Factorial / Block / Mixed / RSM / Optimal / Power / Quality) | `Hanalyze.Design.{Factorial,Block,Mixed,RSM,Optimal,Power,Quality,MultiRSM,Anova}` | [doe/01-doe.md](docs/doe/01-doe.md) | [doe/theory-doe.md](docs/doe/theory-doe.md) |
 | Orthogonal arrays (L4/L8/L9/L12/L16/L18) + Taguchi (S/N + inner/outer) + process capability (Cp/Cpk) | `Hanalyze.Design.{Orthogonal,Taguchi,Quality}` | [doe/02-orthogonal-taguchi.md](docs/doe/02-orthogonal-taguchi.md) | [doe/theory-doe.md](docs/doe/theory-doe.md) |
+| Custom optimal design (coordinate exchange + modified Fedorov: D/A/G/I criteria, Bayesian D, linear constraints, split-plot, augment menus, design comparison via efficiency/FDS/alias) | `Hanalyze.Design.Custom.*` | [doe/usage-custom-design.md](docs/doe/usage-custom-design.md) + [manual](docs/doe/manual-custom-design.md) | — |
+| DOE workflow layer (R-style interactive `Design` object over the low-level design functions) | `Hanalyze.Design.Workflow` | [api-guide/09-doe.md](docs/api-guide/09-doe.md) | — |
 
 ### Visualisation (`Hanalyze.Viz.*`)
 
@@ -101,6 +158,46 @@ Features grouped by category. Each capability links to a usage doc and (where re
 |---|---|---|
 | Scatter / bar / histograms / MCMC diagnostics / GP plot / Pareto plot | `Hanalyze.Viz.{Scatter,Bar,Histogram,MCMC,GP,Pareto,ModelGraph,Taguchi}` | [visualization/01-visualization.md](docs/visualization/01-visualization.md) |
 | Integrated HTML report (MathJax + Mermaid + interactive) | `Hanalyze.Viz.ReportBuilder` | [visualization/02-report-builder.md](docs/visualization/02-report-builder.md) |
+| Unified fit-and-plot operator `df \|-> spec` (one entry point across LM/GLM/GAM/GP/HBM/... specs) + plot-free coefficient diagnostics | `Hanalyze.Fit` / `Hanalyze.Diagnostics` | [io/04-fit-api.md](docs/io/04-fit-api.md) |
+| **hgg integration** (experimental): `toPlot`/`Plottable` overlays a fitted model (LM line+CI / GP mean+credible band) on the layer grammar; `module Hanalyze` quickstart entry. Flag-gated (`plot-integration`, default off). | `Hanalyze.Plot` + `module Hanalyze` | [visualization/03-plot-integration.md](docs/visualization/03-plot-integration.md) |
+| **HBM ModelGraph (3 routes)**: Mermaid HTML / Graphviz DOT / direct SVG via hgg | `Hanalyze.Viz.{ModelGraph,ModelGraphDot}` + `Hgg.Plot.Bridge.Analyze` | see "ModelGraph — 3 routes" below |
+
+#### ModelGraph — 3 routes
+
+There are three ways to visualise the DAG of an HBM model; pick by use case:
+
+| Route | Module | Output / Deps | When to use |
+|---|---|---|---|
+| **Mermaid HTML** | `Hanalyze.Viz.ModelGraph.renderModelGraph` | `.html` + Mermaid CDN script | GitHub / GitLab READMEs, notebook attachments — auto-rendered on GitHub |
+| **Graphviz DOT** | `Hanalyze.Viz.ModelGraphDot.renderModelGraphDot` | `.dot` text + `dot` CLI (install required) | graphviz ecosystem interop (xdot / gephi / `dot -Tpng`), fine-grained directives (`rank=same` / `constraint=false` etc) |
+| **hgg direct** | `Hgg.Plot.Bridge.Analyze.renderModelGraphSVG` ([hgg-analyze-bridge](https://github.com/frenzieddoll/hgg)) | `.svg` (**zero deps**, pure Haskell) | production app embedding, offline batch, fast rendering of large DAGs |
+
+All three routes take the same `Hanalyze.Model.HBM.ModelGraph` as input. Layout
+quality vs dependency trade-off:
+
+- Mermaid: lightweight, but no offline rendering
+- Graphviz DOT: best layout quality, but requires the `dot` CLI
+- hgg: intermediate quality (roughly 70-80% of graphviz dot, pure Haskell); the only option when zero dependencies are required
+
+Code example (with `hgg-analyze-bridge` added as a dependency):
+
+```haskell
+import qualified Hanalyze.Viz.ModelGraph    as Mermaid
+import qualified Hanalyze.Viz.ModelGraphDot as Dot
+import qualified Data.Text.IO               as TIO
+import           Hgg.Plot.Bridge.Analyze (renderModelGraphSVG)
+import           Hanalyze.Model.HBM          (buildModelGraph)
+
+main = do
+  let mg = buildModelGraph myHBM
+  Mermaid.renderModelGraph "out/dag.html" "My HBM" mg            -- Route 1
+  TIO.writeFile "out/dag.dot" (Dot.renderModelGraphDot mg)       -- Route 2
+  renderModelGraphSVG     "out/dag.svg"  "My HBM" mg             -- Route 3
+```
+
+Note: for standard plots, hgg also ships native PNG (Rasterific) and PDF
+backends. For the ModelGraph SVG route, convert via `rsvg-convert` / `inkscape`
+when PNG / PDF is needed.
 
 ### Data I/O (`Hanalyze.DataIO.*`)
 
@@ -136,7 +233,7 @@ command.
 ### 30 seconds via Haskell API
 
 ```haskell
-import qualified Stat.Test as ST
+import qualified Hanalyze.Stat.Test as ST
 import qualified Numeric.LinearAlgebra as LA
 
 main = do
@@ -146,6 +243,11 @@ main = do
   print (ST.trPValue result, ST.trEffect result)
   -- (0.012, Just ("Cohen's d", -1.85))
 ```
+
+A single `import Hanalyze` re-exports the core entry points (linear / GLM models,
+descriptive stats, tests, effect sizes, distributions, plotting helpers and CSV
+I/O) for quick exploration; reach for the individual `Hanalyze.Model.*` /
+`Hanalyze.Stat.*` modules when you need their full surface.
 
 See [docs/01-quickstart.md](docs/01-quickstart.md) for a fuller introduction.
 
@@ -175,7 +277,7 @@ For per-command flags, run `hanalyze <cmd> --help` or see [docs/01-quickstart.md
 
 ## Examples / demos
 
-`demo/` contains many demos (60+ as of this release). Highlights:
+`demo/` contains many demos (76 as of this release). Highlights:
 
 | Demo | Summary |
 |---|---|
@@ -188,7 +290,7 @@ For per-command flags, run `hanalyze <cmd> --help` or see [docs/01-quickstart.md
 | `demo/bayesian/SimpsonParadoxDemo.hs` | Disentangle Simpson's paradox via hierarchical model |
 | `demo/io/DirtyDataDemo.hs` | Auto-defend against 19 dirty CSV variants |
 
-Run: `dist-newstyle/build/x86_64-linux/ghc-9.6.7/hanalyze-0.1.0.0/x/<demo-name>/build/<demo-name>/<demo-name>`.
+Run: `dist-newstyle/build/x86_64-linux/ghc-9.6.7/hanalyze-0.2.0.0/x/<demo-name>/build/<demo-name>/<demo-name>`.
 
 ---
 
@@ -253,6 +355,8 @@ See [docs/comparison/python-r.md](docs/comparison/python-r.md) for the feature m
 Selected results from `bench/results/SUMMARY.md`. Each entry is a single
 benchmark configuration; absolute objective values depend on iteration
 counts, seeds, and tolerances — see the SUMMARY for full conditions.
+NUTS is additionally validated against posteriordb reference posteriors
+(see [bench/posteriordb/](bench/posteriordb/)).
 
 - **NUTS 8-schools** (warmup 500, samples 1000): hanalyze 1492 ms with ESS(mu) 839 vs blackjax 530 ms / ESS 810 in this run
 - **Holt-Winters seasonal n=500 p=12**: hanalyze 0.19 ms vs statsmodels MLE 96 ms in this run (note: hanalyze uses fixed α=0.3 closed-form; statsmodels does MLE)
@@ -292,8 +396,8 @@ graph TD
 ## Roadmap & API stability
 
 - **Stable** (API expected to remain backward-compatible within minor versions): `Hanalyze.DataIO.*`, `Hanalyze.Stat.{Test, Bootstrap, MultipleTesting, ClassMetrics, CV, Effect, Distribution}`, `Hanalyze.Model.{LM, GLM, Spline, Regularized, RandomForest, DecisionTree, TimeSeries, Survival, GAM}`, `Hanalyze.Optim.{NelderMead, LBFGS, DifferentialEvolution, CMAES, NSGA, BayesOpt, SimulatedAnnealing, ParticleSwarm}`, `Hanalyze.Design.*`, `Hanalyze.Viz.{Scatter, Bar, Histogram}`.
-- **Experimental** (API may evolve): `Hanalyze.Model.HBM` DSL, `Hanalyze.MCMC.NUTS` (mass-matrix adaptation is opt-in), `Hanalyze.Stat.VI` (ADVI), `Hanalyze.Model.{GP, RFF, GPRobust, GLMM}`, `Hanalyze.Viz.ReportBuilder`. Behaviour is benchmarked but type signatures may shift.
-- **Future direction**: a unified top-level `Hanalyze.*` re-export layer, a Pipeline-style `Unfitted → Fitted` API, and a backend-abstraction typeclass for swapping hmatrix/Massiv/Accelerate are under consideration but not on a fixed schedule.
+- **Experimental** (API may evolve): `Hanalyze.Model.HBM` DSL, `Hanalyze.MCMC.NUTS` (mass-matrix adaptation is opt-in), `Hanalyze.Stat.VI` (ADVI), `Hanalyze.Model.{GP, RFF, GPRobust, GLMM}`, `Hanalyze.Model.{SVM, GradientBoosting, NeuralNetwork}`, `Hanalyze.Model.LiNGAM.*`, `Hanalyze.Design.Custom.*`, the `df |-> spec` fit operator (`Hanalyze.Fit`), the hgg integration (`plot-integration` flag), `Hanalyze.Viz.ReportBuilder`. Behaviour is benchmarked but type signatures may shift.
+- **Future direction**: a backend-abstraction typeclass for swapping hmatrix/Massiv/Accelerate is under consideration but not on a fixed schedule. (The unified top-level re-export layer and the fit-operator API planned earlier landed in 0.2.0.0 as `module Hanalyze` and `Hanalyze.Fit`.)
 
 ---
 
@@ -302,22 +406,23 @@ graph TD
 ```
 src/
   DataIO/      — CSV/JSON/Parquet IO + health checks + sniff + clean DSL + reshape (9 mods)
-  Stat/        — tests/distributions/interpolation/effect/CV/bootstrap/interpret etc. (21 mods)
-  Model/       — LM/GLM/GLMM/Spline/Kernel/GP/RFF/HBM/PCA/Cluster/Tree/TS/Survival (23 mods)
+  Stat/        — tests/distributions/effect/CV/bootstrap/interpret/causal/MCMC diagnostics (33 mods)
+  Model/       — LM/GLM/GLMM/GP/HBM/SVM/GBM/NN/Cluster/TS/Survival/LiNGAM/FDA etc. (75 mods)
   Optim/       — single-obj (NM/LBFGS/DE/CMAES/SA/PSO) + multi-obj (NSGA/BO/Pareto) (18 mods)
-  Design/      — Factorial/Block/RSM/Optimal/Orthogonal/Taguchi (11 mods)
-  Viz/         — Vega-Lite-based visualisation + ReportBuilder (15 mods)
-  MCMC/        — MH/HMC/NUTS/Gibbs/Slice (6 mods)
+  Design/      — Factorial/Block/RSM/Orthogonal/Taguchi + Custom optimal design (30 mods)
+  Viz/         — Vega-Lite-based visualisation + ReportBuilder (19 mods)
+  MCMC/        — MH/HMC/NUTS/Gibbs/Slice/SMC + progress (9 mods)
+  Math/ Data/ Plot/ + Fit/Diagnostics — numeric kernels, data helpers, hgg integration, fit operator
 ```
 
-As of this release: 103 modules, 238 tests.
+As of this release: 212 modules, ~1,390 test examples.
 
 ---
 
 ## Build
 
 ```bash
-cabal build all                  # library + all executables (60+ demos)
+cabal build all                  # library + all executables (76 demos)
 cabal test                       # hspec test suite
 cabal repl                       # interactive REPL
 ```
