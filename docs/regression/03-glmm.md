@@ -295,7 +295,7 @@ The most general path: sample all parameters ($\boldsymbol\beta, \mathbf{u}, \si
 #### Example model
 
 ```haskell
-import Model.HBM
+import Hanalyze.Model.HBM
 
 hierarchicalNormal :: ModelP ()
 hierarchicalNormal = do
@@ -330,10 +330,28 @@ Practical guidance:
 
 ### 6.1 LME (Gaussian + Identity)
 
+**High-level (`df |-> glmmF`)** — an R-style formula with a random term
+`(1|group)` fits the mixed model and `toPlot` draws the caterpillar directly:
+
 ```haskell
-import Model.GLMM (fitLMEDataFrame, GLMMResult (..),
+import Hanalyze.Plot     (glmmF, (|->), toPlot)
+import Hgg.Plot.Spec        (ColData (..))
+import Hgg.Plot.Frame       ((|>>))
+import Hgg.Plot.Backend.SVG (saveSVGBound)
+import Data.Text                (Text)
+
+let (re, fixedNames) = df |-> glmmF "score ~ hours + (1|school)"  -- (GLMMResultRE, names)
+    noDf             = [] :: [(Text, ColData)]                    -- caterpillar needs no df
+saveSVGBound "glmm-caterpillar.svg" (noDf |>> toPlot re)          -- per-group random effects
+```
+
+**Lower-level (`fitLMEDataFrame`)** — get the raw `GLMMResult` with variance
+components and ICC:
+
+```haskell
+import Hanalyze.Model.GLMM (fitLMEDataFrame, GLMMResult (..),
                    glmmFixed, glmmRandVar, glmmResidVar, glmmICC)
-import Model.Core (coefficientsV)
+import Hanalyze.Model.Core (coefficientsV)
 
 case fitLMEDataFrame [("hours", 1)] "school" "score" df of
   Nothing -> putStrLn "fit failed"
@@ -346,11 +364,16 @@ case fitLMEDataFrame [("hours", 1)] "school" "score" df of
     putStrLn $ "ICC = " ++ show icc
 ```
 
+A caterpillar (forest) plot makes the per-group random effects easy to read —
+each group's estimated effect with its interval, sorted, around the overall mean:
+
+![Caterpillar plot of per-group random effects with intervals](../images/glmm-caterpillar.svg)
+
 ### 6.2 GLMM (Binomial / Poisson)
 
 ```haskell
-import Model.GLMM (fitGLMMDataFrame)
-import Model.GLM (Family (..), LinkFn (..))
+import Hanalyze.Model.GLMM (fitGLMMDataFrame)
+import Hanalyze.Model.GLM (Family (..), LinkFn (..))
 
 case fitGLMMDataFrame Binomial Logit [("dose", 1)] "patient" "outcome" df of
   Just gr -> ...
@@ -371,7 +394,7 @@ hanalyze data.csv x y GLM -d binomial -l logit --group hospital --report
 Complex hierarchies are easiest in `Hanalyze.Model.HBM`:
 
 ```haskell
-import Model.HBM
+import Hanalyze.Model.HBM
 
 complexModel :: ModelP ()
 complexModel = do

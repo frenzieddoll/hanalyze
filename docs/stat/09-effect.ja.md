@@ -9,7 +9,7 @@ p-value を補完する **効果の大きさ** を測る指標。
 ### 位置 (location)
 
 ```haskell
-import qualified Stat.Effect as Eff
+import qualified Hanalyze.Stat.Effect as Eff
 
 -- Cohen's d (二群、pooled SD)
 Eff.cohenD groupA groupB

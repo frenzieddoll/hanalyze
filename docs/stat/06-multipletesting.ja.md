@@ -21,7 +21,7 @@ bonferroni, holm, benjaminiHochberg, benjaminiYekutieli :: [Double] -> [Double]
 ## 2. 使用例
 
 ```haskell
-import qualified Stat.MultipleTesting as MT
+import qualified Hanalyze.Stat.MultipleTesting as MT
 
 -- 10 個の検定 p-values
 let pvals = [0.001, 0.005, 0.012, 0.023, 0.041, 0.063, 0.091, 0.123, 0.156, 0.198]

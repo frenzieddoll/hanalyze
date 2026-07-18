@@ -17,50 +17,60 @@ import Hanalyze.Viz.Core (PlotConfig (..), defaultConfig, OutputFormat (..), wri
 -- ---------------------------------------------------------------------------
 
 -- (カテゴリ, 実装済 ✅, 部分実装 🚧, 未実装 ❌)
--- Phase A-J まで完了後の最新数値。
+-- Phase 29 完了 + Phase 37 計画反映 (2026-05-30 更新)。
+-- A2 (連続 7) + A3 (離散 6) + A4 (多変量 3) = 16 の分布が Phase 37 計画上で
+-- 未実装、 これを missing にカウントする (旧 Bound 1 も含めて 17)。
 statusByCategory :: [(Text, Int, Int, Int)]
 statusByCategory =
   [ -- 分布: Base12 + (Mixture, Truncated, Censored, MvNormal, Dirichlet,
     --        LKJ, Multinomial, NegBinom, ZIP, ZIB, InvGamma, Weibull,
-    --        Pareto, BetaBinom, VonMises) - 27; 残り Wishart, MvT, Bound = 3
-    ("分布",          27, 0, 3 )
-  , -- サンプラー: NUTS/HMC/MH/Gibbs/ADVI/Slice = 6; Full-ADVI/SMC/NormFlow = 3
-    ("サンプラー",     6, 0, 3 )
-  , -- 事後 Workflow: PPC/PriorPC/Potential/set_data/Deterministic = 5
-    ("事後 Workflow",  5, 0, 1 )  -- 多PPC など 1 件残
-  , -- 可視化: trace/posterior/pair/acf/forest/energy/BFMI/HDI-trace
-    --        /rank/pp_check/summary/divergence-overlay = 12; 残 1
-    ("可視化・診断",   12, 0, 1 )
-  , -- モデル比較: WAIC/LOO/compareModels = 3; ベイズファクター 1
-    ("モデル比較",     3, 0, 1 )
+    --        Pareto, BetaBinom, VonMises) = 27 ✅
+    -- + Phase 37-A2 (4) + A3 (5) + A4 (2) ✅ → 38
+    -- 残 Phase 37 計画: A2 残 (3) + A3 残 (1) + A4 残 Wishart (1) + Bound (1) = 6 ❌
+    ("分布",          38, 0,  6)
+  , -- サンプラー: NUTS/HMC/MH/Gibbs/Slice/ADVI/SMC/Full-rank ADVI = 8 ✅
+    -- 残: 正規化フロー (Stretch) = 1 ❌
+    ("サンプラー",     8, 0, 1 )
+  , -- 事後 Workflow: PPC/PriorPC/Potential/set_data/Deterministic = 5 ✅
+    ("事後 Workflow",  5, 0, 0 )
+  , -- 可視化・診断: trace/posterior/pair/acf/forest/energy/BFMI/HDI-trace
+    --              /rank/ppc/summary/divergence-overlay/ESS-R̂表 = 13 ✅
+    --              A7 はナビ整理のみで実装 gap なし
+    ("可視化・診断",   13, 0, 0 )
+  , -- モデル比較: WAIC/LOO/Pseudo-BMA/真BMA/BayesFactor (Bridge) = 5 ✅
+    ("モデル比較",     5, 0, 0 )
   , -- プリミティブ: 階層/ランダム切片・傾き/Mixture/Trunc/Censored/Potential
-    --              /Deterministic/non-centered/AR/MvN-latent/Dirichlet/LKJ = 12
-    ("プリミティブ",   12, 1, 3 )  -- GP部分; ODE/BNN/state-space-extended
+    --              /Deterministic/non-centered/AR/MvN-latent/Dirichlet/LKJ = 12 ✅
+    -- + Phase 37-A6: glmmRandomIntercept ✅ → 13
+    -- 残 Phase 39: hmmLatent / dpStickBreaking = 2 ❌
+    -- Stretch: ODE 尤度 / Bayes NN = 2 ❌
+    ("プリミティブ",   13, 1, 4 )  -- GP 部分; hmm/dp + ODE/BNN
   ]
 
--- 完了したフェーズ
+-- 完了したフェーズ (Phase 29 まで)
 addedThisBranch :: [(Text, Text)]
 addedThisBranch =
-  [ ("Phase A", "pm.Potential プリミティブ")
-  , ("Phase B", "pm.Mixture (log-sum-exp)")
-  , ("Phase C", "Truncated / Censored")
-  , ("Phase D", "MvNormal 観測専用")
-  , ("Phase E", "Energy plot / BFMI")
-  , ("Phase F", "5 つの可視化基盤 (Summary/HDI-Trace/Rank/PPC/Divergence)")
-  , ("Phase G", "6 つの主要機能 (Deterministic/Dir/non-centered/Div/set_data/MvN-latent)")
-  , ("Phase H", "6 件の補完 (NB/Multinomial/ZIP/LKJ/withData多相/Hanalyze.Stat.Summary 切出)")
-  , ("Phase I", "5 つの新規分布 (InvGamma/Weibull/Pareto/BetaBin/VonMises)")
-  , ("Phase J", "LKJ K=3 / AR(1) / Slice sampler")
+  [ ("Phase A-J",   "本ブランチ初期: 27 分布 + サンプラー基盤 + 5 viz")
+  , ("Phase 29-A1", "SMC (annealing + bridge 経路)")
+  , ("Phase 29-A2", "Bridge Sampling + Bayes Factor")
+  , ("Phase 29-A3", "真の BMA (周辺尤度ベース)")
+  , ("Phase 37-A0", "HBM 書き方 doc (グループ別 3 形式 + multi-level + crossed)")
+  , ("Phase 37-A1", "本 PyMC 比較 doc を Phase 29 反映 + 残 gap 確定")
+  , ("Phase 37-A2", "連続分布 +4: SkewNormal / Logistic / Gumbel / AsymmetricLaplace")
+  , ("Phase 37-A3", "離散分布 +5: OrderedLogistic / DiscreteUniform / Geometric / HyperGeometric / ZeroInflatedNegativeBinomial")
+  , ("Phase 37-A4", "多変量分布 +2: MvStudentT / DirichletMultinomial (Wishart 後回し)")
+  , ("Phase 37-A5", "Full-rank ADVI (q = N(μ, LLᵀ)、 viCovU で L 出力)")
+  , ("Phase 37-A6", "glmmRandomIntercept helper (Gaussian/Binomial/Poisson)")
   ]
 
--- 残課題 (Stretch)
+-- 残課題 (Phase 37 計画分 + Stretch)
 todoStretch :: [Text]
 todoStretch =
-  [ "Wishart / Multivariate-t (LKJ で代替推奨)"
-  , "Full-rank ADVI / Normalizing flows / SMC"
-  , "ODE 尤度 (Runge-Kutta + AD、研究レベル)"
-  , "ベイズ NN (隠れ層、研究レベル)"
-  , "ベイズファクター / 周辺尤度 (重要度サンプリング系)"
+  [ "[A2 残] 連続分布 3 (低優先): Triangular/Kumaraswamy/Rice"
+  , "[A3 残] 離散 1 (低優先): DiscreteWeibull"
+  , "[A4 残] 多変量 1: Wishart (LKJ 代替可、 後回し)"
+  , "[Phase 39 候補] 残 helper: hmmLatent / dpStickBreaking (Phase 37 から繰越)"
+  , "[Stretch] 正規化フロー / ODE 尤度 / ベイズ NN (研究レベル、 別 Phase)"
   ]
 
 -- ---------------------------------------------------------------------------

@@ -1,4 +1,10 @@
--- | Common foundation for multi-output regression.
+-- |
+-- Module      : Hanalyze.Model.MultiOutput
+-- Description : Common foundation for multi-output regression (単出力 ↔ 多出力変換 + 評価指標)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Common foundation for multi-output regression.
 --
 -- Design policy:
 --

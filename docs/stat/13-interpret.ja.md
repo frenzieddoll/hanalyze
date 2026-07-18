@@ -8,7 +8,7 @@
 最も影響の大きい feature を特定:
 
 ```haskell
-import qualified Stat.Interpret as Interp
+import qualified Hanalyze.Stat.Interpret as Interp
 import qualified System.Random.MWC as MWC
 
 gen <- MWC.createSystemRandom
@@ -63,8 +63,8 @@ ICE curves が分散していれば **interaction 効果** あり (heterogeneous
 
 ```haskell
 -- Random Forest 分類器を解釈
-import qualified Model.RandomForest as RF
-import qualified Stat.ClassMetrics as CM
+import qualified Hanalyze.Model.RandomForest as RF
+import qualified Hanalyze.Stat.ClassMetrics as CM
 
 let cfg = RF.defaultRFConfig  -- ... (existing module)
 rf <- RF.fitRF cfg xsTrain ysTrain gen

@@ -8,7 +8,7 @@ import qualified Numeric.LinearAlgebra   as LA
 import qualified System.Random.MWC       as MWC
 import qualified Data.Vector             as V
 
-import qualified Hanalyze.Model.Kernel            as Kn
+import qualified Hanalyze.Model.KernelRegression            as Kn
 import qualified Hanalyze.Model.GP                as GP
 import qualified Hanalyze.Model.RFF               as RFF
 import qualified Hanalyze.Model.GPRobust          as GPR

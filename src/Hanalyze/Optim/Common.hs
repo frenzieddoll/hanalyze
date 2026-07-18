@@ -1,5 +1,10 @@
-{-# LANGUAGE StrictData #-}
--- | Common foundation for the single-objective optimization algorithms.
+-- |
+-- Module      : Hanalyze.Optim.Common
+-- Description : 単一目的最適化アルゴリズム群が共有する基盤型・既定値
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Common foundation for the single-objective optimization algorithms.
 --
 -- Provides the shared types and defaults used by every single-objective
 -- optimizer (@Hanalyze.Optim.NelderMead@, @Hanalyze.Optim.LBFGS@, @Hanalyze.Optim.LineSearch@,
@@ -15,6 +20,7 @@
 --
 -- (Deterministic algorithms also return @IO@ for uniformity. A pure-only
 -- variant can be exported separately when needed.)
+{-# LANGUAGE StrictData #-}
 module Hanalyze.Optim.Common
   ( OptimResult (..)
   , StopCriteria (..)

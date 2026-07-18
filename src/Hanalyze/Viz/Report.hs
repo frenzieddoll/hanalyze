@@ -1,3 +1,9 @@
+-- |
+-- Module      : Hanalyze.Viz.Report
+-- Description : MCMC 結果の統合 HTML レポート (モデル DAG・事後要約表・診断プロット・pairs 散布図)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
 {-# LANGUAGE OverloadedStrings #-}
 -- | Integrated HTML report for MCMC results.
 --
@@ -28,7 +34,6 @@ import Graphics.Vega.VegaLite (fromVL)
 
 import Hanalyze.Model.HBM        (ModelGraph)
 import Hanalyze.MCMC.Core        (Chain (..), chainVals, posteriorMean, posteriorSD, posteriorQuantile)
-import Hanalyze.Stat.MCMC        (ess, rhat)
 import Hanalyze.Stat.Summary     (SummaryRow (..), posteriorSummary)
 import Hanalyze.Viz.Assets       (vegaJS, vegaLiteJS, vegaEmbedJS)
 import Hanalyze.Viz.MCMC         (mcmcDiagnostics, mcmcDiagnosticsMulti, autocorrPlot, pairScatter)
@@ -262,7 +267,7 @@ summarySection rpt =
     , "  <table>"
     , "    <thead><tr>"
     , "      <th>Parameter</th><th>Mean</th><th>SD</th>"
-    , "      <th>HDI 3%</th><th>HDI 97%</th><th>ESS</th>" <> rhatHeader
+    , "      <th>HDI 3%</th><th>HDI 97%</th><th>ESS (bulk)</th>" <> rhatHeader
     , "    </tr></thead>"
     , "    <tbody>"
     , T.concat (map tableRow rows)

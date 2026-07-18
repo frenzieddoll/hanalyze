@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Structured warning / informational messaging shared by data loaders
+-- |
+-- Module      : Hanalyze.DataIO.Log
+-- Description : データローダ / 前処理が共有する構造化警告・情報メッセージ (LogEntry/LogReport)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Structured warning / informational messaging shared by data loaders
 -- and preprocessing.
 --
 --   * 'LogEntry'        — a single message (severity / code / body / hint).

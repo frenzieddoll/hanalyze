@@ -16,7 +16,7 @@
 5. [モデル別の使用例](#5-モデル別の使用例)
 6. [CLI からの利用](#6-cli-からの利用)
 7. [カスタムレポートの作り方](#7-カスタムレポートの作り方)
-8. [既存 `Hanalyze.Viz.AnalysisReport` との関係](#8-既存-vizanalysisreport-との関係)
+8. [既存 `Hanalyze.Viz.AnalysisReport` との関係](#8-既存-hanalyzevizanalysisreport-との関係)
 9. [よくあるパターンと落とし穴](#9-よくあるパターンと落とし穴)
 
 ---
@@ -116,7 +116,7 @@ defaultReportConfig :: Text -> ReportConfig
 
 ```haskell
 {-# LANGUAGE OverloadedStrings #-}
-import Viz.ReportBuilder
+import Hanalyze.Viz.ReportBuilder
 
 main :: IO ()
 main = do
@@ -187,10 +187,10 @@ data GLMReport = GLMReport
 利用例 (LM):
 
 ```haskell
-import qualified Model.Core as Core
-import qualified Model.LM   as LM
-import qualified Viz.ReportBuilder   as RB
-import qualified Viz.ReportInstances as RI
+import qualified Hanalyze.Model.Core as Core
+import qualified Hanalyze.Model.LM   as LM
+import qualified Hanalyze.Viz.ReportBuilder   as RB
+import qualified Hanalyze.Viz.ReportInstances as RI
 
 main = do
   Right df <- DataIO.CSV.loadAuto "data.csv"
@@ -293,11 +293,11 @@ data InteractiveModel = InteractiveModel
 import qualified Numeric.LinearAlgebra as LA
 import qualified Data.Vector as V
 
-import DataIO.CSV         (loadAuto)
+import Hanalyze.DataIO.CSV         (loadAuto)
 import DataFrame.Core     (DataFrame, getNumeric)
-import Model.Regularized  (Penalty (..), fitRegularized)
-import Viz.ReportBuilder
-import Viz.ReportInstances ()    -- instances を可視化
+import Hanalyze.Model.Regularized  (Penalty (..), fitRegularized)
+import Hanalyze.Viz.ReportBuilder
+import Hanalyze.Viz.ReportInstances ()    -- instances を可視化
 
 main :: IO ()
 main = do
@@ -341,9 +341,9 @@ hanalyze ridge data.csv "x1 x2 x3" y --penalty lasso --lambda 0.05 --report repo
 ライブラリから:
 
 ```haskell
-import Model.Regularized (fitRegularized, Penalty (..))
-import Viz.ReportBuilder
-import Viz.ReportInstances ()
+import Hanalyze.Model.Regularized (fitRegularized, Penalty (..))
+import Hanalyze.Viz.ReportBuilder
+import Hanalyze.Viz.ReportInstances ()
 let fit = fitRegularized (L1 0.05) xMat yLA
 renderReport "out.html" (defaultReportConfig "Lasso") (toReport cfg df xCols "y" fit)
 ```
@@ -357,7 +357,7 @@ hanalyze spline data.csv x y --type natural --knots 8 --report
 レポート構成: Data / Model / KeyValue (kind, knots, RMSE) / FitScatter (knots を含む滑らか曲線) / Residuals。
 
 ```haskell
-import Model.Spline
+import Hanalyze.Model.Spline
 let fit = fitSpline (BSpline 3) [0, 1, 2, 3, 4, 5] xVec yVec
 renderReport "spline.html" cfg (toReport cfg df ["x"] "y" fit)
 ```
@@ -372,8 +372,8 @@ hanalyze kernel data.csv x y --method rff --features 200 --report
 ライブラリ:
 
 ```haskell
-import qualified Model.Kernel as K
-import qualified Model.RFF    as R
+import qualified Hanalyze.Model.Kernel as K
+import qualified Hanalyze.Model.RFF    as R
 let krFit  = K.kernelRidge K.Gaussian 0.5 0.01 xVec yVec   -- KernelRidgeFit
 gen <- createSystemRandom
 feats <- R.sampleRFFRBF 200 0.6 1.0 gen
@@ -404,11 +404,11 @@ hanalyze rf       data.csv "x1 x2 x3" y --trees 200 --report
 ライブラリから直接構築する例:
 
 ```haskell
-import qualified Model.Quantile      as Q
-import qualified Model.GAM           as GAM
-import qualified Model.RandomForest  as RF
-import qualified Viz.ReportBuilder   as RB
-import qualified Viz.ReportInstances as RI
+import qualified Hanalyze.Model.Quantile      as Q
+import qualified Hanalyze.Model.GAM           as GAM
+import qualified Hanalyze.Model.RandomForest  as RF
+import qualified Hanalyze.Viz.ReportBuilder   as RB
+import qualified Hanalyze.Viz.ReportInstances as RI
 
 -- Quantile (τ = 0.5 で中央値回帰)
 let qfit = Q.fitQuantile 0.5 xMat yVec
@@ -429,8 +429,8 @@ RB.renderReport "rf.html" cfg (RB.toReport cfg df ["x1","x2"] "y" rep)
 ### Robust GP
 
 ```haskell
-import Model.GP        (GPParams (..))
-import Model.GPRobust
+import Hanalyze.Model.GP        (GPParams (..))
+import Hanalyze.Model.GPRobust
 let hp  = GPParams 0.6 1.0 0.05 1.0
     fit = fitGPRobust RBF hp (RCauchy 0.5) trainX trainY
 renderReport "rgp.html" cfg (toReport cfg df ["x"] "y" fit)
@@ -443,9 +443,9 @@ renderReport "rgp.html" cfg (toReport cfg df ["x"] "y" fit)
 タグチ分析は固有の構造 (要因効果 + SN 比) があるため、専用の `Hanalyze.Viz.Taguchi.renderTaguchiReport` を持つ:
 
 ```haskell
-import qualified Design.Orthogonal as OA
-import qualified Design.Taguchi    as TG
-import qualified Viz.Taguchi       as VTG
+import qualified Hanalyze.Design.Orthogonal as OA
+import qualified Hanalyze.Design.Taguchi    as TG
+import qualified Hanalyze.Viz.Taguchi       as VTG
 
 let Right ad = OA.assignFactors OA.l9 specs
     sns      = TG.snRatioRows TG.SmallerBetter yMatrix
@@ -499,7 +499,7 @@ section を直接組み立てる:
 
 ```haskell
 {-# LANGUAGE OverloadedStrings #-}
-import Viz.ReportBuilder
+import Hanalyze.Viz.ReportBuilder
 import Graphics.Vega.VegaLite (VegaLite, toVegaLite, dataFromColumns,
                                 dataColumn, mark, encoding, position,
                                 Mark (..), Position (..), PName, PmType,

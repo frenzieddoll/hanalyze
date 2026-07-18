@@ -297,7 +297,7 @@ fitGLMM :: Family -> LinkFn
 #### モデル例
 
 ```haskell
-import Model.HBM
+import Hanalyze.Model.HBM
 
 hierarchicalNormal :: ModelP ()
 hierarchicalNormal = do
@@ -332,10 +332,27 @@ hierarchicalNormal = do
 
 ### 6.1 LME (Gaussian + Identity)
 
+**高レベル (`df |-> glmmF`)** — ランダム項 `(1|group)` を含む R 流フォーミュラで
+混合モデルを学習し、`toPlot` が caterpillar をそのまま描く:
+
 ```haskell
-import Model.GLMM (fitLMEDataFrame, GLMMResult (..),
+import Hanalyze.Plot     (glmmF, (|->), toPlot)
+import Hgg.Plot.Spec        (ColData (..))
+import Hgg.Plot.Frame       ((|>>))
+import Hgg.Plot.Backend.SVG (saveSVGBound)
+import Data.Text                (Text)
+
+let (re, fixedNames) = df |-> glmmF "score ~ hours + (1|school)"  -- (GLMMResultRE, 名前)
+    noDf             = [] :: [(Text, ColData)]                    -- caterpillar は df 不要
+saveSVGBound "glmm-caterpillar.svg" (noDf |>> toPlot re)          -- グループ別ランダム効果
+```
+
+**低レベル (`fitLMEDataFrame`)** — 分散成分と ICC を持つ生の `GLMMResult` を得る:
+
+```haskell
+import Hanalyze.Model.GLMM (fitLMEDataFrame, GLMMResult (..),
                    glmmFixed, glmmRandVar, glmmResidVar, glmmICC)
-import Model.Core (coefficientsV)
+import Hanalyze.Model.Core (coefficientsV)
 
 case fitLMEDataFrame [("hours", 1)] "school" "score" df of
   Nothing -> putStrLn "fit failed"
@@ -348,11 +365,17 @@ case fitLMEDataFrame [("hours", 1)] "school" "score" df of
     putStrLn $ "ICC = " ++ show icc
 ```
 
+caterpillar (forest) プロットを描くと、グループごとのランダム効果が
+読み取りやすくなります。各グループの推定効果とその区間を、全体平均の
+まわりに並べて表示します:
+
+![グループごとのランダム効果と区間を示す caterpillar プロット](../images/glmm-caterpillar.svg)
+
 ### 6.2 GLMM (Binomial / Poisson)
 
 ```haskell
-import Model.GLMM (fitGLMMDataFrame)
-import Model.GLM (Family (..), LinkFn (..))
+import Hanalyze.Model.GLMM (fitGLMMDataFrame)
+import Hanalyze.Model.GLM (Family (..), LinkFn (..))
 
 case fitGLMMDataFrame Binomial Logit [("dose", 1)] "patient" "outcome" df of
   Just gr -> ...
@@ -373,7 +396,7 @@ hanalyze data.csv x y GLM -d binomial -l logit --group hospital --report
 複雑な階層は `Hanalyze.Model.HBM` で書くのが柔軟:
 
 ```haskell
-import Model.HBM
+import Hanalyze.Model.HBM
 
 complexModel :: ModelP ()
 complexModel = do

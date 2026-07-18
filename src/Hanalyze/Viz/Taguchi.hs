@@ -1,3 +1,9 @@
+-- |
+-- Module      : Hanalyze.Viz.Taguchi
+-- Description : 田口メソッド解析結果の HTML レポート (SN 比・主効果・最適水準)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
 {-# LANGUAGE OverloadedStrings #-}
 -- | HTML report for Taguchi-method analysis.
 --

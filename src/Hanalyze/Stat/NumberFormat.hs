@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Number-formatting helpers for reports and CLI output.
+-- |
+-- Module      : Hanalyze.Stat.NumberFormat
+-- Description : レポート/CLI 出力向けの数値フォーマット helper (桁数に応じた固定/指数表記の自動選択)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Number-formatting helpers for reports and CLI output.
 --
 -- A single function chooses fixed-point or exponential notation based on
 -- magnitude:

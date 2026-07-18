@@ -66,7 +66,7 @@ $$ R^1_\tau = 1 - \frac{V_\tau(\text{model})}{V_\tau(\text{intercept-only})} $$
 ## ライブラリ API
 
 ```haskell
-import Model.Quantile
+import Hanalyze.Model.Quantile
 
 data QRFit = QRFit
   { qfTau     :: Double
@@ -95,7 +95,7 @@ pseudoR1    :: Double -> Double -> Double        -- modelV, baseV → R¹_τ
 {-# LANGUAGE OverloadedStrings #-}
 import qualified Numeric.LinearAlgebra as LA
 import qualified Data.Vector as V
-import Model.Quantile
+import Hanalyze.Model.Quantile
 
 main :: IO ()
 main = do
@@ -128,13 +128,18 @@ hanalyze quantile data.csv x y --taus 0.1,0.5,0.9 --report
 `--taus` 指定時のレポートに **Multiple quantile fits** セクションが
 追加され、観測散布 + 各分位線が tableau10 カラーで色分け表示される。
 
+複数分位線を 1 枚に重ねると、τ=0.1/0.5/0.9 の線が右に行くほど末広がりに
+開き、予測区間の幅が説明変数とともに広がる様子が読み取れる:
+
+![分位点回帰の複数分位線 (τ=0.1/0.5/0.9)](../images/quantile-lines.svg)
+
 ## Reportable による可視化
 
 現状 `Reportable QRFit` instance は未提供 (CLI ハンドラが直接 section を
 構築)。ライブラリから同等のレポートを作る場合:
 
 ```haskell
-import qualified Viz.ReportBuilder as RB
+import qualified Hanalyze.Viz.ReportBuilder as RB
 
 let cfg = RB.defaultReportConfig "Quantile demo"
     sections =

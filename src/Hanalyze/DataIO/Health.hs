@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | DataFrame health check. Surfaces the "looks suspicious" patterns that
+-- |
+-- Module      : Hanalyze.DataIO.Health
+-- Description : 読み込み済み DataFrame の疑わしいパターンを警告コード (W001〜W008) として検出
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- DataFrame health check. Surfaces the "looks suspicious" patterns that
 -- can hide in a successfully-loaded DataFrame, as warning codes.
 --
 -- Codes detected:

@@ -1,5 +1,10 @@
-{-# LANGUAGE OverloadedStrings #-}
--- | Desirability functions (Derringer & Suich 1980).
+-- |
+-- Module      : Hanalyze.Optim.Desirability
+-- Description : Desirability 関数 (Derringer & Suich 1980) による多目的スカラー化
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Desirability functions (Derringer & Suich 1980).
 --
 -- A classical scalarization for multi-objective optimization. Each response
 -- @y_j@ is mapped to a per-response desirability @d_j ∈ [0, 1]@, and the
@@ -11,6 +16,7 @@
 --
 -- The @x@ that maximizes @D@ is a point that satisfies all responses
 -- reasonably well.
+{-# LANGUAGE OverloadedStrings #-}
 module Hanalyze.Optim.Desirability
   ( DesirabilityType (..)
   , individualDesirability

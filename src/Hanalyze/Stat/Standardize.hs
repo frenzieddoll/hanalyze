@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Input-feature standardization (z-score) utilities.
+-- |
+-- Module      : Hanalyze.Stat.Standardize
+-- Description : 入力特徴量の標準化 (z-score) ユーティリティ
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Input-feature standardization (z-score) utilities.
 --
 -- Use cases:
 --

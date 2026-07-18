@@ -50,4 +50,8 @@ let roc = CM.rocCurve ys scores  -- [(FPR, TPR), ...]
     pr  = CM.prCurve ys scores   -- [(recall, precision), ...]
 ```
 
-可視化は Viz モジュールで HTML 出力可能。
+可視化は Viz モジュールで HTML 出力可能。多クラス分類では、決定境界を領域色で
+塗り分けてクラス平均を重ねると、分類器がどのように特徴空間を分割しているかを
+直感的に把握できます。下図は LDA による 3 クラスの決定境界です。
+
+![LDA の決定境界とクラス平均 (3 クラスを領域色で塗り分け)](../images/lda-decision-boundary.svg)

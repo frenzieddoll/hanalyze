@@ -33,7 +33,7 @@ predictDTProbs :: DTree -> [Double] -> Map Int Double
 ## 2. 使用例
 
 ```haskell
-import qualified Model.DecisionTree as DT
+import qualified Hanalyze.Model.DecisionTree as DT
 
 -- iris like データ
 let xs = [[5.1, 3.5, 1.4, 0.2], [4.9, 3.0, 1.4, 0.2], ...]
@@ -71,6 +71,11 @@ CART (Classification And Regression Trees, Breiman et al. 1984):
 - **分割探索**: 全 feature × 全 threshold 候補で gain 最大化
 - **threshold**: 隣接相異値の中点
 - **再帰**: stop 条件まで深さ優先で構築
+
+構築された木は樹形図で可視化できる。矩形が分割ノード (例 `f1 ≤ 3.50`)、
+楕円が葉ノード (予測クラス `y=0/1`) を表す:
+
+![決定木の樹形図](../images/decisiontree.svg)
 
 ## 5. アンサンブル
 

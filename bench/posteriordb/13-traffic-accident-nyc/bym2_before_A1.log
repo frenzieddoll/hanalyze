@@ -1,0 +1,7 @@
+N = 1921, N_edges = 5461
+勾配経路 = vecIR (ベクトル式 IR 高速経路)
+sampling wall = 198004.3 ms (draws only, no dashboard/startup)
+param           mean        sd   hdi_3%..hdi_97%       ess    r_hat mcse_mean
+beta0        -6.6128    0.0245 [-6.657, -6.565]    1000.0   0.9996   0.00077
+sigma         1.1878    0.0377 [ 1.117,  1.258]     116.9   1.0170   0.00348
+rho           0.5469    0.0426 [ 0.469,  0.626]     141.1   1.0118   0.00359

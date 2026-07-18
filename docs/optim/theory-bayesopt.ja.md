@@ -66,10 +66,10 @@ $q$ 点を同時提案。並列実験で有効。
 
 ```haskell
 -- 単目的
-import Optim.BayesOpt (bayesOpt, defaultBayesOptConfig)
+import Hanalyze.Optim.BayesOpt (bayesOpt, defaultBayesOptConfig)
 (history, best) <- bayesOpt cfg f (lo, hi) gen
 
 -- 多目的 (NSGA-II 内側で acquisition 最大化)
-import Optim.BayesOpt (bayesOptMOWithNSGA)
+import Hanalyze.Optim.BayesOpt (bayesOptMOWithNSGA)
 hist <- bayesOptMOWithNSGA nIter nInit RBF f bounds gen
 ```

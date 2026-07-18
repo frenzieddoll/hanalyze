@@ -54,10 +54,12 @@ n 本の木をそれぞれ **異なる bootstrap サンプル** (元データか
 
 (現状の実装は単純な split 回数。MDI/Permutation は将来課題)
 
+`toPlot` で特徴重要度をバーチャート化できる (`Plottable RandomForest`)。
+
 ## ライブラリ API
 
 ```haskell
-import Model.RandomForest
+import Hanalyze.Model.RandomForest
 
 data RFConfig = RFConfig
   { rfTrees      :: Int       -- ツリー数 (default 100)
@@ -92,7 +94,7 @@ predictTree :: Tree -> [Double] -> Double
 {-# LANGUAGE OverloadedStrings #-}
 import qualified System.Random.MWC as MWC
 import qualified Data.Vector as V
-import Model.RandomForest
+import Hanalyze.Model.RandomForest
 
 main :: IO ()
 main = do
@@ -133,7 +135,7 @@ hanalyze rf data.csv "x1 x2 x3 x4" y \
 独自レポート例:
 
 ```haskell
-import qualified Viz.ReportBuilder as RB
+import qualified Hanalyze.Viz.ReportBuilder as RB
 import qualified Data.Vector as V
 
 let imp = V.toList (featureImportance forest)

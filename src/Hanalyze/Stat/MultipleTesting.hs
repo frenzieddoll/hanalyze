@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Multiple-testing correction.
+-- |
+-- Module      : Hanalyze.Stat.MultipleTesting
+-- Description : 多重比較補正 (FWER: Bonferroni/Holm、 FDR: BH/BY)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Multiple-testing correction.
 --
 -- Adjusts a list of p-values to control either:
 --

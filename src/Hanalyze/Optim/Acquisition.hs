@@ -1,6 +1,10 @@
-{-# LANGUAGE StrictData #-}
-{-# LANGUAGE OverloadedStrings #-}
--- | Acquisition functions for Bayesian Optimization.
+-- |
+-- Module      : Hanalyze.Optim.Acquisition
+-- Description : ベイズ最適化の獲得関数 (単一目的 EI/UCB/PI, 多目的 EHVI/ParEGO)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Acquisition functions for Bayesian Optimization.
 --
 -- Single-objective:
 --
@@ -12,6 +16,8 @@
 --
 --   * EHVI   — Expected Hypervolume Improvement.
 --   * ParEGO — Tchebycheff scalarization + EI.
+{-# LANGUAGE StrictData #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Hanalyze.Optim.Acquisition
   ( ei
   , ucb

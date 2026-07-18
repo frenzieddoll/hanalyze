@@ -15,7 +15,7 @@
 ## 2. API
 
 ```haskell
-import Model.Spline
+import Hanalyze.Model.Spline
 
 data SplineKind = BSpline Int | NaturalCubic
 data SplineFit = SplineFit { sfKind :: SplineKind
@@ -34,7 +34,7 @@ quantileKnots    :: Int -> Vector Double -> [Double]
 
 ```haskell
 import qualified Data.Vector as V
-import Model.Spline
+import Hanalyze.Model.Spline
 
 let xs = V.fromList [0, 0.1, 0.2, ..., 1.0]
     ys = V.fromList [...]
@@ -44,6 +44,12 @@ let fit = fitSpline (BSpline 3) knots xs ys   -- cubic B-spline
 let xNew = V.fromList [0, 0.05, 0.10, ..., 1.0]
     yNew = predictSpline fit xNew
 ```
+
+`predictSpline` で得た滑らかな曲線を散布図に重ねると、データの傾向を
+関数形を仮定せず捉えられる。信頼区間帯を併せて描けば、推定の不確実性も
+読み取れる。
+
+![スプライン平滑化曲線と信頼区間帯](../images/spline-smooth-ci.svg)
 
 ## 4. ノットの選び方
 

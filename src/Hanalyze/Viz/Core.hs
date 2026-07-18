@@ -1,3 +1,9 @@
+-- |
+-- Module      : Hanalyze.Viz.Core
+-- Description : 全 Viz.* モジュール共有の I/O ヘルパ (writeSpec / openInBrowser / vlJson 等)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
 {-# LANGUAGE OverloadedStrings #-}
 -- | Core visualization I/O helpers shared by every @Viz.*@ module.
 --

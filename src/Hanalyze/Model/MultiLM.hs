@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Multivariate (multi-output) linear regression.
+-- |
+-- Module      : Hanalyze.Model.MultiLM
+-- Description : Multivariate (multi-output) linear regression — 列別 OLS + 残差共分散推定
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Multivariate (multi-output) linear regression.
 --
 -- @Y = XB + E@ with @Y@ of shape @n × q@ (@q@ outputs), @X@ of shape
 -- @n × p@, @B@ of shape @p × q@ and @E@ of shape @n × q@.

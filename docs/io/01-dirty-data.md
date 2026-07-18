@@ -17,8 +17,8 @@ This document walks through the common breakage patterns and their fixes per fix
 `Loaded a = (a, LogReport)` returns the value paired with logs.
 
 ```haskell
-import DataIO.CSV (loadAutoSafeWith, defaultLoadOpts, LoadOpts (..))
-import qualified DataIO.Log as Log
+import Hanalyze.DataIO.CSV (loadAutoSafeWith, defaultLoadOpts, LoadOpts (..))
+import qualified Hanalyze.DataIO.Log as Log
 
 Right (df, lg) <- loadAutoSafeWith
                     (defaultLoadOpts { loSkip = 3 })
@@ -88,9 +88,9 @@ hanalyze regress --strict data/raw.csv x y LM
 ## Library usage (working with the LogReport)
 
 ```haskell
-import DataIO.CSV    (loadAutoSafe)
-import DataIO.Log    (entries, hasWarnings, lgCode)
-import qualified DataIO.Log as Log
+import Hanalyze.DataIO.CSV    (loadAutoSafe)
+import Hanalyze.DataIO.Log    (entries, hasWarnings, lgCode)
+import qualified Hanalyze.DataIO.Log as Log
 
 main :: IO ()
 main = do
@@ -165,8 +165,8 @@ rate falls below 50 % (suggesting an alternative rule).
 ### Library
 
 ```haskell
-import qualified DataIO.Clean as Clean
-import           DataIO.Clean (ColumnRule (..), cleanPipeline)
+import qualified Hanalyze.DataIO.Clean as Clean
+import Hanalyze.DataIO.Clean (ColumnRule (..), cleanPipeline)
 
 (df', lg) = cleanPipeline
   [ ("price",  ParseCurrency)

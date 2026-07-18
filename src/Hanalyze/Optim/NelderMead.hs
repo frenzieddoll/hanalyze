@@ -1,5 +1,10 @@
-{-# LANGUAGE StrictData #-}
--- | Nelder-Mead simplex method (downhill simplex).
+-- |
+-- Module      : Hanalyze.Optim.NelderMead
+-- Description : Nelder-Mead シンプレックス法
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Nelder-Mead simplex method (downhill simplex).
 --
 -- Nelder & Mead (1965). Gradient-free, easy to implement at low dimension
 -- (1-30), and stable for local optimization. The default behind R's
@@ -12,6 +17,7 @@
 --
 -- Cost: 1-2 function evaluations per iteration (@n@ on shrink). Convergence
 -- becomes slow for larger @n@ — practical up to @n ≤ 10@.
+{-# LANGUAGE StrictData #-}
 module Hanalyze.Optim.NelderMead
   ( NMConfig (..)
   , defaultNMConfig

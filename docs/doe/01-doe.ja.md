@@ -23,7 +23,7 @@
 ## 1. 完全要因計画 (`Hanalyze.Design.Factorial`)
 
 ```haskell
-import Design.Factorial
+import Hanalyze.Design.Factorial
 
 -- 2 水準 × k 因子: 各因子は ±1
 twoLevelFactorial :: Int -> [[Double]]
@@ -58,7 +58,7 @@ mixedFactorial :: [Int] -> [[Double]]
 ## 2. ブロック計画 (`Hanalyze.Design.Block`)
 
 ```haskell
-import Design.Block
+import Hanalyze.Design.Block
 
 -- ラテン方格 4×4 (1..n を各行各列で 1 回ずつ)
 latinSquare :: Int -> [[Int]]
@@ -77,7 +77,7 @@ randomizedBlock :: Int -> Int -> Int -> [[Int]]
 ## 3. ANOVA (`Hanalyze.Design.Anova`)
 
 ```haskell
-import Design.Anova
+import Hanalyze.Design.Anova
 
 oneWayAnova :: [Text] -> [Double] -> AnovaTable
 twoWayAnova :: [Text] -> [Text] -> [Double] -> AnovaTable
@@ -150,7 +150,7 @@ let n = sampleSizeTTest 0.5 0.8 0.05  -- → 64
 ## 5. 設計の質指標 (`Hanalyze.Design.Quality`)
 
 ```haskell
-import Design.Quality
+import Hanalyze.Design.Quality
 
 isOrthogonal       :: Double -> [[Double]] -> Bool        -- 許容誤差 ε
 orthogonalityScore :: [[Double]] -> Double                -- 0..1
@@ -174,7 +174,7 @@ vifList            :: [[Double]] -> [Double]              -- 各列の VIF
 二次関数の極値 (最適条件) を見つけるための設計と解析。
 
 ```haskell
-import Design.RSM
+import Hanalyze.Design.RSM
 
 -- 中心複合計画 (CCD)
 data CCDType = CCC Double | CCF | CCI Double
@@ -203,6 +203,17 @@ let fit = fitQuadratic design ys
 -- eigs 全部 < 0 → x* は極大点
 ```
 
+当てはめた二次モデルは曲面として見ると理解しやすい。次の図は、推定した二次の
+応答曲面を 3D で示し、床面に等高線を投影し、CCD の設計点を実測値として重ねた
+ものである。
+
+![床面の等高線と CCD 設計点を重ねた推定二次応答曲面](../images/rsm-surface-3d.svg)
+
+同じ曲面を回転させると、立体的な形状と曲率の位置を確認できる。下の 4 パネルは、
+方位角 0°・45°・90°・135° から見た同一曲面である。
+
+![方位角 0/45/90/135° で回転させた同一応答曲面](../images/rsm-rotation.svg)
+
 ---
 
 ## 6.5 直交表 Lₙ (`Hanalyze.Design.Orthogonal`)
@@ -211,7 +222,7 @@ let fit = fitQuadratic design ys
 水準構成 (例: L18(2¹×3⁷) は 1 因子 × 2 水準 + 7 因子 × 3 水準)。
 
 ```haskell
-import qualified Design.Orthogonal as OA
+import qualified Hanalyze.Design.Orthogonal as OA
 
 -- 標準表
 OA.l4    -- L4(2^3)        4 試行 × 3 列 (2 水準)
@@ -276,7 +287,7 @@ hanalyze doe ortho L9 \
 ### SN 比 4 種
 
 ```haskell
-import qualified Design.Taguchi as TG
+import qualified Hanalyze.Design.Taguchi as TG
 
 TG.snRatio TG.SmallerBetter        ys   -- η = -10 log10(Σ y²/n)
 TG.snRatio TG.LargerBetter         ys   -- η = -10 log10(Σ (1/y²)/n)
@@ -328,7 +339,7 @@ hanalyze taguchi cross L9 L4 \
 候補集合から指定試行数の部分集合を Fedorov 交換で最適化。
 
 ```haskell
-import Design.Optimal
+import Hanalyze.Design.Optimal
 
 data OptCriterion = DOpt | AOpt
 
@@ -386,3 +397,13 @@ let nA = sampleSizeOneWayAnova 0.25 3 0.8 0.05
 - 理論: [docs/doe/theory-doe.ja.md](theory-doe.ja.md)
 - demo: `doe-demo`, `rsm-demo`, `optimaldoe-demo`
 - 既存の回帰: `Hanalyze.Model.LM` で因子効果を fit
+- **Custom Design 拡張機能** (Phase 23-26、 JMP 同等の高度な設計機能):
+  → [docs/doe/manual-custom-design.ja.md](manual-custom-design.ja.md) (統合マニュアル)
+  - [usage-classic-extensions.ja.md](usage-classic-extensions.ja.md)
+    (Phase 23: G-opt / Compound / Linear-Forbidden 制約 / 非正規 Cp / 多変量 Cp)
+  - [usage-custom-design.ja.md](usage-custom-design.ja.md)
+    (Phase 24: Custom Design Core + Compare + Power)
+  - [usage-augment-splitplot.ja.md](usage-augment-splitplot.ja.md)
+    (Phase 25: SplitPlot + Augment 5 メニュー)
+  - [usage-bayesian-d.ja.md](usage-bayesian-d.ja.md)
+    (Phase 26: Bayesian-D + Compound 強化)

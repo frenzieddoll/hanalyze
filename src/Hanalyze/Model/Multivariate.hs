@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Specialized multivariate regression: Reduced-Rank Regression, PLS,
+-- |
+-- Module      : Hanalyze.Model.Multivariate
+-- Description : Specialized multivariate regression — Reduced-Rank Regression / PLS / CCA
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Specialized multivariate regression: Reduced-Rank Regression, PLS,
 -- and CCA.
 --
 -- These all express the relationship between a multi-response @Y@

@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
 
-## [Unreleased]
+## [0.2.0.0] - 2026-07-18
 
 ### Added (NUTS streaming callback for live MCMC progress)
 - `Hanalyze.MCMC.NUTS.nutsStream` — new sampler entry point taking a
@@ -15,8 +15,28 @@ and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
 - `Hanalyze.MCMC.NUTS.SampleEvent` — exported record carrying the above.
 - Existing `nuts` is now a thin wrapper over `nutsStream` with a no-op
   callback (API and behaviour unchanged).
-- Use case: downstream apps (e.g. AelysceCanvas) can push live trace plots /
-  R-hat / ESS over WebSocket / SSE without modifying NUTS internals.
+- Use case: downstream apps (e.g. a live-dashboard frontend) can push live
+  trace plots / R-hat / ESS over WebSocket / SSE without modifying NUTS
+  internals.
+
+### Added
+- Large-scale sync from the private development fork: ~105 new modules
+  covering a substantially expanded HBM Bayesian inference engine (NUTS
+  performance work validated against posteriordb benchmarks, a library of
+  analytic-gradient primitives), a Formula DSL (R-style model formulas), DOE
+  Custom Design, survival analysis (AFT, competing risks), LiNGAM causal
+  discovery, and ML additions (SVM, gradient boosting, and related models).
+- `Hanalyze.*.Plot` integration layer (`plot-integration` cabal flag) bridging
+  analysis outputs to the `hgg` plotting library's `VisualSpec`.
+- `essBulk` — arviz-compatible bulk effective sample size diagnostic.
+
+### Changed
+- The `dataframe` dependency is now consumed via qualified submodule imports
+  (`DX`/`DXC`/`DXD`) instead of the monolithic re-export, reducing coupling
+  to internal `dataframe` layout.
+- Documentation (`docs/`) and benchmark suite (`bench/`) substantially
+  expanded alongside the above modules.
+
 ## [0.1.0.1] - 2026-05-20
 
 ### Changed

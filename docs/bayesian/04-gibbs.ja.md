@@ -1,10 +1,10 @@
-# Gibbs サンプリング (MCMC.Gibbs)
+# Gibbs サンプリング (Hanalyze.MCMC.Gibbs)
 
 > 🌐 [English](04-gibbs.md) | **日本語**
 
 > 関連デモ:
-> - [`gibbs-demo`](../demo/GibbsDemo.hs) — Gibbs + WAIC/LOO モデル比較
-> - [`gibbs-hbm-demo`](../demo/GibbsHBMDemo.hs) — HBM DSL × Gibbs (共役自動検出)
+> - [`gibbs-demo`](../../demo/bayesian/GibbsDemo.hs) — Gibbs + WAIC/LOO モデル比較
+> - [`gibbs-hbm-demo`](../../demo/bayesian/GibbsHBMDemo.hs) — HBM DSL × Gibbs (共役自動検出)
 
 ## 概要と原理
 
@@ -37,8 +37,12 @@ normalNormal
   -> Double   -- 事前 SD σ₀
   -> [Double] -- 観測データ y
   -> Double   -- 尤度 SD σ_lik (既知)
-  -> GibbsUpdate
+  -> GibbsUpdate m
 ```
+
+> **`GibbsUpdate m`** (Phase 50): update は monad パラメタ型
+> (`type GibbsUpdate m = Params -> Gen (PrimState m) -> m (Text, Double)`) になり、 `IO` でも `ST` でも
+> 走ります。 これにより純粋な `gibbsPure` / `gibbsMHPure` が可能になります。
 
 ### `betaBinomial` — Beta-Binomial 共役
 
@@ -53,7 +57,7 @@ betaBinomial
   -> Double -- 事前 β
   -> Int    -- 試行数 n
   -> Int    -- 成功数 k
-  -> GibbsUpdate
+  -> GibbsUpdate m
 ```
 
 ### `gammaPoisson` — Gamma-Poisson 共役
@@ -68,7 +72,7 @@ gammaPoisson
   -> Double   -- 事前 shape α
   -> Double   -- 事前 rate β
   -> [Double] -- 観測データ
-  -> GibbsUpdate
+  -> GibbsUpdate m
 ```
 
 ---
@@ -76,7 +80,7 @@ gammaPoisson
 ## 基本的な使い方
 
 ```haskell
-import MCMC.Gibbs
+import Hanalyze.MCMC.Gibbs
 import qualified Data.Map.Strict as Map
 import System.Random.MWC (createSystemRandom)
 
@@ -131,11 +135,10 @@ chain <- gibbs updates cfg (Map.fromList [("p_ctrl", 0.5), ("p_trt", 0.5)]) gen
 ## 多チェーン実行
 
 ```haskell
--- gibbsChains でチェーンごとに独立した乱数シードを使う
-chains <- gibbsChains updates cfg 4 initP gen
-
--- R-hat で収束確認
-let r = rhat (map (chainVals "mu") chains)
+-- gibbsChainsPure は chain ごとに子 seed を導出し parList rdeepseq で評価
+-- (+RTS -N でマルチコア・結果は -N に依らず決定的)。
+let chains = gibbsChainsPure [ normalNormal "mu" 0 10 obsData 2.0 ] cfg initP 42
+    r      = rhat (map (chainVals "mu") chains)
 print r  -- Just 1.000 (Gibbs は通常すぐ収束)
 ```
 
@@ -160,15 +163,17 @@ print r  -- Just 1.000 (Gibbs は通常すぐ収束)
 
 ## カスタムアップデート関数の書き方
 
-`GibbsUpdate = Params -> GenIO -> IO (Text, Double)` を満たせば任意の分布が使えます。
+`GibbsUpdate m = Params -> Gen (PrimState m) -> m (Text, Double)` を満たせば任意の分布が使えます。
+関数を `PrimMonad m =>` 多相に保てば純粋版 (`gibbsPure`)・IO 版 (`gibbs`) の両方で使えます。
 
 ```haskell
-import MCMC.Gibbs (GibbsUpdate)
+import Hanalyze.MCMC.Gibbs (GibbsUpdate)
+import Control.Monad.Primitive (PrimMonad)
 import qualified Data.Map.Strict as Map
 import System.Random.MWC.Distributions (normal)
 
 -- カスタム: μ ~ Normal(0,10), y ~ Normal(μ,σ)  の条件付き事後
-myMuUpdate :: [Double] -> Double -> GibbsUpdate
+myMuUpdate :: PrimMonad m => [Double] -> Double -> GibbsUpdate m
 myMuUpdate ys sigLik params gen = do
   let n       = fromIntegral (length ys) :: Double
       ybar    = sum ys / n

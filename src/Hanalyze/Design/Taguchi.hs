@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | The Taguchi method — an analytical layer that extends orthogonal
+-- |
+-- Module      : Hanalyze.Design.Taguchi
+-- Description : タグチメソッド — SN 比・内側/外側配置・要因効果によるロバスト設計解析
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- The Taguchi method — an analytical layer that extends orthogonal
 -- arrays ('Hanalyze.Design.Orthogonal') for robust design.
 --
 -- Main building blocks:

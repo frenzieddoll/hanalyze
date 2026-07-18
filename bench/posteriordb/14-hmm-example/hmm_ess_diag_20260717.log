@@ -1,0 +1,69 @@
+Phase 92 B4: ess/draw 効率調査 (2026-07-17 #51・このマシン・全 run 単独逐次)
+条件: 4chain・warmup1000+draws1000・CPU。B3 実装 (43bb2afb) 時点。
+
+================================================================
+[1] nutpie+jax 診断 (run_nutpie_diag.py・nutpie 直接 API)
+================================================================
+--- seed 1 ---
+wall build   =      19.1 ms
+wall compile =     755.1 ms
+wall sample  =    2939.5 ms (tune+draws)
+
+== post-warmup per-draw stats (chains x 1000 draws) ==
+chain mean_nsteps mean_depth  step_size mean_accept  div
+    0         5.9       2.41    0.66016       0.825    0
+    1         5.7       2.35    0.72437       0.820    0
+    2         5.6       2.34    0.73155       0.819    0
+    3         5.7       2.38    0.68585       0.804    0
+total leapfrog (post-warmup) = 22888
+depth histogram: {1: 179, 2: 2209, 3: 1555, 4: 57}
+total leapfrog (warmup)      = 25058
+ess_bulk(mu_1) = 1328.0  ess/draw = 0.3320
+(az.summary 全パラメータ: mu_1 1328/mu_2 5011/gap 1347/theta1 3294/theta2 2975・rhat 全 1.00)
+
+--- seed 2 ---
+wall build=20.4ms compile=745.7ms sample=2987.6ms
+ess_bulk(mu_1) = 1245.0  ess/draw = 0.3113
+
+--- seed 3 ---
+wall build=21.7ms compile=770.6ms sample=2967.5ms
+ess_bulk(mu_1) = 1383.0  ess/draw = 0.3458
+
+================================================================
+[2] hanalyze 診断 (posteriordb-hmm 計装 + compute_hanalyze_ess.py = arviz 同一指標)
+================================================================
+--- seed 1 (B3 記録と bit 一致: mu_1 3.0117/ess(旧指標) 766.7) ---
+sampling wall = 5382.4 ms (warmup+draws・compile/起動なし)
+chain 0: mean_depth=3.04  est_leapfrog/draw=9.2  div=0  accept(incl-warmup)=0.932
+chain 1: mean_depth=3.05  est_leapfrog/draw=9.2  div=0  accept(incl-warmup)=0.924
+chain 2: mean_depth=3.09  est_leapfrog/draw=9.5  div=0  accept(incl-warmup)=0.934
+chain 3: mean_depth=3.28  est_leapfrog/draw=10.9 div=0  accept(incl-warmup)=0.942
+depth histogram (all chains): 1:53, 2:635, 3:2120, 4:1180, 5:12
+
+arviz (rank-normalized・4chain) summary:
+            mean     sd eti89_lb eti89_ub  ess_bulk  ess_tail r_hat
+mu_1       3.017   0.22      2.7      3.4      3143      2855  1.00
+mu_2       8.829  0.106      8.7        9      5354      2645  1.00
+gap        5.812  0.244      5.4      6.2      3084      2664  1.00
+theta1_0   0.669    0.1      0.5     0.82      4433      2222  1.00
+theta2_0  0.0735  0.028    0.034     0.12      4210      2669  1.00
+ess_bulk(mu_1) = 3143.0  ess/draw = 0.7857
+
+--- seed 2 ---
+sampling wall = 5148.8 ms・mean_depth 2.93-3.12・div=0
+ess_bulk(mu_1) = 3068.0  ess/draw = 0.7670
+
+--- seed 3 ---
+sampling wall = 5294.0 ms・mean_depth 3.02-3.12・div=0
+ess_bulk(mu_1) = 3438.0  ess/draw = 0.8595
+
+================================================================
+[3] 結論 (詳細 = phase-92 md B4)
+================================================================
+- 旧「0.192 vs 0.291 = 1.5× 劣後」= 指標アーチファクト
+  (hanalyze 旧 ess = chain0 のみ Geyer IMSE・n=1000 頭打ち を 4000 で割った値)
+- 同一指標 ess/draw: hanalyze 0.77-0.86 vs nutpie 0.31-0.35 = 2.4-2.5× 優位
+- ess/leapfrog (mu_1・seed1): hanalyze 0.081 vs nutpie 0.058
+- ESS/sec (sampling wall): hanalyze ~584-650 vs nutpie ~417-466 = 1.3-1.4× 勝ち
+- 統一 wall 基準 (sampling wall = tune/warmup+draws・compile 除外):
+  hanalyze 5,325ms vs nutpie+jax ≈2,965ms = 1.80× (compile 込み参考 1.43×)

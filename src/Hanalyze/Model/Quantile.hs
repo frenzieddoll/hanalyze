@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Quantile regression.
+-- |
+-- Module      : Hanalyze.Model.Quantile
+-- Description : Quantile regression — Hunter & Lange (2000) MM 法による条件付き τ-分位点回帰
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Quantile regression.
 --
 -- Whereas OLS fits the conditional /mean/, quantile regression fits the
 -- conditional @τ@-quantile (with @τ ∈ (0, 1)@). @τ = 0.5@ gives outlier-

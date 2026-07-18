@@ -68,10 +68,10 @@ Propose $q$ points at once. Useful for parallel experiments.
 
 ```haskell
 -- single-objective
-import Optim.BayesOpt (bayesOpt, defaultBayesOptConfig)
+import Hanalyze.Optim.BayesOpt (bayesOpt, defaultBayesOptConfig)
 (history, best) <- bayesOpt cfg f (lo, hi) gen
 
 -- multi-objective (acquisition maximisation inside NSGA-II)
-import Optim.BayesOpt (bayesOptMOWithNSGA)
+import Hanalyze.Optim.BayesOpt (bayesOptMOWithNSGA)
 hist <- bayesOptMOWithNSGA nIter nInit RBF f bounds gen
 ```

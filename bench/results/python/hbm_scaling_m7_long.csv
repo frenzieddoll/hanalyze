@@ -1,0 +1,8 @@
+system,suite,name,time_ms,acc_main,acc_aux,extra
+python,hbm_scaling,M7_pois_iter400,889.177,0.79,189,iter=400 warmup=500 key=b ess=189.0 ess_per_sec=212.56 tree_depth=2.09 time_ms=889.2
+python,hbm_scaling,M7_pois_iter800,895.665,0.79,392,iter=800 warmup=500 key=b ess=392.0 ess_per_sec=437.66 tree_depth=2.12 time_ms=895.7
+python,hbm_scaling,M7_pois_iter1600,1008.66,0.789,821,iter=1600 warmup=500 key=b ess=821.0 ess_per_sec=813.95 tree_depth=2.12 time_ms=1008.7
+python,hbm_scaling,M7_pois_iter3200,1268.82,0.788,1605,iter=3200 warmup=500 key=b ess=1605.0 ess_per_sec=1264.95 tree_depth=2.11 time_ms=1268.8
+python,hbm_scaling,M7_pois_iter6400,1753.52,0.789,3369,iter=6400 warmup=500 key=b ess=3369.0 ess_per_sec=1921.28 tree_depth=2.11 time_ms=1753.5
+python,hbm_scaling,M7_pois_iter12800,2781.91,0.787,7091,iter=12800 warmup=500 key=b ess=7091.0 ess_per_sec=2548.97 tree_depth=2.11 time_ms=2781.9
+python,hbm_scaling,M7_pois_iter25600,4792.65,0.788,13930,iter=25600 warmup=500 key=b ess=13930.0 ess_per_sec=2906.53 tree_depth=2.11 time_ms=4792.7

@@ -1,0 +1,18 @@
+system,suite,name,time_ms,acc_main,acc_aux,extra
+python,phase17,WeibullMLE_n100,1.30002,0.0289468,0.0241229,trueK=2.0 trueLam=10.0
+python,phase17,WeibullMLE_n1000,1.91112,0.00782863,0.00324476,trueK=2.0 trueLam=10.0
+python,phase17,WeibullMLE_n10000,7.72091,0.000879444,0.00054334,trueK=2.0 trueLam=10.0
+python,phase17,MANOVA_3grp_n30,0.053755,0.152495,4.0519e-34,groupShift=1.5 2vars
+python,phase17,MANOVA_3grp_n100,0.051411,0.16997,2.17824e-112,groupShift=1.5 2vars
+python,phase17,MANOVA_3grp_n500,0.06376,0.17472,0,groupShift=1.5 2vars
+python,phase17,HotellingT2_n50,0.033045,71.7094,4.00789e-10,"shift=0.5 2vars mu0=(0,0)"
+python,phase17,HotellingT2_n200,0.031921,293.407,1.11257e-39,"shift=0.5 2vars mu0=(0,0)"
+python,phase17,HotellingT2_n1000,0.043032,1491.03,1.19387e-198,"shift=0.5 2vars mu0=(0,0)"
+python,phase17,LassoCV_n200_p10,2.3196,0.01,0,grid=7 folds=5
+python,phase17,LassoCV_n500_p20,2.43006,0.001,0,grid=7 folds=5
+python,phase17,RidgeCV_n200_p10,14.5109,0.001,0,grid=7 folds=5
+python,phase17,RidgeCV_n500_p20,15.062,0.05,0,grid=7 folds=5
+python,phase17,LHS_n50_d2,0.051812,0.0184305,0,method=LHS
+python,phase17,LHS_n200_d3,0.047916,0.0163442,0,method=LHS
+python,phase17,Halton_n50_d2,0.098972,0.0292199,0,method=Halton
+python,phase17,Halton_n200_d3,0.148154,0.0309472,0,method=Halton

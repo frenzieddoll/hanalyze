@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Principal Component Analysis (PCA) and related dimensionality
+-- |
+-- Module      : Hanalyze.Model.PCA
+-- Description : Principal Component Analysis (PCA) and related dimensionality reduction
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Principal Component Analysis (PCA) and related dimensionality
 -- reduction.
 --
 -- @

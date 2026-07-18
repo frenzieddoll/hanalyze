@@ -1,3 +1,9 @@
+-- |
+-- Module      : Hanalyze.Viz.Scatter
+-- Description : 散布図とその重ね描き (回帰直線/平滑化・グループ別・予測 vs 実測)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
 {-# LANGUAGE OverloadedStrings #-}
 -- | Scatter plots and overlays.
 --

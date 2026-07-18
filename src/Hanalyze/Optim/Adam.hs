@@ -1,5 +1,10 @@
-{-# LANGUAGE OverloadedStrings #-}
--- | Adam first-order optimizer (Kingma & Ba 2014).
+-- |
+-- Module      : Hanalyze.Optim.Adam
+-- Description : Adam 一次勾配法オプティマイザ (Kingma & Ba 2014)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Adam first-order optimizer (Kingma & Ba 2014).
 --
 -- A general-purpose gradient-based optimizer used for ELBO maximization,
 -- neural-network training, acquisition-function optimization, and similar
@@ -16,6 +21,7 @@
 --
 -- 'adamStep' 単体は 1 ステップだけ進める低レベル API で、`Hanalyze.Stat.VI` などが
 -- 内部で利用する。
+{-# LANGUAGE OverloadedStrings #-}
 module Hanalyze.Optim.Adam
   ( -- * 設定
     AdamConfig (..)

@@ -1,13 +1,13 @@
-# 可視化ガイド (Viz.*)
+# 可視化ガイド (Hanalyze.Viz.*)
 
 > 🌐 [English](01-visualization.md) | **日本語**
 
 > 関連デモ:
-> - [`hbm-example`](../demo/HBMExample.hs) — `Hanalyze.Viz.Report` (KDE/トレース/DAG/ペア散布)
-> - [`hbm-regression`](../demo/HBMRegressionDemo.hs) — HBM 回帰の HTML レポート (DAG + MCMC + 信用区間付き予測。レポートビルダは `Hanalyze.Viz.AnalysisReport` (非推奨) → `Hanalyze.Viz.ReportBuilder` (標準) へ移行中)
-> - [`simpson-paradox`](../demo/SimpsonParadoxDemo.hs) — `writeComparisonReport` で複数モデル並列比較
-> - [`bar-demo`](../demo/BarDemo.hs) — `Hanalyze.Viz.Bar` + PNG/SVG エクスポート
-> - [`gp-demo`](../demo/GPDemo.hs) — GP 専用レポート
+> - [`hbm-example`](../../demo/bayesian/HBMExample.hs) — `Hanalyze.Viz.Report` (KDE/トレース/DAG/ペア散布)
+> - [`hbm-regression`](../../demo/bayesian/HBMRegressionDemo.hs) — HBM 回帰の HTML レポート (DAG + MCMC + 信用区間付き予測。レポートビルダは `Hanalyze.Viz.AnalysisReport` (非推奨) → `Hanalyze.Viz.ReportBuilder` (標準) へ移行中)
+> - [`simpson-paradox`](../../demo/bayesian/SimpsonParadoxDemo.hs) — `writeComparisonReport` で複数モデル並列比較
+> - [`bar-demo`](../../demo/visualization/BarDemo.hs) — `Hanalyze.Viz.Bar` + PNG/SVG エクスポート
+> - [`gp-demo`](../../demo/regression/GPDemo.hs) — GP 専用レポート
 >
 > CLI: `--report` で HTML レポート生成 (`regress` は legacy `Hanalyze.Viz.AnalysisReport`、その他は標準 `Hanalyze.Viz.ReportBuilder`)、`--format png|svg` で個別プロットも画像化。
 
@@ -32,7 +32,7 @@ PNG/SVG 生成に失敗した場合は自動で HTML にフォールバックし
 **1つの自己完結 HTML** にまとめます。
 
 ```haskell
-import Viz.Report
+import Hanalyze.Viz.Report
 
 data MCMCReport = MCMCReport
   { reportTitle    :: Text
@@ -84,8 +84,8 @@ renderReport "report_multi.html" report
 `Hanalyze.Viz.Report` を使わずに個別のプロットを生成したい場合:
 
 ```haskell
-import Viz.MCMC
-import Viz.Core (defaultConfig, OutputFormat (..))
+import Hanalyze.Viz.MCMC
+import Hanalyze.Viz.Core (defaultConfig, OutputFormat (..))
 
 -- 単一チェーン診断 (KDE + トレース縦並び)
 mcmcDiagnosticsFile HTML "diag.html" (defaultConfig "Model") names chain
@@ -111,8 +111,8 @@ posteriorPlotFile HTML "kde.html" (defaultConfig "KDE") names chain
 ## Viz.Bar — 棒グラフ
 
 ```haskell
-import Viz.Bar
-import Viz.Core (defaultConfig, OutputFormat (..))
+import Hanalyze.Viz.Bar
+import Hanalyze.Viz.Core (defaultConfig, OutputFormat (..))
 ```
 
 ### 縦棒グラフ
@@ -159,7 +159,7 @@ groupedBarFile HTML "grouped.html" (defaultConfig "グループ") "月" "売上"
 ## Viz.Histogram — ヒストグラム
 
 ```haskell
-import Viz.Histogram
+import Hanalyze.Viz.Histogram
 
 -- 純粋なヒストグラム
 histogramPlotFile HTML "hist.html"
@@ -180,8 +180,8 @@ histogramWithDensityFile HTML "hist_fit.html"
 `app/Main.hs` の CLI から自動生成されますが、ライブラリ関数として直接使うこともできます。
 
 ```haskell
-import Viz.Scatter
-import Viz.Core (defaultConfig)
+import Hanalyze.Viz.Scatter
+import Hanalyze.Viz.Core (defaultConfig)
 
 -- 散布図 + 回帰曲線
 scatterWithSmooth :: PlotConfig -> Text -> Text -> [Double] -> [Double] -> SmoothFit -> VegaLite
@@ -199,7 +199,7 @@ predictedVsActual :: PlotConfig -> Text -> [Double] -> [Double] -> VegaLite
 ## Viz.ModelGraph — モデル構造 DAG
 
 ```haskell
-import Viz.ModelGraph
+import Hanalyze.Viz.ModelGraph
 
 buildModelGraph :: Model a -> [(Text, Text)] -> ModelGraph
 modelGraphFile  :: OutputFormat -> FilePath -> ModelGraph -> IO ()
@@ -222,7 +222,7 @@ modelGraphFile HTML "graph.html" graph
 ## PlotConfig の設定
 
 ```haskell
-import Viz.Core
+import Hanalyze.Viz.Core
 
 data PlotConfig = PlotConfig
   { plotTitle  :: Text

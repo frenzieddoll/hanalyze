@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Mixed-level designs.
+-- |
+-- Module      : Hanalyze.Design.Mixed
+-- Description : 因子ごとに異なる水準数を持つ混合水準計画の生成
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Mixed-level designs.
 --
 -- Designs in which factors have different numbers of levels. An extension
 -- of @Hanalyze.Design.Factorial.mixedFactorial@ that accepts an explicit list of

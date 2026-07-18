@@ -17,8 +17,8 @@
 `Loaded a = (a, LogReport)` で値とログがペアになって返ります。
 
 ```haskell
-import DataIO.CSV (loadAutoSafeWith, defaultLoadOpts, LoadOpts (..))
-import qualified DataIO.Log as Log
+import Hanalyze.DataIO.CSV (loadAutoSafeWith, defaultLoadOpts, LoadOpts (..))
+import qualified Hanalyze.DataIO.Log as Log
 
 Right (df, lg) <- loadAutoSafeWith
                     (defaultLoadOpts { loSkip = 3 })
@@ -89,9 +89,9 @@ hanalyze regress --strict data/raw.csv x y LM
 ## ライブラリ利用例 (LogReport を取り回す)
 
 ```haskell
-import DataIO.CSV    (loadAutoSafe)
-import DataIO.Log    (entries, hasWarnings, lgCode)
-import qualified DataIO.Log as Log
+import Hanalyze.DataIO.CSV    (loadAutoSafe)
+import Hanalyze.DataIO.Log    (entries, hasWarnings, lgCode)
+import qualified Hanalyze.DataIO.Log as Log
 
 main :: IO ()
 main = do
@@ -164,8 +164,8 @@ hanalyze melt data/io/wide_sample.csv \
 ### ライブラリ利用
 
 ```haskell
-import qualified DataIO.Clean as Clean
-import           DataIO.Clean (ColumnRule (..), cleanPipeline)
+import qualified Hanalyze.DataIO.Clean as Clean
+import Hanalyze.DataIO.Clean (ColumnRule (..), cleanPipeline)
 
 (df', lg) = cleanPipeline
   [ ("price",  ParseCurrency)

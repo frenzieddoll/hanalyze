@@ -7,6 +7,13 @@
 >
 > 関連: [04-gp.ja.md](04-gp.ja.md) (厳密 GP) / [04-kernel.ja.md](04-kernel.ja.md) (カーネル回帰)
 
+> 💡 **高レベルの入口**: RFF は統合 spec `gp` / `gpMulti` の **近似象限**
+> `GpRff D seed` (分布あり・帯) / `KrrRff D seed` (点) として
+> `df |-> gp (GPConfig RBF (GpRff 500 42) AutoMarginalLik) "x" "y"` で使える。
+> seed を取るので結果は純粋に再現可能。4 象限の一覧は
+> [04-gp.ja.md §0 統合 API](04-gp.ja.md#0-統合-api--gp--gpmulti-推奨の入口) を参照。
+> 本ページは Φ 構成・LOOCV 探索などの低レベルリファレンス。
+
 ## 1. アイデア
 
 定常カーネル `k(x, x') = k(x - x')` は Fourier 変換で正の測度 `p(ω)` に対応 (Bochner 定理):
@@ -20,7 +27,7 @@
 ## 2. API
 
 ```haskell
-import Model.RFF
+import Hanalyze.Model.RFF
 
 -- 1D
 sampleRFFRBF       :: Int -> Double -> Double -> GenIO -> IO RFFFeatures
@@ -44,7 +51,7 @@ gridSearchLOOCVRBFMV        :: ...
 ```haskell
 import qualified System.Random.MWC as MWC
 import qualified Numeric.LinearAlgebra as LA
-import Model.RFF
+import Hanalyze.Model.RFF
 
 gen <- MWC.createSystemRandom
 

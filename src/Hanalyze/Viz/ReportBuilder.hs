@@ -1,3 +1,9 @@
+-- |
+-- Module      : Hanalyze.Viz.ReportBuilder
+-- Description : 全モデル/解析種別共通の合成型 HTML レポートビルダー (ReportSection / Reportable)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
 {-# LANGUAGE OverloadedStrings #-}
 -- | Compositional HTML report builder.
 --

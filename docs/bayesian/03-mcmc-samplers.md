@@ -3,9 +3,9 @@
 > 🌐 **English** | [日本語](03-mcmc-samplers.ja.md)
 
 > Related demos:
-> - [`bench-mcmc`](../demo/BenchMCMC.hs) — MH/HMC/NUTS performance comparison (easy/hard cases)
-> - [`test-hmc-nuts`](../demo/TestHMCNUTS.hs) — HMC/NUTS sanity check on a 1D Gaussian
-> - [`hbm-example`](../demo/HBMExample.hs) — 4-chain NUTS + R-hat diagnostics
+> - [`bench-mcmc`](../../demo/bayesian/BenchMCMC.hs) — MH/HMC/NUTS performance comparison (easy/hard cases)
+> - [`test-hmc-nuts`](../../demo/bayesian/TestHMCNUTS.hs) — HMC/NUTS sanity check on a 1D Gaussian
+> - [`hbm-example`](../../demo/bayesian/HBMExample.hs) — 4-chain NUTS + R-hat diagnostics
 
 ## Sampler comparison
 
@@ -20,6 +20,30 @@ HMC and NUTS use exact gradients via `Numeric.AD.Mode.Forward`, so they are more
 accurate and faster than numerical-derivative versions.
 All samplers accept the polymorphic `ModelP r` and automatically apply constraint
 transforms (PositiveT/UnitIntervalT).
+
+Whatever sampler you pick, the output is a `Chain` of posterior draws. The trace plot
+below shows the sample sequence for one parameter — a stationary, well-mixed "fuzzy
+caterpillar" indicates the sampler has converged.
+
+![MCMC trace plot of a parameter](../images/mcmc-trace.svg)
+
+Collapsing that same sequence into a histogram/KDE gives the marginal posterior density
+the sampler is approximating.
+
+![Marginal posterior density of the parameter](../images/mcmc-density.svg)
+
+### Pure (`*Pure`) vs IO API — prefer the pure one
+
+Every sampler ships two entry points (Phase 50):
+
+| Flavour | Signature shape | Notes |
+|---|---|---|
+| **Pure (recommended)** | `… -> Word32 -> Chain` (`nutsPure`, `nutsChainsPure`, …) | Takes a **seed**, returns a plain value. Deterministic: same seed → bit-identical `Chain`. No `IO`, so it composes in `let` bindings / notebooks and is trivially testable. `*ChainsPure` parallelises chains with `parList rdeepseq` (`+RTS -N`). |
+| IO (legacy) | `… -> GenIO -> IO Chain` (`nuts`, `nutsChains`, …) | Mutable `GenIO`, async parallel (`mapConcurrently`). Kept for backward compatibility; **scheduled for deprecation**. Same per-sample cost and parallel wall-clock as the pure version. |
+
+This guide uses the **pure** API throughout. The seed is any `Word32`; reuse it to
+reproduce a run exactly. (Both flavours run the identical algorithm — the pure one
+just threads the RNG through `ST`/`runST` instead of `IO`.)
 
 ---
 
@@ -48,7 +72,7 @@ transparently.
 ### API
 
 ```haskell
-import MCMC.MH
+import Hanalyze.MCMC.MH
 
 data MCMCConfig = MCMCConfig
   { mcmcIterations :: Int
@@ -59,6 +83,11 @@ data MCMCConfig = MCMCConfig
 defaultMCMCConfig :: [Text] -> MCMCConfig
 -- iterations=2000, burnIn=500, stepSize=1.0 (all parameters)
 
+-- Pure (recommended): seed → deterministic Chain
+metropolisPure       :: Model a -> MCMCConfig -> Params -> Word32 -> Chain
+metropolisChainsPure :: Model a -> MCMCConfig -> Int -> Params -> Word32 -> [Chain]
+
+-- IO (legacy, deprecation-scheduled)
 metropolis       :: Model a -> MCMCConfig -> Params -> GenIO -> IO Chain
 metropolisChains :: Model a -> MCMCConfig -> Int    -> Params -> GenIO -> IO [Chain]
 ```
@@ -66,7 +95,7 @@ metropolisChains :: Model a -> MCMCConfig -> Int    -> Params -> GenIO -> IO [Ch
 ### Example
 
 ```haskell
-import MCMC.MH
+import Hanalyze.MCMC.MH
 import qualified Data.Map.Strict as Map
 
 let m   = normalMean [1.2, 2.3, 3.1]
@@ -75,7 +104,8 @@ let m   = normalMean [1.2, 2.3, 3.1]
             , mcmcBurnIn     = 1000
             , mcmcStepSizes  = Map.fromList [("mu", 0.5)]  -- target 20–50 % accept
             }
-chain <- metropolis m cfg (Map.fromList [("mu", 0.0)]) gen
+    -- pure: no IO, reproducible for seed 42
+    chain = metropolisPure m cfg (Map.fromList [("mu", 0.0)]) 42
 ```
 
 ---
@@ -89,7 +119,7 @@ chain <- metropolis m cfg (Map.fromList [("mu", 0.0)]) gen
 ### API
 
 ```haskell
-import MCMC.HMC
+import Hanalyze.MCMC.HMC
 
 data HMCConfig = HMCConfig
   { hmcIterations    :: Int
@@ -101,6 +131,11 @@ data HMCConfig = HMCConfig
 defaultHMCConfig :: HMCConfig
 -- iterations=2000, burnIn=500, stepSize=0.1, leapfrogSteps=10
 
+-- Pure (recommended)
+hmcPure       :: Model a -> HMCConfig -> Params -> Word32 -> Chain
+hmcChainsPure :: Model a -> HMCConfig -> Int -> Params -> Word32 -> [Chain]
+
+-- IO (legacy)
 hmc       :: Model a -> HMCConfig -> Params -> GenIO -> IO Chain
 hmcChains :: Model a -> HMCConfig -> Int    -> Params -> GenIO -> IO [Chain]
 ```
@@ -108,14 +143,14 @@ hmcChains :: Model a -> HMCConfig -> Int    -> Params -> GenIO -> IO [Chain]
 ### Example
 
 ```haskell
-import MCMC.HMC
+import Hanalyze.MCMC.HMC
 
 let cfg = defaultHMCConfig
             { hmcIterations    = 3000
             , hmcStepSize      = 0.1    -- target 60-80 % accept
             , hmcLeapfrogSteps = 15     -- raise to 20-50 if strongly correlated
             }
-chain <- hmc m cfg initP gen
+    chain = hmcPure m cfg initP 42
 ```
 
 ### Tuning rules of thumb
@@ -134,7 +169,7 @@ needs no tuning. Step size is auto-adapted by Dual Averaging during burn-in.
 ### API
 
 ```haskell
-import MCMC.NUTS
+import Hanalyze.MCMC.NUTS
 
 data NUTSConfig = NUTSConfig
   { nutsIterations    :: Int
@@ -147,6 +182,11 @@ data NUTSConfig = NUTSConfig
 
 defaultNUTSConfig :: NUTSConfig
 
+-- Pure (recommended)
+nutsPure       :: Model a -> NUTSConfig -> Params -> Word32 -> Chain
+nutsChainsPure :: Model a -> NUTSConfig -> Int -> Params -> Word32 -> [Chain]
+
+-- IO (legacy)
 nuts       :: Model a -> NUTSConfig -> Params -> GenIO -> IO Chain
 nutsChains :: Model a -> NUTSConfig -> Int    -> Params -> GenIO -> IO [Chain]
 ```
@@ -154,24 +194,27 @@ nutsChains :: Model a -> NUTSConfig -> Int    -> Params -> GenIO -> IO [Chain]
 ### Example: basic usage
 
 ```haskell
-import MCMC.NUTS
+import Hanalyze.MCMC.NUTS
 
 -- Just hand it an initial stepSize (auto-tuned during burn-in)
-let cfg = defaultNUTSConfig { nutsIterations = 2000, nutsStepSize = 0.1 }
-chain <- nuts m cfg initP gen
+let cfg   = defaultNUTSConfig { nutsIterations = 2000, nutsStepSize = 0.1 }
+    chain = nutsPure m cfg initP 42   -- pure & reproducible
 ```
 
 ### Example: 4-chain parallel + R-hat convergence check
 
 ```haskell
-import MCMC.NUTS
-import MCMC.Core  (chainVals)
-import Stat.MCMC  (rhat, ess)
+import Hanalyze.MCMC.NUTS
+import Hanalyze.MCMC.Core  (chainVals)
+import Hanalyze.Stat.MCMC  (rhat, ess)
 
-chains <- nutsChains m cfg 4 initP gen  -- pass +RTS -N4 for OS-thread parallelism
+-- Pure parallel: chains evaluated with parList rdeepseq. Pass +RTS -N4 for multicore.
+-- Child seeds are derived from the master seed, so the result is reproducible
+-- regardless of core count.
+let chains = nutsChainsPure m cfg 4 initP 42
+    params = sampleNames m
 
 -- R-hat < 1.01 = converged
-let params = sampleNames m
 forM_ params $ \p -> do
   let r = rhat (map (chainVals p) chains)
   printf "%s: R-hat = %s, ESS = %.0f\n"
@@ -193,20 +236,21 @@ so the initial value just needs to be in the right ballpark.
 
 ## Multi-chain pattern
 
-MH / HMC / NUTS all expose `<sampler>Chains` for parallel chain execution.
+MH / HMC / NUTS / Gibbs all expose `<sampler>ChainsPure` for parallel chain execution
+(and the legacy IO `<sampler>Chains`). The pure variant runs each chain in its own
+`runST` with a child seed and evaluates the list with `parList rdeepseq`, so it uses
+multiple cores under `+RTS -N` while staying deterministic.
 
 ```haskell
--- Run 4 chains asynchronously in parallel (via the `async` library).
--- Pass +RTS -N4 to allocate threads.
-chains <- nutsChains m cfg 4 initP gen
-
--- Convergence check
-let allParams = sampleNames m
-converged = all (\p -> maybe False (< 1.01) (rhat (map (chainVals p) chains))) allParams
-if converged
-  then putStrLn "converged"
-  else putStrLn "warning: may not have converged"
+-- Pure 4-chain run. Pass +RTS -N4 for multicore (result is identical regardless of -N).
+let chains    = nutsChainsPure m cfg 4 initP 42
+    allParams = sampleNames m
+    converged = all (\p -> maybe False (< 1.01) (rhat (map (chainVals p) chains))) allParams
+putStrLn (if converged then "converged" else "warning: may not have converged")
 ```
+
+> The IO `nutsChains m cfg 4 initP gen` (async via the `async` library) is equivalent
+> in wall-clock; the pure version is preferred and the IO one is deprecation-scheduled.
 
 ---
 
@@ -215,7 +259,7 @@ if converged
 Common interface for the `Chain` returned by every sampler.
 
 ```haskell
-import MCMC.Core
+import Hanalyze.MCMC.Core
 
 data Chain = Chain
   { chainSamples  :: [Map Text Double]  -- post-burn-in samples
@@ -236,7 +280,7 @@ chainVals :: Text -> Chain -> [Double]  -- sample sequence (feed to Stat.MCMC.es
 ## Stat.MCMC — diagnostic statistics
 
 ```haskell
-import Stat.MCMC
+import Hanalyze.Stat.MCMC
 
 ess     :: [Double] -> Double          -- effective sample size (Geyer estimator)
 rhat    :: [[Double]] -> Maybe Double  -- Split R-hat (Vehtari et al. 2021)

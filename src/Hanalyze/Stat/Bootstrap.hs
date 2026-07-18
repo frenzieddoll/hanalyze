@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Bootstrap resampling and permutation tests.
+-- |
+-- Module      : Hanalyze.Stat.Bootstrap
+-- Description : ブートストラップ再標本化と置換検定
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Bootstrap resampling and permutation tests.
 --
 -- @
 -- import Hanalyze.Stat.Bootstrap

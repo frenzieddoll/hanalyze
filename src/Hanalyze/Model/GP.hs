@@ -1,6 +1,12 @@
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE OverloadedStrings #-}
--- | Gaussian-process regression.
+-- |
+-- Module      : Hanalyze.Model.GP
+-- Description : ガウス過程回帰 (Gaussian-process regression)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Gaussian-process regression.
 --
 -- Pick a kernel, fit it to training data and obtain the posterior
 -- predictive at arbitrary test points. Hyperparameters can be tuned
@@ -21,12 +27,15 @@
 -- -- gpMean res, gpLower res, gpUpper res で結果を取得
 -- @
 module Hanalyze.Model.GP
-  ( -- * カーネル型
+  ( -- * カーネル型 (re-export from "Hanalyze.Model.Kernel")
     Kernel (..)
   , kernelName
+  , KernelParams (..)
+  , defaultKernelParams
     -- * Hyperparameters
   , GPParams (..)
   , defaultGPParams
+  , gpKernelParams
   , initParamsFromData
   , initParamsFromDataMV
     -- * Model and result
@@ -34,12 +43,16 @@ module Hanalyze.Model.GP
   , GPResult (..)
     -- * Kernel computation
   , kernelFn
+  , kEvalMV
   , buildKernelMatrix
     -- * Inference
   , logMarginalLikelihood
   , fitGP
   , fitGPMulti
   , optimizeGP
+  , gramLOOCV
+  , autoCVHyperGP
+  , autoCVHyperGPMV
     -- * Data for interactive prediction
   , GPPredData (..)
   , gpPredData
@@ -54,7 +67,6 @@ module Hanalyze.Model.GP
   , optimizeGPMVCached
   ) where
 
-import Data.Text (Text)
 import qualified Numeric.LinearAlgebra as LA
 import qualified Hanalyze.Optim.LBFGS as LBFGS
 import qualified Hanalyze.Optim.Common as OC
@@ -64,31 +76,26 @@ import qualified Data.Vector.Storable         as VS
 import qualified Data.Vector.Storable.Mutable as VSM
 import           Control.Monad.ST             (runST)
 import           System.IO.Unsafe             (unsafePerformIO)
+-- 共有カーネル語彙は 'Model.Kernel' (Phase 75.18 で分離)。 GP は後方互換のため
+-- 'Kernel'/'KernelParams'/評価関数を re-export する。
+import           Hanalyze.Model.Kernel
+                   ( Kernel (..), kernelName, KernelParams (..), defaultKernelParams
+                   , kernelFn, buildKernelMatrix, applyKernel, kernelOfParams
+                   , ardScaleXY, buildKernelMatrixMV, kEvalMV )
 
 -- ---------------------------------------------------------------------------
 -- Types
 -- ---------------------------------------------------------------------------
+--
+-- NB: 'Kernel' / 'kernelName' / 'KernelParams' と評価関数群は Phase 75.18 で
+-- 'Hanalyze.Model.Kernel' へ分離。 GP は後方互換のため re-export する
+-- (上の import 参照)。
 
--- | GP kernel kind.
-data Kernel
-  = RBF
-    -- ^ Squared exponential: @k(x,x') = σ_f² exp(−r²/(2ℓ²))@.
-    --   Best for smooth functions; the most commonly used kernel.
-  | Matern52
-    -- ^ Matérn 5/2: @k(x,x') = σ_f²(1+√5 r/ℓ+5r²/(3ℓ²)) exp(−√5 r/ℓ)@.
-    --   Slightly rougher than RBF; common in physical systems.
-  | Periodic
-    -- ^ Periodic: @k(x,x') = σ_f² exp(−2 sin²(π r/p)/ℓ²)@.
-    --   For periodic patterns; set 'gpPeriod' appropriately.
-  deriving (Show, Eq)
-
--- | Display name of a kernel.
-kernelName :: Kernel -> Text
-kernelName RBF       = "RBF"
-kernelName Matern52  = "Mat\xe9rn 5/2"
-kernelName Periodic  = "Periodic"
-
--- | GP hyperparameters.
+-- | GP hyperparameters (= 'KernelParams' + 観測ノイズ σ_n²)。
+--
+-- カーネル系フィールド (ℓ / σ_f² / period / ARD) は 'gpKernelParams' で
+-- 'KernelParams' へ射影でき、 カーネル評価関数 ('kernelFn' / 'kEvalMV' /
+-- 'buildKernelMatrix' 等) はその 'KernelParams' を取る。
 data GPParams = GPParams
   { gpLengthScale  :: Double
     -- ^ Isotropic length scale @ℓ@; larger means smoother. Used unless
@@ -112,6 +119,17 @@ data GPParams = GPParams
 -- | Default hyperparameters: @ℓ = σ_f² = p = 1@, @σ_n² = 0.1@.
 defaultGPParams :: GPParams
 defaultGPParams = GPParams 1.0 1.0 0.1 1.0 Nothing
+
+-- | Project the kernel hyperparameters of a 'GPParams' onto a
+-- 'KernelParams' (drops the observation noise σ_n²). カーネル評価関数へ
+-- 渡す際に使う。
+gpKernelParams :: GPParams -> KernelParams
+gpKernelParams p = KernelParams
+  { kpLengthScale  = gpLengthScale p
+  , kpSignalVar    = gpSignalVar p
+  , kpPeriod       = gpPeriod p
+  , kpLengthScales = gpLengthScales p
+  }
 
 -- | Build a sensible initial 'GPParams' from data statistics, suitable
 -- as a starting point for optimization.
@@ -171,56 +189,6 @@ data GPResult = GPResult
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
--- Kernel
--- ---------------------------------------------------------------------------
-
--- | Evaluate the kernel function @k(x, x')@.
-kernelFn :: Kernel -> GPParams -> Double -> Double -> Double
-kernelFn RBF p x x' =
-  let d = x - x'
-      l = gpLengthScale p
-  in gpSignalVar p * exp (-(d * d) / (2 * l * l))
-kernelFn Matern52 p x x' =
-  let d = abs (x - x')
-      l = gpLengthScale p
-      s = sqrt 5 * d / l
-  in gpSignalVar p * (1 + s + s * s / 3) * exp (-s)
-kernelFn Periodic p x x' =
-  let d = abs (x - x')
-      l = gpLengthScale p
-      s = sin (pi * d / gpPeriod p)
-  in gpSignalVar p * exp (-2 * s * s / (l * l))
-
--- | Build the kernel matrix @K(xs, xs')@ of shape @|xs| × |xs'|@.
---
--- Phase 11b (2026-05-14): rewritten to fill a flat 'Storable.Vector'
--- via @runST + MVector@ instead of materialising the @|xs|·|xs'|@
--- lazy @[Double]@ list that the previous @(n><m) [..]@ form created.
--- The thunk-heavy list cost ~30 MB at @n=768@ purely in cons cells
--- (one allocation per kernel call) and pressured GC; the strict
--- buffer is a single allocation. 'kernelFn' itself is unchanged so
--- 'Periodic' (signed-difference dependent) keeps working.
-buildKernelMatrix :: Kernel -> GPParams -> [Double] -> [Double] -> LA.Matrix Double
-buildKernelMatrix ker p xs xs' =
-  let xv = VS.fromList xs
-      yv = VS.fromList xs'
-      n  = VS.length xv
-      m  = VS.length yv
-      out = runST $ do
-        v <- VSM.unsafeNew (n * m)
-        let go !i !j
-              | i >= n    = pure ()
-              | j >= m    = go (i + 1) 0
-              | otherwise = do
-                  let xi = VS.unsafeIndex xv i
-                      yj = VS.unsafeIndex yv j
-                  VSM.unsafeWrite v (i * m + j) (kernelFn ker p xi yj)
-                  go i (j + 1)
-        go 0 0
-        VS.unsafeFreeze v
-  in LA.reshape m out
-
--- ---------------------------------------------------------------------------
 -- Inference
 -- ---------------------------------------------------------------------------
 
@@ -228,7 +196,7 @@ buildKernelMatrix ker p xs xs' =
 noiseKernel :: Kernel -> GPParams -> [Double] -> LA.Matrix Double
 noiseKernel ker p xs =
   let n      = length xs
-      k      = buildKernelMatrix ker p xs xs
+      k      = buildKernelMatrix ker (gpKernelParams p) xs xs
       jitter = max (gpNoiseVar p) 1e-6
   in k `LA.add` LA.scale jitter (LA.ident n)
 
@@ -295,14 +263,14 @@ fitGPMulti model trainX trainY testX =
   let ker    = gpKernel model
       params = gpParams model
       ky     = noiseKernel ker params trainX
-      kStar  = buildKernelMatrix ker params testX trainX  -- (m × n)
+      kStar  = buildKernelMatrix ker (gpKernelParams params) testX trainX  -- (m × n)
       -- α = Ky⁻¹ Y via SPD Cholesky (n × q)
       alpha  = Chol.cholSolveJitter ky trainY
       meanMt = kStar LA.<> alpha                          -- (m × q)
       -- v = Ky⁻¹ K_*ᵀ via the same Cholesky factor (n × m).
       -- Then var_i = k(x*_i, x*_i) − K_*[i,:] · v[:,i].
       v       = Chol.cholSolveJitter ky (LA.tr kStar)
-      diagKss = [kernelFn ker params x x | x <- testX]
+      diagKss = [kernelFn ker (gpKernelParams params) x x | x <- testX]
       -- F1: vectorise diag(kStar · v).
       kStarDotV = LA.toList (KD.diagAB kStar v)
       varList   = zipWith (\d kv -> max 0 (d - kv)) diagKss kStarDotV
@@ -346,6 +314,93 @@ optimizeGP ker trainX trainY p0 =
     obj u = logMarginalLikelihood trainX trainY ker (toParams u)
 
 -- ---------------------------------------------------------------------------
+-- LOOCV hyperparameter selection (exact / Gram path) — Phase 70.5 項目 E
+-- ---------------------------------------------------------------------------
+
+-- | Leave-one-out CV (PRESS) for exact kernel-ridge / GP-mean prediction
+-- from a /noiseless/ Gram matrix @K@. Closed form
+-- @PRESS = (1/n) Σ ((yᵢ − ŷᵢ)/(1 − Hᵢᵢ))²@ with @H = K (K + λI)⁻¹@ and
+-- @ŷ = H y@ (no @n@-fold refit). This is the Gram-space analogue of
+-- 'Hanalyze.Model.RFF.loocvFromPhi' (identical PRESS algebra, but
+-- in the @n@-dim Gram space instead of the @D@-dim RFF feature space).
+-- KRR ≡ GP posterior mean with @λ = σ_n²@, so the same routine selects
+-- @λ@ for both the @Ridge@ and @Gp@ quadrants of the unified @gp@ spec.
+gramLOOCV :: LA.Matrix Double   -- ^ Noiseless Gram matrix @K@ (@n × n@).
+          -> LA.Vector Double   -- ^ Targets @y@ (length @n@).
+          -> Double             -- ^ Ridge penalty @λ@ (= @σ_n²@).
+          -> Double
+gramLOOCV k y lam =
+  let n         = LA.rows k
+      regK      = addToDiag lam k                 -- K + λI (SPD)
+      -- H = K (K+λI)⁻¹ = (regK⁻¹ K)ᵀ (K, regK symmetric). Solve once.
+      h         = LA.tr (regK LA.<\> k)
+      yhat      = h LA.#> y
+      hDiag     = LA.takeDiag h
+      oneMinusH = LA.cmap (\hh -> max 1e-12 (1 - hh)) hDiag
+      resid     = y - yhat
+      ratios    = zipWith (/) (LA.toList resid) (LA.toList oneMinusH)
+  in sum [ r * r | r <- ratios ] / fromIntegral (max 1 n)
+
+-- | Pick GP/KRR hyperparameters by minimizing leave-one-out CV (PRESS)
+-- over a log-spaced @(ℓ, λ)@ grid. @σ_f@ is fixed at @std(y)@ (mirroring
+-- 'Hanalyze.Model.RFF.gridSearchLOOCVRBFMV', where @σ_f@ and @λ@
+-- are degenerate and @λ@ absorbs the scale). Returns 'GPParams' with the
+-- selected @ℓ*@, @σ_f² = std(y)²@ and @σ_n² = λ*@ (KRR ≡ GP mean with
+-- @λ = σ_n²@). Used by the @AutoCV@ 'HyperStrategy' for the exact
+-- ('Gp'/'Ridge') quadrants.
+autoCVHyperGP :: Kernel -> [Double] -> [Double] -> GPParams
+autoCVHyperGP ker xs ys =
+  let p0      = initParamsFromData xs ys
+      yStd    = max 1e-9 (sqrt (varOfList ys))
+      ell0    = gpLengthScale p0
+      ellGrid = logSpaceList (ell0 * 0.1)   (ell0 * 10) 10
+      lamGrid = logSpaceList (yStd * 1e-6)  (yStd * 10) 20
+      yV      = LA.fromList ys
+      score ell lam =
+        let pk = p0 { gpLengthScale = ell, gpSignalVar = yStd * yStd }
+            k  = buildKernelMatrix ker (gpKernelParams pk) xs xs
+        in gramLOOCV k yV lam
+      cands = [ (ell, lam, score ell lam) | ell <- ellGrid, lam <- lamGrid ]
+      (bEll, bLam, _) =
+        foldr1 (\a@(_,_,sa) b@(_,_,sb) -> if sa <= sb then a else b) cands
+  in p0 { gpLengthScale = bEll, gpSignalVar = yStd * yStd, gpNoiseVar = bLam }
+
+-- | Multi-input analogue of 'autoCVHyperGP'. Same log-spaced @(ℓ, λ)@
+-- Gram-LOOCV search but builds the kernel from an @n × p@ training
+-- matrix via 'buildKernelMatrixMV' (isotropic; ℓ shared across inputs).
+autoCVHyperGPMV :: Kernel -> LA.Matrix Double -> LA.Vector Double -> GPParams
+autoCVHyperGPMV ker trainX y =
+  let p0      = initParamsFromDataMV trainX y
+      yStd    = max 1e-9 (sqrt (varOfList (LA.toList y)))
+      ell0    = gpLengthScale p0
+      ellGrid = logSpaceList (ell0 * 0.1)  (ell0 * 10) 8
+      lamGrid = logSpaceList (yStd * 1e-6) (yStd * 10) 16
+      score ell lam =
+        let pk = p0 { gpLengthScale = ell, gpSignalVar = yStd * yStd }
+            k  = buildKernelMatrixMV ker (gpKernelParams pk) trainX trainX
+        in gramLOOCV k y lam
+      cands = [ (ell, lam, score ell lam) | ell <- ellGrid, lam <- lamGrid ]
+      (bEll, bLam, _) =
+        foldr1 (\a@(_,_,sa) b@(_,_,sb) -> if sa <= sb then a else b) cands
+  in p0 { gpLengthScale = bEll, gpSignalVar = yStd * yStd, gpNoiseVar = bLam }
+
+-- | Population variance of a list (LOOCV σ_f init).
+varOfList :: [Double] -> Double
+varOfList zs =
+  let n = fromIntegral (length zs)
+      m = sum zs / n
+  in if n <= 0 then 0 else sum [ (z - m) ^ (2 :: Int) | z <- zs ] / n
+
+-- | @n@ points log-spaced in @[lo, hi]@ (inclusive). @lo,hi > 0@.
+logSpaceList :: Double -> Double -> Int -> [Double]
+logSpaceList lo hi n
+  | n <= 1    = [lo]
+  | otherwise = [ exp (logLo + (logHi - logLo) * fromIntegral i / fromIntegral (n - 1))
+                | i <- [0 .. n - 1] ]
+  where logLo = log lo
+        logHi = log hi
+
+-- ---------------------------------------------------------------------------
 -- Interactive prediction data (for Hanalyze.Viz.GPReport)
 -- ---------------------------------------------------------------------------
 
@@ -363,7 +418,7 @@ gpPredData model trainX trainY =
   let ker    = gpKernel model
       params = gpParams model
       n      = length trainX
-      k      = buildKernelMatrix ker params trainX trainX
+      k      = buildKernelMatrix ker (gpKernelParams params) trainX trainX
       jitter = max (gpNoiseVar params) 1e-6
       ky     = addToDiag jitter k
       -- SPD: solve via Cholesky rather than 'LA.inv'. Equivalent to
@@ -399,69 +454,6 @@ data GPResultMV = GPResultMV
   , gpmvUpper :: LA.Vector Double  -- ^ @mean + 2σ@.
   } deriving (Show)
 
--- | Apply the kernel function to an @m × n@ matrix of squared distances.
--- This is the per-element work that follows BLAS distance computation.
--- F2: per-element kernel evaluation via massiv's @A.map@. Measured
--- 1.7× faster than @LA.cmap@ on 2000×2000 matrices because
--- 'A.computeAs' produces a fused tight loop while @LA.cmap@ pays
--- per-element function-call overhead. Bigger payoff at large @n@
--- (kernel matrices for Kernel/GP are the main hot path).
-applyKernel :: Kernel -> GPParams -> LA.Matrix Double -> LA.Matrix Double
-applyKernel RBF p d2 =
-  let l2 = gpLengthScale p ** 2
-      sf = gpSignalVar p
-  in KD.mapMatrix (\s -> sf * exp (- s / (2 * l2))) d2
-applyKernel Matern52 p d2 =
-  let l  = gpLengthScale p
-      sf = gpSignalVar p
-  in KD.mapMatrix (\s -> let r = sqrt (max 0 s)
-                             u = sqrt 5 * r / l
-                         in sf * (1 + u + u * u / 3) * exp (- u)) d2
-applyKernel Periodic p d2 =
-  let l  = gpLengthScale p
-      sf = gpSignalVar p
-      pr = gpPeriod p
-  in KD.mapMatrix (\s -> let r = sqrt (max 0 s)
-                             ss = sin (pi * r / pr)
-                         in sf * exp (- 2 * ss * ss / (l * l))) d2
-
--- mapMatrix / mapVector は 'Hanalyze.Stat.KernelDist' に集約 (KD.mapMatrix)。
-
--- | Apply ARD scaling to (X, X') if 'gpLengthScales' is 'Just'. Returns
--- the (possibly rescaled) matrices and a 'GPParams' with @ℓ = 1@ so
--- that 'applyKernel' divides by 1 (the per-dim ℓ_d already absorbed
--- into the column scaling). 'Nothing' = isotropic, returns inputs and
--- params unchanged. The 'Periodic' kernel does not support ARD.
-ardScaleXY
-  :: Kernel -> GPParams -> LA.Matrix Double -> LA.Matrix Double
-  -> (LA.Matrix Double, LA.Matrix Double, GPParams)
-ardScaleXY Periodic p x y = (x, y, p)
-ardScaleXY _        p x y = case gpLengthScales p of
-  Nothing -> (x, y, p)
-  Just ls ->
-    let p_     = LA.cols x
-        lsExt  = if LA.size ls == p_
-                   then ls
-                   else LA.konst (gpLengthScale p) p_  -- safety fallback
-        invL   = LA.cmap (1 /) lsExt                 -- 1 / ℓ_d
-        scaleCols m = m LA.<> LA.diag invL
-        x'     = scaleCols x
-        y'     = scaleCols y
-        p'     = p { gpLengthScale = 1.0 }
-    in (x', y', p')
-
--- | Build the kernel matrix @K(X, X')@ of shape @|X| × |X'|@ from
--- multi-input matrices. @X@ is @n × p@; @X'@ is @m × p@.
---
--- When 'gpLengthScales' is 'Just', uses ARD: each input dimension is
--- scaled by @1 / ℓ_d@ before computing pairwise squared distances.
-buildKernelMatrixMV
-  :: Kernel -> GPParams -> LA.Matrix Double -> LA.Matrix Double
-  -> LA.Matrix Double
-buildKernelMatrixMV ker p x x' =
-  let (xs, ys, p') = ardScaleXY ker p x x'
-  in applyKernel ker p' (KD.pairwiseSqDistXY xs ys)
-
 -- | Add a scalar @c@ to the diagonal of a square matrix in one pass.
 --
 -- Replaces the @M + c·I@ pattern (which allocates a fresh @n × n@
@@ -492,33 +484,6 @@ addToDiag c m =
         VS.unsafeFreeze v
   in LA.reshape n out
 
--- | Specialized kernel function for a fixed parameter set, returning a
--- monomorphic @Double -> Double@ that GHC can inline tightly into
--- @mkNoiseKernelFromD2@s inner loop.
-{-# INLINE kernelOfParams #-}
-kernelOfParams :: Kernel -> GPParams -> (Double -> Double)
-kernelOfParams RBF p =
-  let !l2 = gpLengthScale p ** 2
-      !sf = gpSignalVar p
-      !inv2L2 = 1 / (2 * l2)
-  in \s -> sf * exp (- s * inv2L2)
-kernelOfParams Matern52 p =
-  let !l  = gpLengthScale p
-      !sf = gpSignalVar p
-      !invL = sqrt 5 / l
-  in \s -> let r = sqrt (max 0 s)
-               u = invL * r
-           in sf * (1 + u + u * u / 3) * exp (- u)
-kernelOfParams Periodic p =
-  let !l  = gpLengthScale p
-      !sf = gpSignalVar p
-      !pr = gpPeriod p
-      !invL2 = 1 / (l * l)
-      !invPr = pi / pr
-  in \s -> let r  = sqrt (max 0 s)
-               ss = sin (invPr * r)
-           in sf * exp (- 2 * ss * ss * invL2)
-
 -- | Build the noise-augmented kernel matrix @K + jitter·I@ in a single
 -- pass over the squared-distance matrix.
 --
@@ -531,7 +496,7 @@ kernelOfParams Periodic p =
 -- 35.3% of @optimizeGPMV@; halving its allocation footprint translates
 -- to a measurable wall-time reduction in the LBFGS hot loop.
 mkNoiseKernelFromD2
-  :: Kernel -> GPParams -> Double -> LA.Matrix Double -> LA.Matrix Double
+  :: Kernel -> KernelParams -> Double -> LA.Matrix Double -> LA.Matrix Double
 mkNoiseKernelFromD2 ker p jitter d2 =
   let n     = LA.rows d2
       flatD = LA.flatten d2
@@ -557,7 +522,7 @@ mkNoiseKernelFromD2 ker p jitter d2 =
 -- single @n²@ pass rather than two.
 noiseKernelMV :: Kernel -> GPParams -> LA.Matrix Double -> LA.Matrix Double
 noiseKernelMV ker p x =
-  let (xs, _, p') = ardScaleXY ker p x x
+  let (xs, _, p') = ardScaleXY ker (gpKernelParams p) x x
       d2          = KD.pairwiseSqDist xs
       jitter      = max (gpNoiseVar p) 1e-6
   in mkNoiseKernelFromD2 ker p' jitter d2
@@ -571,7 +536,7 @@ noiseKernelMVCached
   :: Kernel -> GPParams -> LA.Matrix Double -> LA.Matrix Double
 noiseKernelMVCached ker p d2 =
   let jitter = max (gpNoiseVar p) 1e-6
-  in mkNoiseKernelFromD2 ker p jitter d2
+  in mkNoiseKernelFromD2 ker (gpKernelParams p) jitter d2
 
 -- | D-cached version of 'logMarginalLikelihoodMV' — accepts a
 -- pre-computed @D = pairwiseSqDist trainX@ instead of recomputing it
@@ -659,7 +624,7 @@ fitGPMVMulti model trainX trainY testX =
   let ker    = gpKernel model
       params = gpParams model
       ky     = noiseKernelMV ker params trainX
-      kStar  = buildKernelMatrixMV ker params testX trainX -- m × n
+      kStar  = buildKernelMatrixMV ker (gpKernelParams params) testX trainX -- m × n
       -- α = Ky⁻¹ Y via SPD Cholesky (reused for v below by passing both
       -- right-hand sides through the same factorization).
       rhs    = trainY LA.||| LA.tr kStar           -- n × (q + m)

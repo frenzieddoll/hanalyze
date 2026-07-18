@@ -1,6 +1,10 @@
-{-# LANGUAGE StrictData #-}
-{-# LANGUAGE OverloadedStrings #-}
--- | Bayesian Optimization loop.
+-- |
+-- Module      : Hanalyze.Optim.BayesOpt
+-- Description : ベイズ最適化ループ (GP フィット + 獲得関数最大化)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Bayesian Optimization loop.
 --
 -- Single-objective procedure:
 --
@@ -9,10 +13,14 @@
 --   3. Maximize an acquisition function to choose the next @x@.
 --   4. Evaluate @x@ and append to the observed sequence.
 --   5. Repeat steps 2-4 for @T@ iterations.
+{-# LANGUAGE StrictData #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Hanalyze.Optim.BayesOpt
   ( BayesOptConfig (..)
   , defaultBayesOptConfig
+  , BOIterEvent (..)
   , bayesOpt
+  , bayesOptWithCallback
   , bayesOptND
   , bayesOptScalarMO
   , bayesOptMOWithNSGA
@@ -29,6 +37,7 @@ import System.IO.Unsafe (unsafePerformIO)
 import System.Random.MWC (GenIO, uniform)
 
 import Hanalyze.Model.GP (Kernel (..), GPModel (..), GPResult (..), GPParams (..),
+                 gpKernelParams,
                  fitGP, optimizeGP, initParamsFromData,
                  GPResultMV (..), fitGPMV, optimizeGPMV,
                  logMarginalLikelihoodMV,
@@ -79,18 +88,39 @@ defaultBayesOptConfig = BayesOptConfig
 --
 -- Returns @(observations, best)@: the full @(x, y)@ history and the best
 -- @(x*, y*)@.
+-- | Phase 21 で追加。 BO の各 iteration 末端で発火するイベント。
+data BOIterEvent = BOIterEvent
+  { boeIter        :: !Int               -- ^ 0-based iteration index
+  , boeProposedX   :: !Double             -- ^ acquisition が選んだ新点
+  , boeProposedY   :: !Double             -- ^ そこでの f 値
+  , boeCurrentBest :: !(Double, Double)   -- ^ (x*, y*) これまで
+  } deriving (Show)
+
 bayesOpt :: BayesOptConfig
          -> (Double -> IO Double)   -- ^ Objective (1D, minimized).
          -> (Double, Double)        -- ^ Search bounds.
          -> GenIO
          -> IO ([(Double, Double)], (Double, Double))
-bayesOpt cfg f (lo, hi) gen = do
+bayesOpt cfg f bounds gen =
+  bayesOptWithCallback cfg f bounds gen (\_ -> pure ())
+
+-- | Phase 21 で追加。 BO iteration ごとに 'BOIterEvent' を渡す callback 付き版。
+-- 既存 'bayesOpt' は no-op callback の wrapper として保持される。
+bayesOptWithCallback
+  :: BayesOptConfig
+  -> (Double -> IO Double)
+  -> (Double, Double)
+  -> GenIO
+  -> (BOIterEvent -> IO ())
+  -> IO ([(Double, Double)], (Double, Double))
+bayesOptWithCallback cfg f (lo, hi) gen onIter = do
   -- 初期点 (uniform random, 簡易)
   initX <- replicateM (boInitPoints cfg) (do
               u <- uniform gen :: IO Double
               return (lo + u * (hi - lo)))
   initY <- mapM f initX
   let history0 = zip initX initY
+      totalIter = boIterations cfg
 
   -- BO ループ
   -- 内側 acquisition 最大化は **Brent 法** (1D 単峰超線形収束)。
@@ -141,9 +171,19 @@ bayesOpt cfg f (lo, hi) gen = do
                 xNext = head (OC.orBest bRes)
 
             yNext <- f xNext
-            loop (t - 1) (hist ++ [(xNext, yNext)])
+            let newHist = hist ++ [(xNext, yNext)]
+                bestPair = head [pair | pair@(_, y) <- newHist
+                                      , y == minimum (map snd newHist)]
+                iterIdx = totalIter - t   -- 0-based
+            onIter BOIterEvent
+              { boeIter        = iterIdx
+              , boeProposedX   = xNext
+              , boeProposedY   = yNext
+              , boeCurrentBest = bestPair
+              }
+            loop (t - 1) newHist
 
-  finalHist <- loop (boIterations cfg) history0
+  finalHist <- loop totalIter history0
   let bestPair = head [pair | pair@(_, y) <- finalHist
                             , y == minimum (map snd finalHist)]
   return (finalHist, bestPair)
@@ -306,7 +346,7 @@ bayesOptND cfg nStarts f bounds gen = do
                   let xScl    = LA.fromList (scaleX xVec)
                       xRow    = LA.asRow xScl
                       kStarV  = LA.flatten
-                                 (buildKernelMatrixMV kern params xRow xMat)
+                                 (buildKernelMatrixMV kern (gpKernelParams params) xRow xMat)
                       mu      = LA.dot kStarV alpha
                       vstar   = LA.flatten
                                  (Chol.cholSolveWithFactor rChol
@@ -324,7 +364,7 @@ bayesOptND cfg nStarts f bounds gen = do
                   :: LA.Matrix Double  -- ^ Scaled X candidates (m × p)
                   -> (LA.Vector Double, LA.Vector Double)
                 predictBatchScaled xCand =
-                  let kStar = buildKernelMatrixMV kern params xCand xMat  -- m × n
+                  let kStar = buildKernelMatrixMV kern (gpKernelParams params) xCand xMat  -- m × n
                       mus   = kStar LA.#> alpha                            -- m
                       vMat  = Chol.cholSolveWithFactor rChol (LA.tr kStar) -- n × m
                       -- F1: diag(kStar · vMat) without forming m×m.
@@ -352,7 +392,7 @@ bayesOptND cfg nStarts f bounds gen = do
                       l       = gpLengthScale params
                       l2      = l * l
                       kStarV  = LA.flatten
-                                  (buildKernelMatrixMV kern params
+                                  (buildKernelMatrixMV kern (gpKernelParams params)
                                      (LA.asRow xScl) xMat)
                       factor  = case kern of
                                   RBF      ->
@@ -365,8 +405,8 @@ bayesOptND cfg nStarts f bounds gen = do
                                                 (sf `LA.scale`
                                                   (ef * (LA.cmap (1 +) r)))
                                     in c
-                                  Periodic ->
-                                    LA.konst 0 (LA.size kStarV)  -- numeric fallback
+                                  _ ->
+                                    LA.konst 0 (LA.size kStarV)  -- Periodic/Linear/Poly: numeric fallback
                       vstar   = LA.flatten
                                   (Chol.cholSolveWithFactor rChol
                                     (LA.asColumn kStarV))
@@ -454,8 +494,9 @@ bayesOptND cfg nStarts f bounds gen = do
                     jit   = (u - 0.5) * 0.05 * span_
                 pure (max lo (min hi (v + jit)))
             let useAnalytic = case kern of
-                                Periodic -> False
-                                _        -> True
+                                RBF      -> True
+                                Matern52 -> True
+                                _        -> False   -- Periodic/Linear/Poly は数値勾配
                 runMSG objFn gradFn = mapM (\x0 ->
                   LBFGS.runLBFGSWith
                     (LBFGS.defaultLBFGSConfig

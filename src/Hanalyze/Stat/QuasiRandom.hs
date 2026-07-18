@@ -1,4 +1,10 @@
--- | Quasi-random number sequences with low discrepancy.
+-- |
+-- Module      : Hanalyze.Stat.QuasiRandom
+-- Description : 低不一致準乱数列 (Halton 列・LHS) — ベイズ最適化の初期設計に利用
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Quasi-random number sequences with low discrepancy.
 --
 -- These sequences cover a multi-dimensional unit hyper-cube more
 -- evenly than independent uniform-random samples and are the
@@ -15,6 +21,7 @@ module Hanalyze.Stat.QuasiRandom
   , haltonSequence
   , haltonSequenceIn
   , haltonMatrix
+  , radicalInverse
   , primes
     -- * Latin Hypercube Sampling
   , lhsSamples

@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Data-frame reshaping helpers that are missing in Hackage
+-- |
+-- Module      : Hanalyze.DataIO.Reshape
+-- Description : Hackage dataframe に無い reshape 操作 (pivotWider・oneHot・lag/lead・rolling)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Data-frame reshaping helpers that are missing in Hackage
 -- @dataframe@:
 --
 --   * 'pivotWider' — long → wide reshape (inverse of @meltLonger@).

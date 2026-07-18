@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | CSV / TSV / SSV loaders that return Hackage @dataframe@'s
+-- |
+-- Module      : Hanalyze.DataIO.CSV
+-- Description : CSV / TSV / SSV を Hackage dataframe の DataFrame として読み込むローダ群
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- CSV / TSV / SSV loaders that return Hackage @dataframe@'s
 -- 'DataFrame.Internal.DataFrame.DataFrame' directly.
 --
 --   * CSV / TSV — delegated to Hackage's 'DX.readCsv' / 'DX.readTsv'

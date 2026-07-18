@@ -118,7 +118,7 @@ $$ \alpha = \min\!\left(1, \frac{\pi(\theta')}{\pi(\theta)}\right) $$
 ### 3.5 hanalyze での実装
 
 ```haskell
-import MCMC.MH (metropolis, defaultMCMCConfig)
+import Hanalyze.MCMC.MH (metropolis, defaultMCMCConfig)
 
 ch <- metropolis model
         (defaultMCMCConfig ["mu", "sigma"])
@@ -161,7 +161,7 @@ for t = 1, 2, ...:
 ### 4.4 hanalyze の実装
 
 ```haskell
-import MCMC.Gibbs (gibbsMH, defaultGibbsConfig)
+import Hanalyze.MCMC.Gibbs (gibbsMH, defaultGibbsConfig)
 
 -- 事前/尤度の組み合わせから 共役構造を自動検出:
 ch <- gibbsMH model defaultGibbsConfig init0 gen

@@ -1,11 +1,17 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
--- | Gibbs sampler — analytic full-conditional sampling for conjugate priors.
+-- |
+-- Module      : Hanalyze.MCMC.Gibbs
+-- Description : 共役事前分布向け Gibbs sampler (解析的フル条件付きサンプリング)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Gibbs sampler — analytic full-conditional sampling for conjugate priors.
 --
 -- Each 'GibbsUpdate' draws a single parameter directly from its full
 -- conditional distribution, so no Metropolis rejection step is needed and
 -- every sample is accepted. When non-conjugate parameters are mixed in,
 -- combine with Metropolis-Hastings ('gibbsMH').
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 module Hanalyze.MCMC.Gibbs
   ( -- * 共役アップデートブロック
     GibbsUpdate
@@ -19,23 +25,33 @@ module Hanalyze.MCMC.Gibbs
   , gibbs
   , gibbsBetaBinomial
   , gibbsChains
+  , gibbsPure
+  , gibbsChainsPure
+  , gibbsBetaBinomialPure
     -- * HBM-DSL integration: conjugacy auto-detection
   , gibbsFromModel
     -- * Hybrid Gibbs+MH sampler
   , gibbsMH
   , gibbsMHChains
+  , gibbsMHPure
+  , gibbsMHChainsPure
   ) where
 
 import Control.Concurrent.Async (mapConcurrently)
 import Control.Monad (foldM, replicateM, when)
-import Data.IORef
+import Control.Monad.Primitive (PrimMonad, PrimState)
+import Control.Monad.ST (runST)
+import Control.Parallel.Strategies (parList, rdeepseq, using)
+import Data.Primitive.MutVar
 import Data.List (nub)
 import Data.Maybe (listToMaybe)
+import Data.Word (Word32)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import Data.Text (Text)
+import qualified Data.Vector as V
 import qualified Data.Vector.Storable as VS
-import System.Random.MWC (GenIO, uniform)
+import System.Random.MWC (Gen, GenIO, uniform, initialize)
 import System.Random.MWC.Distributions (gamma, normal)
 
 import Hanalyze.MCMC.Core (Chain (..), spawnGen)
@@ -50,7 +66,11 @@ import Hanalyze.Model.HBM (ModelP, Params, Distribution (..),
 -- | A Gibbs update block. Receives the current parameter set and returns
 -- a single fresh @(name, value)@ sampled from the assigned parameter's
 -- full conditional distribution.
-type GibbsUpdate = Params -> GenIO -> IO (Text, Double)
+--
+-- Phase 50: monad パラメタ化 (@m@) で 'IO' でも @ST s@ でも走らせる
+-- (純粋 Gibbs に必要)。 rank-N alias にすると @Maybe@/list 構築が impredicative に
+-- なるため、 alias を kind @* -> *@ にして関数側 ('gibbsFromModel' 等) を多相にする。
+type GibbsUpdate m = Params -> Gen (PrimState m) -> m (Text, Double)
 
 -- ---------------------------------------------------------------------------
 -- 共役アップデート (モデル非依存)
@@ -59,7 +79,7 @@ type GibbsUpdate = Params -> GenIO -> IO (Text, Double)
 -- | Conjugate update for a Normal prior × Normal likelihood with known
 -- @σ@.
 normalNormal
-  :: Text -> Double -> Double -> [Double] -> Double -> GibbsUpdate
+  :: PrimMonad m => Text -> Double -> Double -> [Double] -> Double -> GibbsUpdate m
 normalNormal paramName mu0 sig0 ys sigLik _ps gen = do
   let n        = fromIntegral (length ys) :: Double
       ybar     = if n == 0 then 0 else sum ys / n
@@ -73,7 +93,7 @@ normalNormal paramName mu0 sig0 ys sigLik _ps gen = do
 
 -- | Conjugate update for a Beta prior × Binomial likelihood.
 betaBinomial
-  :: Text -> Double -> Double -> Int -> Int -> GibbsUpdate
+  :: PrimMonad m => Text -> Double -> Double -> Int -> Int -> GibbsUpdate m
 betaBinomial paramName alpha0 beta0 n k _ps gen = do
   val <- sampleBeta (alpha0 + fromIntegral k)
                     (beta0  + fromIntegral (n - k))
@@ -83,7 +103,7 @@ betaBinomial paramName alpha0 beta0 n k _ps gen = do
 -- | Conjugate update for a Gamma prior × Poisson likelihood
 -- (rate parameterization).
 gammaPoisson
-  :: Text -> Double -> Double -> [Double] -> GibbsUpdate
+  :: PrimMonad m => Text -> Double -> Double -> [Double] -> GibbsUpdate m
 gammaPoisson paramName alpha0 beta0 ys _ps gen = do
   let n     = fromIntegral (length ys) :: Double
       aPost = alpha0 + sum ys
@@ -93,7 +113,7 @@ gammaPoisson paramName alpha0 beta0 ys _ps gen = do
 
 -- | Sample @Beta(a, b)@. Implemented as @X / (X + Y)@ with
 -- @X ~ Gamma(a)@, @Y ~ Gamma(b)@, since @mwc-random@ has no Beta sampler.
-sampleBeta :: Double -> Double -> GenIO -> IO Double
+sampleBeta :: PrimMonad m => Double -> Double -> Gen (PrimState m) -> m Double
 sampleBeta a b gen
   | a > 1 && b > 1 = sampleBetaBB a b gen   -- Cheng's BB, much faster
   | otherwise      = sampleBetaGamma a b gen
@@ -103,7 +123,7 @@ sampleBeta a b gen
 -- Used when the Cheng-BB precondition @a, b > 1@ is violated; the BB
 -- algorithm's @λ = √((α − 2) / (2 a b − α))@ becomes imaginary at
 -- @a, b ≤ 1@ so a different branch (BC) would be required there.
-sampleBetaGamma :: Double -> Double -> GenIO -> IO Double
+sampleBetaGamma :: PrimMonad m => Double -> Double -> Gen (PrimState m) -> m Double
 sampleBetaGamma a b gen = do
   x <- gamma a 1 gen
   y <- gamma b 1 gen
@@ -121,7 +141,7 @@ sampleBetaGamma a b gen = do
 --
 -- Reference: Cheng (1978), "Generating Beta variates with non-integral
 -- shape parameters", CACM 21(4):317-322. Algorithm BB on p. 319.
-sampleBetaBB :: Double -> Double -> GenIO -> IO Double
+sampleBetaBB :: forall m. PrimMonad m => Double -> Double -> Gen (PrimState m) -> m Double
 sampleBetaBB a b gen = do
   let !alpha    = a + b
       !beta_    = sqrt ((alpha - 2) / (2 * a * b - alpha))
@@ -130,8 +150,8 @@ sampleBetaBB a b gen = do
       !log5     = log 5
       !logAlpha = log alpha
   let loop = do
-        u1 <- uniform gen :: IO Double
-        u2 <- uniform gen :: IO Double
+        u1 <- uniform gen :: m Double
+        u2 <- uniform gen :: m Double
         let !v = beta_ * log (u1 / (1 - u1))
             !w = a * exp v
             !z = u1 * u1 * u2
@@ -173,12 +193,12 @@ defaultGibbsConfig = GibbsConfig
 -- | Apply each update in @updates@ once per iteration, in order. Every
 -- Gibbs step is accepted by construction, so @chainAccepted@ equals
 -- @(length updates) × iterations@.
-gibbs :: [GibbsUpdate] -> GibbsConfig -> Params -> GenIO -> IO Chain
+gibbs :: PrimMonad m => [GibbsUpdate m] -> GibbsConfig -> Params -> Gen (PrimState m) -> m Chain
 gibbs updates cfg initP gen = do
   let total = gibbsBurnIn cfg + gibbsIterations cfg
       nUpd  = length updates
-  samplesRef  <- newIORef []
-  acceptedRef <- newIORef (0 :: Int)
+  samplesRef  <- newMutVar []
+  acceptedRef <- newMutVar (0 :: Int)
   let step current = foldM applyOne current updates
         where
           applyOne ps upd = do
@@ -187,19 +207,20 @@ gibbs updates cfg initP gen = do
   let loop 0 current = return current
       loop i current = do
         next <- step current
-        modifyIORef' acceptedRef (+ nUpd)
+        modifyMutVar' acceptedRef (+ nUpd)
         when (i <= gibbsIterations cfg) $
-          modifyIORef' samplesRef (next :)
+          modifyMutVar' samplesRef (next :)
         loop (i - 1) next
   _ <- loop total initP
-  samples  <- fmap reverse (readIORef samplesRef)
-  accepted <- readIORef acceptedRef
+  samples  <- fmap reverse (readMutVar samplesRef)
+  accepted <- readMutVar acceptedRef
   return Chain
     { chainSamples  = samples
     , chainAccepted = accepted
     , chainTotal    = total * nUpd
     , chainEnergy   = []
     , chainDivergences = []
+    , chainTreeDepths  = []
     }
 
 -- | Specialised Beta-Binomial conjugate sampler. Equivalent to
@@ -214,9 +235,9 @@ gibbs updates cfg initP gen = do
 --
 --   * @Map.insert paramName val ps@ — fresh Map allocation every iter
 --     (size-1 Map but still a tree node + Text key + boxed Double)
---   * @modifyIORef' acceptedRef (+ nUpd)@ — counter that's exactly
+--   * @modifyMutVar' acceptedRef (+ nUpd)@ — counter that's exactly
 --     @total@ at the end (every Gibbs step is unconditionally accepted)
---   * @modifyIORef' samplesRef (next :)@ + final @reverse@ — list cons
+--   * @modifyMutVar' samplesRef (next :)@ + final @reverse@ — list cons
 --     of every kept iteration plus a 10000-element reverse
 --   * @foldM applyOne current updates@ — closure construction even
 --     though the update list has length 1
@@ -231,14 +252,15 @@ gibbs updates cfg initP gen = do
 -- numpy.random.beta(a, b, size=10000) does the same thing in C with
 -- SIMD; this brings the Haskell side to within ~2× of it without FFI.
 gibbsBetaBinomial
-  :: Text     -- ^ Parameter name (= sample-Map key).
+  :: PrimMonad m
+  => Text     -- ^ Parameter name (= sample-Map key).
   -> Double   -- ^ Beta prior @α@.
   -> Double   -- ^ Beta prior @β@.
   -> Int      -- ^ Binomial @n@.
   -> Int      -- ^ Observed successes @k@.
   -> GibbsConfig
-  -> GenIO
-  -> IO Chain
+  -> Gen (PrimState m)
+  -> m Chain
 gibbsBetaBinomial paramName alpha0 beta0 n k cfg gen = do
   let !total = gibbsBurnIn cfg + gibbsIterations cfg
       !keep  = gibbsIterations cfg
@@ -256,10 +278,11 @@ gibbsBetaBinomial paramName alpha0 beta0 n k cfg gen = do
     , chainTotal       = total
     , chainEnergy      = []
     , chainDivergences = []
+    , chainTreeDepths  = []
     }
 
 -- | Run 'gibbs' on @numChains@ parallel chains.
-gibbsChains :: [GibbsUpdate] -> GibbsConfig -> Int -> Params -> GenIO -> IO [Chain]
+gibbsChains :: [GibbsUpdate IO] -> GibbsConfig -> Int -> Params -> GenIO -> IO [Chain]
 gibbsChains updates cfg numChains initP baseGen = do
   gens <- replicateM numChains (spawnGen baseGen)
   mapConcurrently (\g -> gibbs updates cfg initP g) gens
@@ -287,6 +310,7 @@ distParams (Mixture ws _)     = ws  -- 共役検出には使えない (重みの
 distParams (Truncated _ _ _)  = []  -- 共役検出対象外
 distParams (Censored  _ _ _)  = []  -- 共役検出対象外
 distParams MvNormal{}         = []  -- 共役検出対象外 (観測専用)
+distParams MvNormalChol{}     = []  -- 共役検出対象外 (観測専用)
 distParams (NegativeBinomial mu a) = [mu, a]
 distParams (Multinomial _ ps)      = ps
 distParams (ZeroInflatedPoisson psi lam)  = [psi, lam]
@@ -325,7 +349,7 @@ detectObsDeps m latNames =
 --
 -- Returns @(updates, remaining)@: the synthesised updates and the names
 -- of parameters that still need an MH step.
-gibbsFromModel :: ModelP r -> ([GibbsUpdate], [Text])
+gibbsFromModel :: forall r m. PrimMonad m => ModelP r -> ([GibbsUpdate m], [Text])
 gibbsFromModel m =
   let nodes    = collectNodes m
       latNames = [ nodeName n | n <- nodes, nodeKind n == LatentN ]
@@ -378,12 +402,13 @@ gibbsFromModel m =
 -- ---------------------------------------------------------------------------
 
 hybridStep
-  :: [GibbsUpdate]
+  :: PrimMonad m
+  => [GibbsUpdate m]
   -> [Text]
   -> Map Text Double
   -> ModelP r
-  -> Params -> GenIO
-  -> IO (Params, Bool)
+  -> Params -> Gen (PrimState m)
+  -> m (Params, Bool)
 hybridStep gibbsUpds mhNames mhSteps model current gen = do
   afterGibbs <- foldM (\ps upd -> do
     (name, val) <- upd ps gen
@@ -404,33 +429,35 @@ hybridStep gibbsUpds mhNames mhSteps model current gen = do
 -- | Hybrid sampler: Gibbs-update conjugate parameters and use Random-Walk
 -- Metropolis on the rest.
 gibbsMH
-  :: ModelP r
+  :: PrimMonad m
+  => ModelP r
   -> GibbsConfig
   -> Map Text Double   -- ^ MH step size per non-conjugate parameter.
   -> Params
-  -> GenIO
-  -> IO Chain
+  -> Gen (PrimState m)
+  -> m Chain
 gibbsMH model cfg mhSteps initP gen = do
   let (gibbsUpds, mhNames) = gibbsFromModel model
       total = gibbsBurnIn cfg + gibbsIterations cfg
-  samplesRef  <- newIORef []
-  acceptedRef <- newIORef (0 :: Int)
+  samplesRef  <- newMutVar []
+  acceptedRef <- newMutVar (0 :: Int)
   let loop 0 current = return current
       loop i current = do
         (next, acc) <- hybridStep gibbsUpds mhNames mhSteps model current gen
-        when acc $ modifyIORef' acceptedRef (+1)
+        when acc $ modifyMutVar' acceptedRef (+1)
         when (i <= gibbsIterations cfg) $
-          modifyIORef' samplesRef (next :)
+          modifyMutVar' samplesRef (next :)
         loop (i - 1) next
   _ <- loop total initP
-  samples  <- fmap reverse (readIORef samplesRef)
-  accepted <- readIORef acceptedRef
+  samples  <- fmap reverse (readMutVar samplesRef)
+  accepted <- readMutVar acceptedRef
   return Chain
     { chainSamples  = samples
     , chainAccepted = accepted
     , chainTotal    = total
     , chainEnergy   = []
     , chainDivergences = []
+    , chainTreeDepths  = []
     }
 
 gibbsMHChains
@@ -444,3 +471,50 @@ gibbsMHChains
 gibbsMHChains model cfg mhSteps numChains initP baseGen = do
   gens <- replicateM numChains (spawnGen baseGen)
   mapConcurrently (\g -> gibbsMH model cfg mhSteps initP g) gens
+
+-- ---------------------------------------------------------------------------
+-- Phase 50: 純粋 (ST + seed) ラッパ
+-- ---------------------------------------------------------------------------
+
+-- | 純粋・決定的な hybrid Gibbs+MH (モデルから共役 update を内部導出)。 seed → 確定 Chain。
+gibbsMHPure :: ModelP r -> GibbsConfig -> Map Text Double -> Params -> Word32 -> Chain
+gibbsMHPure model cfg mhSteps initP seed =
+  runST (initialize (V.singleton seed) >>= gibbsMH model cfg mhSteps initP)
+
+-- | 純粋・決定的な multi-chain hybrid Gibbs+MH。 子 seed を純粋導出し @parList rdeepseq@ で並列。
+gibbsMHChainsPure :: ModelP r -> GibbsConfig -> Map Text Double -> Int -> Params -> Word32 -> [Chain]
+gibbsMHChainsPure model cfg mhSteps numChains initP seed =
+  let childSeeds :: [Word32]
+      childSeeds = runST $ do
+        g <- initialize (V.singleton seed)
+        replicateM numChains (uniform g)
+      chains = [ gibbsMHPure model cfg mhSteps initP s | s <- childSeeds ]
+  in chains `using` parList rdeepseq
+
+-- | 純粋・決定的な Beta-Binomial 共役 Gibbs (seed → 確定 Chain)。
+gibbsBetaBinomialPure
+  :: Text -> Double -> Double -> Int -> Int -> GibbsConfig -> Word32 -> Chain
+gibbsBetaBinomialPure paramName alpha0 beta0 n k cfg seed =
+  runST (initialize (V.singleton seed)
+           >>= gibbsBetaBinomial paramName alpha0 beta0 n k cfg)
+
+-- | 純粋・決定的な汎用 Gibbs (seed → 確定 Chain)。 update 群は **rank-N**
+-- (@forall m. PrimMonad m => [GibbsUpdate m]@) で渡す = リストリテラルを直接渡せば
+-- 多相のまま通る (@let updates = …@ で束縛すると単相化するので注意・直接渡しが楽)。
+gibbsPure
+  :: (forall m. PrimMonad m => [GibbsUpdate m])
+  -> GibbsConfig -> Params -> Word32 -> Chain
+gibbsPure updates cfg initP seed =
+  runST (initialize (V.singleton seed) >>= gibbs updates cfg initP)
+
+-- | 純粋・決定的な汎用 multi-chain Gibbs。 子 seed を純粋導出し @parList rdeepseq@ で並列。
+gibbsChainsPure
+  :: (forall m. PrimMonad m => [GibbsUpdate m])
+  -> GibbsConfig -> Int -> Params -> Word32 -> [Chain]
+gibbsChainsPure updates cfg numChains initP seed =
+  let childSeeds :: [Word32]
+      childSeeds = runST $ do
+        g <- initialize (V.singleton seed)
+        replicateM numChains (uniform g)
+      chains = [ gibbsPure updates cfg initP s | s <- childSeeds ]
+  in chains `using` parList rdeepseq
