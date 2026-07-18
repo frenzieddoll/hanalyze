@@ -31,6 +31,8 @@ bench/venv/
 !bench/**/*.html
 !bench/**/*.png
 !bench/**/*.svg
+# docs に埋め込む図版は追跡する (生成物だが doc から参照されるため)
+!docs/images/**
 
 # bench/data/ の合成 CSV は `cabal run bench-data-gen` で決定的に
 # 再生成可能 (固定 seed)。GitHub の 100 MB 制限を超える大規模ケース
