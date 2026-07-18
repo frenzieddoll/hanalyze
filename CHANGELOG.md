@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
 
-## [Unreleased]
+## [0.2.0.0] - 2026-07-18
 
 ### Added (NUTS streaming callback for live MCMC progress)
 - `Hanalyze.MCMC.NUTS.nutsStream` — new sampler entry point taking a
@@ -18,8 +18,6 @@ and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
 - Use case: downstream apps (e.g. a live-dashboard frontend) can push live
   trace plots / R-hat / ESS over WebSocket / SSE without modifying NUTS
   internals.
-
-## [0.2.0.0] - 2026-07-18
 
 ### Added
 - Large-scale sync from the private development fork: ~105 new modules
