@@ -133,8 +133,10 @@ I=21 プレート規模の小さな階層モデル。当初 Binomial の n が g
 
 ### 図
 
-[hs_dashboard_full.png](./figures/hs_dashboard_full.png) /
-[py_dashboard_full.svg](./figures/py_dashboard_full.svg)
+`figures/hs_dashboard_full.png` /
+`figures/py_dashboard_full.svg`
+
+(図はベンチ実行後に `figures/` へ生成される。リポジトリには含めていない)
 
 ### 既知の課題 (Phase 94 で①②を解消)
 

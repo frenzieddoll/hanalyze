@@ -94,8 +94,10 @@ PyMC最速CPU (pymc+numba・5920.0ms) の約18.2倍高速** — N=27という小
 
 ## 図 — 両側とも「フルダッシュボード」1 枚に統一
 
-[hs_dashboard_full.png](./figures/hs_dashboard_full.png) /
-[py_dashboard_full.svg](./figures/py_dashboard_full.svg)
+`figures/hs_dashboard_full.png` /
+`figures/py_dashboard_full.svg`
+
+(図はベンチ実行後に `figures/` へ生成される。リポジトリには含めていない)
 
 ## 既知の課題
 

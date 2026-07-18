@@ -136,9 +136,11 @@ A2+B2+B3 後・`hmm_ess_diag_20260717.log`):
 
 ### 図
 
-[hs_dashboard_full.png](./figures/hs_dashboard_full.png) /
-[py_dashboard_forest.svg](./figures/py_dashboard_forest.svg) /
-[py_dashboard_full.svg](./figures/py_dashboard_full.svg)
+`figures/hs_dashboard_full.png` /
+`figures/py_dashboard_forest.svg` /
+`figures/py_dashboard_full.svg`
+
+(図はベンチ実行後に `figures/` へ生成される。リポジトリには含めていない)
 
 ### 既知の課題
 
