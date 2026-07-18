@@ -1,130 +1,88 @@
 # Functional Data Analysis (FDA) (Phase 33)
 
-Phase 33 (2026-05-29) adds `Hanalyze.Model.FDA`, which treats sensor /
-process time series as **one observation = one function**
-(Ramsay-Silverman style). Closes gap #16 — the last of the original 17,
-so **the gap list is now empty**.
+> 🌐 **English** | [日本語](usage-fda.ja.md)
+
+> Learning guide for `Hanalyze.Model.FDA` added in Phase 33 (2026-05-29).
+> It treats sensor and process time series as **one observation = one function**
+> in the Ramsay-Silverman style. Closes gap #16 — the last of the original 17 gaps,
+> so **the gap list is now completely empty**. Type signatures and minimal examples are
+> documented in [api-guide 04-multivariate](../api-guide/04-multivariate.md) as the primary reference.
+> This guide covers **smoothing solution derivation, mass matrix, and knot convention traps**.
 
 ---
 
 ## 0. Overview
 
-| Feature | API | Use |
-|---|---|---|
-| Smoothing | `smoothBasis` | B-spline + P-spline penalty function fit |
-| Evaluation | `evalFunctional` | Evaluate the smoothed function on any grid |
-| FPCA | `functionalPCA` | Functional principal components |
-| Functional LM | `fLM` | y_i = α + ∫ x_i(t) β(t) dt + ε |
+| Feature | Use |
+|---|---|
+| Basis smoothing (`smoothBasis`) | Estimate function with B-spline + P-spline penalty |
+| Evaluation (`evalFunctional`) | Evaluate smoothed function on any grid |
+| FPCA (`functionalPCA`) | Functional principal components (= SVD in function space) |
+| Functional linear regression (`fLM`) | y_i = α + ∫ x_i(t) β(t) dt + ε |
 
-Only the B-spline basis is implemented. Fourier basis is left for a
-future phase.
+Only B-spline basis is implemented. Fourier basis is a future phase candidate.
 
 ---
 
-## 1. Smoothing
+## 1. Smoothing Solution (smoothBasis)
 
-```haskell
-import qualified Numeric.LinearAlgebra as LA
-import qualified Hanalyze.Model.FDA   as FDA
-
-let tGrid = LA.fromList [0, 0.02 .. 1.0]
-    -- B-spline degree=3, knots include the boundaries
-    basis = FDA.BSpline 3 [0, 0.1 .. 1.0]
-    fits  = FDA.smoothBasis basis 1e-3 tGrid yMat
-
-let yhat = FDA.evalFunctional (head fits) tGrid
-```
-
-Solution: `c = (BᵀB + λ DᵀD)⁻¹ Bᵀy`, where `D` is the second-difference
-operator (Eilers-Marx 1996 P-spline). `λ → 0` interpolates; `λ → ∞`
-over-smooths.
+Solution: `c = (BᵀB + λ DᵀD)⁻¹ Bᵀy`, where `D` is the second-difference operator
+(Eilers-Marx 1996). `λ → 0` interpolates, `λ → ∞` over-smooths.
 
 ---
 
 ## 2. Functional PCA
 
-```haskell
-let pca = FDA.functionalPCA 3 fits
-FDA.fpcaEigenvalues pca
-FDA.fpcaEigenfn pca
-FDA.fpcaScores pca
-FDA.fpcaMeanFn pca
-```
-
-`FunctionalPCA` is `Plottable`: `toPlot` overlays the mean function and the
-leading (up to 3) eigenfunctions on the grid — the figure below:
-
-```haskell
-import Hanalyze.Plot       (toPlot)
-import Hgg.Plot.Spec          (ColData (..))
-import Hgg.Plot.Frame         ((|>>))
-import Hgg.Plot.Backend.SVG   (saveSVGBound)
-
-let noDf = [] :: [(Text, ColData)]
-saveSVGBound "fda-fpca.svg" (noDf |>> toPlot pca)
-```
-
-PCA on the basis-coefficient covariance, projected back to the grid.
-Adequate for B-spline + dense grid; exact mass-matrix-weighted SVD is a
-future extension.
-
-The mean function and the leading eigenfunctions are themselves curves
-over the grid. Plotting them together shows the mean shape plus the
-dominant modes of variation:
+PCA on the basis-coefficient covariance, with principal component functions evaluated on grid.
+For B-spline + dense grid, orthogonal approximation is sufficiently practical. Exact mass-matrix
+weighted version is a future extension. Mean function and leading eigenfunctions are both curves
+on grid; plotting them together shows mean shape and dominant variation modes at a glance:
 
 ![FPCA mean function and leading eigenfunctions (PC1/PC2/PC3 + mean)](../images/fda-fpca.svg)
 
 ---
 
-## 3. Functional Linear Regression
+## 3. Functional Linear Regression (fLM)
 
-```haskell
-let flm = FDA.fLM fits ys lambdaBeta
-FDA.flmAlpha flm
-FDA.flmBetaFn flm
-FDA.flmR2 flm
-```
-
-`FLMResult` is `Plottable`: `toPlot` draws the functional regression
-coefficient curve β(t) over the grid:
-
-```haskell
-import Hanalyze.Plot       (toPlot)
-import Hgg.Plot.Spec          (ColData (..))
-import Hgg.Plot.Frame         ((|>>))
-import Hgg.Plot.Backend.SVG   (saveSVGBound)
-
-let noDf = [] :: [(Text, ColData)]
-saveSVGBound "flm-beta.svg" (noDf |>> toPlot flm)
-```
-
-Model: `y_i = α + ∫ x_i(t) β(t) dt + ε`. β expanded in the same basis,
-mass matrix `J ≈ trapezoidal(BᵀB)`, OLS plus a second-difference penalty
-on β.
+Model: `y_i = α + ∫ x_i(t) β(t) dt + ε`. Expand β in the same basis,
+OLS via mass matrix `J ≈ trapezoidal(BᵀB)`, with second-difference penalty on β.
 
 ---
 
-## 4. Caveats
+## 4. Unexpected Behaviors to Watch
 
-- **`bsplineBasis` knot list includes boundaries**: from
-  `Hanalyze.Model.Spline.bsplineBasis`'s contract. Passing interior-only
-  knots gives wrong dimensions (tripped on this during the Phase 33
-  initial test run).
-- **Basis count**: `n_basis = length knots + degree - 1`. Increase
-  basis count for curvy data, control over-fit with `λ`.
-- **FPCA orthogonality assumption**: holds for B-spline + dense grid;
-  for coarse grids prefer the weighted SVD variant (future work).
-- **fLM with x ⟂ β**: if the integral vanishes by construction the
-  outcome carries no signal — R² ≈ 0. Make sure x and β are not
-  orthogonal by design (debugging note from the initial Phase 33 test).
+### `bsplineBasis` knot list includes boundaries
+
+The knot list from `Hanalyze.Model.Spline.bsplineBasis` is the full knot sequence `[t_min, .., t_max]`.
+Passing interior-only knots causes dimension mismatch (encountered during Phase 33 initial checkout).
+
+### Choosing `n_basis`
+
+`n_basis = length knots + degree - 1`. With `degree=3` and 12 knots, you get 14 basis functions.
+Increase basis count for curvy data and use `λ` to suppress over-fitting — the standard approach
+(Ramsay-Silverman 2005 §5).
+
+### Is FPCA orthogonal approximation good enough?
+
+For B-spline + dense grid (sampling interval << basis spacing), approximation error is small.
+For **coarse grid** or **few basis** functions, exact mass-matrix-weighted SVD is needed.
+This implementation assumes the former; the latter is a future extension.
+
+### fLM with x and β orthogonal → R² ≈ 0
+
+If `∫ x_i(t) β(t) dt = 0` always holds, then `y_i = α + noise` and R² ≈ 0.
+When designing the data-generation process, verify that **β-correlated components** are present in x
+(encountered as a debugging trap during initial checkout).
 
 ---
 
-## 5. References
+## 5. Related
 
-- Plan: `specification/phases/phase-33-fda.md`
-- Existing dependency: `Hanalyze.Model.Spline.bsplineBasis`
-- Ramsay & Silverman (2005) "Functional Data Analysis" 2nd ed.
-- Eilers, Marx (1996) "Flexible smoothing with B-splines and penalties"
-  Statist. Sci. 11:89-121.
-- Comparable: R `fda` package, Python `scikit-fda`
+- Types and minimal examples: [api-guide 04-multivariate](../api-guide/04-multivariate.md)
+- Specification: `specification/phases/phase-33-fda.md`
+- Existing dependency: `Hanalyze.Model.Spline.bsplineBasis` (B-spline basis generation)
+- References:
+  - Ramsay & Silverman (2005) "Functional Data Analysis" 2nd ed.
+  - Eilers, Marx (1996) "Flexible smoothing with B-splines and penalties"
+    Statist. Sci. 11:89-121.
+- Comparisons: R `fda` package, Python `scikit-fda`

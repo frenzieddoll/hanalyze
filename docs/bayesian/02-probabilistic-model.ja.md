@@ -211,7 +211,7 @@ regModel xs ys = do
 ![ベイズ単回帰 — 事後平均と 94% HDI 帯](../images/hbm-epred.svg)
 
 > `plot-integration-demo` executable で生成
-> ([`PlotIntegrationDemo.hs`](../../demo-plot/PlotIntegrationDemo.hs))。
+> (`PlotIntegrationDemo.hs`・非公開)。
 
 ---
 

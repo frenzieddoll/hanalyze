@@ -3,7 +3,7 @@
 > 🌐 **English** | [日本語](03-regrid.ja.md)
 
 > Related: [01-dirty-data.md](01-dirty-data.md) (dirty-data defense),
-> [DataIO.Preprocess.meltLonger](../../src/hanalyze/Analyze/DataIO/Preprocess.hs) (wide → long)
+> [DataIO.Preprocess.meltLonger](../../src/Hanalyze/DataIO/Preprocess.hs) (wide → long)
 
 For long-form data where the **z axis is slightly misaligned across ids and
 partially missing** (typical of "V-Z profiles per process condition" in

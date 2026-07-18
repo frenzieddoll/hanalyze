@@ -1,6 +1,8 @@
 # 因果推論
 
-> [📚 索引](README.md) ｜ [01 quickstart](01-quickstart.md) ｜ [02 regression](02-regression.md) ｜ [03 bayesian-hbm](03-bayesian-hbm.md) ｜ [04 multivariate](04-multivariate.md) ｜ [05 ml](05-ml.md) ｜ [06 timeseries](06-timeseries.md) ｜ [07 survival](07-survival.md) ｜ **08 causal** ｜ [09 doe](09-doe.md) ｜ [10 stat](10-stat.md) ｜ [11 data](11-data.md) ｜ [12 plot](12-plot.md)
+> 🌐 [English](08-causal.md) | **日本語**
+
+> [📚 索引](README.ja.md) ｜ [01 quickstart](01-quickstart.ja.md) ｜ [02 regression](02-regression.ja.md) ｜ [03 bayesian-hbm](03-bayesian-hbm.ja.md) ｜ [04 multivariate](04-multivariate.ja.md) ｜ [05 ml](05-ml.ja.md) ｜ [06 timeseries](06-timeseries.ja.md) ｜ [07 survival](07-survival.ja.md) ｜ **08 causal** ｜ [09 doe](09-doe.ja.md) ｜ [10 stat](10-stat.ja.md) ｜ [11 data](11-data.ja.md) ｜ [12 plot](12-plot.ja.md)
 
 傾向スコア・IPW・二重頑健・CATE と、 因果探索 (LiNGAM)。 推定量は数値結果を返す
 (`toPlot` 非対象)、 LiNGAM のみ DAG を `toPlot` で描ける。 理論は

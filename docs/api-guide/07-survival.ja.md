@@ -1,8 +1,10 @@
 # 生存解析
 
-> [📚 索引](README.md) ｜ [01 quickstart](01-quickstart.md) ｜ [02 regression](02-regression.md) ｜ [03 bayesian-hbm](03-bayesian-hbm.md) ｜ [04 multivariate](04-multivariate.md) ｜ [05 ml](05-ml.md) ｜ [06 timeseries](06-timeseries.md) ｜ **07 survival** ｜ [08 causal](08-causal.md) ｜ [09 doe](09-doe.md) ｜ [10 stat](10-stat.md) ｜ [11 data](11-data.md) ｜ [12 plot](12-plot.md)
+> 🌐 [English](07-survival.md) | **日本語**
 
-生存時間解析。 理論は [10-survival](../regression/10-survival.md) ・
+> [📚 索引](README.ja.md) ｜ [01 quickstart](01-quickstart.ja.md) ｜ [02 regression](02-regression.ja.md) ｜ [03 bayesian-hbm](03-bayesian-hbm.ja.md) ｜ [04 multivariate](04-multivariate.ja.md) ｜ [05 ml](05-ml.ja.md) ｜ [06 timeseries](06-timeseries.ja.md) ｜ **07 survival** ｜ [08 causal](08-causal.ja.md) ｜ [09 doe](09-doe.ja.md) ｜ [10 stat](10-stat.ja.md) ｜ [11 data](11-data.ja.md) ｜ [12 plot](12-plot.ja.md)
+
+生存時間解析。 理論は [10-survival](../regression/10-survival.ja.md) ・
 [usage-ts-surv-advanced](../timeseries/usage-ts-surv-advanced.ja.md) が一次根拠。
 
 | 手法 | fit | 結果型 | 図 |
@@ -77,7 +79,7 @@ saveSVGBound "aft-survival.svg" $ noDf |>> toPlot fit <> title "AFT survival cur
 ## Cox 比例ハザード
 
 `Hanalyze.Model.Survival` に Cox 比例ハザード。 現状 `toPlot` 非対象 (係数 / ハザード比は
-数値で取得)。 → [10-survival](../regression/10-survival.md)
+数値で取得)。 → [10-survival](../regression/10-survival.ja.md)
 
 ---
 

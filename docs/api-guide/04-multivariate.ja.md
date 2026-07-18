@@ -1,6 +1,8 @@
 # 多変量解析
 
-> [📚 索引](README.md) ｜ [01 quickstart](01-quickstart.md) ｜ [02 regression](02-regression.md) ｜ [03 bayesian-hbm](03-bayesian-hbm.md) ｜ **04 multivariate** ｜ [05 ml](05-ml.md) ｜ [06 timeseries](06-timeseries.md) ｜ [07 survival](07-survival.md) ｜ [08 causal](08-causal.md) ｜ [09 doe](09-doe.md) ｜ [10 stat](10-stat.md) ｜ [11 data](11-data.md) ｜ [12 plot](12-plot.md)
+> 🌐 [English](04-multivariate.md) | **日本語**
+
+> [📚 索引](README.ja.md) ｜ [01 quickstart](01-quickstart.ja.md) ｜ [02 regression](02-regression.ja.md) ｜ [03 bayesian-hbm](03-bayesian-hbm.ja.md) ｜ **04 multivariate** ｜ [05 ml](05-ml.ja.md) ｜ [06 timeseries](06-timeseries.ja.md) ｜ [07 survival](07-survival.ja.md) ｜ [08 causal](08-causal.ja.md) ｜ [09 doe](09-doe.ja.md) ｜ [10 stat](10-stat.ja.md) ｜ [11 data](11-data.ja.md) ｜ [12 plot](12-plot.ja.md)
 
 次元圧縮・多変量回帰・クラスタリングのシグネチャ + 最小例 + 図。 これらは `df |-> spec` 動詞を
 持たないので、 行列で fit して結果を `toPlot` (または専用 plot 関数) で描く。 理論は
@@ -124,7 +126,7 @@ let m = df |-> ccaOf ["x1","x2"] ["y1","y2"]   -- CCAFit (ccaCorr = 正準相関
 
 ![多変量回帰の残差相関](../images/multilm-resid-corr.svg)
 
-→ [05-multivariate](../regression/05-multivariate.md) / [07-multireg](../regression/07-multireg.md)
+→ [05-multivariate](../regression/05-multivariate.ja.md) / [07-multireg](../regression/07-multireg.ja.md)
 
 ---
 
@@ -141,7 +143,7 @@ let m = df |-> ldaOf ["x1","x2"] "class"   -- DiscriminantFit
 ```
 
 `DiscriminantFit` は `Plottable`。 決定境界は分類器共通の `decisionBoundaryOf`(⚠ 領域塗りは
-現状未実装で「未実装」 注記のみ・[05-ml](05-ml.md#k-nn) 参照)。
+現状未実装で「未実装」 注記のみ・[05-ml](05-ml.ja.md#k-nn) 参照)。
 **低レベル**: `fitLDA :: LA.Matrix Double -> V.Vector Int -> Either Text DiscriminantFit`。
 
 ```haskell
@@ -176,7 +178,7 @@ saveSVGBound "kmeans.svg" $ df |>> clusterScatterOf df res "x1" "x2" <> centroid
 
 ![k-means クラスタ](../images/kmeans-clusters.svg)
 
-→ [05-cluster](../stat/05-cluster.md)
+→ [05-cluster](../stat/05-cluster.ja.md)
 
 ---
 
@@ -185,7 +187,7 @@ saveSVGBound "kmeans.svg" $ df |>> clusterScatterOf df res "x1" "x2" <> centroid
 `Hanalyze.Model.HierarchicalCluster` で凝集型クラスタリング。 `HClusterFit` は
 `Plottable` (`toPlot` = dendrogram)。 樹形図は plot の custom mark (Phase 48・
 `hgg-custom` の `dendrogramMark`) で U 字リンクを描く。
-→ [05-cluster](../stat/05-cluster.md)
+→ [05-cluster](../stat/05-cluster.ja.md)
 
 ---
 

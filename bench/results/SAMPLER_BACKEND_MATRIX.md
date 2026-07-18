@@ -131,7 +131,7 @@ radon を **4 chain (別 seed) × iter=1600・warmup=500** で実行し、hanaly
 ### 副産物の発見: hanalyze 自身の ESS 表示は下限値 (クランプの影響)
 
 上表とは別に、hanalyze 自身の `ess` 関数 (Geyer's Initial Monotone Sequence
-Estimator・`src/hanalyze/Analyze/Stat/MCMC.hs`) は `tau = max 1 (...)` で
+Estimator・`src/Hanalyze/Stat/MCMC.hs`) は `tau = max 1 (...)` で
 下限をクランプしており、**理論上 ESS が draw 数 n を超える場合でも n で
 頭打ちにして報告する**。今回の radon iter1600 (1 chain, n=1600) で:
 

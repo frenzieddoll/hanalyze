@@ -1,8 +1,10 @@
 # Custom Design: Augment + Split-Plot の使い方
 
+> 🌐 [English](usage-augment-splitplot.md) | **日本語**
+
 > Phase 24 の Custom Design Core (`Hanalyze.Design.Custom.*`) を前提に、
 > 既存設計の **増補 (Augment)** と **分割実験 (Split-Plot)** を扱う。 型シグネチャ・
-> 最小例は [api-guide 09-doe](../api-guide/09-doe.md) を一次根拠に、 ここは
+> 最小例は [api-guide 09-doe](../api-guide/09-doe.ja.md) を一次根拠に、 ここは
 > **各メニューの意味論・REML 情報行列・既知制限** を扱う。
 >
 > 仕様: `specification/spec/hanalyze-doe-custom-design-spec.md` v0.1.1

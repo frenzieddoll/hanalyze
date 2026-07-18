@@ -106,7 +106,7 @@ Jones-Goos (2012) Table 2 の D-opt 設計と **完全に同じ D-criterion 値*
   X̃ = chol(X' M⁻¹ X) を渡し det(X̃' X̃) = det(X' M⁻¹ X) を最大化)
 
 **副次的成果 (本 phase でついでに実施)**:
-- `src/hanalyze/Analyze/Design/Custom/SplitPlot.hs::chol` を `LA.chol` → `LA.mbChol`
+- `src/Hanalyze/Design/Custom/SplitPlot.hs::chol` を `LA.chol` → `LA.mbChol`
   に置換 (非 PD 時 zero matrix → 候補 rejection)。 既知の脆弱箇所 (line 334-336
   「正定でない場合は inf 評価に任せる」 とコメントされていた未対応箇所) を解消。
   559 tests pass、 regression なし。
@@ -212,7 +212,7 @@ deferred を解除し、 live 比較を有効化** (2026-05-29)。
 **deferred 理由**: hanalyze の現状 IOpt 実装は **数学的に degenerate**:
 
 ```haskell
--- src/hanalyze/Analyze/Design/Custom/Coordinate.hs::iValueSelfM
+-- src/Hanalyze/Design/Custom/Coordinate.hs::iValueSelfM
 iValueSelfM x =
   let xtx    = X' X
       inv    = (X'X)⁻¹
@@ -278,7 +278,7 @@ phase-28 計画 doc にこれら ✦ 印を反映済。
 
 ### 副次的成果 (Phase 27 の本筋ではないが本 phase で実施)
 
-- `src/hanalyze/Analyze/Design/Custom/SplitPlot.hs::chol`: `LA.chol` → `LA.mbChol`
+- `src/Hanalyze/Design/Custom/SplitPlot.hs::chol`: `LA.chol` → `LA.mbChol`
   置換 (非 PD 時 zero matrix → 候補 rejection)。 既知の脆弱箇所を解消、
   559 tests pass
 

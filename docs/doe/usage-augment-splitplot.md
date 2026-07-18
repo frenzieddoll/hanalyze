@@ -1,61 +1,85 @@
-# Custom Design: Augment + Split-Plot
+# Custom Design: Augment + Split-Plot Usage
 
-> Augmentation and Split-Plot extensions to the Custom Design Core (Phase 24).
+> 🌐 **English** | [日本語](usage-augment-splitplot.ja.md)
+
+> Assumes Custom Design Core from Phase 24. Covers existing design **augmentation
+> (Augment)** and **split-plot (Split-Plot)** for hard-to-change factors. API
+> signatures and minimal examples reference [api-guide 09-doe](../api-guide/09-doe.md)
+> as primary; here we address **menu semantics, REML information matrix, known limitations**.
 >
-> Spec: `specification/spec/hanalyze-doe-custom-design-spec.md` v0.1.1
-> §2.5 / §2.6
-> Phases: 25-3 through 25-9
-> Prerequisite: Phase 24 complete (`Coordinate.coordinateExchange` working)
+> Specification: `specification/spec/hanalyze-doe-custom-design-spec.md` v0.1.1
+> §2.5 / §2.6 / Related Phases: 25-3 through 25-9 / Prerequisite: Phase 24 complete
 
-Japanese reference: [`usage-augment-splitplot.ja.md`](usage-augment-splitplot.ja.md).
-
-## Module map
+## Module Quick Reference
 
 | Module | Role |
 |---|---|
-| `Hanalyze.Design.Custom.Augment`   | `augmentMenu` (Replicate / AddCenter / AddAxial / AddRuns / Foldover) |
-| `Hanalyze.Design.Custom.SplitPlot` | `generateSplitPlot` (REML D-opt for HardToChange factors) |
+| `Design.Custom.Augment`   | `augmentMenu` (Replicate / AddCenter / AddAxial / AddRuns / Foldover) |
+| `Design.Custom.SplitPlot` | `generateSplitPlot` (HardToChange factor REML D-opt) |
 
-## Augment 5 menu
+---
 
-```haskell
-data AugmentMenu
-  = Replicate Int
-  | AddCenter Int
-  | AddAxial  Double
-  | AddRuns   Int
-  | Foldover  FoldoverKind
+## 1. Augment 5 Menu Semantics
 
-data FoldoverKind = FullFoldover | PartialFoldover [Text]
+- `Replicate k` — Duplicate existing design k times
+- `AddCenter n` — Add n center point rows (all continuous = 0)
+- `AddAxial α` — Add ±α axial points across all continuous factors
+- `AddRuns N` — Add N rows from candidate set to existing design
+- `Foldover kind` — Sign-flip replica. `FullFoldover` flips all continuous factor signs,
+  doubling row count. `PartialFoldover ["x1"]` flips only x1.
 
-augmentMenu :: CustomDesignSpec -> AugmentMenu -> IO (Either Text AugmentMenuResult)
+### Limitations
+
+- `cdsInitial = Nothing` returns **`Left`** (existing design required)
+- `AddAxial` **assumes coded space ([-1, 1])**. Caller must rescale for raw-unit α
+- `AddRuns` candidate set = continuous ±1 corners + categorical all-level cartesian
+  product. High-dimensional factors risk candidate explosion; use carefully
+
+---
+
+## 2. Split-Plot REML Information Matrix
+
+`fRole = HardToChange` factor stays constant within each whole-plot (WP) = setup count.
+`SplitPlotConfig { spcNWhole, spcVarRatio=η }`. Goos-Vandebroek (2003) D-opt:
+
+```
+I_β = Xᵀ M⁻¹ X,   M = I + η · Z Zᵀ
 ```
 
-- `cdsInitial` must be `Just _`; `Nothing` → `Left`.
-- `AddAxial` assumes coded space `[-1, 1]`.
-- `AddRuns` builds a candidate set = continuous ±1 corners × categorical full
-  levels (Cartesian product), then dispatches to `Hanalyze.Design.Optimal.augmentDesign`.
+where Z is WP indicator (n × n_WP), η = σ²_WP / σ².
+- η = 0 degenerates to standard D-opt
+- η → ∞ reduces WP factor weight to near-zero (= unestimable within WP)
 
-## Split-Plot
+Implementation: X̃ = chol(X' M⁻¹ X) evaluated via `critValueM` (DOpt det) is
+**simplified version**. Direction matches standard Goos-Vandebroek, but exact
+criterion value absolute comparison is invalid (relative comparison only meaningful).
+`spdWholePlotId` returns per-run WP membership (e.g., `[0,0,0,1,1,1,...]`).
 
-```haskell
-data SplitPlotConfig = SplitPlotConfig
-  { spcNWhole   :: !Int     -- # whole plots, user-supplied
-  , spcVarRatio :: !Double  -- η = σ²_WP / σ², default 1.0
-  }
+### Limitations
 
-generateSplitPlot :: CustomDesignSpec -> SplitPlotConfig -> IO (Either Text SplitPlotDesign)
-```
+- **VeryHardToChange (strip-plot) returns `Left`** (future support)
+- **Categorical HardToChange returns `Left`** (deferred with GLMM integration)
+- spcNWhole **user-specified mandatory** (not inferred; follows spec §2.5 principle)
+- spcVarRatio (η) default 1.0 may be inappropriate by domain. Set if known variance
+  ratio available
 
-A factor with `fRole = HardToChange` is the whole-plot factor; it stays
-constant within each whole plot. The criterion is approximate REML D-opt:
-`X' M^{-1} X` with `M = I + η Z Z^T`. The implementation evaluates a
-Cholesky-transformed surrogate via `critValueM` (DOpt det), preserving the
-direction of optimization but not the exact Goos-Vandebroek scale.
+---
 
-## Known limitations
+## 3. Design Flow (Augment → Split-Plot)
 
-- `VeryHardToChange` (strip-plot) → `Left`
-- Categorical HardToChange (whole-plot) → `Left` (deferred to GLMM-integrated future commit)
-- Categorical factors in Foldover keep their indices unchanged (no sign concept)
-- Conditional constraint NOT-clauses are not supported (AND/OR only)
+1. Generate standard custom design via `coordinateExchange`
+2. If augmentation desired: `cdsInitial = Just (cdMatrix cd)` in `augmentMenu` to add
+   center / axial / etc.
+3. Subsequent batch: `generateSplitPlot` with HardToChange considered for split-plot layout
+
+---
+
+## Known Limitations (Phase 25 Complete, Spec-Documented)
+
+- Strip-plot (VeryHardToChange) unsupported
+- Categorical WP / Categorical strip-plot unsupported
+- Foldover categorical factors: indices unchanged (no sign concept)
+- Conditional constraint NOT-clause unsupported (AND/OR positive logic only, spec §2.4)
+
+Phase 26 adds Bayesian-D (DuMouchel-Jones) and Compound criterion enhancement
+([usage-bayesian-d](usage-bayesian-d.md)).

@@ -1,8 +1,10 @@
 # 時系列
 
-> [📚 索引](README.md) ｜ [01 quickstart](01-quickstart.md) ｜ [02 regression](02-regression.md) ｜ [03 bayesian-hbm](03-bayesian-hbm.md) ｜ [04 multivariate](04-multivariate.md) ｜ [05 ml](05-ml.md) ｜ **06 timeseries** ｜ [07 survival](07-survival.md) ｜ [08 causal](08-causal.md) ｜ [09 doe](09-doe.md) ｜ [10 stat](10-stat.md) ｜ [11 data](11-data.md) ｜ [12 plot](12-plot.md)
+> 🌐 [English](06-timeseries.md) | **日本語**
 
-自己回帰・多変量自己回帰・ボラティリティ・予測。 理論は [09-timeseries](../regression/09-timeseries.md) ・
+> [📚 索引](README.ja.md) ｜ [01 quickstart](01-quickstart.ja.md) ｜ [02 regression](02-regression.ja.md) ｜ [03 bayesian-hbm](03-bayesian-hbm.ja.md) ｜ [04 multivariate](04-multivariate.ja.md) ｜ [05 ml](05-ml.ja.md) ｜ **06 timeseries** ｜ [07 survival](07-survival.ja.md) ｜ [08 causal](08-causal.ja.md) ｜ [09 doe](09-doe.ja.md) ｜ [10 stat](10-stat.ja.md) ｜ [11 data](11-data.ja.md) ｜ [12 plot](12-plot.ja.md)
+
+自己回帰・多変量自己回帰・ボラティリティ・予測。 理論は [09-timeseries](../regression/09-timeseries.ja.md) ・
 [usage-ts-surv-advanced](../timeseries/usage-ts-surv-advanced.ja.md) が一次根拠。
 
 | モデル | fit | 結果型 | 図 |

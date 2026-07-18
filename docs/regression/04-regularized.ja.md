@@ -12,7 +12,7 @@
 > 統合 spec `df |-> regularized cfg ["x1","x2"] "y"` (+近道 `ridge`/`lasso`/`elasticNet`)
 > で当てられる。λ は CV / LOOCV (Ridge) / 1-SE rule で自動選択、X は内部標準化、係数は
 > 元スケール。一覧と図は
-> [api-guide 02-regression](../api-guide/02-regression.md) の「罰則付き回帰」節を参照。
+> [api-guide 02-regression](../api-guide/02-regression.ja.md) の「罰則付き回帰」節を参照。
 > 本ページは `fitRegularized` などの低レベル行列 API リファレンス。
 
 ## 1. 用途

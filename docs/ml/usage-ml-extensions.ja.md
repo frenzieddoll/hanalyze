@@ -2,7 +2,7 @@
 
 > 2026-05-29 Phase 34 で機械学習系の代表的アルゴリズムを 5 モジュール集約追加。
 > 由来 gap 元 17 件 + ml-extensions 追加。 型シグネチャ・最小例・`df |->`/`toPlot`
-> 経路は [api-guide 05-ml](../api-guide/05-ml.md) を一次根拠に、 ここは
+> 経路は [api-guide 05-ml](../api-guide/05-ml.ja.md) を一次根拠に、 ここは
 > **各アルゴリズムの定式化・実装方針・scope 判断** を扱う。 集約言及のみ:
 > Random Forest 分類 (`RandomForestClassifier`) と MLP NN (`NeuralNetwork`) は既存。
 
@@ -89,6 +89,6 @@ Brute force ユークリッド距離 (O(n_test · n_train · d))。 KD-tree は 
 
 ## 8. 関連
 
-- 型・最小例・`df |->`/`toPlot` 経路: [api-guide 05-ml](../api-guide/05-ml.md)
+- 型・最小例・`df |->`/`toPlot` 経路: [api-guide 05-ml](../api-guide/05-ml.ja.md)
 - 計画書: `specification/phases/phase-34-ml-extensions.md`
 </content>

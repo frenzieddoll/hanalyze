@@ -1,10 +1,12 @@
 # Custom Design (JMP 同等) の使い方
 
+> 🌐 [English](usage-custom-design.md) | **日本語**
+
 > JMP Pro "Custom Design" 相当の **任意モデル × 任意制約 × 任意 runs** を
 > 1 関数で生成する。 候補集合ベースの古典 D-optimal (`Hanalyze.Design.Optimal`)
 > と異なり、 連続因子は coordinate exchange (Meyer-Nachtsheim 1995)、 categorical
 > 因子は Modified Fedorov の hybrid で動く。 型シグネチャ・最小例は
-> [api-guide 09-doe](../api-guide/09-doe.md) を一次根拠に、 ここは **設計思想・raw
+> [api-guide 09-doe](../api-guide/09-doe.ja.md) を一次根拠に、 ここは **設計思想・raw
 > 表現規約・既知制限** を扱う。
 >
 > 仕様: `specification/spec/hanalyze-doe-custom-design-spec.md` v0.1.1

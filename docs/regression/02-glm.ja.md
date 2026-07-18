@@ -168,7 +168,7 @@ fitGLMWithSmooth :: Family -> LinkFn -> [(Text, Int)] -> Band -> Int
 ### 5.2 最小例: ロジスティック回帰
 
 **高レベル (`df |-> glm`)** — データ源から学習し、当てはめ曲線 + 帯を散布図に
-重畳する (万能動詞・[../io/04-fit-api.md](../io/04-fit-api.md) 参照):
+重畳する (万能動詞・[../io/04-fit-api.md](../io/04-fit-api.ja.md) 参照):
 
 ```haskell
 import Hanalyze.Plot     (glm, (|->), toPlot)

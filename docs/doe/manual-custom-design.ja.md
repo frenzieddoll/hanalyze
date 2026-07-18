@@ -1,5 +1,7 @@
 # Custom Design 機能マニュアル (Phase 23-28 統合)
 
+> 🌐 [English](manual-custom-design.md) | **日本語**
+
 > 2026-05-29 に追加された **JMP Pro "Custom Design" 同等機能** の全体マニュアル。
 > 「何ができるようになったか」 「どんな時に使うか」 「どう書くか」 を、
 > ユースケースから API への橋渡し形式で整理する。

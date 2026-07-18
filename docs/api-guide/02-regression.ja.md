@@ -1,21 +1,23 @@
 # 回帰モデル
 
-> [📚 索引](README.md) ｜ [01 quickstart](01-quickstart.md) ｜ **02 regression** ｜ [03 bayesian-hbm](03-bayesian-hbm.md) ｜ [04 multivariate](04-multivariate.md) ｜ [05 ml](05-ml.md) ｜ [06 timeseries](06-timeseries.md) ｜ [07 survival](07-survival.md) ｜ [08 causal](08-causal.md) ｜ [09 doe](09-doe.md) ｜ [10 stat](10-stat.md) ｜ [11 data](11-data.md) ｜ [12 plot](12-plot.md)
+> 🌐 [English](02-regression.md) | **日本語**
+
+> [📚 索引](README.ja.md) ｜ [01 quickstart](01-quickstart.ja.md) ｜ **02 regression** ｜ [03 bayesian-hbm](03-bayesian-hbm.ja.md) ｜ [04 multivariate](04-multivariate.ja.md) ｜ [05 ml](05-ml.ja.md) ｜ [06 timeseries](06-timeseries.ja.md) ｜ [07 survival](07-survival.ja.md) ｜ [08 causal](08-causal.ja.md) ｜ [09 doe](09-doe.ja.md) ｜ [10 stat](10-stat.ja.md) ｜ [11 data](11-data.ja.md) ｜ [12 plot](12-plot.ja.md)
 
 回帰系モデルのシグネチャ + 最小例 + 図。 二変量の当てはめは **高レベル `df |-> spec`**
 が主役 (`spec` = `lm`/`glm`/`spline`/`rlm`/`rq`)、 描画は `toPlot`。
 理論・診断・罠は各 [`docs/regression/`](../regression/) のガイドが一次根拠。
-(formula 入力 `lmF`/`glmF`/`glmmF` 等の式構文は別ページ [11-formula-dsl](../regression/11-formula-dsl.md)。)
+(formula 入力 `lmF`/`glmF`/`glmmF` 等の式構文は別ページ [11-formula-dsl](../regression/11-formula-dsl.ja.md)。)
 
 | モデル | 高レベル | 結果型 (Plottable) | 図 | ガイド |
 |---|---|---|---|---|
-| 線形回帰 (単回帰 OLS) | `df \|-> lm "x" "y"` | `LMModel` | scatter + 線 + CI | [01-lm](../regression/01-lm.md) |
+| 線形回帰 (単回帰 OLS) | `df \|-> lm "x" "y"` | `LMModel` | scatter + 線 + CI | [01-lm](../regression/01-lm.ja.md) |
 | 重回帰 (multiple) | `df \|-> lmMulti ["x1","x2","x3"] "y"` | `MultiLMModel` | 部分効果 plot | 本ページ ↓ |
-| 一般化線形 (GLM) | `df \|-> glm fam link "x" "y"` | `GLMModel` | scatter + 平均 + CI | [02-glm](../regression/02-glm.md) |
+| 一般化線形 (GLM) | `df \|-> glm fam link "x" "y"` | `GLMModel` | scatter + 平均 + CI | [02-glm](../regression/02-glm.ja.md) |
 | 重み付き最小二乗 (WLS) | `df \|-> weighted "w" (lm "x" "y")` | `WeightedLMModel` | scatter + 線 + CI | 本ページ ↓ |
 | ロバスト回帰 | `df \|-> rlm est "x" "y"` | `RobustModel` | OLS との対比 | [usage-regularized-advanced](../regression/usage-regularized-advanced.ja.md) |
-| 分位点回帰 | `df \|-> rq taus "x" "y"` | `QuantileModel` | τ 別の線群 | [06-quantile](../regression/06-quantile.md) |
-| スプライン | `df \|-> spline kind knots "x" "y"` | `SplineModel` | 平滑曲線 + CI | [04-spline](../regression/04-spline.md) |
+| 分位点回帰 | `df \|-> rq taus "x" "y"` | `QuantileModel` | τ 別の線群 | [06-quantile](../regression/06-quantile.ja.md) |
+| スプライン | `df \|-> spline kind knots "x" "y"` | `SplineModel` | 平滑曲線 + CI | [04-spline](../regression/04-spline.ja.md) |
 | GAM | `df \|-> gam cfg "x" "y"` (`gamMulti` で多予測子) | `GAMModelN` | 平滑曲線 (基底選択・GCV) | 本ページ ↓ |
 | カーネル法 (GP / KRR / RFF) | `df \|-> gp cfg "x" "y"` (`gpMulti` で多予測子) | `GPRegModel` / `GPRegModelN` | 平滑曲線 + 帯 (Gp/GpRff) | 本ページ ↓ |
 | 罰則付き (Ridge/Lasso/EN/MCP/SCAD/Adaptive/Group) | `df \|-> ridge \|lasso \|regularized cfg ["x1","x2"] "y"` | `RegModel` | 係数 bar (CV 選択 λ) | 本ページ ↓ |
@@ -118,7 +120,7 @@ saveSVGBound "lm.svg" $ df |>> layer (scatter "x" "y") <> toPlot (statModel fit)
 
 ![散布図 + 回帰線 + CI 帯](../images/lm-scatter-ci.svg)
 
-**低レベル** (行列 API): `fitLMVec (designMatrix xs) ys :: FitResult` ([01 quickstart](01-quickstart.md#low-level))。
+**低レベル** (行列 API): `fitLMVec (designMatrix xs) ys :: FitResult` ([01 quickstart](01-quickstart.ja.md#low-level))。
 
 ---
 
@@ -141,7 +143,7 @@ let m = df |-> lmMulti ["x1", "x2", "x3"] "y"   -- MultiLMModel (重回帰)
 設計行列は `[1, x1, x2, x3]`。 GLM・ロバストも同じ列名リスト記法で重回帰化できる
 (`glmMulti Poisson Log [...] "y"` 等)。
 
-**低レベル** (行列 API): `fitMultiLM (X :: Matrix) (y :: Vector) :: MultiFit` (→ [04 multivariate](04-multivariate.md))。
+**低レベル** (行列 API): `fitMultiLM (X :: Matrix) (y :: Vector) :: MultiFit` (→ [04 multivariate](04-multivariate.ja.md))。
 
 ### 係数サマリ (`coefSummary`)
 
@@ -298,7 +300,7 @@ saveSVGBound "poisson.svg" $ df |>> layer (scatter "x" "y") <> toPlot (statModel
 
 ロジスティック回帰は `df |-> glm Binomial Logit "x" "y"`。 重回帰は `glmMulti`。
 
-**低レベル** (行列 API): `fitGLMFull fam link (designMatrix xs) ys :: FitResult` (→ [02-glm](../regression/02-glm.md))。
+**低レベル** (行列 API): `fitGLMFull fam link (designMatrix xs) ys :: FitResult` (→ [02-glm](../regression/02-glm.ja.md))。
 
 ---
 
@@ -371,7 +373,7 @@ saveSVGBound "quantile.svg" $ df |>> layer (scatter "x" "y") <> toPlot (statMode
 
 多変量版 `rqMulti` は[重回帰](#重回帰-multiple-regression)節にまとめている。
 
-**低レベル** (行列 API): `fitQuantile τ (X :: Matrix) (y :: Vector) :: QRFit` (→ [06-quantile](../regression/06-quantile.md))。
+**低レベル** (行列 API): `fitQuantile τ (X :: Matrix) (y :: Vector) :: QRFit` (→ [06-quantile](../regression/06-quantile.ja.md))。
 分位点回帰は SE を持たないため `coefSummary` は非対応。
 
 ---
@@ -390,7 +392,7 @@ saveSVGBound "spline.svg" $ df |>> layer (scatter "x" "y") <> toPlot (statModel 
 
 ![スプライン平滑 + CI](../images/spline-smooth-ci.svg)
 
-**低レベル** (行列 API): `fitSpline kind knots (xs :: Vector) (ys :: Vector) :: SplineFit` (→ [04-spline](../regression/04-spline.md))。
+**低レベル** (行列 API): `fitSpline kind knots (xs :: Vector) (ys :: Vector) :: SplineFit` (→ [04-spline](../regression/04-spline.ja.md))。
 スプラインは**単一予測子の基底展開**が本質 (複数予測子の平滑化は加法モデル `gamMulti` を使う)。
 
 ---
@@ -518,8 +520,8 @@ df |-> gp (GPConfig RBF Gp AutoCV)                  "x" "y"   -- LOOCV でハイ
 `FixedHyper` (手動)。RFF は定常カーネルのみ可ゆえ `Periodic` + RFF 象限は厳密へ自動
 フォールバックする。低レベル API (`fitGP` / `optimizeGP` / `fitGPMV` / `kernelRidge` /
 `rffRidge` 等) は温存。詳細・4 象限の使い分けは
-[04-gp](../regression/04-gp.md) / [04-kernel](../regression/04-kernel.md) /
-[04-rff](../regression/04-rff.md)。
+[04-gp](../regression/04-gp.ja.md) / [04-kernel](../regression/04-kernel.ja.md) /
+[04-rff](../regression/04-rff.ja.md)。
 
 > ⚠ **カーネルと `GPParams` フィールドの対応**: カーネルは自分が使うフィールドだけ読み、
 > 無関係なフィールドは**黙って無視**する (検証・警告なし)。RBF/Matern52 は `gpPeriod` と
@@ -604,7 +606,7 @@ df |-> regularized (RegConfig (GroupLasso [0,0,1,1,2]) (FixedLambda 0.1)) cols "
 ```
 
 **低レベル** 行列 API (`fitRegularized` / `fitRidge` / `fitLasso` / `selectLambdaCV` 等) も
-温存 ([04-regularized](../regression/04-regularized.md))。 advanced 罰則 (MCP/SCAD/Adaptive/Group)
+温存 ([04-regularized](../regression/04-regularized.ja.md))。 advanced 罰則 (MCP/SCAD/Adaptive/Group)
 は `Hanalyze.Model.RegularizedAdvanced` に行列直叩きの個別 fit を持つ — いずれも
 `RegFit` (`Plottable`・係数 bar) を返す:
 

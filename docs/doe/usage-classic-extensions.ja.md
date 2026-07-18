@@ -2,7 +2,7 @@
 
 > 既存の DoE 機能 (`Hanalyze.Design.*`) に **JMP / Spotfire 同等の高度な機能** を
 > 追加した分。 Custom Design (Phase 24+) の前提でもある。 型シグネチャ・最小例は
-> [api-guide 09-doe](../api-guide/09-doe.md) を一次根拠に、 ここは **各機能の意図と
+> [api-guide 09-doe](../api-guide/09-doe.ja.md) を一次根拠に、 ここは **各機能の意図と
 > 注意点** を扱う。
 >
 > 仕様: `specification/spec/hanalyze-doe-spec.md` v0.2
@@ -70,7 +70,7 @@
 
 ## 関連リンク
 
-- 型・最小例: [api-guide 09-doe](../api-guide/09-doe.md)
+- 型・最小例: [api-guide 09-doe](../api-guide/09-doe.ja.md)
 - 上流 (古典 DoE 全体): [01-doe.ja.md](01-doe.ja.md)
 - Custom Design Core (Phase 24): [usage-custom-design.ja.md](usage-custom-design.ja.md)
 - 理論: [theory-doe.ja.md](theory-doe.ja.md)

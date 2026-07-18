@@ -224,7 +224,7 @@ to observe.
 
 ## References
 
-- Implementation: `src/hanalyze/Analyze/Model/HBM.hs`
+- Implementation: `src/Hanalyze/Model/HBM.hs`
   - `extractDeps` (line 2228-), `distDepsT` (line 2257-),
     `Deterministic` handler (line 2247-)
   - `ar1Latent` (line 1683-), `nonCenteredNormal` (line 1719-),

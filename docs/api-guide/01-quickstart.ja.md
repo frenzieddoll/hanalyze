@@ -1,11 +1,13 @@
 # クイックスタート ─ 最短で fit → 描画
 
-> [📚 索引](README.md) ｜ **01 quickstart** ｜ [02 regression](02-regression.md) ｜ [03 bayesian-hbm](03-bayesian-hbm.md) ｜ [04 multivariate](04-multivariate.md) ｜ [05 ml](05-ml.md) ｜ [06 timeseries](06-timeseries.md) ｜ [07 survival](07-survival.md) ｜ [08 causal](08-causal.md) ｜ [09 doe](09-doe.md) ｜ [10 stat](10-stat.md) ｜ [11 data](11-data.md) ｜ [12 plot](12-plot.md)
+> 🌐 [English](01-quickstart.md) | **日本語**
+
+> [📚 索引](README.ja.md) ｜ **01 quickstart** ｜ [02 regression](02-regression.ja.md) ｜ [03 bayesian-hbm](03-bayesian-hbm.ja.md) ｜ [04 multivariate](04-multivariate.ja.md) ｜ [05 ml](05-ml.ja.md) ｜ [06 timeseries](06-timeseries.ja.md) ｜ [07 survival](07-survival.ja.md) ｜ [08 causal](08-causal.ja.md) ｜ [09 doe](09-doe.ja.md) ｜ [10 stat](10-stat.ja.md) ｜ [11 data](11-data.ja.md) ｜ [12 plot](12-plot.ja.md)
 
 hanalyze で **データを当てはめて 1 枚出す**ための最短経路を示す。 各モデルの
-シグネチャと最小例は [02 regression](02-regression.md) 以降が辞書になる。 fit API の
-全体像は [11 data](11-data.md) と [`docs/io/04-fit-api.md`](../io/04-fit-api.md)、 描画への
-変換は [12 plot](12-plot.md) を参照。
+シグネチャと最小例は [02 regression](02-regression.ja.md) 以降が辞書になる。 fit API の
+全体像は [11 data](11-data.ja.md) と [`docs/io/04-fit-api.md`](../io/04-fit-api.ja.md)、 描画への
+変換は [12 plot](12-plot.ja.md) を参照。
 
 > **黄金律 (これだけ先に覚える)**
 >
@@ -15,7 +17,7 @@ hanalyze で **データを当てはめて 1 枚出す**ための最短経路を
 >    でデータと重畳して `saveSVGBound` で保存する。
 
 このページの構成:
-**[30 秒で 1 枚 (LM)](#lm-30s)** ｜ **[データ源](#data-source)** ｜ **[低レベル (行列 API)](#low-level)**
+**[30 秒で 1 枚 (線形回帰)](#lm-30s)** ｜ **[データ源](#data-source)** ｜ **[低レベル (行列 API)](#low-level)**
 
 ---
 
@@ -44,7 +46,7 @@ main = do
 
 `df |-> lm "x" "y"` の `lm` は **9 つの spec 動詞**の 1 つ。 同じ形で `glm` (GLM) ・
 `spline` ・ `robust` ・ `quantile` ・ Formula 版 `lmF` / `glmF` / `glmmF` ・ ベイズ `hbm`
-が使える ([README 早見表](README.md#演算子抽出子-早見表))。
+が使える ([README 早見表](README.ja.md#演算子抽出子-早見表))。
 
 ---
 
@@ -55,12 +57,12 @@ main = do
 | データ源 | 例 |
 |---|---|
 | assoc list | `[("x", NumData (V.fromList xs)), ("y", NumData (V.fromList ys))]` |
-| Hackage `DataFrame` | CSV ローダ (`loadAuto` 等・[11 data](11-data.md)) が返す `DataFrame` をそのまま |
+| Hackage `DataFrame` | CSV ローダ (`loadAuto` 等・[11 data](11-data.ja.md)) が返す `DataFrame` をそのまま |
 | `Map Text ColData` | `Map.fromList [("x", NumData …), …]` |
 
 `ColData` の構成子は数値列 `NumData (V.Vector Double)` と 文字列 (カテゴリ) 列
-`TxtData (V.Vector Text)` の 2 つ ([`Hgg.Plot.Spec`](../../src/hanalyze/Analyze/Plot.hs))。 データを持たない図 (HBM の forest 等)
-には空源 `noDf = [] :: [(Text, ColData)]` を渡す ([03 bayesian-hbm](03-bayesian-hbm.md))。
+`TxtData (V.Vector Text)` の 2 つ ([`Hgg.Plot.Spec`](../../src/Hanalyze/Plot.hs))。 データを持たない図 (HBM の forest 等)
+には空源 `noDf = [] :: [(Text, ColData)]` を渡す ([03 bayesian-hbm](03-bayesian-hbm.ja.md))。
 
 ---
 
@@ -82,5 +84,5 @@ let fit  = fitLMVec (designMatrix xs) ys   -- FitResult: β, ŷ, residuals, R²
 `LMModel` を返す (`toPlot` が CI 帯を描けるのはこのため)。 各モデルページでも
 **高レベルを主・低レベルを `**低レベル**` ラベルで併記**する。
 
-→ fit API の全体像: [11 data](11-data.md) / [`docs/io/04-fit-api.md`](../io/04-fit-api.md)
-→ 描画への変換と抽出子一覧: [12 plot](12-plot.md)
+→ fit API の全体像: [11 data](11-data.ja.md) / [`docs/io/04-fit-api.md`](../io/04-fit-api.ja.md)
+→ 描画への変換と抽出子一覧: [12 plot](12-plot.ja.md)

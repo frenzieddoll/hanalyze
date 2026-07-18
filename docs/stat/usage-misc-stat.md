@@ -1,140 +1,111 @@
-# Misc Stat extensions — Fit Y by X / Friedman / Cohen's d CI / LCA / Graphical Lasso (Phase 32)
+# Miscellaneous Statistical Extensions — Fit Y by X / Friedman / Cohen's d CI / LCA / Graphical Lasso (Phase 32)
 
-Phase 32 (2026-05-29) adds **Correlation Network (Graphical Lasso)** and
-**Latent Class Analysis**. The other three items originally listed in the
-same NN doc — **Fit Y by X / Friedman + Dunn / Cohen's d CI** — turned
-out to be already implemented in Phase 13. This page covers all five.
+> 🌐 **English** | [日本語](usage-misc-stat.ja.md)
+
+> Phase 32 (2026-05-29) adds **Correlation Network (Graphical Lasso) and
+> Latent Class Analysis** as new features. Three other capabilities 
+> (**Fit Y by X / Friedman + Dunn / Cohen's d CI**) were already implemented in Phase 13,
+> so this guide consolidates all five functions, covering **formulations and pitfalls**.
+> Type signatures and minimal examples are documented in [api-guide 10-stat](../api-guide/10-stat.md) as the primary reference.
 
 ---
 
 ## 0. Overview
 
-| Feature | API | Use |
-|---|---|---|
-| Fit Y by X | `Hanalyze.Model.FitYByX.fitYByX` | Auto-dispatch by var type (LM / GLM / ANOVA / chi²) |
-| Friedman test | `Hanalyze.Stat.Test.friedmanTest` | Paired multi-group nonparametric |
-| Dunn multiple comparisons | `Hanalyze.Stat.Test.dunnTest` | All-pairs follow-up with p-adjust |
-| Cohen's d CI | `Hanalyze.Stat.Effect.cohenDCI` | Effect-size CI via non-central t |
-| LCA | `Hanalyze.Model.LatentClassAnalysis.fitLCA` | Categorical latent class clustering (EM) |
-| Graphical Lasso | `Hanalyze.Stat.CorrelationNetwork.graphicalLasso` | Sparse precision matrix (conditional-independence network) |
+| Feature | Use |
+|---|---|
+| Fit Y by X | Auto-dispatch two variables by type (LM / GLM / ANOVA / chi²) |
+| Friedman test | Paired multi-group nonparametric |
+| Dunn multiple comparisons | All-pairs comparisons after Kruskal-Wallis + p-adjust |
+| Cohen's d CI | Confidence interval for effect size (via non-central t) |
+| LCA | Categorical latent class clustering (EM) |
+| Graphical Lasso | Sparse precision matrix (= conditional independence network) |
 
-Before any of these, a quick look at the distribution of each variable
-is worthwhile. A box plot summarises location and spread at a glance —
-`describeBox` takes a raw `[Double]` column:
+Before any of these analyses, it is helpful to first understand the distribution of each variable
+using a box plot (`describeBox`):
 
-```haskell
-import Hanalyze.Plot       (describeBox)
-import Hgg.Plot.Spec          (ColData (..))
-import Hgg.Plot.Frame         ((|>>))
-import Hgg.Plot.Backend.SVG   (saveSVGBound)
-
-let noDf = [] :: [(Text, ColData)]
-saveSVGBound "describe-box.svg" (noDf |>> describeBox xs)
-```
-
-![Box plot of a variable's distribution (descriptive statistics)](../images/describe-box.svg)
+![Box plot showing variable distributions (descriptive statistics)](../images/describe-box.svg)
 
 ---
 
 ## 1. Fit Y by X (Phase 13 existing)
 
-```haskell
-import qualified Hanalyze.Model.FitYByX as FXY
-let r = FXY.fitYByX xVec FXY.Continuous yVec FXY.Continuous   -- LM
-```
-
-Dispatch table:
+JMP "Fit Y by X" platform equivalent. Auto-dispatch based on type of X / Y
+(`Continuous` / `Categorical`):
 
 | X | Y | Analysis |
 |---|---|---|
 | Cont | Cont | Simple regression (LM) |
 | Cont | Cat  | Logistic GLM |
 | Cat  | Cont | One-way ANOVA |
-| Cat  | Cat  | Chi-square independence |
+| Cat  | Cat  | Chi-square independence test |
 
 ---
 
-## 2. Friedman + Dunn (Phase 13 existing)
+## 2. Friedman test + Dunn multiple comparisons (Phase 13 existing)
 
-```haskell
-import qualified Hanalyze.Stat.Test as ST
-let r  = ST.friedmanTest (LA.fromLists rows)
-let mc = ST.dunnTest [g1, g2, g3]
-```
-
-`MultiCompareResult` carries `(i, j, p_raw, p_adj)` for every pair.
-
-`friedmanTest` returns a `TestResult`, which is `Plottable` — `toPlot`
-draws a one-row forest, and `testForest` lays out several tests together:
-
-```haskell
-import Hanalyze.Plot       (toPlot, testForest)
-import Hgg.Plot.Spec          (ColData (..))
-import Hgg.Plot.Frame         ((|>>))
-import Hgg.Plot.Backend.SVG   (saveSVGBound)
-
-let noDf = [] :: [(Text, ColData)]
-saveSVGBound "friedman-forest.svg" (noDf |>> toPlot r)
-```
+Friedman is a paired nonparametric test for n subjects × k treatments matrix.
+Dunn performs all-pairs follow-up comparisons after Kruskal-Wallis, with
+`MultiCompareResult` containing `(i, j, p_raw, p_adj)` for each pair
+(p-adjustment choice: Bonferroni / BH specified in API; BH is default).
+The `TestResult` from `friedmanTest` is `Plottable`, and `toPlot` draws a one-row forest.
 
 ---
 
 ## 3. Cohen's d CI (Phase 13 existing)
 
-```haskell
-import qualified Hanalyze.Stat.Effect as Eff
-let (lo, hi) = Eff.cohenDCI xs ys 0.05   -- 95% CI
-```
-
-Computed from the non-central t distribution (exact, not asymptotic).
+`cohenDCI` computes exact confidence intervals via the non-central t distribution
+(not asymptotic approximation). Paired version is `cohenDPaired`.
 
 ---
 
-## 4. LCA (Phase 32-A2)
+## 4. LCA (Latent Class Analysis, Phase 32-A2 new)
 
-```haskell
-import qualified Hanalyze.Model.LatentClassAnalysis as LCA
-import qualified System.Random.MWC as MWC
+Latent class clustering for categorical variables using EM algorithm. Model:
 
-gen <- MWC.create
-fit <- LCA.fitLCA 2 2 rows 100 1e-4 gen
+```
+P(X_i) = Σ_k π_k · Π_j ρ_{k, j, X_{i,j}}
 ```
 
-Model: `P(X_i) = Σ_k π_k · Π_j ρ_{k, j, X_{i,j}}`. EM in log space.
+### Caveats
 
-**Caveats**: label switching across runs; EM is locally optimal so for
-non-trivial problems run several seeds and keep the highest log-likelihood.
+- **Label switching**: Classes 0 / 1 may randomly swap. When interpreting,
+  recommend reordering by the ρ pattern
+- **Initialization dependence**: EM finds local optima. If needed, fit multiple
+  times with different seeds and choose the result with highest log-likelihood
+- **K selection**: BIC / AIC provide external model selection (this implementation fixes K)
 
 ---
 
-## 5. Graphical Lasso (Phase 32-A1)
+## 5. Graphical Lasso / Correlation Network (Phase 32-A1 new)
 
-```haskell
-import qualified Hanalyze.Stat.CorrelationNetwork as CN
-let fit = CN.graphicalLasso xMat 0.05 100 1e-4
-CN.glPrecision fit
-CN.nonZeroPrecision 0.01 (CN.glPrecision fit)
-```
+Estimates correlation structure in high-dimensional data via **sparse precision matrix**.
+Zero elements represent conditional independence. Optimization:
 
-Optimisation:
 ```
 max_{Θ ≻ 0}  log det Θ - tr(SΘ) - λ ‖Θ‖_{1, off-diag}
 ```
 
-Implementation: FHT 2008 block coordinate descent, inner Lasso solved
-on the quadratic form `(1/2) β^T W β - s^T β + λ |β|_1`.
+### Caveats
 
-**Caveats**: λ choice (no auto-CV); for `n < p`, `Σ ← S + λI`
-initialisation keeps it well-posed.
+- **λ tuning**: Larger λ produces sparsity. Select via cross-validation or BIC
+  (this implementation uses fixed λ). Starting value: roughly σ̂_max × 0.1
+- **n < p regime**: Empirical covariance `S` is singular, but initialization with
+  `Σ ← S + λI` allows fitting when λ > 0
+- **No convergence**: λ may be too large or maxOuter insufficient. Try increasing from 100 to 500
+- **Reusing existing covariance**: Use `empiricalCov` → `graphicalLassoFromCov`
 
 ---
 
-## 6. References
+## 6. Related
 
-- Phase 13 commit `3a4e056` for the existing entries
-- Friedman, Hastie, Tibshirani (2008) Biostatistics 9(3):432-441
-- Linzer, Lewis (2011) J Stat Softw 42(10) — poLCA
-- Dunn (1964) Technometrics 6
-- Smithson (2003) — non-central t for Cohen's d CI
-- Comparable: scikit-learn `GraphicalLasso`, R `glasso` / `poLCA` /
+- Types and minimal examples: [api-guide 10-stat](../api-guide/10-stat.md)
+- Specification: `specification/phases/phase-32-misc-stat.md`
+- Existing implementation commit: `3a4e056` (Phase 13, 2026-05-24)
+- References:
+  - Friedman, Hastie, Tibshirani (2008) Biostatistics 9(3):432-441
+  - Linzer, Lewis (2011) J Stat Softw 42(10) — poLCA
+  - Dunn (1964) Technometrics 6 — Dunn multiple comparisons
+  - Smithson (2003) — Cohen's d CI via non-central t
+- Comparisons: scikit-learn `GraphicalLasso`, R `glasso` / `poLCA` /
   `scikit-posthocs.posthoc_dunn` / `effsize`, JMP "Fit Y by X" platform

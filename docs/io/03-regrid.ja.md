@@ -3,7 +3,7 @@
 > 🌐 [English](03-regrid.md) | **日本語**
 
 > 関連: [01-dirty-data.ja.md](01-dirty-data.ja.md) (汚いデータ防衛)、
-> [DataIO.Preprocess.meltLonger](../../src/hanalyze/Analyze/DataIO/Preprocess.hs) (wide → long)
+> [DataIO.Preprocess.meltLonger](../../src/Hanalyze/DataIO/Preprocess.hs) (wide → long)
 
 「半導体プロセスの V-Z プロファイル」のように **id (条件) ごとに z 軸が
 微妙にズレ + 部分的に欠損** している long-form データを、**共通 z grid に

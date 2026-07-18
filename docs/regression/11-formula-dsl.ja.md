@@ -252,4 +252,4 @@ y ~ x + (0+x|g)      # random slope のみ (intercept 抑制)
 - **複数 grouping factor** の random effect (`(…|g1) + (…|g2)`): 単一群のみ実装。
 - `smooth` (B-spline) の信頼帯 (現状は点推定のみ)。
 
-> 設計の詳細は [spec: analysis-language §2.1/§2.2/§2.4/§3.6](../../specification/spec/hanalyze-analysis-language-spec.md) を参照。
+> 設計の詳細は 内部設計文書 spec: analysis-language §2.1/§2.2/§2.4/§3.6 (非公開) を参照。

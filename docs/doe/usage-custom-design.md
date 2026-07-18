@@ -1,78 +1,89 @@
-# Custom Design (JMP-equivalent) — Usage
+# Custom Design (JMP Equivalent) Usage
 
-> JMP Pro "Custom Design" equivalent that generates **arbitrary model ×
-> arbitrary constraint × arbitrary runs** designs in a single call.
-> Continuous factors use coordinate exchange (Meyer-Nachtsheim 1995);
-> categorical factors use Modified Fedorov; both are unified under a single
-> per-column-grid outer loop.
+> 🌐 **English** | [日本語](usage-custom-design.ja.md)
+
+> JMP Pro "Custom Design" equivalent: generate **arbitrary model × arbitrary
+> constraint × arbitrary runs** designs in one function call. Unlike classic
+> D-optimal with candidate sets (`Hanalyze.Design.Optimal`), continuous factors
+> use coordinate exchange (Meyer-Nachtsheim 1995) and categorical factors use
+> Modified Fedorov, unified in a hybrid algorithm. API signatures and minimal
+> examples reference [api-guide 09-doe](../api-guide/09-doe.md) as primary; here
+> we address **design philosophy, raw representation conventions, known limitations**.
 >
-> Spec: `specification/spec/hanalyze-doe-custom-design-spec.md` v0.1.1
-> Phases: 24-1 through 24-9.
+> Specification: `specification/spec/hanalyze-doe-custom-design-spec.md` v0.1.1
+> Related Phases: 24-1 through 24-9 (Phase 24 complete).
 
-(Japanese reference: [`usage-custom-design.ja.md`](usage-custom-design.ja.md))
-
-## Module map
+## Module Quick Reference
 
 | Module | Role |
 |---|---|
-| `Hanalyze.Design.Custom.Factor`     | Factor ADT (Role × Kind orthogonal) |
-| `Hanalyze.Design.Custom.Model`      | Model term ADT + `expandDesignMatrix` |
-| `Hanalyze.Design.Custom.Constraint` | LinearIneq / Forbidden / Conditional / RangeBound |
-| `Hanalyze.Design.Custom.Coordinate` | `coordinateExchange` (multi-start search) |
-| `Hanalyze.Design.Custom.Compare`    | `compareDesigns` (D/A/G/I + FDS + alias norm) |
-| `Hanalyze.Design.Custom.Power`      | `designPower` (design-matrix power analysis) |
+| `Design.Custom.Factor`     | Factor ADT (Role × Kind orthogonal axes) |
+| `Design.Custom.Model`      | Model term ADT + `expandDesignMatrix` |
+| `Design.Custom.Constraint` | Constraint ADT (LinearIneq / Forbidden / Conditional / RangeBound) |
+| `Design.Custom.Coordinate` | `coordinateExchange` core (multi-start search) |
+| `Design.Custom.Compare`    | `compareDesigns` (D/A/G/I efficiency + FDS + alias norm) |
+| `Design.Custom.Power`      | `designPower` (design-matrix power analysis) |
 
-## Categorical raw representation (caveat)
+---
 
-The raw `Matrix Double` is **type-unsafe** for Categorical / Ordinal columns:
-levels are stored as **integer index `0..K-1` cast to `Double`**.
-`expandDesignMatrix` performs reference (treatment) coding with reference = index 0.
-A type-safe redesign (R `model.matrix` / patsy-style separation) is registered
-as Phase 27 in `specification/phase-plan.md`.
+## 1. Factor Role (`FactorRole`)
 
-## Quick example
+- `FactorKind` is 5 types: `Continuous lo hi` / `DiscreteNum [Double]` /
+  `Mixture lo hi` / `Categorical [Text]` / `Ordinal [Text]`
+- `FactorRole` is operational purpose (Controllable / HardToChange / Blocking / etc.).
+  In Phase 24, role does not affect design generation (Phase 25 split-plot uses it).
 
-```haskell
-import Hanalyze.Design.Custom.Factor
-import Hanalyze.Design.Custom.Model
-import Hanalyze.Design.Custom.Coordinate
-import Hanalyze.Design.Optimal (OptCriterion (..))
+### Categorical Factor Raw Representation Convention (Critical)
 
-f1 = Factor "x1" (Continuous (-1) 1) Controllable
-f2 = Factor "x2" (Continuous (-1) 1) Controllable
+**Type-unsafe**: Categorical / Ordinal columns in `Matrix Double` hold **level
+index 0..K-1 as Double** (option α). `expandDesignMatrix` applies reference
+(treatment) coding to K-1 columns, reference = index 0.
+Details and future type-safe redesign (Phase 27 candidate) in spec.
 
-model = Model
-  [ TIntercept
-  , TMain "x1", TMain "x2"
-  , TInter ["x1","x2"]
-  , TPower "x1" 2, TPower "x2" 2
-  ] NCoded
+---
 
-spec = CustomDesignSpec
-  { cdsFactors     = [f1, f2]
-  , cdsModel       = model
-  , cdsConstraints = []
-  , cdsNRuns       = 12
-  , cdsCriterion   = DOpt
-  , cdsBudget      = defaultBudget
-  , cdsSeed        = Just 42
-  , cdsInitial     = Nothing
-  }
+## 2. Constraint Integration
 
-main = do
-  Right cd <- coordinateExchange spec
-  print (cdMatrix cd)
-```
+`Constraint` integrates into `coordinateExchange` as a per-grid-point filter.
+Grid points violating constraints skip criterion evaluation. Random initialization
+uses rejection sampling (200 attempts per row max). Categorical TMain expands to
+K-1 columns; TInter uses cartesian product.
 
-## Known limitations (Phase 24)
+---
 
-- I-efficiency uses self-moment approximation (region-integral version: future)
-- Alias matrix considers only continuous × continuous 2fi
-- FDS region assumes independent uniform factors; constrained regions need
-  rejection sampling
-- Split-plot (Hard-to-Change): Phase 25
-- Augment menu (5 modes): Phase 25
-- Bayesian-D (DuMouchel-Jones): Phase 26
-- `cdsInitial` / `TNested` / `TCustom` are not yet supported
+## 3. Evaluation Metrics (`Compare`, `Power`)
 
-For full Japanese tutorial including examples: see `usage-custom-design.ja.md`.
+- `compareDesigns` `dcEffTable`: D/A/G/I efficiency (4 columns per design),
+  `dcFDS`: prediction variance sorted vector (Halton 500 points),
+  `dcAliasNorm`: continuous 2fi alias matrix Frobenius norm.
+- `designPower`: per-term power from effect size and sigma via noncentral F approximation.
+
+---
+
+## 4. JMP Golden Test Cases
+
+Production-level behavioral pinning in `test/Spec.hs` describe blocks:
+
+- "Custom Design golden ex1: 2 factor 2nd-order RSM"
+- "Custom Design golden ex2: 1 cont + 1 cat(3) + main+int model"
+- "Custom Design golden ex3: LinearIneq constraint + 2 factor"
+
+Generated with `defaultBudget` + fixed seed; D-efficiency, row count, and
+constraint satisfaction verified against pinned values.
+
+---
+
+## Known Limitations (Phase 24 Scope)
+
+- I-efficiency: self-moment approximation (region integral version: future)
+- Alias matrix: continuous × continuous 2fi only (categorical absent / TPower
+  extension: future)
+- FDS region: all-factor-independent uniform; constrained regions need rejection
+  sampling
+- Split-Plot (Hard-to-Change): Phase 25 ([usage-augment-splitplot](usage-augment-splitplot.md))
+- Augment 5 menus: Phase 25
+- Bayesian-D (DuMouchel-Jones): Phase 26 ([usage-bayesian-d](usage-bayesian-d.md))
+- `cdsInitial` (Augment input) / `TNested` / `TCustom`: unsupported
+
+Input API type-safety enhancement (Categorical level index → type-separated)
+registered as Phase 27 candidate in phase-plan.md.

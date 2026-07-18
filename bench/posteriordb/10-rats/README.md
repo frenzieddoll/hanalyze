@@ -23,7 +23,7 @@ Gelman & Hill 系譜)。出典: `stan-dev/posteriordb`
 現象が発生した (`cabal repl` で `chainDivergences`/`chainEnergy` を直接
 確認・全 draw が発散と確定)。
 
-原因は `src/hanalyze/Analyze/Model/HBM/Distribution.hs:309-310` の既知の
+原因は `src/Hanalyze/Model/HBM/Distribution.hs:309-310` の既知の
 制約 (01-glm-poisson で既に文書化済み): **`Uniform` の真の制約変換
 (logit-on-(lo,hi)) が未実装で unconstrained 扱い**。unconstrained の初期値
 raw=0 は、`Uniform(lo,hi)` では変換なしにそのまま値として使われるため、

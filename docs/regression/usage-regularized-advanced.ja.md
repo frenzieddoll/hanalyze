@@ -4,7 +4,7 @@
 > (Adaptive Lasso / MCP / SCAD / Group Lasso) と **M-estimator ロバスト回帰**
 > (Huber / Tukey biweight) の学習ガイド。 JMP "Generalized Regression" +
 > "Robust Fit" 同等。 型シグネチャ・最小例・`df |->`/`toPlot` 経路は
-> [api-guide 02-regression](../api-guide/02-regression.md) を一次根拠に、 ここは
+> [api-guide 02-regression](../api-guide/02-regression.ja.md) を一次根拠に、 ここは
 > **罰則の数式・推定アルゴリズム・凸性条件の罠** を扱う。
 
 ---
@@ -113,7 +113,7 @@ IRLS アルゴリズム:
 
 ## 7. 関連
 
-- 型・最小例・`df |->`/`toPlot` 経路: [api-guide 02-regression](../api-guide/02-regression.md)
+- 型・最小例・`df |->`/`toPlot` 経路: [api-guide 02-regression](../api-guide/02-regression.ja.md)
 - 計画書: `specification/phases/phase-31-regression-advanced.md`
 - 文献:
   - Zou (2006) JASA 101 — Adaptive Lasso

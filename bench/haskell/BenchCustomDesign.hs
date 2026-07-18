@@ -17,7 +17,7 @@
 --
 -- Phase 25 で SplitPlot.evalCritSP は internal (非 public)。 bench から
 -- 直接呼べないので、 同じ M⁻¹ 構築ロジックをここに重複実装している。
--- 仕様変更時は src/hanalyze/Analyze/Design/Custom/SplitPlot.hs と本ファイル両方を
+-- 仕様変更時は src/Hanalyze/Design/Custom/SplitPlot.hs と本ファイル両方を
 -- 更新すること (簡易 REML criterion: critValueM(DOpt, chol(X' M⁻¹ X)) =
 -- -det(X' M⁻¹ X))。
 module Main where

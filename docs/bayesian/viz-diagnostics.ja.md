@@ -1,6 +1,6 @@
 # MCMC 診断 viz ガイド (Hanalyze.Viz.MCMC)
 
-> 🌐 [English](viz-diagnostics.md) ｜ **日本語**
+> 🌐 [English](viz-diagnostics.md) | **日本語**
 >
 > NUTS / HMC / 平均場 ADVI / Full-rank ADVI など主要 sampler に共通の **収束
 > 診断 viz / 事後予測 viz / 要約表** をまとめて参照できるガイド。

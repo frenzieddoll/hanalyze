@@ -313,7 +313,7 @@ resolveIOptRegion fs model cons crit
 -- DuMouchel-Jones §2.2 column transform (Phase 28-12)
 -- ---------------------------------------------------------------------------
 --
--- 詳細は doc: src/hanalyze/Analyze/Design/Custom/Bayesian.hs (Phase 28-12 section)。
+-- 詳細は doc: src/Hanalyze/Design/Custom/Bayesian.hs (Phase 28-12 section)。
 -- Power.termColumnIndices に依存しないよう、 列 index 列挙を本 module 内に
 -- 再実装している (Coordinate ↔ Bayesian の module cycle 回避)。
 

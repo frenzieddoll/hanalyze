@@ -4,7 +4,7 @@
 > Latent Class Analysis** を新規追加。 同 NN doc に含まれていた残 3 機能
 > (**Fit Y by X / Friedman + Dunn / Cohen's d CI**) は Phase 13 で既実装
 > だったので、 本ガイドで 5 機能の **定式化と罠** を集約解説する。 型シグネチャ・
-> 最小例は [api-guide 10-stat](../api-guide/10-stat.md) を一次根拠に。
+> 最小例は [api-guide 10-stat](../api-guide/10-stat.ja.md) を一次根拠に。
 
 ---
 
@@ -95,7 +95,7 @@ max_{Θ ≻ 0}  log det Θ - tr(SΘ) - λ ‖Θ‖_{1, off-diag}
 
 ## 6. 関連
 
-- 型・最小例: [api-guide 10-stat](../api-guide/10-stat.md)
+- 型・最小例: [api-guide 10-stat](../api-guide/10-stat.ja.md)
 - 計画書: `specification/phases/phase-32-misc-stat.md`
 - 既存実装 commit: `3a4e056` (Phase 13、 2026-05-24)
 - 文献:

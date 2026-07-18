@@ -3,8 +3,8 @@
 > Phase 35 (2026-05-29) は、 既存の `Hanalyze.Model.{TimeSeries, Survival,
 > Weibull, Reliability}` でカバーされていない時系列・生存解析の advanced
 > 機能 4 個を追加する学習ガイド。 型シグネチャ・最小例・`toPlot` 経路は
-> [api-guide 06-timeseries](../api-guide/06-timeseries.md) /
-> [07-survival](../api-guide/07-survival.md) を一次根拠に、 ここは **各モデルの
+> [api-guide 06-timeseries](../api-guide/06-timeseries.ja.md) /
+> [07-survival](../api-guide/07-survival.ja.md) を一次根拠に、 ここは **各モデルの
 > 定式化と推定の根拠** を扱う。 State Space / Kalman Filter は
 > `Hanalyze.Model.StateSpace` (Phase 15) で既実装。
 
@@ -81,8 +81,8 @@
 
 ## 6. 関連
 
-- 型・最小例: [api-guide 06-timeseries](../api-guide/06-timeseries.md) /
-  [07-survival](../api-guide/07-survival.md)
+- 型・最小例: [api-guide 06-timeseries](../api-guide/06-timeseries.ja.md) /
+  [07-survival](../api-guide/07-survival.ja.md)
 - 計画書: `specification/phases/phase-35-timeseries-survival.md`
 - 文献: Lütkepohl (2005) — VAR / Kalbfleisch & Prentice (1980) — CIF
 </content>

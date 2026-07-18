@@ -261,4 +261,4 @@ y ~ x + (0+x|g)      # random slope only (intercept suppressed)
 - random effects with **multiple grouping factors** (`(…|g1) + (…|g2)`): single group only.
 - confidence band for `smooth` (B-spline) — point estimate only for now.
 
-> For design rationale see [spec: analysis-language §2.1/§2.2/§2.4/§3.6](../../specification/spec/hanalyze-analysis-language-spec.md).
+> For design rationale see the internal design document spec: analysis-language §2.1/§2.2/§2.4/§3.6 (not published).
