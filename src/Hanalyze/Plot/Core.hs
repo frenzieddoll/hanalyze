@@ -122,7 +122,7 @@ import qualified Numeric.LinearAlgebra as LA
 import           Data.Text             (Text)
 import qualified Data.Text             as T
 
-import           Hgg.Plot.Spec     ( VisualSpec, Layer, layer, inline, inlineCat
+import           Graphics.Hgg.Spec     ( VisualSpec, Layer, layer, inline, inlineCat
                                        , Color (..), fromHex
                                        , scatter, line, band
                                        , shape, MarkShape (..)
@@ -133,10 +133,10 @@ import           Hgg.Plot.Spec     ( VisualSpec, Layer, layer, inline, inlineCat
                                        , LineType (..)
                                        , linetype, alpha, stroke )
 import           Hanalyze.Diagnostics ( CoefRow (..), HasCoefSummary (..) )
-import           Hgg.Plot.Unit     (pt', (*~))
-import qualified Hgg.Plot.ThreeD.Spec  as P3
-import           Hgg.Plot.ThreeD.Types (Point3 (..))
-import           Hgg.Plot.Color        (toCss)
+import           Graphics.Hgg.Unit     (pt', (*~))
+import qualified Graphics.Hgg.ThreeD.Spec  as P3
+import           Graphics.Hgg.ThreeD.Types (Point3 (..))
+import           Graphics.Hgg.Color        (toCss)
 
 import           Hanalyze.Model.Wrappers
 import           Hanalyze.Model.Formula.Frame   (ModelFrame (..), VarRole (..))

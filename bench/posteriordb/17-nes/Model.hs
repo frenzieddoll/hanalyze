@@ -44,9 +44,9 @@ import Hanalyze.Model.HBM (ModelP, Distribution (..), sample, observe,
                                     gradPathLabel)
 import Hanalyze.Plot (HBMConfig (..), defaultHBM, hbm, (|->),
                               dashboardFullOf, hbmChainsR, hbmModelSpec)
-import Hgg.Plot.Spec (ColData (..))
-import Hgg.Plot.Frame (BoundPlot, (|>>))
-import Hgg.Plot.Backend.Rasterific (savePNGBound)
+import Graphics.Hgg.Spec (ColData (..))
+import Graphics.Hgg.Frame (BoundPlot, (|>>))
+import Graphics.Hgg.Backend.Rasterific (savePNGBound)
 
 import Common (summarize, printSummary, timeSamplingMs)
 

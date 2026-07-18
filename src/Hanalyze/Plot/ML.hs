@@ -101,7 +101,7 @@ import qualified Numeric.LinearAlgebra as LA
 import           Data.Text             (Text)
 import qualified Data.Text             as T
 
-import           Hgg.Plot.Spec     ( VisualSpec, layer, inline, inlineCat
+import           Graphics.Hgg.Spec     ( VisualSpec, layer, inline, inlineCat
                                        , fromHex
                                        , scatter, line, band
                                        , shape, MarkShape (..)
@@ -123,11 +123,11 @@ import           Hgg.Plot.Spec     ( VisualSpec, layer, inline, inlineCat
                                        , dagFromListsWithPlates
                                        , DAGNode (..), DAGEdge (..)
                                        , DAGNodeKind (..), DAGLayoutAlgorithm (..) )
-import           Hgg.Plot.Unit     (Pos (..))
-import           Hgg.Plot.Palette  (ggplotHue)
-import           Hgg.Plot.Custom.Dendrogram (DendroSeg (..), DendroPayload (..), dendrogramMark)  -- Phase 48
-import           Hgg.Plot.DAG      (layoutHierarchicalFullWithPlates)
-import           Hgg.Plot.Render.Special (bakeDAGRoutesInSpec)
+import           Graphics.Hgg.Unit     (Pos (..))
+import           Graphics.Hgg.Palette  (ggplotHue)
+import           Graphics.Hgg.Custom.Dendrogram (DendroSeg (..), DendroPayload (..), dendrogramMark)  -- Phase 48
+import           Graphics.Hgg.DAG      (layoutHierarchicalFullWithPlates)
+import           Graphics.Hgg.Render.Special (bakeDAGRoutesInSpec)
 
 import           Numeric               (showFFloat)
 

@@ -343,10 +343,10 @@ library
         Hanalyze.Plot.ML
         Hanalyze.Plot.Wrappers
     build-depends:
-        hgg-core
-      , hgg-svg
-      , hgg-3d
-      , hgg-custom
+        hgg-core   ^>= 0.1
+      , hgg-svg    ^>= 0.1
+      , hgg-3d     ^>= 0.1
+      , hgg-custom ^>= 0.1
 
 -- NOTE (public sync 2026-07-18): hanalyze-plot-test / phase104-probe-prof /
 -- plot-integration-demo は fork 側の demo-plot/ test-plot/ experiments/ 配下

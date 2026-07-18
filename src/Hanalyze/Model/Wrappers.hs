@@ -17,7 +17,7 @@
 -- ('VisualSpec' 化・'Plottable' instance) を担うのに対し、 本モジュールは
 -- そこから **hgg に依存しない** 部分 (フィット済みモデルを束ねた
 -- 描画ラッパ型と、 それを組み立てる smart constructor) のみを切り出したもの。
--- 非ゲート (常時 build) なので 'Hgg.Plot.*' を一切 import しない。
+-- 非ゲート (常時 build) なので 'Graphics.Hgg.*' を一切 import しない。
 -- 'Hanalyze.Plot' は本モジュールを import し従来の名前で再 export する。
 module Hanalyze.Model.Wrappers
   ( -- * 多変量 effect plot のラッパ + smart ctor

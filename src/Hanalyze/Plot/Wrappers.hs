@@ -42,7 +42,7 @@ import qualified DataFrame.Internal.DataFrame  as DX
 
 import           Hanalyze.Data.ColumnSource     (ColumnSource (..))
 
-import           Hgg.Plot.Spec     ( VisualSpec, layer, inline, inlineCat
+import           Graphics.Hgg.Spec     ( VisualSpec, layer, inline, inlineCat
                                        , ColData (..)
                                        , scatter, line
                                        , heatmap, colorBy

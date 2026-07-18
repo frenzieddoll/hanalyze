@@ -30,7 +30,7 @@ import qualified Numeric.LinearAlgebra as LA
 import           Data.Text             (Text)
 import qualified Data.Text             as T
 
-import           Hgg.Plot.Spec     ( VisualSpec, layer, inline, inlineCat
+import           Graphics.Hgg.Spec     ( VisualSpec, layer, inline, inlineCat
                                        , scatter, line, band
                                        , colorBy, alpha )
 

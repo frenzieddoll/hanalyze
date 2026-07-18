@@ -30,7 +30,7 @@
 -- +---------------+--------------------------------------------------+---------------------+-----------------------+
 -- | __本 module__ | 'renderModelGraphDot' (= Graphviz DOT)           | .dot + dot CLI 別途 | graphviz 連携、 加工  |
 -- +---------------+--------------------------------------------------+---------------------+-----------------------+
--- | hgg  | @Hgg.Plot.Bridge.Analyze.renderModelGraphSVG@| .svg (依存ゼロ)     | production、 offline  |
+-- | hgg  | @Graphics.Hgg.Bridge.Analyze.renderModelGraphSVG@| .svg (依存ゼロ)     | production、 offline  |
 -- |               | (= @hgg-analyze-bridge@ package)        |                     |                       |
 -- +---------------+--------------------------------------------------+---------------------+-----------------------+
 --

@@ -25,7 +25,7 @@ import           Data.Ord              (comparing)
 import qualified Hanalyze.Model.HBM.Distribution as BD
 import qualified Numeric.LinearAlgebra as LA
 
-import           Hgg.Plot.Spec     ( layer, inline
+import           Graphics.Hgg.Spec     ( layer, inline
                                        , scatter, line, band )
 
 import           Hanalyze.Model.Wrappers

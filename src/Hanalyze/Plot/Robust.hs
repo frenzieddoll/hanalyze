@@ -24,7 +24,7 @@ import           Data.Ord              (comparing)
 import qualified Data.Vector           as V
 import qualified Numeric.LinearAlgebra as LA
 
-import           Hgg.Plot.Spec     ( layer, inline, fromHex
+import           Graphics.Hgg.Spec     ( layer, inline, fromHex
                                        , scatter, line, band
                                        , sizeBy, color )
 

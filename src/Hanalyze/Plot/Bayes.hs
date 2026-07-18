@@ -83,7 +83,7 @@ import qualified Numeric.LinearAlgebra as LA
 import           Data.Text             (Text)
 import qualified Data.Text             as T
 
-import           Hgg.Plot.Spec     ( VisualSpec, layer, inline, inlineCat
+import           Graphics.Hgg.Spec     ( VisualSpec, layer, inline, inlineCat
                                        , Color (..), fromHex
                                        , scatter, line, band, bar
                                        , position, Position (..)
@@ -97,9 +97,9 @@ import           Hgg.Plot.Spec     ( VisualSpec, layer, inline, inlineCat
                                        , dagFromListsWithPlates
                                        , DAGNode (..), DAGEdge (..), DAGPlate (..)
                                        , DAGNodeKind (..), DAGLayoutAlgorithm (..) )
-import           Hgg.Plot.DAG      (layoutHierarchicalFullWithPlates)
-import           Hgg.Plot.Render.Special (bakeDAGRoutesInSpec)
-import qualified Hgg.Plot.ThreeD.Spec  as P3
+import           Graphics.Hgg.DAG      (layoutHierarchicalFullWithPlates)
+import           Graphics.Hgg.Render.Special (bakeDAGRoutesInSpec)
+import qualified Graphics.Hgg.ThreeD.Spec  as P3
 
 import           Hanalyze.Model.Wrappers
 import           Hanalyze.Plot.Core

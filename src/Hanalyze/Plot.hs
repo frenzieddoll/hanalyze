@@ -534,14 +534,14 @@ import qualified Data.Text             as T
 
 import           Hanalyze.Data.ColumnSource     (ColumnSource (..))
 
-import           Hgg.Plot.Spec     ( VisualSpec, layer, inline, inlineCat
+import           Graphics.Hgg.Spec     ( VisualSpec, layer, inline, inlineCat
                                        , ColData (..)
                                        , scatter, line
                                        , heatmap, colorBy
                                        , scaleColorManual, legend
                                        , bar, title
                                        , LineType (..) )
-import qualified Hgg.Plot.ThreeD.Spec  as P3
+import qualified Graphics.Hgg.ThreeD.Spec  as P3
 
 import           Hanalyze.Model.Wrappers
 import           Hanalyze.Plot.Core
