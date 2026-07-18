@@ -1,0 +1,46 @@
+Initializing NUTS using jitter+adapt_diag...
+Sequential sampling (4 chains in 1 job)
+NUTS: [mu_1, gap, theta1, theta2]
+Sampling 4 chains for 1_000 tune and 1_000 draw iterations (4_000 + 4_000 draws total) took 6 seconds.
+pymc+numba     wall=  23262.7ms  ess_bulk(mu_1)= 1298.0  ess/s=   55.80  rhat=1.520
+Initializing NUTS using jitter+adapt_diag...
+Sequential sampling (4 chains in 1 job)
+NUTS: [mu_1, gap, theta1, theta2]
+Sampling 4 chains for 1_000 tune and 1_000 draw iterations (4_000 + 4_000 draws total) took 49 seconds.
+pymc+cvm       wall=  69606.1ms  ess_bulk(mu_1)= 1437.0  ess/s=   20.64  rhat=1.520
+Initializing NUTS using jitter+adapt_diag...
+Sequential sampling (4 chains in 1 job)
+NUTS: [mu_1, gap, theta1, theta2]
+Sampling 4 chains for 1_000 tune and 1_000 draw iterations (4_000 + 4_000 draws total) took 8 seconds.
+pymc+jax       wall=   9327.5ms  ess_bulk(mu_1)= 1673.0  ess/s=  179.36  rhat=1.520
+NUTS[numpyro]: [mu_1, gap, theta1, theta2]
+numpyro        wall=   5342.5ms  ess_bulk(mu_1)= 1880.0  ess/s=  351.90  rhat=1.000
+NUTS[nutpie]: [mu_1, gap, theta1, theta2]
+nutpie+numba   wall=  10867.9ms  ess_bulk(mu_1)= 1136.0  ess/s=  104.53  rhat=1.000
+NUTS[nutpie]: [mu_1, gap, theta1, theta2]
+nutpie+jax     wall=   3331.2ms  ess_bulk(mu_1)= 1165.0  ess/s=  349.72  rhat=1.000
+NUTS[blackjax]: [mu_1, gap, theta1, theta2]
+Traceback (most recent call last):
+  File "<repo>/bench/posteriordb/14-hmm-example/run_pymc_matrix.py", line 49, in <module>
+    main()
+  File "<repo>/bench/posteriordb/14-hmm-example/run_pymc_matrix.py", line 37, in main
+    idata = pm.sample(draws=1000, tune=1000, chains=4, cores=1,
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/toshiaki/.virtualenvs/pymc312/lib/python3.12/site-packages/pymc/sampling/mcmc.py", line 995, in sample
+    return _sample_external_nuts(
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/toshiaki/.virtualenvs/pymc312/lib/python3.12/site-packages/pymc/sampling/mcmc.py", line 512, in _sample_external_nuts
+    idata = pymc_jax.sample_jax_nuts(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/toshiaki/.virtualenvs/pymc312/lib/python3.12/site-packages/pymc/sampling/jax.py", line 640, in sample_jax_nuts
+    raw_mcmc_samples, sample_stats, library = sampler_fn(
+                                              ^^^^^^^^^^^
+  File "/home/toshiaki/.virtualenvs/pymc312/lib/python3.12/site-packages/pymc/sampling/jax.py", line 369, in _sample_blackjax_nuts
+    raw_mcmc_samples, sample_stats = map_fn(get_posterior_samples)(keys, initial_points)
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/toshiaki/.virtualenvs/pymc312/lib/python3.12/site-packages/jax/_src/pmap.py", line 319, in wrapped
+    out = jitted_f(*dyn_args_flat)
+          ^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: cannot select an axis to squeeze out which has size not equal to one, got shape=(4, 2) and dimensions=(0,)
+--------------------
+For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.

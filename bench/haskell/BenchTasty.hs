@@ -20,7 +20,7 @@ import           Hanalyze.Model.Core              (coefficients)
 import           Hanalyze.Model.GLM               (Family (..), LinkFn (..), fitGLMFull)
 import qualified Hanalyze.Model.Regularized       as Reg
 import           Hanalyze.Model.Regularized       (Penalty (..), rfBeta)
-import qualified Hanalyze.Model.Kernel            as Kn
+import qualified Hanalyze.Model.KernelRegression            as Kn
 import qualified Hanalyze.Stat.Cholesky           as Chol
 import qualified Hanalyze.Stat.KernelDist         as KD
 import           Data.Maybe              (fromMaybe)

@@ -1,0 +1,6 @@
+example,metric,hanalyze_value,reference_value,ratio,tolerance,pass
+jones-goos-2012-table2-splitplot-20run,D-criterion-ratio-raw,2684.4444444444,2684.4444444444,1.0000000000,2.000000e-2,true
+jones-goos-2012-table2-splitplot-20run,D-efficiency-pth-root,1.0000000000,1.0000000000,1.0000000000,2.000000e-2,true
+dumouchel-jones-1994-example3-both,BayesianD-criterion-ratio-raw-DJ,2.0992000000e7,2.0992000000e7,1.0000000000,2.000000e-2,true
+dumouchel-jones-1994-example3-both,BayesianD-efficiency-pth-root-DJ,1.0000000000,1.0000000000,1.0000000000,2.000000e-2,true
+jmp-rsm-constraints-categorical-18run,IOptRegion-criterion-ratio,0.4510918052,0.4607015761,0.9791410072,5.000000e-2,true

@@ -1,0 +1,8 @@
+system,suite,name,time_ms,acc_main,acc_aux,extra
+python,hbm_scaling,M9_negbin_iter400,2464.2,0.812,558,iter=400 warmup=500 key=b ess=558.0 ess_per_sec=226.44 tree_depth=1.99 time_ms=2464.2
+python,hbm_scaling,M9_negbin_iter800,2589.99,0.813,955,iter=800 warmup=500 key=b ess=955.0 ess_per_sec=368.73 tree_depth=1.98 time_ms=2590.0
+python,hbm_scaling,M9_negbin_iter1600,2803.79,0.81,1848,iter=1600 warmup=500 key=b ess=1848.0 ess_per_sec=659.11 tree_depth=1.98 time_ms=2803.8
+python,hbm_scaling,M9_negbin_iter3200,3434.65,0.81,4158,iter=3200 warmup=500 key=b ess=4158.0 ess_per_sec=1210.60 tree_depth=1.98 time_ms=3434.6
+python,hbm_scaling,M9_negbin_iter6400,4289.11,0.809,7992,iter=6400 warmup=500 key=b ess=7992.0 ess_per_sec=1863.32 tree_depth=1.98 time_ms=4289.1
+python,hbm_scaling,M9_negbin_iter12800,5841.98,0.81,16363,iter=12800 warmup=500 key=b ess=16363.0 ess_per_sec=2800.93 tree_depth=1.98 time_ms=5842.0
+python,hbm_scaling,M9_negbin_iter25600,8689.36,0.811,32073,iter=25600 warmup=500 key=b ess=32073.0 ess_per_sec=3691.07 tree_depth=1.98 time_ms=8689.4

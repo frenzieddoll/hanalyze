@@ -1,0 +1,7 @@
+system,suite,name,time_ms,acc_main,acc_aux,extra
+python,hbm_scaling,eightschools_iter50,834.131,3.2,43,iter=50 warmup=500 key=tau ess=43.0 ess_per_sec=51.55 tree_depth=2.92 time_ms=834.1
+python,hbm_scaling,eightschools_iter100,661.092,3.4,79,iter=100 warmup=500 key=tau ess=79.0 ess_per_sec=119.50 tree_depth=2.93 time_ms=661.1
+python,hbm_scaling,eightschools_iter200,840.788,4,38,iter=200 warmup=500 key=tau ess=38.0 ess_per_sec=45.20 tree_depth=2.92 time_ms=840.8
+python,hbm_scaling,eightschools_iter400,873.597,3.8,124,iter=400 warmup=500 key=tau ess=124.0 ess_per_sec=141.94 tree_depth=2.93 time_ms=873.6
+python,hbm_scaling,eightschools_iter800,994.809,3.6,309,iter=800 warmup=500 key=tau ess=309.0 ess_per_sec=310.61 tree_depth=2.94 time_ms=994.8
+python,hbm_scaling,eightschools_iter1600,1351.31,3.7,639,iter=1600 warmup=500 key=tau ess=639.0 ess_per_sec=472.88 tree_depth=2.94 time_ms=1351.3

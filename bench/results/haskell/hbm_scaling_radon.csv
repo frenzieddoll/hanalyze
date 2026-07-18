@@ -1,0 +1,5 @@
+system,suite,name,time_ms,acc_main,acc_aux,extra
+haskell,hbm_scaling,radon_iter50,3480.651422,-0.611624,33.295544,iter=50 warmup=500 key=floor ess=33.3 ess_per_sec=9.57 accept=0.951 tree_depth=4.00 time_ms=3480.7
+haskell,hbm_scaling,radon_iter100,2983.739956,-0.610373,100.000000,iter=100 warmup=500 key=floor ess=100.0 ess_per_sec=33.51 accept=0.953 tree_depth=4.00 time_ms=2983.7
+haskell,hbm_scaling,radon_iter200,3186.739635,-0.616255,200.000000,iter=200 warmup=500 key=floor ess=200.0 ess_per_sec=62.76 accept=0.957 tree_depth=4.00 time_ms=3186.7
+haskell,hbm_scaling,radon_iter400,3533.425008,-0.613483,400.000000,iter=400 warmup=500 key=floor ess=400.0 ess_per_sec=113.20 accept=0.961 tree_depth=4.00 time_ms=3533.4

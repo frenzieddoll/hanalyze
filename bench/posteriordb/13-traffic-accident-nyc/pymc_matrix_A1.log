@@ -1,0 +1,51 @@
+Initializing NUTS using jitter+adapt_diag...
+Sequential sampling (4 chains in 1 job)
+NUTS: [beta0, sigma, rho, theta, phi]
+Sampling 4 chains for 1_000 tune and 1_000 draw iterations (4_000 + 4_000 draws total) took 28 seconds.
+pymc+numba     wall=   28409.6ms
+                 ess_bulk(rho)=  365.0  ess/s=   12.85  rhat=1.010  beta0=-6.612 sigma=1.186 rho=0.545
+Initializing NUTS using jitter+adapt_diag...
+Sequential sampling (4 chains in 1 job)
+NUTS: [beta0, sigma, rho, theta, phi]
+Sampling 4 chains for 1_000 tune and 1_000 draw iterations (4_000 + 4_000 draws total) took 37 seconds.
+pymc+cvm       wall=   38082.7ms
+                 ess_bulk(rho)=  474.0  ess/s=   12.45  rhat=1.010  beta0=-6.612 sigma=1.187 rho=0.547
+Initializing NUTS using jitter+adapt_diag...
+Sequential sampling (4 chains in 1 job)
+NUTS: [beta0, sigma, rho, theta, phi]
+Sampling 4 chains for 1_000 tune and 1_000 draw iterations (4_000 + 4_000 draws total) took 78 seconds.
+pymc+jax       wall=   79064.3ms
+                 ess_bulk(rho)=  343.0  ess/s=    4.34  rhat=1.010  beta0=-6.612 sigma=1.185 rho=0.543
+NUTS[numpyro]: [beta0, sigma, rho, theta, phi]
+numpyro        wall=   41190.1ms
+                 ess_bulk(rho)=  400.0  ess/s=    9.71  rhat=1.010  beta0=-6.612 sigma=1.185 rho=0.545
+NUTS[nutpie]: [beta0, sigma, rho, theta, phi]
+nutpie+numba   wall=   19903.2ms
+                 ess_bulk(rho)=  460.0  ess/s=   23.11  rhat=1.010  beta0=-6.612 sigma=1.189 rho=0.550
+NUTS[nutpie]: [beta0, sigma, rho, theta, phi]
+nutpie+jax     wall=   26273.0ms
+                 ess_bulk(rho)=  430.0  ess/s=   16.37  rhat=1.010  beta0=-6.612 sigma=1.186 rho=0.545
+NUTS[blackjax]: [beta0, sigma, rho, theta, phi]
+blackjax       FAILED: ValueError: cannot select an axis to squeeze out which has size not equal to one, got shape=(4, 2) and dimensions=(0,)
+Traceback (most recent call last):
+  File "<repo>/bench/posteriordb/13-traffic-accident-nyc/run_pymc_matrix.py", line 47, in main
+    idata = pm.sample(draws=1000, tune=1000, chains=4, cores=1,
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/toshiaki/.virtualenvs/pymc312/lib/python3.12/site-packages/pymc/sampling/mcmc.py", line 995, in sample
+    return _sample_external_nuts(
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/toshiaki/.virtualenvs/pymc312/lib/python3.12/site-packages/pymc/sampling/mcmc.py", line 512, in _sample_external_nuts
+    idata = pymc_jax.sample_jax_nuts(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/toshiaki/.virtualenvs/pymc312/lib/python3.12/site-packages/pymc/sampling/jax.py", line 640, in sample_jax_nuts
+    raw_mcmc_samples, sample_stats, library = sampler_fn(
+                                              ^^^^^^^^^^^
+  File "/home/toshiaki/.virtualenvs/pymc312/lib/python3.12/site-packages/pymc/sampling/jax.py", line 369, in _sample_blackjax_nuts
+    raw_mcmc_samples, sample_stats = map_fn(get_posterior_samples)(keys, initial_points)
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/toshiaki/.virtualenvs/pymc312/lib/python3.12/site-packages/jax/_src/pmap.py", line 319, in wrapped
+    out = jitted_f(*dyn_args_flat)
+          ^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: cannot select an axis to squeeze out which has size not equal to one, got shape=(4, 2) and dimensions=(0,)
+--------------------
+For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.

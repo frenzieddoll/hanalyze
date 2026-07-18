@@ -1,0 +1,28 @@
+system,suite,name,time_ms,acc_main,acc_aux,extra
+haskell,phase17,WeibullMLE_n100,0.115963,2.894046e-2,2.412123e-2,trueK=2.0 trueLam=10.0
+haskell,phase17,WeibullMLE_n1000,1.100202,7.832403e-3,3.242096e-3,trueK=2.0 trueLam=10.0
+haskell,phase17,WeibullMLE_n10000,11.288050,8.741917e-4,5.464890e-4,trueK=2.0 trueLam=10.0
+haskell,phase17,MANOVA_3grp_n30,1.283900e-2,0.152495,4.051899e-34,groupShift=1.5 2vars
+haskell,phase17,MANOVA_3grp_n100,2.196300e-2,0.169970,2.178244e-112,groupShift=1.5 2vars
+haskell,phase17,MANOVA_3grp_n500,5.833500e-2,0.174720,0.000000,groupShift=1.5 2vars
+haskell,phase17,HotellingT2_n50,8.106000e-3,71.709448,4.007888e-10,"shift=0.5 2vars mu0=(0,0)"
+haskell,phase17,HotellingT2_n200,1.381200e-2,293.407335,1.112571e-39,"shift=0.5 2vars mu0=(0,0)"
+haskell,phase17,HotellingT2_n1000,3.769600e-2,1491.031564,1.193871e-198,"shift=0.5 2vars mu0=(0,0)"
+haskell,phase17,LassoCV_n200_p10,0.467362,1.000000e-3,1.000000e-2,grid=7 folds=5
+haskell,phase17,LassoCV_n500_p20,2.291203,1.000000e-3,1.000000e-3,grid=7 folds=5
+haskell,phase17,RidgeCV_n200_p10,0.792083,0.100000,1.000000,grid=7 folds=5
+haskell,phase17,RidgeCV_n500_p20,3.637455,0.100000,1.000000,grid=7 folds=5
+haskell,phase17,LHS_n50_d2,0.229242,3.710792e-2,0.000000,method=LHS
+haskell,phase17,LHS_n200_d3,4.980787,1.478019e-2,0.000000,method=LHS
+haskell,phase17,Halton_n50_d2,2.300000e-5,5.298046e-2,0.000000,method=Halton
+haskell,phase17,Halton_n200_d3,2.100000e-5,5.192047e-2,0.000000,method=Halton
+haskell,phase17,Augment_existing4_add2,7.166500e-2,256.000000,-0.000000,no_python_equivalent
+haskell,phase17,Augment_existing4_add3,8.885200e-2,960.000000,-0.000000,no_python_equivalent
+haskell,phase17,Augment_existing4_add4,0.102695,2304.000000,-0.000000,no_python_equivalent
+haskell,phase17,DSD_k4,3.600000e-5,9.000000,1.000000,no_python_equivalent
+haskell,phase17,DSD_k6,2.446000e-3,13.000000,0.000000,no_python_equivalent
+haskell,phase17,DSD_k8,3.301000e-3,17.000000,0.000000,no_python_equivalent
+haskell,phase17,DSD_k10,4.852000e-3,21.000000,0.000000,no_python_equivalent
+haskell,phase17,SPC_XR_subgroups10,4.710000e-4,9.998750,0.000000,no_python_equivalent subgroupSize=5
+haskell,phase17,SPC_XR_subgroups30,1.083000e-3,9.998281,0.000000,no_python_equivalent subgroupSize=5
+haskell,phase17,SPC_XR_subgroups100,3.280000e-3,9.999512,0.000000,no_python_equivalent subgroupSize=5

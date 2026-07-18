@@ -63,6 +63,47 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
 | optim | `bench-optim` / `bench_optim.py` | (旧 `timeit` のまま) |
 | mo | `bench-mo` / `bench_mo.py` | (旧 `timeit` のまま) |
 | bo | `bench-bo` / `bench_bo.py` | (旧 `timeit` のまま) |
+| **phase17** | **`bench-phase17` / `bench_phase17.py`** | (旧 `timeit` のまま、 Phase 1-7 機能比較) |
+
+## Phase 1-7 機能のベンチマーク (phase17 suite)
+
+Phase 1-7 で追加した Spotfire/JMP gap 機能 (SPC、 Weibull、 NSGA 拡張、
+GroupComparison、 MANOVA、 Regularized CV、 Augment、 SpaceFilling、 DSD、
+Mixture、 Sequential RSM) を Python と比較するための bench suite。
+
+実行:
+
+```bash
+# 1. Haskell 側 (CSV 生成 + 計測)
+cabal run bench-phase17
+
+# 2. Python 側 (同じ CSV を読んで scipy / sklearn / statsmodels と比較)
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
+  bench/venv/bin/python bench/python/bench_phase17.py
+```
+
+現在実装済みの比較:
+
+| 機能 | Haskell | Python 比較先 |
+|---|---|---|
+| Weibull MLE | `Hanalyze.Model.Weibull.fitWeibullMLE` | `scipy.stats.weibull_min.fit` |
+
+予定 (`bench/python/bench_phase17.py` の module docstring に TODO 一覧):
+
+- Hotelling T² / MANOVA → `statsmodels.multivariate`
+- Lasso/Ridge λ CV → `sklearn.linear_model.{LassoCV,RidgeCV}`
+- Augment Design → (Python 直接等価なし、 pyDOE2 / dexpy で比較可)
+- LHS / Maximin / Halton → `scipy.stats.qmc` / `pyDOE2`
+- DSD → `pyDOE2.dsd` (可用なら)
+
+### 新規 Phase 1-7 機能をベンチに追加する手順
+
+1. `bench/haskell/BenchPhase17.hs` に `benchXxx :: ... -> IO BenchRow` を追加
+2. `main` 関数内で呼び出し、 `bench/data/xxx_n*.csv` に共通入力を書き出す
+3. `bench/python/bench_phase17.py` に対応する Python 関数 + `main()` で append
+4. `cabal run bench-phase17 && python3 bench/python/bench_phase17.py` で両側計測
+5. 結果は `bench/results/{haskell,python}/phase17.csv` に書かれ、 aggregator で
+   joiner 可能
 
 詳細レポート / 残課題 / プロファイル分析は:
 
