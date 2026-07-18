@@ -1,3 +1,9 @@
+-- |
+-- Module      : Hanalyze.Viz.GPReport
+-- Description : GP 回帰用の統合 HTML レポート (データ特性・モデル比較・回帰結果・対話予測・付録)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
 {-# LANGUAGE OverloadedStrings #-}
 -- | Comprehensive HTML report for GP regression.
 --
@@ -540,6 +546,16 @@ appendixKernels fits = T.unlines $
       , "    <div class=\"formula\">k(x, x') = σ²_f · exp( −2 sin²(π|x−x'|/p) / ℓ² )</div>"
       , "    <p>周期 p の周期的パターンを持つ関数をモデル化します。</p>"
       ]
+    kernelDesc Linear =
+      [ "    <p><b>Linear (内積) カーネル</b></p>"
+      , "    <div class=\"formula\">k(x, x') = σ²_f · (x·x')</div>"
+      , "    <p>線形な関数をモデル化する非定常カーネル。</p>"
+      ]
+    kernelDesc (Poly d) =
+      [ "    <p><b>Polynomial カーネル (次数 " <> T.pack (show d) <> ")</b></p>"
+      , "    <div class=\"formula\">k(x, x') = (γ·(x·x') + 1)^" <> T.pack (show d) <> " &nbsp; (γ = 1/(2ℓ²))</div>"
+      , "    <p>多項式の決定境界をモデル化する非定常カーネル。</p>"
+      ]
 
 appendixHyperparams :: Text
 appendixHyperparams = T.unlines
@@ -687,6 +703,8 @@ jsKernelId :: Kernel -> Text
 jsKernelId RBF      = "rbf"
 jsKernelId Matern52 = "matern52"
 jsKernelId Periodic = "periodic"
+jsKernelId Linear   = "linear"
+jsKernelId (Poly _) = "poly"
 
 jsParams :: Kernel -> GPParams -> Text
 jsParams ker p = "{ell:" <> fmtJS (gpLengthScale p)

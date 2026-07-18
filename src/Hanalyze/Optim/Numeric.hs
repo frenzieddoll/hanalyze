@@ -1,5 +1,10 @@
-{-# LANGUAGE OverloadedStrings #-}
--- | Numeric gradients (finite differences).
+-- |
+-- Module      : Hanalyze.Optim.Numeric
+-- Description : 数値勾配 (有限差分法)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Numeric gradients (finite differences).
 --
 -- For situations where automatic differentiation is impractical (e.g. GP
 -- log-marginal likelihood whose @det@ is computed inside hmatrix and would
@@ -8,6 +13,7 @@
 --   * 'numGradCentral' — central differences (error @O(h²)@; recommended).
 --   * 'numGradForward' — forward differences (error @O(h)@; half the cost).
 --   * 'numHessianCentral' — Hessian approximation via central differences.
+{-# LANGUAGE OverloadedStrings #-}
 module Hanalyze.Optim.Numeric
   ( numGradCentral
   , numGradForward

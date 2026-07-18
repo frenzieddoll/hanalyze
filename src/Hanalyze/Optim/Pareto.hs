@@ -1,6 +1,10 @@
-{-# LANGUAGE StrictData #-}
-{-# LANGUAGE OverloadedStrings #-}
--- | Pareto-front utilities for evaluating multi-objective results.
+-- |
+-- Module      : Hanalyze.Optim.Pareto
+-- Description : 多目的最適化結果評価のための Pareto フロント関連ユーティリティ
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Pareto-front utilities for evaluating multi-objective results.
 --
 --   * 'isNonDominated' — is a given point non-dominated within the front?
 --   * 'paretoFront'    — extract just the non-dominated points from a set.
@@ -12,6 +16,8 @@
 --
 -- All objectives are treated as **minimized**, matching the NSGA-II
 -- convention.
+{-# LANGUAGE StrictData #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Hanalyze.Optim.Pareto
   ( isNonDominated
   , paretoFront

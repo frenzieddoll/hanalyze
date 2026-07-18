@@ -1,6 +1,12 @@
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE OverloadedStrings #-}
--- | Regularized regression (Ridge / Lasso / Elastic Net) in one module.
+-- |
+-- Module      : Hanalyze.Model.Regularized
+-- Description : 正則化回帰 (Ridge / Lasso / Elastic Net) を単一 API に統合したモジュール
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Regularized regression (Ridge / Lasso / Elastic Net) in one module.
 --
 -- The penalty is encoded as the sum type 'Penalty', and 'fitRegularized'
 -- handles all four models:
@@ -18,6 +24,8 @@ module Hanalyze.Model.Regularized
   ( Penalty (..)
   , RegFit (..)
   , fitRegularized
+  , fitRidge
+  , fitElasticNet
   , predictRegularized
   , standardize
   , unstandardizeBeta
@@ -31,6 +39,19 @@ module Hanalyze.Model.Regularized
   , fitRegularizedWith
     -- * Regularization path
   , regularizationPath
+
+    -- * λ 自動選択 (Phase 4.4、 request/150)
+  , PenaltyKind (..)
+  , LambdaSelection (..)
+  , selectLambdaCV
+  , selectLambdaCVPure
+
+    -- * Phase 31: CD 内部プリミティブの再利用 (RegularizedAdvanced 用)
+  , softThreshold
+  , cdLoop
+  , mkRegFit
+  , fitOLS
+  , fitLasso
   ) where
 
 import qualified Data.Vector                  as V
@@ -38,8 +59,14 @@ import qualified Data.Vector.Storable         as VS
 import qualified Data.Vector.Storable.Mutable as VSM
 import qualified Numeric.LinearAlgebra        as LA
 import           Control.Monad                (forM_, when)
-import           Data.List                    (foldl')
+import           Control.Monad.Primitive      (PrimMonad, PrimState)
+import           Control.Monad.ST             (runST)
+import           Data.List                    (foldl', sortBy)
+import           Data.Ord                     (comparing)
+import           Data.Word                    (Word32)
 import           System.IO.Unsafe             (unsafePerformIO)
+import qualified System.Random.MWC            as MWC
+import qualified Hanalyze.Stat.CV             as HCV
 
 -- ---------------------------------------------------------------------------
 -- ペナルティ型
@@ -539,3 +566,114 @@ regularizationPath mkPen lambdas x y =
   [ (lam, LA.toList (rfBeta (fitRegularized (mkPen lam) x y)))
   | lam <- lambdas ]
 
+
+-- ===========================================================================
+-- λ 自動選択 (Phase 4.4、 request/150)
+-- ===========================================================================
+
+-- | Penalty の "形" (λ 抜き)。 'selectLambdaCV' の grid 探索で λ を変化させる
+-- 際の penalty family を指定する。
+data PenaltyKind
+  = KindRidge                -- ^ Ridge (= 'L2' λ)
+  | KindLasso                -- ^ Lasso (= 'L1' λ)
+  | KindElasticNet !Double   -- ^ ElasticNet。 @α@ = L1 比率 (0 ≤ α ≤ 1)。
+                             --   total penalty = λ·(α·L1 + (1-α)/2·L2)、 内部で
+                             --   'ElasticNet' (α·λ) ((1-α)·λ) に展開。
+  deriving (Show, Eq)
+
+-- | λ 自動選択の結果。
+data LambdaSelection = LambdaSelection
+  { lsBestLambda  :: !Double      -- ^ CV MSE が最小の λ
+  , lsLambdas     :: ![Double]    -- ^ 検証した λ 値 (入力順)
+  , lsCVScores    :: ![Double]    -- ^ 各 λ の CV MSE (lsLambdas と対応)
+  , lsCVScoreSE   :: ![Double]    -- ^ 各 λ の CV MSE の標準誤差 (fold 間 SD)
+  , lsOneSeLambda :: !Double      -- ^ 1-SE rule の λ (best ± 1·SE 範囲内で
+                                  --   最大スパース = 最大 λ)
+  , lsKind        :: !PenaltyKind -- ^ 入力 PenaltyKind を保持 (canvas 側参照用)
+  } deriving (Show)
+
+-- | k-fold CV で λ を自動選択。
+--
+-- 入力 'PenaltyKind' に従って λ grid を Ridge/Lasso/EN の 'Penalty' に展開し、
+-- 各 λ について k-fold CV を実行、 fold 平均 MSE を計算する。
+--
+-- 返り値の 'lsBestLambda' は MSE 最小の λ、 'lsOneSeLambda' は 1-SE rule
+-- (= best MSE から 1·SE 以内で最大スパースな λ) の λ。
+selectLambdaCV
+  :: PrimMonad m
+  => Int               -- ^ k-fold の k (≥ 2)
+  -> PenaltyKind       -- ^ Ridge / Lasso / ElasticNet
+  -> [Double]          -- ^ 検証する λ grid (log-spaced 推奨)
+  -> LA.Matrix Double  -- ^ X (n × p)
+  -> LA.Vector Double  -- ^ y (n)
+  -> MWC.Gen (PrimState m)  -- ^ shuffle 用 (ST/IO 両用)
+  -> m LambdaSelection
+selectLambdaCV k kind lambdas xMat yVec gen = do
+  let n = LA.rows xMat
+  folds <- HCV.kFold k n gen
+  let perLambda lam =
+        let scores =
+              [ mseForFold (penaltyOf kind lam) xMat yVec trainIdx testIdx
+              | (trainIdx, testIdx) <- folds, not (null testIdx)
+              ]
+            !nFolds = fromIntegral (length scores) :: Double
+            mean   = sum scores / nFolds
+            varN   = sum [(s - mean) ** 2 | s <- scores] / max 1 (nFolds - 1)
+            !se    = sqrt (varN / nFolds)
+        in (mean, se)
+      stats = map perLambda lambdas
+      mses  = map fst stats
+      ses   = map snd stats
+      indexedMSEs = zip3 lambdas mses ses
+      sortedAsc   = sortBy (comparing (\(_, m, _) -> m)) indexedMSEs
+      (bestL, bestMSE, bestSE) =
+        case sortedAsc of
+          (h:_) -> h
+          []    -> (0, 0, 0)
+      threshold = bestMSE + bestSE
+      -- 1-SE λ: best から 1·SE 以内の λ のうち最大 (= 最大スパース)
+      oneSe =
+        let cands = [ lam | (lam, m, _) <- indexedMSEs, m <= threshold ]
+        in if null cands then bestL else maximum cands
+  pure LambdaSelection
+    { lsBestLambda  = bestL
+    , lsLambdas     = lambdas
+    , lsCVScores    = mses
+    , lsOneSeLambda = oneSe
+    , lsCVScoreSE   = ses
+    , lsKind        = kind
+    }
+
+-- | 純粋 (seed) 版 'selectLambdaCV'。 同 seed → 同 λ 選択 (ST/IO ビット一致)。
+-- 罰則回帰の高レベル spec (Phase 70.7 = `df |-> lasso …`) を pure 'fitWith' で完結
+-- させる継ぎ目 (GP の `AutoCV` / `kMeansPure` / `fitRFVPure` と一貫)。
+selectLambdaCVPure
+  :: Int -> PenaltyKind -> [Double] -> LA.Matrix Double -> LA.Vector Double
+  -> Word32 -> LambdaSelection
+selectLambdaCVPure k kind lambdas xMat yVec seed =
+  runST (MWC.initialize (V.singleton seed) >>= selectLambdaCV k kind lambdas xMat yVec)
+
+-- | 内部 helper: PenaltyKind と λ から具体 'Penalty' を組み立てる。
+penaltyOf :: PenaltyKind -> Double -> Penalty
+penaltyOf KindRidge          lam = L2 lam
+penaltyOf KindLasso          lam = L1 lam
+penaltyOf (KindElasticNet a) lam = ElasticNet (a * lam) ((1 - a) * lam)
+
+-- | 1 fold の MSE を返す。 train index で fit、 test index で predict + 残差²平均。
+mseForFold
+  :: Penalty
+  -> LA.Matrix Double
+  -> LA.Vector Double
+  -> [Int]            -- train 行 index
+  -> [Int]            -- test 行 index
+  -> Double
+mseForFold pen xMat yVec trainIdx testIdx =
+  let xTr = xMat LA.? trainIdx
+      yTr = LA.fromList [ yVec LA.! i | i <- trainIdx ]
+      xTe = xMat LA.? testIdx
+      yTe = LA.fromList [ yVec LA.! i | i <- testIdx ]
+      fit = fitRegularized pen xTr yTr
+      yHat = predictRegularized fit xTe
+      resid = yTe - yHat
+      nTe = fromIntegral (length testIdx) :: Double
+  in LA.sumElements (resid * resid) / nTe

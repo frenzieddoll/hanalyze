@@ -1,3 +1,9 @@
+-- |
+-- Module      : Hanalyze.Viz.MCMC
+-- Description : Vega-Lite ベースの MCMC 診断プロット (トレース・事後密度・自己相関・forest/energy 等)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
 {-# LANGUAGE OverloadedStrings #-}
 -- | MCMC diagnostic plots (built on Vega-Lite).
 --
@@ -37,7 +43,7 @@ import qualified Data.Text as T
 import Graphics.Vega.VegaLite
 
 import Hanalyze.MCMC.Core  (Chain (..), chainVals)
-import Hanalyze.Stat.MCMC    (autocorr, hdi, kde, bfmi)
+import Hanalyze.Stat.MCMC    (autocorr, hdi, kde, bfmi, rankHist)
 import Hanalyze.Stat.Summary (SummaryRow (..), posteriorSummary)
 import Data.List   (sortBy)
 import Data.Maybe (fromMaybe)
@@ -578,7 +584,7 @@ posteriorSummaryHtml title rows =
       header = T.unlines
         [ "    <tr>"
         , "      <th>Parameter</th><th>Mean</th><th>SD</th>"
-        , "      <th>HDI 3%</th><th>HDI 97%</th><th>ESS</th>" <> rhatHeader
+        , "      <th>HDI 3%</th><th>HDI 97%</th><th>ESS (bulk)</th>" <> rhatHeader
         , "    </tr>"
         ]
   in T.unlines
@@ -615,27 +621,27 @@ printPosteriorSummary params chains = do
   let rows  = posteriorSummary params chains
       multi = any (\r -> case srRhat r of Just _ -> True; _ -> False) rows
       hdr | multi     =
-              printf "%-12s  %10s  %10s  %10s  %10s  %6s  %6s\n"
+              printf "%-12s  %10s  %10s  %10s  %10s  %8s  %6s\n"
                      ("Parameter" :: String) ("mean" :: String) ("sd" :: String)
                      ("hdi_3%" :: String) ("hdi_97%" :: String)
-                     ("ess" :: String) ("r_hat" :: String)
+                     ("ess_bulk" :: String) ("r_hat" :: String)
           | otherwise =
-              printf "%-12s  %10s  %10s  %10s  %10s  %6s\n"
+              printf "%-12s  %10s  %10s  %10s  %10s  %8s\n"
                      ("Parameter" :: String) ("mean" :: String) ("sd" :: String)
                      ("hdi_3%" :: String) ("hdi_97%" :: String)
-                     ("ess" :: String)
+                     ("ess_bulk" :: String)
       pr r
         | multi =
             let rh = case srRhat r of Just v -> printf "%.3f" v; Nothing -> "—" :: String
-            in printf "%-12s  %10.4f  %10.4f  %10.4f  %10.4f  %6d  %6s\n"
+            in printf "%-12s  %10.4f  %10.4f  %10.4f  %10.4f  %8d  %6s\n"
                   (T.unpack (srName r)) (srMean r) (srSD r)
                   (srHdiLo r) (srHdiHi r) (round (srEssV r) :: Int) rh
         | otherwise =
-            printf "%-12s  %10.4f  %10.4f  %10.4f  %10.4f  %6d\n"
+            printf "%-12s  %10.4f  %10.4f  %10.4f  %10.4f  %8d\n"
                   (T.unpack (srName r)) (srMean r) (srSD r)
                   (srHdiLo r) (srHdiHi r) (round (srEssV r) :: Int)
   hdr
-  putStrLn (replicate (if multi then 79 else 72) '-')
+  putStrLn (replicate (if multi then 81 else 74) '-')
   mapM_ pr rows
 
 -- ---------------------------------------------------------------------------
@@ -656,31 +662,14 @@ rankPlot cfg nBins names chains = toVegaLite
     nChains = length chains
     panel pname =
       let perChain  = map (chainVals pname) chains
-          flat      = [ (cid, v)
-                      | (cid, vs) <- zip [(1 :: Int) ..] perChain
-                      , v <- vs ]
-          n         = length flat
-          -- 順位 (1..n) を value 昇順に割り当てる
-          indexed   = zip [(0 :: Int) ..] flat
-          sorted    = sortBy (\(_, (_, a)) (_, (_, b)) -> compare a b) indexed
-          ranked    = zipWith (\rk (origIdx, _) -> (origIdx, rk))
-                              [(1 :: Int) ..] sorted
-          rankBy    = sortBy (\(a,_) (b,_) -> compare a b) ranked
-          ranks     = map snd rankBy   -- 元 (chain, value) 順序の rank 列
-          chainSeq  = map fst flat
-          binSize   = max 1 (n `div` nBins)
-          binOf r   = min (nBins - 1) ((r - 1) `div` binSize)
-          counts    = [ ((cid, b), 1 :: Int)
-                      | (cid, r) <- zip chainSeq ranks
-                      , let b = binOf r ]
-          -- (chain, bin) ごとに集計
-          tally     = groupAndCount counts
-          xs        = [ fromIntegral b :: Double
-                      | (_, b) <- map fst tally ]
-          ys        = [ fromIntegral c :: Double
-                      | (_, c) <- tally ]
-          chainIds  = [ T.pack (show cid)
-                      | ((cid, _), _) <- tally ]
+          -- rank 正規化ヒストグラムは Stat.MCMC.rankHist に一元化 (Plot 経路と共有)。
+          hists     = rankHist nBins perChain          -- [chain][bin] (chain は 0-based)
+          triples   = [ (cid, b, c)
+                      | (cid, cnts) <- zip [(1 :: Int) ..] hists   -- 表示は 1-based chain
+                      , (b, c)      <- zip [(0 :: Int) ..] cnts ]
+          xs        = [ fromIntegral b :: Double | (_, b, _) <- triples ]
+          ys        = [ fromIntegral c :: Double | (_, _, c) <- triples ]
+          chainIds  = [ T.pack (show cid)          | (cid, _, _) <- triples ]
       in asSpec
           [ dataFromColumns []
               . dataColumn "bin"   (Numbers xs)
@@ -702,16 +691,6 @@ rankPlot cfg nBins names chains = toVegaLite
           , width (max 60 (plotWidth cfg / fromIntegral nChains))
           , height 100
           ]
-
-    groupAndCount :: [((Int, Int), Int)] -> [((Int, Int), Int)]
-    groupAndCount xs =
-      let mp = foldr (\(k, v) acc -> insertWith (+) k v acc) [] xs
-      in mp
-      where
-        insertWith f k v ((k', v'):rest)
-          | k == k'   = (k', f v v') : rest
-          | otherwise = (k', v')     : insertWith f k v rest
-        insertWith _ k v [] = [(k, v)]
 
 rankPlotFile :: OutputFormat -> FilePath -> PlotConfig
              -> Int -> [Text] -> [Chain] -> IO ()

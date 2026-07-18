@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Result type and 'Model' class shared by every regression model.
+-- |
+-- Module      : Hanalyze.Model.Core
+-- Description : 全回帰モデル共通の Result 型と Model 型クラス
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Result type and 'Model' class shared by every regression model.
 --
 -- For multi-output support, the principal fields of 'FitResult' are
 -- generalized to @Matrix Double@ (@n × q@) or @Vector Double@ (@q@-vector).
@@ -13,6 +19,8 @@
 module Hanalyze.Model.Core
   ( FitResult (..)
   , Model (..)
+  , PredictiveModel (..)
+  , ResidualModel (..)
   , Band (..)
     -- * Vec / Scalar accessors (for @q = 1@)
   , coefficientsV
@@ -128,3 +136,41 @@ class Model m where
           -> LA.Matrix Double  -- ^ Coefficients @β@ of shape @p × q@.
           -> LA.Matrix Double  -- ^ Test input @X_new@ of shape @m × p@.
           -> LA.Matrix Double  -- ^ Predictions @ŷ@ of shape @m × q@.
+
+-- ---------------------------------------------------------------------------
+-- 能力別 protocol (Phase 46 / plot Phase 15 = analyze 統合 A 先行)
+--
+-- モデルの「能力」 を細粒度 class に割り、 持てる能力だけ instance を生やす
+-- (spec §2.3 = god class を避ける)。 数値核は hmatrix で完結 (list 操作で書かない)。
+-- これらは plot 非依存 = hanalyze-portable (toPlot/Plottable は別途 Hanalyze.Plot)。
+-- ===========================================================================
+
+-- | 残差を取り出せるフィット結果。 'toPlot' の残差診断図 (残差 vs fitted / QQ)
+-- が要求する最小能力。
+class ResidualModel r where
+  -- | 残差ベクトル (単出力 @q = 1@ を想定。 多出力は 'residualsCol' を使う)。
+  residualsOf :: r -> LA.Vector Double
+
+-- | 新しい入力に対し予測できるフィット結果。 'toPlot' の回帰線・予測 band が
+-- 要求する最小能力。
+--
+-- ⚠ 既定の意味は **線形予測子** @η = X_new · β@ (列 = 各応答)。 LM では平均応答に
+-- 一致するが、 GLM の平均応答 @μ = g⁻¹(η)@ には逆リンクが要る (モデルタグ依存)
+-- ため、 GLM は 'Model' の 'predict' を使うこと。 本 class は線形スケールの予測を
+-- 与える低レベル能力と位置づける。
+class PredictiveModel r where
+  -- | @X_new (m×p)@ に対する線形予測子 @ŷ = X_new · β (m×q)@。
+  predictAt :: r -> LA.Matrix Double -> LA.Matrix Double
+
+-- ---------------------------------------------------------------------------
+-- FitResult instances
+--
+-- 'FitResult' は LM / GLM / GLMM が共有する数値核 (= 1 instance で 3 モデルを覆う)。
+-- ===========================================================================
+
+instance ResidualModel FitResult where
+  residualsOf = residualsV
+
+instance PredictiveModel FitResult where
+  -- ŷ = X_new · β  (β = coefficients、 線形予測子)
+  predictAt res xNew = xNew LA.<> coefficients res

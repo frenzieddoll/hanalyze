@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Cross-validation framework.
+-- |
+-- Module      : Hanalyze.Stat.CV
+-- Description : クロスバリデーションのフレームワーク (fold 分割 + 汎用 crossValidate)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Cross-validation framework.
 --
 -- Provides train/validation splits and a generic 'crossValidate'
 -- function that runs a user-supplied @fit@ + @score@ on each fold.
@@ -44,6 +50,7 @@ import qualified Data.Map.Strict       as Map
 import qualified Data.Vector           as V
 import qualified Data.Vector.Mutable   as VM
 import           Control.Monad         (forM, forM_)
+import           Control.Monad.Primitive (PrimMonad, PrimState)
 import           Data.List             (sortBy)
 import           Data.Ord              (comparing)
 import qualified System.Random.MWC     as MWC
@@ -60,12 +67,16 @@ type Fold = ([Int], [Int])
 -- Split strategies
 -- ---------------------------------------------------------------------------
 
--- | Random k-fold split.
+-- | Random k-fold split. 'PrimMonad' 汎用 (mwc は 'PrimMonad' 汎用) ゆえ ST/IO 両経路で
+-- 同コード。 IO 呼び出しは従来どおり。 純粋 (seed) 経路は呼び出し側で
+-- @runST (MWC.initialize (V.singleton seed) >>= kFold k n)@ で完結 (Phase 70.7 = 罰則回帰
+-- の λ CV 純粋化に使う・[[selectLambdaCV]])。
 kFold
-  :: Int            -- ^ Number of folds @k@.
+  :: PrimMonad m
+  => Int            -- ^ Number of folds @k@.
   -> Int            -- ^ Total sample count @n@.
-  -> MWC.GenIO
-  -> IO [Fold]
+  -> MWC.Gen (PrimState m)
+  -> m [Fold]
 kFold k n gen
   | k < 2     = pure [(allIdx n, [])]
   | k > n     = leaveOneOut n
@@ -118,7 +129,7 @@ stratifiedKFold k labels gen
 
 -- | Leave-one-out cross-validation: @n@ folds, each test set is a
 -- single row.
-leaveOneOut :: Int -> IO [Fold]
+leaveOneOut :: Applicative f => Int -> f [Fold]
 leaveOneOut n =
   pure [ ([j | j <- [0 .. n - 1], j /= i], [i]) | i <- [0 .. n - 1] ]
 
@@ -236,8 +247,8 @@ gridSearchCV folds grid fp sf d = do
 allIdx :: Int -> [Int]
 allIdx n = [0 .. n - 1]
 
--- | Fisher-Yates shuffle producing a list of indices.
-shuffleIndices :: Int -> MWC.GenIO -> IO [Int]
+-- | Fisher-Yates shuffle producing a list of indices. 'PrimMonad' 汎用 (ST/IO 両用)。
+shuffleIndices :: PrimMonad m => Int -> MWC.Gen (PrimState m) -> m [Int]
 shuffleIndices n gen = do
   v <- V.thaw (V.fromList [0 .. n - 1])
   forM_ [n - 1, n - 2 .. 1] $ \i -> do
@@ -248,8 +259,8 @@ shuffleIndices n gen = do
     VM.write v j a
   V.toList <$> V.freeze v
 
--- | Shuffle an arbitrary list.
-shuffleList :: [a] -> MWC.GenIO -> IO [a]
+-- | Shuffle an arbitrary list. 'PrimMonad' 汎用 (ST/IO 両用)。
+shuffleList :: PrimMonad m => [a] -> MWC.Gen (PrimState m) -> m [a]
 shuffleList xs gen = do
   let n = length xs
   v <- V.thaw (V.fromList xs)

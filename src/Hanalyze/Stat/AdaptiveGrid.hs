@@ -1,4 +1,10 @@
--- | Adaptive 1D grid generation.
+-- |
+-- Module      : Hanalyze.Stat.AdaptiveGrid
+-- Description : 複数 id 間で変化の急な領域に点を集中させる適応的 1D グリッド生成
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Adaptive 1D grid generation.
 --
 -- Builds a common grid that concentrates grid points in regions where the
 -- function changes rapidly across multiple ids.

@@ -1,16 +1,32 @@
--- | Linear and generalized linear mixed-effects models.
+-- |
+-- Module      : Hanalyze.Model.GLMM
+-- Description : 線形/一般化線形混合効果モデル (random intercept/slope)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
 --
--- 'fitLME' fits a Gaussian linear mixed-effects model via exact EM.
--- 'fitGLMM' fits a non-Gaussian GLMM via Laplace approximation. Both
--- support per-group random intercepts and slopes. The multi-output
--- variants ('fitLMEMulti', 'fitGLMMMulti') run the algorithm independently
--- per response column.
+-- Linear and generalized linear mixed-effects models.
+--
+-- 'fitLME' / 'fitGLMM' fit a __random-intercept__ mixed model: a single
+-- scalar random effect per group (variance @σ²_u@, scalar BLUP @û_j@).
+-- 'fitLME' is Gaussian via exact EM; 'fitGLMM' is non-Gaussian via Laplace.
+--
+-- 'fitLMEGeneral' / 'fitGLMMGeneral' (Phase 48) generalise to __vector
+-- random effects__ (random intercept + slopes): a per-group design block
+-- @Z_j@ with an @r×r@ covariance matrix @G@ and a vector BLUP @b̂_j@. With
+-- @r = 1@ (intercept only) they reduce exactly to 'fitLME' / 'fitGLMM'.
+--
+-- The multi-output variants ('fitLMEMulti', 'fitGLMMMulti') run the
+-- random-intercept algorithm independently per response column.
 module Hanalyze.Model.GLMM
   ( GLMMResult (..)
   , fitLME
   , fitGLMM
   , fitLMEDataFrame
   , fitGLMMDataFrame
+    -- * General random effects (intercept + slope; Phase 48)
+  , GLMMResultRE (..)
+  , fitLMEGeneral
+  , fitGLMMGeneral
     -- * Multi-output (per-column EM/Laplace; Family/Link shared)
   , GLMMResultMulti (..)
   , fitLMEMulti
@@ -18,6 +34,8 @@ module Hanalyze.Model.GLMM
     -- * Standard errors (request/100)
   , glmmFixedSE
   , glmmBLUPSE
+    -- * Group helper (shared with Formula.Mixed)
+  , buildGroups
   ) where
 
 import qualified DataFrame.Internal.DataFrame as DXD
@@ -52,6 +70,27 @@ data GLMMResult = GLMMResult
   , glmmICC      :: Double           -- ^ Intraclass correlation (exact
                                      --   for Gaussian; link-scale
                                      --   approximation otherwise).
+  } deriving (Show)
+
+-- | Fit result for a __general__ mixed model with vector random effects
+--   (random intercept + slopes), Phase 48.
+--
+--   * LME (Gaussian):     @y_j = X_j β + Z_j b_j + ε_j@, @b_j ~ N(0, G)@,
+--     @ε_i ~ N(0, σ²)@, where @Z_j@ is the per-group random-effect design
+--     block (@n_j × r@) and @G@ is the @r×r@ random-effect covariance.
+--   * GLMM (non-Gaussian): @g(E[y|b]) = X_j β + Z_j b_j@, @b_j ~ N(0, G)@.
+--
+--   With @r = 1@ and an intercept-only @Z@ this reduces exactly to the
+--   scalar 'GLMMResult' (@reRandCov = [[σ²_u]]@, @reBLUPs@ a single column).
+data GLMMResultRE = GLMMResultRE
+  { reFixed    :: FitResult        -- ^ Fixed-effect fit (β, conditional
+                                   --   fitted values, residuals, R²).
+  , reRandCov  :: LA.Matrix Double -- ^ Random-effect covariance @G@ (@r×r@).
+  , reResidVar :: Double           -- ^ Residual variance @σ²@ (1.0 for
+                                   --   non-Gaussian families).
+  , reBLUPs    :: LA.Matrix Double -- ^ BLUPs @b̂@ as a @q×r@ matrix (row j =
+                                   --   group j, aligned with 'reGroups').
+  , reGroups   :: V.Vector Text    -- ^ Sorted unique group labels (length q).
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
@@ -157,6 +196,120 @@ fitLME x y idx labels sizes =
                           (LA.fromList [r2])
 
   in GLMMResult fitRes su2F s2F uF labels icc
+
+-- ---------------------------------------------------------------------------
+-- General random effects (intercept + slope): vector EM for Gaussian LME
+-- ---------------------------------------------------------------------------
+
+-- | Fit a Gaussian LME with __vector__ random effects via EM (ML), Phase 48.
+--
+-- Per group @j@ the model is @y_j = X_j β + Z_j b_j + ε_j@ with
+-- @b_j ~ N(0, G)@ (@G@ is @r×r@) and @ε ~ N(0, σ²I)@. The @Z@ argument holds
+-- the raw random-effect design columns (usually a sub-block of @X@, e.g. the
+-- intercept column plus the slope column for @(1+x|g)@); rows align with @X@.
+--
+-- EM (Laird-Ware), each step given @(β, G, σ²)@:
+--
+--   * E-step (per group, @r×r@): @P_j = (G⁻¹ + Z_jᵀZ_j/σ²)⁻¹@,
+--     @b̂_j = P_j Z_jᵀ r_j / σ²@ with @r_j = y_j − X_j β@.
+--   * M-step: @β = (XᵀX)⁻¹Xᵀ(y − Zb̂)@,
+--     @G = (1/q) Σ_j (P_j + b̂_j b̂_jᵀ)@,
+--     @σ² = (1/n)[Σ‖y_j − X_j β − Z_j b̂_j‖² + Σ tr(Z_jᵀZ_j P_j)]@.
+--
+-- With @r = 1@ and an intercept-only @Z@ this reproduces 'fitLME' exactly.
+-- All linear algebra is hmatrix-native (no list-based fallbacks).
+--
+-- TODO (Phase 48 follow-up): this is ML; a REML variant would correct the
+-- variance estimates for the fixed-effect degrees of freedom.
+fitLMEGeneral
+  :: LA.Matrix Double  -- ^ X (fixed-effect design, must include intercept)
+  -> LA.Matrix Double  -- ^ Z (random-effect design, @n × r@; rows align with X)
+  -> LA.Vector Double  -- ^ y
+  -> V.Vector Int      -- ^ per-observation group index (0-based)
+  -> V.Vector Text     -- ^ sorted group labels (length q)
+  -> GLMMResultRE
+fitLMEGeneral x z y idx labels =
+  let n       = LA.rows x
+      q       = V.length labels
+      r       = LA.cols z
+      members = precompMembers idx q n
+      zRows   = V.fromList (LA.toRows z)         -- O(1) per-row access for scatter
+
+      -- per-group X_j, Z_j, y_j (and Z_jᵀZ_j) precomputed once
+      groupBlk j =
+        let mem = members V.! j
+            xj  = x LA.? mem
+            zj  = z LA.? mem
+            yj  = LA.fromList [ y `LA.atIndex` i | i <- mem ]
+            ztz = LA.tr zj LA.<> zj
+        in (xj, zj, yj, ztz)
+      blocks = V.fromList [ groupBlk j | j <- [0..q-1] ]
+
+      -- initial values: OLS fixed fit, residual variance split intercept/resid
+      beta0 = LA.flatten (x LA.<\> LA.asColumn y)
+      yMean = LA.sumElements y / fromIntegral n
+      yDev  = y - LA.konst yMean n
+      ssTot = yDev `LA.dot` yDev
+      varY  = ssTot / fromIntegral n
+      g0    = LA.scale (varY / 2) (LA.ident r)
+      s20   = varY / 2
+
+      -- scatter (Zb̂)_i = Z_i · b̂_{g(i)}
+      scatterZb bhats =
+        LA.fromList [ (zRows V.! i) `LA.dot` (bhats V.! (idx V.! i)) | i <- [0..n-1] ]
+
+      emStep (beta, gMat, s2) =
+        let gInv  = LA.inv gMat
+            -- E-step: posterior cov P_j and mean b̂_j per group
+            pbs   = V.map (\(xj, zj, yj, ztz) ->
+                      let rj  = yj - xj LA.#> beta
+                          pj  = LA.inv (gInv + LA.scale (1/s2) ztz)
+                          bj  = LA.scale (1/s2) (pj LA.#> (LA.tr zj LA.#> rj))
+                      in (pj, bj, ztz)) blocks
+            bhats = V.map (\(_, bj, _) -> bj) pbs
+            zb    = scatterZb bhats
+            -- M-step β
+            betaN = LA.flatten (x LA.<\> LA.asColumn (y - zb))
+            -- M-step G = (1/q) Σ (P_j + b̂_j b̂_jᵀ)
+            gAcc  = V.foldl' (\acc (pj, bj, _) -> acc + pj + LA.outer bj bj)
+                             (LA.konst 0 (r, r)) pbs
+            gN    = LA.scale (1 / fromIntegral q) gAcc
+            -- M-step σ²: conditional residuals (using updated β) + trace term
+            zbN   = scatterZb bhats
+            r1    = y - x LA.#> betaN - zbN
+            trc   = V.sum (V.map (\(pj, _, ztz) -> LA.sumElements (ztz * pj)) pbs)
+            s2N   = max 1e-10 $ (r1 `LA.dot` r1 + trc) / fromIntegral n
+        in (betaN, gN, s2N)
+
+      converge 0 st            = st
+      converge k st@(b, gM, s) =
+        let st'@(b', gM', s') = emStep st
+        in if    LA.norm_2 (b' - b)            < emTol
+              && LA.norm_2 (LA.flatten (gM' - gM)) < emTol
+              && abs (s' - s)                   < emTol
+           then st'
+           else converge (k-1) st'
+
+      (betaF, gF, s2F) = converge maxEmIter (beta0, g0, s20)
+
+      -- final BLUPs and conditional fit
+      gInvF  = LA.inv gF
+      bhatsF = V.map (\(xj, zj, yj, ztz) ->
+                 let rj = yj - xj LA.#> betaF
+                     pj = LA.inv (gInvF + LA.scale (1/s2F) ztz)
+                 in LA.scale (1/s2F) (pj LA.#> (LA.tr zj LA.#> rj))) blocks
+      zbF     = scatterZb bhatsF
+      fittedV = x LA.#> betaF + zbF
+      residV  = y - fittedV
+      ssResF  = residV `LA.dot` residV
+      r2      = if ssTot == 0 then 1.0 else 1.0 - ssResF / ssTot
+      fitRes  = FitResult (LA.asColumn betaF)
+                          (LA.asColumn fittedV)
+                          (LA.asColumn residV)
+                          (LA.fromList [r2])
+      blupMat = LA.fromRows (V.toList bhatsF)   -- q×r
+
+  in GLMMResultRE fitRes gF s2F blupMat labels
 
 -- ---------------------------------------------------------------------------
 -- Laplace approximation for non-Gaussian GLMM
@@ -362,6 +515,151 @@ fitGLMM family link x y idx labels _sizes =
                             (LA.fromList [r2])
 
   in GLMMResult fitRes su2F 1.0 uF labels icc
+
+-- ---------------------------------------------------------------------------
+-- General random effects (intercept + slope): vector Laplace for GLMM
+-- ---------------------------------------------------------------------------
+
+-- | Multivariate inner Newton-Raphson: find the conditional mode @b̂_j@ of one
+-- group and return @(b̂_j, P_j)@ where @P_j = (Σ_i w_i z_i z_iᵀ + G⁻¹)⁻¹@ is
+-- the Laplace posterior covariance at the mode.
+--
+-- Maximises @Q_j(b) = Σ_i log p(y_i | g⁻¹(η_i + z_iᵀ b)) − ½ bᵀ G⁻¹ b@.
+-- Newton step solves @H δ = grad@ with
+-- @grad = Σ_i s_i z_i − G⁻¹ b@, @H = Σ_i w_i z_i z_iᵀ + G⁻¹@.
+nrOneGroupVec
+  :: Family -> LinkFn
+  -> LA.Matrix Double    -- ^ G⁻¹ (r×r)
+  -> [LA.Vector Double]  -- ^ z_i rows for this group (each length r)
+  -> [Double]            -- ^ etaFixed_i = (X_i β)
+  -> [Double]            -- ^ y_i
+  -> LA.Vector Double    -- ^ initial b (length r)
+  -> (LA.Vector Double, LA.Matrix Double)
+nrOneGroupVec family link gInv zs etaFixed ys = go maxNRIter
+  where
+    clamp = glmmClampMu family
+    gInvL = glmmInvLink link
+    r     = LA.rows gInv
+
+    -- negative Hessian (= posterior precision) at b: Σ_i w_i z_i z_iᵀ + G⁻¹
+    hessAt b =
+      let etas = zipWith (\z ef -> ef + z `LA.dot` b) zs etaFixed
+          mus  = map (clamp . gInvL) etas
+          ws   = map (glmmWeight family link) mus
+      in foldr (\(w, z) acc -> acc + LA.scale w (LA.outer z z)) gInv (zip ws zs)
+
+    go 0 b = (b, LA.inv (hessAt b))
+    go k b =
+      let etas  = zipWith (\z ef -> ef + z `LA.dot` b) zs etaFixed
+          mus   = map (clamp . gInvL) etas
+          ss    = zipWith (glmmScore family link) ys mus
+          ws    = map (glmmWeight family link) mus
+          grad  = foldr (\(s, z) acc -> acc + LA.scale s z) (LA.konst 0 r) (zip ss zs)
+                    - (gInv LA.#> b)
+          hess  = foldr (\(w, z) acc -> acc + LA.scale w (LA.outer z z)) gInv (zip ws zs)
+          delta = LA.flatten (hess LA.<\> LA.asColumn grad)
+          b'    = b + delta
+      in if LA.norm_2 delta < nrTol then (b', LA.inv hess) else go (k-1) b'
+
+-- | Fit a non-Gaussian GLMM with __vector__ random effects via Laplace
+-- approximation (Phase 48). Per group @j@: @g(E[y|b]) = X_j β + Z_j b_j@,
+-- @b_j ~ N(0, G)@ (@G@ is @r×r@). Outer loop: multivariate NR for the modes
+-- @b̂_j@ (with Laplace posterior cov @P_j@), one IRLS step for @β@ (random
+-- effects as offset), and an EM update @G = (1/q) Σ_j (P_j + b̂_j b̂_jᵀ)@.
+--
+-- With @r = 1@ and an intercept-only @Z@ this matches 'fitGLMM'. Supports the
+-- same families/links as 'fitGLMM' (Binomial/Logit, Poisson/Log).
+fitGLMMGeneral
+  :: Family -> LinkFn
+  -> LA.Matrix Double  -- ^ X (fixed-effect design, must include intercept)
+  -> LA.Matrix Double  -- ^ Z (random-effect design, @n × r@; rows align with X)
+  -> LA.Vector Double  -- ^ y
+  -> V.Vector Int      -- ^ per-observation group index (0-based)
+  -> V.Vector Text     -- ^ sorted group labels (length q)
+  -> GLMMResultRE
+fitGLMMGeneral family link x z y idx labels =
+  let n       = LA.rows x
+      p       = LA.cols x
+      q       = V.length labels
+      r       = LA.cols z
+      members = precompMembers idx q n
+      zRows   = V.fromList (LA.toRows z)
+      yV      = V.fromList (LA.toList y)
+
+      groupZs = V.fromList [ [ zRows V.! i | i <- members V.! j ] | j <- [0..q-1] ]
+      groupYs = V.fromList [ [ yV    V.! i | i <- members V.! j ] | j <- [0..q-1] ]
+
+      clamp = glmmClampMu family
+      gInvL = glmmInvLink link
+      gD    = glmmLinkDeriv link
+
+      yMean = LA.sumElements y / fromIntegral n
+      ySafe = case family of
+                Binomial -> max 1e-6 (min (1-1e-6) yMean)
+                Poisson  -> max 1e-6 yMean
+                Gaussian -> yMean
+      beta0 = LA.fromList (glmmFwdLink link ySafe : replicate (p - 1) 0.0)
+      b0    = V.replicate q (LA.konst 0 r)
+      yDev  = y - LA.konst yMean n
+      su2_0 = max 1e-4 ((yDev `LA.dot` yDev) / fromIntegral n / 2)
+      g0    = LA.scale su2_0 (LA.ident r)
+
+      scatterZb bs =
+        LA.fromList [ (zRows V.! i) `LA.dot` (bs V.! (idx V.! i)) | i <- [0..n-1] ]
+
+      step (beta, gMat, bs) =
+        let gInv      = LA.inv gMat
+            xBeta     = x LA.#> beta
+            etaFixedV = V.fromList (LA.toList xBeta)
+            results   = V.fromList
+                          [ nrOneGroupVec family link gInv (groupZs V.! j)
+                              [ etaFixedV V.! i | i <- members V.! j ]
+                              (groupYs V.! j)
+                              (bs V.! j)
+                          | j <- [0..q-1] ]
+            bsNew = V.map fst results
+            pjs   = V.map snd results
+            -- IRLS β with random offset Zb̂ held fixed
+            zb     = scatterZb bsNew
+            etaF   = xBeta + zb
+            musV   = V.map (clamp . gInvL) (V.fromList (LA.toList etaF))
+            wsV    = V.map (glmmWeight family link) musV
+            xBetaV = V.fromList (LA.toList xBeta)
+            zAdjV  = V.zipWith3 (\yi mui xbi -> (yi - mui) * gD mui + xbi) yV musV xBetaV
+            sqrtW  = LA.diag (LA.fromList . V.toList $ V.map sqrt wsV)
+            zAdj   = LA.fromList (V.toList zAdjV)
+            betaN  = LA.flatten $ (sqrtW LA.<> x) LA.<\> LA.asColumn (sqrtW LA.#> zAdj)
+            -- EM update G = (1/q) Σ (P_j + b̂_j b̂_jᵀ)
+            gAcc   = V.foldl' (\acc (pj, bj) -> acc + pj + LA.outer bj bj)
+                              (LA.konst 0 (r, r)) (V.zip pjs bsNew)
+            gN     = LA.scale (1 / fromIntegral q) gAcc
+        in (betaN, gN, bsNew)
+
+      bsDiff a b = V.sum (V.zipWith (\u v -> LA.norm_2 (u - v)) a b)
+      converge 0 st                = st
+      converge k st@(beta, gM, bs) =
+        let st'@(beta', gM', bs') = step st
+        in if    LA.norm_2 (beta' - beta)                  < glmmTol
+              && LA.norm_2 (LA.flatten (gM' - gM))          < glmmTol
+              && bsDiff bs' bs                              < glmmTol
+           then st'
+           else converge (k-1) st'
+
+      (betaF, gF, bsF) = converge maxGLMMIter (beta0, g0, b0)
+
+      zbF     = scatterZb bsF
+      fittedV = LA.cmap (clamp . gInvL) (x LA.#> betaF + zbF)
+      residV  = y - fittedV
+      ssTot   = yDev `LA.dot` yDev
+      ssRes   = residV `LA.dot` residV
+      r2      = if ssTot == 0 then 1.0 else 1.0 - ssRes / ssTot
+      fitRes  = FitResult (LA.asColumn betaF)
+                          (LA.asColumn fittedV)
+                          (LA.asColumn residV)
+                          (LA.fromList [r2])
+      blupMat = LA.fromRows (V.toList bsF)
+
+  in GLMMResultRE fitRes gF 1.0 blupMat labels
 
 -- ---------------------------------------------------------------------------
 -- DataFrame-level API

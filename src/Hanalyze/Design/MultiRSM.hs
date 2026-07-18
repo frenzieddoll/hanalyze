@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Multi-response Response Surface Methodology.
+-- |
+-- Module      : Hanalyze.Design.MultiRSM
+-- Description : 複数応答同時の Response Surface Methodology (各応答の二次モデル並列 fit + 極値解析)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Multi-response Response Surface Methodology.
 --
 -- Fits a quadratic model to each response @y_j@ and performs the extremum
 -- analysis @q@ times in parallel. As a starting point for multi-objective

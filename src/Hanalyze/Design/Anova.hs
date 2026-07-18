@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | ANOVA / ANCOVA tables.
+-- |
+-- Module      : Hanalyze.Design.Anova
+-- Description : 一元配置・二元配置 ANOVA/ANCOVA 表の算出 (F 値・p 値・η² 効果量)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- ANOVA / ANCOVA tables.
 --
 -- Computes one-way and two-way analysis of variance, reporting F values,
 -- p values, and the @η²@ effect size.

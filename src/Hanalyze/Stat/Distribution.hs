@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Probability distributions used throughout the library.
+-- |
+-- Module      : Hanalyze.Stat.Distribution
+-- Description : ライブラリ全体で使う確率分布 27 種と HMC/NUTS 用の制約変換
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Probability distributions used throughout the library.
 --
 -- Provides 27 named distributions (Normal, Beta, Gamma, StudentT, LKJ,
 -- Truncated, Censored, ...) with @density@ / @logDensity@ / @supportRange@

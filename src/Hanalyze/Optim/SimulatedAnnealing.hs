@@ -1,5 +1,10 @@
-{-# LANGUAGE StrictData #-}
--- | Simulated Annealing.
+-- |
+-- Module      : Hanalyze.Optim.SimulatedAnnealing
+-- Description : Simulated Annealing (焼きなまし法) — Kirkpatrick, Gelatt, Vecchi 1983
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Simulated Annealing.
 --
 -- Kirkpatrick, Gelatt, Vecchi (1983). A physical analogy (cooling solids):
 -- a random walk with probabilistic acceptance approaches a global
@@ -15,6 +20,7 @@
 --
 -- Proposal: add @Normal(0, sigma)@ independently per dimension and reflect
 -- against the bounds.
+{-# LANGUAGE StrictData #-}
 module Hanalyze.Optim.SimulatedAnnealing
   ( SAConfig (..)
   , SACoolingSchedule (..)

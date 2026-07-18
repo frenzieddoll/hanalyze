@@ -2,7 +2,13 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
--- | Data-preprocessing helpers built on Hackage's @dataframe@.
+-- |
+-- Module      : Hanalyze.DataIO.Preprocess
+-- Description : Hackage dataframe 上の前処理ヘルパ (欠損検出/除去/補完・列選択・派生列)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Data-preprocessing helpers built on Hackage's @dataframe@.
 --
 -- All operations consume and produce 'DXD.DataFrame'.
 --
@@ -303,13 +309,20 @@ readMaybeDoubleColumn name df = fmap (maskNulls . zip [0..]) raw
             Just xs -> Just (map Just xs)
             Nothing -> case tryColumnAsList @Int name df of
               Just xs -> Just (map (Just . fromIntegral) xs)
-              Nothing -> case tryColumnAsList @Text name df of
-                Just xs -> Just
-                  [ if isNAString t
-                      then Nothing
-                      else readMaybe (T.unpack t)
-                  | t <- xs ]
-                Nothing -> Nothing
+              -- Phase 60.3: Integer 列の黙殺根治 ([[numericcols-integer-silent-drop]])。
+              -- 判定列に Integer / Maybe Integer が無く、 df |-> hbm の group 列が
+              -- Integer 型だと dataNamed が黙って空になっていた。
+              Nothing -> case tryColumnAsList @Integer name df of
+                Just xs -> Just (map (Just . fromIntegral) xs)
+                Nothing -> case tryColumnAsList @(Maybe Integer) name df of
+                  Just xs -> Just (map (fmap fromIntegral) xs)
+                  Nothing -> case tryColumnAsList @Text name df of
+                    Just xs -> Just
+                      [ if isNAString t
+                          then Nothing
+                          else readMaybe (T.unpack t)
+                      | t <- xs ]
+                    Nothing -> Nothing
 
 -- | Convert a Text column into a Double column. Returns 'Nothing' if
 -- any cell is missing or fails to parse.

@@ -1,6 +1,10 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
--- | Slice sampler (Neal 2003) — a univariate method with no acceptance-rate
+-- |
+-- Module      : Hanalyze.MCMC.Slice
+-- Description : Slice sampler (Neal 2003) — 受理率調整不要な単変量サンプリング法
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Slice sampler (Neal 2003) — a univariate method with no acceptance-rate
 -- tuning.
 --
 -- Each iteration:
@@ -13,20 +17,29 @@
 -- One iteration is a Gibbs-style sweep over every coordinate. Like
 -- HMC/NUTS no gradient is required, but each sweep involves many
 -- log-density evaluations.
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 module Hanalyze.MCMC.Slice
   ( SliceConfig (..)
   , defaultSliceConfig
   , slice
   , sliceChains
+  , slicePure
+  , sliceChainsPure
   ) where
 
 import Control.Concurrent.Async (mapConcurrently)
 import Control.Monad (forM, replicateM, when)
-import Data.IORef
+import Control.Monad.Primitive (PrimMonad, PrimState)
+import Control.Monad.ST (runST)
+import Control.Parallel.Strategies (parList, rdeepseq, using)
+import Data.Primitive.MutVar
+import Data.Word (Word32)
 import qualified Data.Map.Strict as Map
+import qualified Data.Vector as V
 import Data.Map.Strict (Map)
 import Data.Text (Text)
-import System.Random.MWC (GenIO, uniform)
+import System.Random.MWC (Gen, GenIO, uniform, initialize)
 import System.Random.MWC.Distributions (exponential)
 
 import Hanalyze.Model.HBM (ModelP, Params, logJoint, sampleNames)
@@ -54,7 +67,7 @@ defaultSliceConfig names = SliceConfig
 
 -- | Run the slice sampler. One iteration updates every coordinate in
 -- turn (Gibbs-style sweep).
-slice :: ModelP r -> SliceConfig -> Params -> GenIO -> IO Chain
+slice :: forall r m. PrimMonad m => ModelP r -> SliceConfig -> Params -> Gen (PrimState m) -> m Chain
 slice model cfg init_ gen = do
   let names    = sampleNames model
       total    = sliceBurnIn cfg + sliceIterations cfg
@@ -64,11 +77,11 @@ slice model cfg init_ gen = do
       logP :: Params -> Double
       logP = logJoint model
 
-  samplesRef  <- newIORef []
-  acceptedRef <- newIORef (0 :: Int)
+  samplesRef  <- newMutVar []
+  acceptedRef <- newMutVar (0 :: Int)
 
   -- 1 coordinate 更新 (slice sampling on one axis)
-  let updateOne :: Text -> Params -> IO Params
+  let updateOne :: Text -> Params -> m Params
       updateOne nm cur = do
         let w   = Map.findWithDefault 1.0 nm widths
             x0  = Map.findWithDefault 0.0 nm cur
@@ -102,7 +115,7 @@ slice model cfg init_ gen = do
                     then shrink xNew r
                     else shrink l xNew
         xNew <- shrink l1 r1
-        modifyIORef' acceptedRef (+1)
+        modifyMutVar' acceptedRef (+1)
         return (Map.insert nm xNew cur)
 
   let sweep current = foldr (\_ _ -> id) id [] `seq`
@@ -116,18 +129,19 @@ slice model cfg init_ gen = do
       loop i current = do
         next <- sweep current
         when (i <= sliceIterations cfg) $
-          modifyIORef' samplesRef (next :)
+          modifyMutVar' samplesRef (next :)
         loop (i - 1) next
 
   _ <- loop total init_
-  samples  <- fmap reverse (readIORef samplesRef)
-  accepted <- readIORef acceptedRef
+  samples  <- fmap reverse (readMutVar samplesRef)
+  accepted <- readMutVar acceptedRef
   return Chain
     { chainSamples     = samples
     , chainAccepted    = accepted
     , chainTotal       = total * length names
     , chainEnergy      = []
     , chainDivergences = []
+    , chainTreeDepths  = []
     }
 
 -- | Run 'slice' on @numChains@ parallel chains.
@@ -135,3 +149,18 @@ sliceChains :: ModelP r -> SliceConfig -> Int -> Params -> GenIO -> IO [Chain]
 sliceChains model cfg numChains initP baseGen = do
   gens <- replicateM numChains (spawnGen baseGen)
   mapConcurrently (\g -> slice model cfg initP g) gens
+
+-- | Phase 50: 純粋・決定的な slice sampler (seed → 確定 Chain)。
+slicePure :: ModelP r -> SliceConfig -> Params -> Word32 -> Chain
+slicePure model cfg initP seed =
+  runST (initialize (V.singleton seed) >>= slice model cfg initP)
+
+-- | Phase 50: 純粋・決定的な multi-chain slice。 子 seed を純粋導出し @parList rdeepseq@ で並列。
+sliceChainsPure :: ModelP r -> SliceConfig -> Int -> Params -> Word32 -> [Chain]
+sliceChainsPure model cfg numChains initP seed =
+  let childSeeds :: [Word32]
+      childSeeds = runST $ do
+        g <- initialize (V.singleton seed)
+        replicateM numChains (uniform g)
+      chains = [ slicePure model cfg initP s | s <- childSeeds ]
+  in chains `using` parList rdeepseq

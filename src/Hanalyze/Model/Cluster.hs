@@ -1,6 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BangPatterns #-}
--- | Clustering algorithms.
+-- |
+-- Module      : Hanalyze.Model.Cluster
+-- Description : クラスタリングアルゴリズム (k-means / silhouette / inertia)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Clustering algorithms.
 --
 -- Implements:
 --
@@ -14,8 +20,9 @@ module Hanalyze.Model.Cluster
     KMeansConfig (..)
   , KMeansInit (..)
   , KMeansResult (..)
-  , defaultKMeansConfig
+  , defaultKMeans
   , kMeans
+  , kMeansPure
     -- * Quality metrics
   , silhouette
   , inertia
@@ -27,7 +34,8 @@ module Hanalyze.Model.Cluster
 import qualified Numeric.LinearAlgebra        as LA
 import qualified Hanalyze.Stat.KernelDist              as KD
 import qualified System.Random.MWC            as MWC
-import           Control.Monad                (forM_)
+import           Control.Monad                (forM_, foldM)
+import           Control.Monad.Primitive      (PrimMonad, PrimState)
 import           Control.Monad.ST             (ST, runST)
 import qualified Data.Vector                  as V
 import qualified Data.Vector.Mutable          as VM
@@ -35,9 +43,9 @@ import qualified Data.Vector.Unboxed          as VU
 import qualified Data.Vector.Unboxed.Mutable  as MVU
 import qualified Data.Vector.Storable         as VS
 import qualified Data.Vector.Storable.Mutable as VSM
-import           Data.IORef
 import           Data.List                    (minimumBy)
 import           Data.Ord                     (comparing)
+import           Data.Word                    (Word32)
 
 -- ---------------------------------------------------------------------------
 -- K-means
@@ -59,8 +67,8 @@ data KMeansConfig = KMeansConfig
   } deriving (Show, Eq)
 
 -- | Default: k-means++, 300 iters, tol 1e-4, 10 restarts.
-defaultKMeansConfig :: Int -> KMeansConfig
-defaultKMeansConfig k = KMeansConfig
+defaultKMeans :: Int -> KMeansConfig
+defaultKMeans k = KMeansConfig
   { kmK        = k
   , kmInit     = KMeansPlus
   , kmMaxIter  = 300
@@ -79,17 +87,34 @@ data KMeansResult = KMeansResult
 
 -- | Fit K-means; runs 'kmRestarts' independent restarts and keeps
 -- the lowest-inertia solution.
+--
+-- IO ラッパ。 ロジックは 'PrimMonad' 汎用の 'kMeansM' (mwc は 'PrimMonad'
+-- 汎用ゆえ ST/IO で同コードを共有) をそのまま IO に特殊化したもの。
 kMeans :: KMeansConfig -> LA.Matrix Double -> MWC.GenIO -> IO KMeansResult
-kMeans cfg x gen = do
-  results <- mapM (\_ -> kMeansSingleRun cfg x gen) [1 .. kmRestarts cfg]
+kMeans = kMeansM
+
+-- | 純粋・決定的な K-means。 同じ @seed@ なら必ず同じ 'KMeansResult' を返す
+-- (同 seed → ビット同一・IO 不要)。 'kMeansM' を 'ST' で走らせ 'runST' で
+-- 閉じる ([[phase-50-mcmc-purification-status]] の 'nutsPure' と同方針)。
+kMeansPure :: KMeansConfig -> LA.Matrix Double -> Word32 -> KMeansResult
+kMeansPure cfg x seed =
+  runST (MWC.initialize (V.singleton seed) >>= kMeansM cfg x)
+
+-- | 'PrimMonad' 汎用の K-means 本体。 'kMeans' (IO) / 'kMeansPure' (ST) が共有。
+kMeansM :: PrimMonad m
+        => KMeansConfig -> LA.Matrix Double -> MWC.Gen (PrimState m)
+        -> m KMeansResult
+kMeansM cfg x gen = do
+  results <- mapM (\_ -> kMeansSingleRunM cfg x gen) [1 .. kmRestarts cfg]
   pure (minimumBy (comparing kmrInertia) results)
 
-kMeansSingleRun :: KMeansConfig -> LA.Matrix Double -> MWC.GenIO
-                -> IO KMeansResult
-kMeansSingleRun cfg x gen = do
+kMeansSingleRunM :: PrimMonad m
+                 => KMeansConfig -> LA.Matrix Double -> MWC.Gen (PrimState m)
+                 -> m KMeansResult
+kMeansSingleRunM cfg x gen = do
   initC <- case kmInit cfg of
-    Forgy      -> forgyInit (kmK cfg) x gen
-    KMeansPlus -> kmppInit (kmK cfg) x gen
+    Forgy      -> forgyInitM (kmK cfg) x gen
+    KMeansPlus -> kmppInitM (kmK cfg) x gen
   -- Hot loop: keep labels as 'VU.Vector Int' to avoid the per-iteration
   -- list↔Vector roundtrip the previous version paid via 'assignLabels'
   -- + 'updateCentroids' on @[Int]@.
@@ -113,11 +138,13 @@ kMeansSingleRun cfg x gen = do
     }
 
 -- | Forgy initialisation: pick k random rows.
-forgyInit :: Int -> LA.Matrix Double -> MWC.GenIO -> IO (LA.Matrix Double)
-forgyInit k x gen = do
+forgyInitM :: PrimMonad m
+           => Int -> LA.Matrix Double -> MWC.Gen (PrimState m)
+           -> m (LA.Matrix Double)
+forgyInitM k x gen = do
   let n     = LA.rows x
       xRowsV = V.fromList (LA.toRows x)   -- O(1) row access
-  idxs <- pickKDistinct k n gen
+  idxs <- pickKDistinctM k n gen
   pure (LA.fromRows [xRowsV V.! i | i <- idxs])
 
 -- | k-means++ initialisation: 1st centroid uniform random, subsequent
@@ -134,8 +161,10 @@ forgyInit k x gen = do
 -- The fused-BLAS form below uses pre-computed row sq-norms and a
 -- single matrix-vector multiply per centroid — O(np) work for the
 -- whole sweep instead of O(n) per row.
-kmppInit :: Int -> LA.Matrix Double -> MWC.GenIO -> IO (LA.Matrix Double)
-kmppInit k x gen = do
+kmppInitM :: PrimMonad m
+          => Int -> LA.Matrix Double -> MWC.Gen (PrimState m)
+          -> m (LA.Matrix Double)
+kmppInitM k x gen = do
   let n        = LA.rows x
       -- Pre-compute row squared norms once: ‖x_i‖² for all rows
       -- (length-n vector via @(X ⊙ X) · 1@).
@@ -143,16 +172,12 @@ kmppInit k x gen = do
 
   -- Pick the first centroid.
   i0 <- MWC.uniformR (0, n - 1) gen
-  -- Row index list of chosen centroids (kept as Int indices, not row
-  -- vectors, to avoid forming a boxed list of slices).
-  centroidIdx <- newIORef [i0]
   -- bestDist[i] = ‖x_i − x_{i0}‖²  in BLAS form:
   --   = ‖x_i‖² + ‖x_{i0}‖² − 2 x_iᵀ x_{i0}
   -- via @cross = X · x_{i0}@ (one GEMV), reusing 'normsX'.
   let initBest = sqDistsToRow x normsX i0
-  bestRef <- newIORef initBest
 
-  let pickWeighted total bdv =
+      pickWeighted total bdv =
         if total <= 0
           then pure 0
           else do
@@ -167,21 +192,21 @@ kmppInit k x gen = do
                         else go nxt (i + 1)
             go 0 0
 
-  forM_ [2 .. k] $ \_ -> do
-    bd <- readIORef bestRef
-    let !total = VS.sum bd
-    pickIdx <- pickWeighted total bd
-    -- One GEMV → length-n @sq dist to new centroid@; element-wise
-    -- min with @bestDist@ in a single Storable Vector pass.
-    let !newDist = sqDistsToRow x normsX pickIdx
-        !updated = VS.zipWith min bd newDist
-    writeIORef bestRef updated
-    modifyIORef' centroidIdx (pickIdx :)
+      -- IORef を foldM で純粋に畳む (純粋化のため・乱数列順は不変ゆえ
+      -- 旧 IORef 版とビット同一)。 state = (bestDist, 逆順 centroid idx)。
+      step (bd, acc) _ = do
+        let !total = VS.sum bd
+        pickIdx <- pickWeighted total bd
+        -- One GEMV → length-n @sq dist to new centroid@; element-wise
+        -- min with @bestDist@ in a single Storable Vector pass.
+        let !newDist = sqDistsToRow x normsX pickIdx
+            !updated = VS.zipWith min bd newDist
+        pure (updated, pickIdx : acc)
 
-  idxs <- readIORef centroidIdx
+  (_, idxsRev) <- foldM step (initBest, [i0]) [2 .. k]
   -- Build the @k × p@ centroid matrix from row indices in one shot.
   let xRowsV = V.fromList (LA.toRows x)
-  pure (LA.fromRows [xRowsV V.! i | i <- reverse idxs])
+  pure (LA.fromRows [xRowsV V.! i | i <- reverse idxsRev])
 
 -- | Squared distance from every row of @X@ (n × p) to @X[i, :]@,
 -- via the BLAS identity
@@ -202,8 +227,9 @@ sqDistsToRow xMat normsX i =
   in LA.cmap (max 0) d   -- numerical-noise floor at 0
 
 -- | Pick k distinct indices in [0, n) via Fisher-Yates partial.
-pickKDistinct :: Int -> Int -> MWC.GenIO -> IO [Int]
-pickKDistinct k n gen = do
+pickKDistinctM :: PrimMonad m
+               => Int -> Int -> MWC.Gen (PrimState m) -> m [Int]
+pickKDistinctM k n gen = do
   v <- V.thaw (V.fromList [0 .. n - 1])
   forM_ [0 .. min k n - 1] $ \i -> do
     j <- MWC.uniformR (i, n - 1) gen

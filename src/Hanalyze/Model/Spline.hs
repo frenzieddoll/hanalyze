@@ -1,5 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | B-spline and natural cubic-spline regression.
+
+-- |
+-- Module      : Hanalyze.Model.Spline
+-- Description : B-spline / 自然三次スプライン回帰 (Cox-de Boor 基底 + LM フィット)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- B-spline and natural cubic-spline regression.
 --
 -- Builds a design matrix @B@ from spline basis functions and solves
 -- ordinary least squares for the coefficients @β@:
@@ -61,12 +68,16 @@ bsplineEval :: Int -> [Double] -> Double -> [Double]
 bsplineEval k tKnots x =
   let nBasis = length tKnots - k - 1
       -- Order 0 (= k=0): 1 if x in [t_i, t_{i+1}), else 0
-      -- 端点処理: 最後のノットでは右閉
+      -- 端点処理: 右端 x == hi は **hi で終わる最後の正幅区間** [ti, hi) に含める。
+      -- clamped ノットは hi を k+1 回重複させるため、 単純に「最後の区間 index を右閉」
+      -- にすると退化区間 [hi, hi] を選んでしまい、 高次 Cox-de Boor 再帰で d2=0 となって
+      -- 基底が全ゼロ化する (= partition of unity 崩壊。 計測で確認: x=hi で sum=0)。
+      hiKnot = last tKnots
       order0 i =
         let ti  = tKnots !! i
             ti1 = tKnots !! (i + 1)
-            isLast = i == length tKnots - 2
-        in if (x >= ti && x < ti1) || (isLast && x <= ti1 && x >= ti)
+            atRightEnd = x >= ti1 && ti1 == hiKnot && ti < ti1
+        in if (x >= ti && x < ti1) || atRightEnd
              then 1.0 else 0.0
       -- 高次: Cox-de Boor
       go p prev =

@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Effect sizes and power analysis.
+-- |
+-- Module      : Hanalyze.Stat.Effect
+-- Description : 効果量 (Cohen's d 等) と検出力分析
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Effect sizes and power analysis.
 --
 -- Effect-size measures complement p-values by quantifying the
 -- magnitude of an effect, not just its statistical significance.
@@ -22,11 +28,13 @@
 module Hanalyze.Stat.Effect
   ( -- * Effect-size measures (location)
     cohenD
+  , cohenDCI
   , cohenDPaired
   , hedgesG
     -- * Effect-size (ANOVA / regression)
   , cohensF
   , eta2
+  , eta2CI
   , omega2
     -- * Effect-size (categorical)
   , cramerV
@@ -64,6 +72,23 @@ cohenD xs ys =
       v2 = variance ys
       pooledV = ((n1 - 1) * v1 + (n2 - 1) * v2) / (n1 + n2 - 2)
   in if pooledV <= 0 then 0 else (m1 - m2) / sqrt pooledV
+
+-- | Cohen's d with (1-α) confidence interval (Hedges-Olkin SE approximation).
+--
+-- > SE(d) ≈ √( (n1+n2)/(n1·n2) + d² / (2(n1+n2)) )
+-- > CI    = d ± z_{1-α/2} · SE(d)
+--
+-- 厳密な非中心 t 分布の逆変換ではないが、 サンプルサイズ ≥ 20 程度で
+-- 十分実用的 (Cumming 2012)。
+cohenDCI :: LA.Vector Double -> LA.Vector Double -> Double
+         -> (Double, (Double, Double))
+cohenDCI xs ys alpha =
+  let d   = cohenD xs ys
+      n1  = fromIntegral (LA.size xs) :: Double
+      n2  = fromIntegral (LA.size ys) :: Double
+      se  = sqrt ((n1 + n2) / (n1 * n2) + d * d / (2 * (n1 + n2)))
+      z   = SD.quantile Normal.standard (1 - alpha / 2)
+  in (d, (d - z * se, d + z * se))
 
 -- | Cohen's d for paired samples (uses SD of differences).
 cohenDPaired :: LA.Vector Double -> LA.Vector Double -> Double
@@ -107,6 +132,33 @@ eta2 groups
           ssT   = sum [ LA.sumElements ((g - LA.scalar grand)^(2::Int))
                       | g <- groups ]
       in if ssT <= 0 then 0 else ssB / ssT
+
+-- | η² with (1-α) confidence interval from F-statistic + df via the
+--   noncentrality parameter inversion.
+--
+--   F-statistic, df_between, df_within を入力に取り、 η² の (lo, hi) CI を
+--   返す。 信頼区間は noncentrality parameter λ の (lo, hi) を二分探索で
+--   求め、 そこから η² = λ / (λ + df_total + 1) に変換する近似版。
+--
+--   既存 @anovaOneWay@ 等で得た F 値を入れて使う。
+eta2CI :: Double            -- ^ F statistic
+       -> (Int, Int)        -- ^ (df_between, df_within)
+       -> Double            -- ^ α (例: 0.05)
+       -> (Double, (Double, Double))
+eta2CI fStat (dfB, dfW) alpha =
+  let dfBd = fromIntegral dfB :: Double
+      dfWd = fromIntegral dfW :: Double
+      dfTotal = dfBd + dfWd + 1
+      eta = (fStat * dfBd) / (fStat * dfBd + dfWd)
+      -- noncentrality parameter from observed F (point estimate)
+      lambdaHat = max 0 (fStat * dfBd - dfBd)
+      -- crude symmetric CI on λ via Patnaik / Helmert approximation:
+      seL = sqrt (2 * (2 * lambdaHat + dfBd + dfWd))
+      z   = SD.quantile Normal.standard (1 - alpha / 2)
+      lamLo = max 0 (lambdaHat - z * seL)
+      lamHi = max 0 (lambdaHat + z * seL)
+      toEta l = l / (l + dfTotal)
+  in (eta, (toEta lamLo, toEta lamHi))
 
 -- | ω² (omega-squared): unbiased version of η².
 -- @ω² = (SS_between − (k − 1) × MS_within) / (SS_total + MS_within)@.

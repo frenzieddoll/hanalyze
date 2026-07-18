@@ -21,7 +21,7 @@ import Hanalyze.Model.HBM
 -- import Hanalyze.Stat.Distribution (Distribution (..)) -- now from Hanalyze.Model.HBM
 import Hanalyze.MCMC.Core   (Chain (..), chainVals, posteriorMean, posteriorSD)
 import Hanalyze.MCMC.Gibbs  (GibbsConfig (..), defaultGibbsConfig,
-                    gibbsFromModel, gibbsMH)
+                    gibbsFromModel, gibbsMH, GibbsUpdate)
 
 -- ---------------------------------------------------------------------------
 -- モデル定義
@@ -85,7 +85,7 @@ main = do
 
   -- ── Model 1: Gamma-Poisson ──────────────────────────────────────────────
   let trueL  = 4.0 :: Double
-      (gpUpdates, gpMH) = gibbsFromModel pModel
+      (gpUpdates, gpMH) = gibbsFromModel pModel :: ([GibbsUpdate IO], [Text])
 
   putStrLn "\n=== Model 1: Gamma(2,1) + Poisson(λ) ==="
   printf "  検出: Gibbs=%d ブロック, MH=%d パラメータ\n"
@@ -96,7 +96,7 @@ main = do
 
   -- ── Model 2: Beta-Binomial ──────────────────────────────────────────────
   let trueP   = 0.7 :: Double
-      (bbUpdates, bbMH) = gibbsFromModel bModel
+      (bbUpdates, bbMH) = gibbsFromModel bModel :: ([GibbsUpdate IO], [Text])
 
   putStrLn "\n=== Model 2: Beta(2,2) + Binomial(1,p) ==="
   printf "  検出: Gibbs=%d ブロック, MH=%d パラメータ\n"
@@ -108,7 +108,7 @@ main = do
   -- ── Model 3: Normal + Exponential (混合) ────────────────────────────────
   let trueMu  = 2.0 :: Double
       trueSig = 1.5 :: Double
-      (nnUpdates, nnMH) = gibbsFromModel nModel
+      (nnUpdates, nnMH) = gibbsFromModel nModel :: ([GibbsUpdate IO], [Text])
 
   putStrLn "\n=== Model 3: Normal(0,10) + Exponential(1) [混合モード] ==="
   printf "  検出: Gibbs=%d ブロック (mu), MH=%d パラメータ (sigma)\n"

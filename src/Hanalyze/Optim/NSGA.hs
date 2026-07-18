@@ -1,6 +1,10 @@
-{-# LANGUAGE StrictData #-}
-{-# LANGUAGE OverloadedStrings #-}
--- | NSGA-II (Non-dominated Sorting Genetic Algorithm II) — Deb et al. 2002.
+-- |
+-- Module      : Hanalyze.Optim.NSGA
+-- Description : NSGA-II (非優越ソート多目的遺伝的アルゴリズム) — Deb et al. 2002
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- NSGA-II (Non-dominated Sorting Genetic Algorithm II) — Deb et al. 2002.
 --
 -- A widely-used multi-objective evolutionary algorithm based on fast
 -- non-dominated sorting + crowding-distance comparison.
@@ -17,6 +21,8 @@
 --    e) Take the top N to form P_{t+1}.
 -- 3. Return the final front as a Pareto approximation.
 -- @
+{-# LANGUAGE StrictData #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Hanalyze.Optim.NSGA
   ( -- * 型
     Bounds
@@ -26,6 +32,11 @@ module Hanalyze.Optim.NSGA
     -- * High-level API
   , nsga2
   , nsga2WithConstraints
+  , nsga2AllFronts
+  , nsga2AllFrontsWithConstraints
+  , nsga2WithProgress
+  , nsga2WithProgressAndConstraints
+  , NSGAProgress (..)
   , evaluateSolution
     -- * Building blocks
   , dominates
@@ -272,6 +283,65 @@ nsga2WithConstraints
   -> GenIO
   -> IO [Solution]
 nsga2WithConstraints cfg f cFn bounds gen = do
+  finalPop <- runNSGAFinalPopulation cfg f cFn bounds gen
+  -- 最終世代の最初の front (Pareto 近似) を返す
+  case nonDominatedSort finalPop of
+    (front : _) -> return front
+    []          -> return []
+
+-- | NSGA-II all-fronts variant: 最終世代の population を非優越ソートして
+-- **全 front を rank 別に**返す。 @front i@ が @rank i@ (0-origin) に対応:
+-- rank 0 = Pareto 近似、 rank 1 = それに dominate される第 2 集団、 …
+--
+-- フロントエンド app frontend で「最適解 (rank 0) の周辺の代替案 (rank 1, 2)」 を
+-- 一覧する UI を実装するために用意。
+--
+-- 既存 'nsga2' との関係: @nsga2 ≈ head <$> nsga2AllFronts@ (空 population なら
+-- empty list)。 内部 helper 'runNSGAFinalPopulation' を共有しているため、
+-- 既存 API の挙動は不変。
+nsga2AllFronts
+  :: NSGAConfig
+  -> ([Double] -> [Double])
+  -> Bounds
+  -> GenIO
+  -> IO [[Solution]]
+nsga2AllFronts cfg f bounds gen =
+  nsga2AllFrontsWithConstraints cfg f (const 0) bounds gen
+
+-- | Constrained 版 'nsga2AllFronts'。
+nsga2AllFrontsWithConstraints
+  :: NSGAConfig
+  -> ([Double] -> [Double])
+  -> ([Double] -> Double)
+  -> Bounds
+  -> GenIO
+  -> IO [[Solution]]
+nsga2AllFrontsWithConstraints cfg f cFn bounds gen = do
+  finalPop <- runNSGAFinalPopulation cfg f cFn bounds gen
+  return (nonDominatedSort finalPop)
+
+-- | 内部 helper: 最終世代の population (未ソート) を返す。 'nsga2WithConstraints'
+-- と 'nsga2AllFrontsWithConstraints' で共有する。 callback 無し版。
+runNSGAFinalPopulation
+  :: NSGAConfig
+  -> ([Double] -> [Double])
+  -> ([Double] -> Double)
+  -> Bounds
+  -> GenIO
+  -> IO [Solution]
+runNSGAFinalPopulation cfg f cFn bounds gen =
+  runNSGAFinalPopulationCb cfg f cFn bounds (\_ -> pure ()) gen
+
+-- | 内部 helper: 'runNSGAFinalPopulation' の callback 付き版。
+runNSGAFinalPopulationCb
+  :: NSGAConfig
+  -> ([Double] -> [Double])
+  -> ([Double] -> Double)
+  -> Bounds
+  -> (NSGAProgress -> IO ())  -- 各世代終端で呼ぶ progress callback
+  -> GenIO
+  -> IO [Solution]
+runNSGAFinalPopulationCb cfg f cFn bounds onProg gen = do
   let n  = nsgaPopSize cfg
       d  = length bounds
       pM = case nsgaMutationP cfg of
@@ -280,17 +350,99 @@ nsga2WithConstraints cfg f cFn bounds gen = do
       etaC = nsgaEtaCross cfg
       etaM = nsgaEtaMut cfg
       pC   = nsgaCrossoverP cfg
+      tot  = nsgaGenerations cfg
 
   -- 初期母集団: Latin-Hypercube Sampling で各次元のセルを 1 度ずつ
   -- 埋める (iid uniform より初期世代の被覆良 → 第 1 世代で既に
   -- 全域の情報が手に入るため、世代あたりの収束が上がる)。
   initXs <- QR.lhsSamplesIn n bounds gen
   let initPop = [ evaluateSolution f cFn x | x <- initXs ]
+  -- 世代ループ (callback 付き)
+  generationLoopCb tot tot initPop pC etaC etaM pM bounds f cFn onProg gen
 
-  -- 世代ループ
-  finalPop <- generationLoop (nsgaGenerations cfg) initPop pC etaC etaM pM bounds f cFn gen
+-- | NSGA-II 1 世代ステップの進捗。 'nsga2WithProgress' / 'nsga2WithProgressAndConstraints'
+-- の callback 引数で渡される。
+data NSGAProgress = NSGAProgress
+  { ngpGeneration :: !Int       -- ^ 0-origin の現世代番号 (@[0 .. ngpTotal - 1]@ の範囲)
+  , ngpTotal      :: !Int       -- ^ 総世代数 ('NSGAConfig.nsgaGenerations')
+  , ngpParetoSize :: !Int       -- ^ 現 rank-0 (Pareto 近似) のサイズ
+  , ngpBestObjs   :: ![Double]  -- ^ 現 rank-0 中で各目的の最小値
+  } deriving (Show, Eq)
 
-  -- 最終世代の最初の front (Pareto 近似) を返す
+-- | 'generationLoop' の callback 付き版。
+--   各世代の **終端** で 'NSGAProgress' を構築して @onProg@ を呼ぶ。
+generationLoopCb
+  :: Int                              -- ^ 残り iteration t (countdown)
+  -> Int                              -- ^ 総 iteration T (callback の ngpTotal 用)
+  -> [Solution]
+  -> Double -> Double -> Double -> Double
+  -> Bounds
+  -> ([Double] -> [Double])
+  -> ([Double] -> Double)
+  -> (NSGAProgress -> IO ())
+  -> GenIO
+  -> IO [Solution]
+generationLoopCb 0 _ pop _ _ _ _ _ _ _ _ _ = return pop
+generationLoopCb t tot pop pC etaC etaM pM bounds f cFn onProg gen = do
+  let n = length pop
+      fronts = nonDominatedSort pop
+      sortedFronts = map crowdingDistance fronts
+      ranked = concat
+        [ zip3 (repeat r) (frontDistances fr) fr
+        | (r, fr) <- zip [0 :: Int ..] sortedFronts ]
+  children <- fillOffspring n pop pC etaC etaM pM bounds f cFn ranked gen
+  let combined = pop ++ children
+      combinedFronts = nonDominatedSort combined
+      newPop = selectTopN n combinedFronts
+      -- progress 構築: 次世代 newPop の rank-0 で報告
+      newFronts = nonDominatedSort newPop
+      pareto0   = case newFronts of { (fr:_) -> fr; [] -> [] }
+      paretoSize = length pareto0
+      bestObjs  =
+        case pareto0 of
+          [] -> []
+          _  ->
+            let m = length (solObjectives (head pareto0))
+            in [ minimum [ solObjectives s !! j | s <- pareto0 ]
+               | j <- [0 .. m - 1] ]
+      curGen = tot - t              -- 0-origin
+      progress = NSGAProgress
+        { ngpGeneration = curGen
+        , ngpTotal      = tot
+        , ngpParetoSize = paretoSize
+        , ngpBestObjs   = bestObjs
+        }
+  onProg progress
+  generationLoopCb (t - 1) tot newPop pC etaC etaM pM bounds f cFn onProg gen
+
+-- | NSGA-II with per-generation progress callback (unconstrained)。
+-- 各世代の終端で 'NSGAProgress' が @onProg@ に渡される。
+-- 戻り値は 'nsga2' と同じく rank-0 (Pareto 近似) のみ。
+-- 全 rank が欲しい場合は 'nsga2AllFronts' を別途呼ぶ。
+--
+-- 想定用途: フロントエンド app backend が WebSocket / SSE で生存中世代の
+-- progress を frontend に流す。
+nsga2WithProgress
+  :: NSGAConfig
+  -> ([Double] -> [Double])
+  -> Bounds
+  -> (NSGAProgress -> IO ())
+  -> GenIO
+  -> IO [Solution]
+nsga2WithProgress cfg f bounds onProg gen =
+  nsga2WithProgressAndConstraints cfg f (const 0) bounds onProg gen
+
+-- | NSGA-II with per-generation progress callback (constrained)。
+nsga2WithProgressAndConstraints
+  :: NSGAConfig
+  -> ([Double] -> [Double])
+  -> ([Double] -> Double)
+  -> Bounds
+  -> (NSGAProgress -> IO ())
+  -> GenIO
+  -> IO [Solution]
+nsga2WithProgressAndConstraints cfg f cFn bounds onProg gen = do
+  finalPop <- runNSGAFinalPopulationCb cfg f cFn bounds onProg gen
   case nonDominatedSort finalPop of
     (front : _) -> return front
     []          -> return []
@@ -306,43 +458,6 @@ evaluateSolution f cFn x =
            , solObjectives = f x
            , solViolation  = cFn x
            }
-
--- | 1 世代の進化ステップを T 回反復。
-generationLoop
-  :: Int -> [Solution]
-  -> Double -> Double -> Double -> Double  -- pC, etaC, etaM, pM
-  -> Bounds
-  -> ([Double] -> [Double])
-  -> ([Double] -> Double)
-  -> GenIO
-  -> IO [Solution]
-generationLoop 0 pop _ _ _ _ _ _ _ _ = return pop
-generationLoop t pop pC etaC etaM pM bounds f cFn gen = do
-  let n = length pop
-
-  -- ── ranked + crowding 情報を計算 ──
-  let fronts = nonDominatedSort pop
-      sortedFronts = map crowdingDistance fronts
-      ranked = concat
-        [ zip3 (repeat r) (frontDistances fr) fr
-        | (r, fr) <- zip [0 :: Int ..] sortedFronts ]
-
-  -- ── 子母集団 Q を生成 (重複除去 retry 付き、pymoo 互換) ──
-  --
-  -- 'fillOffspring' は新規 child を 1 ペアずつ生成、現プール (pop +
-  -- 既存 offspring) と L∞ 距離が dupEpsilon 以下のものを破棄、必要数
-  -- (n) に達するまで最大 dupMaxRetries 回まで retry する。
-  -- pymoo の DefaultDuplicateElimination + Mating の retry ループと
-  -- 同等の挙動。重複が抑えられる分、有効 popSize が縮まずに済み、
-  -- 100 gen 単一 RNG でも安定して pymoo を上回る。
-  children <- fillOffspring n pop pC etaC etaM pM bounds f cFn ranked gen
-
-  -- ── R = P ∪ Q から上位 N を選別 ──
-  let combined = pop ++ children
-      combinedFronts = nonDominatedSort combined
-      newPop = selectTopN n combinedFronts
-
-  generationLoop (t - 1) newPop pC etaC etaM pM bounds f cFn gen
 
 -- | Duplicate-detection threshold (L∞).
 dupEpsilon :: Double

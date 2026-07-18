@@ -1,5 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | Block designs: Latin squares and randomized complete block designs.
+-- |
+-- Module      : Hanalyze.Design.Block
+-- Description : ブロック計画 (ラテン方格・グレコラテン方格・乱塊法) の生成
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Block designs: Latin squares and randomized complete block designs.
 --
 --   * 'latinSquare'        — @n × n@ Latin square (efficient arrangement
 --     of @n@ treatments).

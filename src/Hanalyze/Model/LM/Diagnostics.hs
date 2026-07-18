@@ -1,4 +1,10 @@
--- | Inference and residual diagnostics for ordinary linear regression.
+-- |
+-- Module      : Hanalyze.Model.LM.Diagnostics
+-- Description : 線形回帰の推論統計量 (標準誤差・t/p 値・F 統計量・AIC/BIC・レバレッジ・Cook's distance)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Inference and residual diagnostics for ordinary linear regression.
 --
 -- Provides standard errors, t / p-values, F-statistic, information
 -- criteria (AIC / BIC), leverage / hat-diagonal, standardised

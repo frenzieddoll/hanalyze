@@ -1,5 +1,11 @@
 {-# LANGUAGE RankNTypes #-}
--- | Exact gradient computation via automatic differentiation (AD), with HMC
+-- |
+-- Module      : Hanalyze.Stat.AD
+-- Description : automatic differentiation (AD) による正確な勾配計算 (HMC 連携)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Exact gradient computation via automatic differentiation (AD), with HMC
 -- integration.
 --
 -- Uses reverse-mode AD from @Numeric.AD@ (ekmett/ad) to compute gradients.
@@ -53,7 +59,7 @@ import Control.Monad (forM, replicateM)
 import Data.IORef
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
-import Numeric.AD.Mode.Forward (grad)
+import Numeric.AD.Mode.Reverse.Double (grad)
 import System.Random.MWC (GenIO, uniform)
 import System.Random.MWC.Distributions (standard)
 

@@ -1,5 +1,10 @@
-{-# LANGUAGE StrictData #-}
--- | Full-rank CMA-ES (Hansen 2016 tutorial, complete edition).
+-- |
+-- Module      : Hanalyze.Optim.CMAESFull
+-- Description : フルランク CMA-ES (Hansen 2016 チュートリアル準拠)
+-- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
+-- License     : BSD-3-Clause
+--
+-- Full-rank CMA-ES (Hansen 2016 tutorial, complete edition).
 --
 -- The companion module @Hanalyze.Optim.CMAES@ is a simplified diagonal variant.
 -- This module implements:
@@ -13,6 +18,7 @@
 --   jumps.
 --
 -- Hyperparameters use the standard values from Hansen (2016).
+{-# LANGUAGE StrictData #-}
 module Hanalyze.Optim.CMAESFull
   ( CMAESFConfig (..)
   , defaultCMAESFConfig
