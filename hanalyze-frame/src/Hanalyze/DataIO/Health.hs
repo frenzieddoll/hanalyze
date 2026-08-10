@@ -5,7 +5,34 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- DataFrame health check. Surfaces the "looks suspicious" patterns that
+-- [日本語]: DataFrame の健全性チェック。 読み込みに成功した DataFrame の中に
+-- 潜みうる「怪しい」パターンを、警告コードとして洗い出す。
+--
+-- 検出されるコード:
+--
+--   * @W001@ — ヘッダが疑わしい (全列名が数値として parse できる)。
+--   * @W003@ — ragged: 列ごとの長さが異なる (Hackage 側で通常はパディングされるが、
+--     念のため二重チェックする)。
+--   * @W004@ — 列名の重複 / 空 / 前後空白。
+--   * @W005@ — delimiter ミスマッチ: 1 列だけの DataFrame で、値に別の
+--     delimiter 候補が含まれている。
+--   * @W006@ — NA 文字列の多型混在。
+--   * @W007@ — 単位サフィックスを推測 (Text 列の大半のセルが
+--     @^\\d+\\.?\\d*[a-zA-Z]+$@ に一致)。
+--   * @W008@ — 通貨記号または桁区切りの疑い。
+--
+-- 生バイト列のプレビューが必要な補助チェックは 'inspectWithPreview' にある。
+-- それ以外は 'inspectDataFrame' で DataFrame だけから判定可能。
+--
+-- 利用シナリオ:
+--
+-- @
+-- (df, lg0) <- loadAutoSafe path
+-- let lg = lg0 <> inspectDataFrame df
+-- printLogReport lg
+-- @
+--
+-- [English]: DataFrame health check. Surfaces the "looks suspicious" patterns that
 -- can hide in a successfully-loaded DataFrame, as warning codes.
 --
 -- Codes detected:
@@ -22,10 +49,10 @@
 --   * @W008@ — currency or thousand-separator suspect.
 --
 -- Auxiliary checks that need a raw-byte preview are in
--- 'inspectWithPreview'.
--- それ以外は 'inspectDataFrame' で DataFrame だけから判定可能。
+-- 'inspectWithPreview'. Everything else can be judged from the
+-- DataFrame alone via 'inspectDataFrame'.
 --
--- 利用シナリオ:
+-- Usage scenario:
 --
 -- @
 -- (df, lg0) <- loadAutoSafe path
@@ -78,9 +105,11 @@ inspectDataFrame df = mconcat
   , detectThousandsCurrency df
   ]
 
--- | DataFrame plus a leading raw-byte preview, used for the W-codes
--- that need both inputs (e.g. W005 delimiter
--- ミスマッチ / W004 ヘッダ行レベルの重複) も合わせて返す。
+-- | [日本語]: DataFrame と先頭の生バイト列プレビューの両方を必要とする W コード
+--   (例: W005 delimiter ミスマッチ / W004 ヘッダ行レベルの重複) も合わせて返す。
+--   [English]: Also returns the W-codes that need both the DataFrame
+--   and a leading raw-byte preview (e.g. W005 delimiter mismatch / W004
+--   header-row-level duplicates).
 inspectWithPreview :: BS.ByteString -> DXD.DataFrame -> LogReport
 inspectWithPreview preview df = mconcat
   [ inspectDataFrame df
@@ -111,9 +140,14 @@ detectCommentLines preview =
                  (Just "--skip N でコメント行数を読み飛ばすか、--comment '#' を指定してください。"))
        else noLog
 
--- | 原本ヘッダ行 (先頭行) を見て、列数 / 重複 / 空セルが DataFrame と
--- 食い違っていないかをチェックする。Hackage は読込時に重複列を後勝ちで
--- 黙ってマージするため、ここで原本側を走査して気付く必要がある。
+-- | [日本語]: 原本ヘッダ行 (先頭行) を見て、列数 / 重複 / 空セルが DataFrame と
+--   食い違っていないかをチェックする。Hackage は読込時に重複列を後勝ちで
+--   黙ってマージするため、ここで原本側を走査して気付く必要がある。
+--   [English]: Looks at the original header row (first line) and checks
+--   whether the column count / duplicates / blank cells disagree with
+--   the DataFrame. Hackage silently merges duplicate columns
+--   last-write-wins on load, so we need to scan the original side here
+--   to notice it.
 detectRawHeaderIssues :: BS.ByteString -> DXD.DataFrame -> LogReport
 detectRawHeaderIssues preview df =
   case takeFirstLine preview of
@@ -170,7 +204,9 @@ findDups xs =
 -- W001 ヘッダ無し疑い
 -- ---------------------------------------------------------------------------
 
--- | 全列名が Double として parse できるなら、先頭行が data 行だった可能性が高い。
+-- | [日本語]: 全列名が Double として parse できるなら、先頭行が data 行だった可能性が高い。
+--   [English]: If every column name can be parsed as 'Double', the
+--   first row was likely a data row, not a header.
 detectHeaderless :: DXD.DataFrame -> LogReport
 detectHeaderless df =
   let names = DX.columnNames df
@@ -191,9 +227,13 @@ detectHeaderless df =
 -- W003 ragged (列ごとに非 null セル数が大きく異なる)
 -- ---------------------------------------------------------------------------
 
--- | DataFrame の各列について、null 以外のセル数を求め、最大と最小の差が
--- 全行数の 1/3 を超えていたら警告。Hackage は ragged 行を null bitmap で
--- 補うため、この差で間接的に検出できる。
+-- | [日本語]: DataFrame の各列について、null 以外のセル数を求め、最大と最小の差が
+--   全行数の 1/3 を超えていたら警告。Hackage は ragged 行を null bitmap で
+--   補うため、この差で間接的に検出できる。
+--   [English]: For each column of the DataFrame, computes the
+--   non-null cell count; warns if the gap between the max and min
+--   exceeds 1/3 of the total row count. Hackage pads ragged rows via
+--   the null bitmap, so this gap lets us detect it indirectly.
 detectRagged :: DXD.DataFrame -> LogReport
 detectRagged df =
   let names    = DX.columnNames df
@@ -260,17 +300,25 @@ detectDuplicateBlankNames df =
 -- W006 NA 文字列の多型混在
 -- ---------------------------------------------------------------------------
 
--- | NA とみなしうる広めの文字列セット。'isNAString' (defaultNAStrings) に
--- 加えて単独の @-@ / @--@ / @.@ も対象にする (検出限定の判定であり、
--- 既存の補完 API の挙動は変えない)。
+-- | [日本語]: NA とみなしうる広めの文字列セット。'isNAString' (defaultNAStrings) に
+--   加えて単独の @-@ / @--@ / @.@ も対象にする (検出限定の判定であり、
+--   既存の補完 API の挙動は変えない)。
+--   [English]: A broader set of strings treated as NA-like. In
+--   addition to 'isNAString' (defaultNAStrings), also targets lone
+--   @-@ / @--@ / @.@ (this is a detection-only judgment; it doesn't
+--   change the behavior of the existing imputation API).
 isNALike :: Text -> Bool
 isNALike t =
   isNAString t
   || (let s = T.strip t in s `elem` ["-", "--", ".", "—"])
 
--- | 1 列の中に異なる NA 表現が 2 種以上混じっていたら警告。
--- DataFrame の null bitmap (= 既に欠損として処理されたセル) と、文字列上に
--- 残っている NA-like トークンを別カウントとして扱う。
+-- | [日本語]: 1 列の中に異なる NA 表現が 2 種以上混じっていたら警告。
+--   DataFrame の null bitmap (= 既に欠損として処理されたセル) と、文字列上に
+--   残っている NA-like トークンを別カウントとして扱う。
+--   [English]: Warns if a single column mixes 2 or more distinct NA
+--   representations. The DataFrame's null bitmap (= cells already
+--   treated as missing) and NA-like tokens still remaining as strings
+--   are counted separately.
 detectMixedNAStrings :: DXD.DataFrame -> LogReport
 detectMixedNAStrings df = mconcat
   [ checkColumn n
@@ -306,7 +354,9 @@ detectMixedNAStrings df = mconcat
 -- W007 単位混入
 -- ---------------------------------------------------------------------------
 
--- | text 列で「数字 + 英字サフィックス」のセルが過半なら、単位付きの数値とみなす。
+-- | [日本語]: text 列で「数字 + 英字サフィックス」のセルが過半なら、単位付きの数値とみなす。
+--   [English]: If more than half the cells in a Text column are
+--   "number + alphabetic suffix", treats it as a unit-suffixed number.
 detectUnitSuffix :: DXD.DataFrame -> LogReport
 detectUnitSuffix df = mconcat
   [ checkColumn n | n <- DX.columnNames df ]
@@ -327,7 +377,8 @@ detectUnitSuffix df = mconcat
                        (Just "Phase C で stripUnits を実装予定。当面は手動で数値化してください。"))
              else noLog
 
--- | "12.3kg" / "11cm" 等のパターン判定。
+-- | [日本語]: "12.3kg" / "11cm" 等のパターン判定。
+--   [English]: Judges patterns like "12.3kg" / "11cm".
 looksLikeUnitNumber :: Text -> Bool
 looksLikeUnitNumber t =
   let s = T.strip t
@@ -344,7 +395,8 @@ looksLikeUnitNumber t =
 -- W008 通貨 / 桁区切り
 -- ---------------------------------------------------------------------------
 
--- | "$1,234.56" / "1,234" / "¥10,000" 等のパターンを検出。
+-- | [日本語]: "$1,234.56" / "1,234" / "¥10,000" 等のパターンを検出。
+--   [English]: Detects patterns like "$1,234.56" / "1,234" / "¥10,000".
 detectThousandsCurrency :: DXD.DataFrame -> LogReport
 detectThousandsCurrency df = mconcat
   [ checkColumn n | n <- DX.columnNames df ]
@@ -377,8 +429,12 @@ looksLikeThousands t0 =
 -- W005 delimiter ミスマッチ
 -- ---------------------------------------------------------------------------
 
--- | DataFrame が 1 列だけで、その値に @;@ / @\t@ / @|@ が頻出するなら delimiter
--- 判定がずれた可能性が高い。preview として渡された生バイト列も確認材料にする。
+-- | [日本語]: DataFrame が 1 列だけで、その値に @;@ / @\t@ / @|@ が頻出するなら delimiter
+--   判定がずれた可能性が高い。preview として渡された生バイト列も確認材料にする。
+--   [English]: If the DataFrame has only a single column and its
+--   values frequently contain @;@ / @\t@ / @|@, the delimiter
+--   detection was likely wrong. The raw byte string passed as the
+--   preview is also used as supporting evidence.
 detectDelimiterMismatch :: BS.ByteString -> DXD.DataFrame -> LogReport
 detectDelimiterMismatch preview df =
   let nCols = length (DX.columnNames df)

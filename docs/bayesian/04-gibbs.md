@@ -3,8 +3,8 @@
 > 🌐 **English** | [日本語](04-gibbs.ja.md)
 
 > Related demos:
-> - [`gibbs-demo`](../../demo/bayesian/GibbsDemo.hs) — Gibbs + WAIC/LOO model comparison
-> - [`gibbs-hbm-demo`](../../demo/bayesian/GibbsHBMDemo.hs) — HBM DSL × Gibbs (auto conjugacy detection)
+> - [`gibbs-demo`](../../hanalyze-demos/demo/bayesian/GibbsDemo.hs) — Gibbs + WAIC/LOO model comparison
+> - [`gibbs-hbm-demo`](../../hanalyze-demos/demo/bayesian/GibbsHBMDemo.hs) — HBM DSL × Gibbs (auto conjugacy detection)
 
 ## Overview and principle
 

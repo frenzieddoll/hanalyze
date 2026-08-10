@@ -8,7 +8,7 @@
 -- External data-format loaders (Parquet / JSON) via the Hackage
 -- @dataframe@ library.
 --
--- Returns Hackage's 'DataFrame.Internal.DataFrame.DataFrame' directly.
+-- Returns Hackage's @DataFrame.Internal.DataFrame.DataFrame@ directly.
 -- For CSV and TSV use 'Hanalyze.DataIO.CSV.loadCSV' / @loadTSV@ instead.
 module Hanalyze.DataIO.External
   ( loadParquet

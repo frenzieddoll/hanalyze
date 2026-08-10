@@ -123,10 +123,8 @@ step で O(latent 数) の残差 AD 再計算経路に落ちている筋の通�
 
 ### 図
 
-`figures/hs_dashboard_full.png` /
-`figures/py_dashboard_full.svg`
-
-(図はベンチ実行後に `figures/` へ生成される。リポジトリには含めていない)
+[hs_dashboard_full.png](./figures/hs_dashboard_full.png) /
+[py_dashboard_full.svg](./figures/py_dashboard_full.svg)
 
 ### 既知の課題
 

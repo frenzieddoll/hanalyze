@@ -6,25 +6,53 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- カーネル SVM (双対形・SMO ソルバ) — Phase 75.11 / 共有 Kernel 化 Phase 75.15。
+-- [日本語]: カーネル SVM (双対形・SMO ソルバ)。
 --
 -- 双対 C-SVC (hinge 損失) を SMO (Platt 1998) で解き、 共有カーネル語彙
 -- ('Hanalyze.Model.Kernel': Linear/Poly/RBF/Matern52/Periodic) と
--- **スパースな真のサポートベクタ** (α>0 の点) を提供する。 既定カーネルは Linear で、
+-- __スパースな真のサポートベクタ__ (α>0 の点) を提供する。 既定カーネルは Linear で、
 -- 線形 SVM が必要なら kernel=Linear・非線形は RBF/Poly を選ぶ (R `e1071::svm` の kernel= 流)。
 --
 -- カーネルハイパラは 'KernelParams' (ℓ/σ_f²/period) を持つ。 GP の観測ノイズ σ_n² は
--- SVM には不要なので 'GPParams' でなく 'KernelParams' のみに依存する (Phase 75.18)。
+-- SVM には不要なので @GPParams@ でなく 'KernelParams' のみに依存する。
 --
 -- 双対問題: max_α  Σα_i − ½ ΣΣ α_i α_j y_i y_j K(x_i,x_j)
 --           s.t.   0 ≤ α_i ≤ C,  Σ α_i y_i = 0
 --
--- SMO は 2 変数 (α_i, α_j) ずつ解析更新する。 第 1 変数 = KKT 違反点、 第 2 変数 =
--- |E_i − E_j| 最大 (Platt の 2nd heuristic)。 **乱数不使用ゆえ純粋・決定的** (簡易 SMO の
+-- SMO は 2 変数 (α_i, α_j) ずつ解析更新する。 第 1 変数 = KKT 違反点、
+-- 第 2 変数 = @|E_i − E_j|@ 最大 (Platt の 2nd heuristic)。
+-- __乱数不使用ゆえ純粋・決定的__ (簡易 SMO の
 -- ランダム j 選択は使わない)。 予測は Σ_{SV} α_i y_i K(x_i, x) + b (SV のみで決まる)。
 --
 -- カーネル評価は 'kEvalMV'(距離カーネルは ‖a−b‖²、 内積カーネル Linear/Poly は a·b、
 -- Poly の γ は 'kpLengthScale' から γ=1/(2ℓ²)・Linear の倍率は σ_f²)で共有する。
+--
+-- [English]: Kernel SVM (dual form, SMO solver).
+--
+-- Solves the dual C-SVC (hinge loss) with SMO (Platt 1998), providing the
+-- shared kernel vocabulary ('Hanalyze.Model.Kernel':
+-- Linear\/Poly\/RBF\/Matern52\/Periodic) and
+-- __truly sparse support vectors__ (points with α>0). The default
+-- kernel is Linear; pick kernel=Linear for a linear SVM or RBF\/Poly for a nonlinear one
+-- (following R's `e1071::svm` kernel= convention).
+--
+-- Kernel hyperparameters live in 'KernelParams' (ℓ\/σ_f²\/period). Since
+-- SVM has no need for the GP observation noise σ_n², it depends only on
+-- 'KernelParams' rather than @GPParams@.
+--
+-- Dual problem: max_α  Σα_i − ½ ΣΣ α_i α_j y_i y_j K(x_i,x_j)
+--           s.t.   0 ≤ α_i ≤ C,  Σ α_i y_i = 0
+--
+-- SMO analytically updates two variables (α_i, α_j) at a time. The first
+-- variable is the KKT-violating point; the second is chosen to maximize
+-- @|E_i − E_j|@ (Platt's 2nd heuristic).
+-- __Uses no randomness, hence pure and deterministic__ (unlike the
+-- simplified SMO's random j selection).
+-- Prediction is Σ_{SV} α_i y_i K(x_i, x) + b (determined only by the SVs).
+--
+-- Kernel evaluation is shared via 'kEvalMV' (distance kernels use
+-- ‖a−b‖²; inner-product kernels Linear\/Poly use a·b; Poly's γ is derived
+-- from 'kpLengthScale' as γ=1/(2ℓ²); Linear's scale is σ_f²).
 module Hanalyze.Model.SVM
   ( SVMConfig (..)
   , defaultSVM
@@ -58,7 +86,8 @@ import           Hanalyze.Model.Kernel (Kernel (..), KernelParams (..), defaultK
 -- カーネル (共有 'Kernel' + 'KernelParams' を使う)
 -- ===========================================================================
 
--- | Gram 行列 K (n×n)。 K_ij = kEvalMV ker params (row i) (row j)。
+-- | [日本語]: Gram 行列 K (n×n)。 K_ij = kEvalMV ker params (row i) (row j)。
+--   [English]: The Gram matrix K (n×n). K_ij = kEvalMV ker params (row i) (row j).
 kGram :: Kernel -> KernelParams -> LA.Matrix Double -> LA.Matrix Double
 kGram ker p x =
   let rv = V.fromList (LA.toRows x)   -- boxed Vector of 行ベクトル (O(1) 添字)
@@ -71,14 +100,17 @@ kGram ker p x =
 -- ===========================================================================
 
 data SVMConfig = SVMConfig
-  { svmC         :: !Double        -- ^ 正則化 C (0 ≤ α ≤ C)。
-  , svmKernel    :: !Kernel        -- ^ 共有カーネル (既定 'Linear')。
-  , svmParams    :: !KernelParams  -- ^ カーネルハイパラ (ℓ→γ=1/2ℓ²、 σ_f²=Linear 倍率)。
-  , svmTol       :: !Double    -- ^ KKT 許容 (E の許容)。
-  , svmMaxPasses :: !Int       -- ^ 変化が無いパスの連続上限 (収束判定)。
-  , svmMaxIter   :: !Int       -- ^ 総パス数の上限 (安全弁)。
-  , svmHyper     :: !SVMHyper  -- ^ ハイパラの決め方 (固定 or CV グリッド探索)。 GP の
-                               --   'HyperStrategy' と同型: 調整は config に畳み動詞は @svmCls@ 一本。
+  { svmC         :: !Double        -- ^ [日本語]: 正則化 C (0 ≤ α ≤ C)。 [English]: Regularization C (0 ≤ α ≤ C).
+  , svmKernel    :: !Kernel        -- ^ [日本語]: 共有カーネル (既定 'Linear')。 [English]: The shared kernel (default 'Linear').
+  , svmParams    :: !KernelParams  -- ^ [日本語]: カーネルハイパラ (ℓ→γ=1/2ℓ²、 σ_f²=Linear 倍率)。 [English]: Kernel hyperparameters (ℓ→γ=1/2ℓ²; σ_f²=Linear scale).
+  , svmTol       :: !Double    -- ^ [日本語]: KKT 許容 (E の許容)。 [English]: KKT tolerance (tolerance on E).
+  , svmMaxPasses :: !Int       -- ^ [日本語]: 変化が無いパスの連続上限 (収束判定)。 [English]: Maximum consecutive no-change passes (convergence check).
+  , svmMaxIter   :: !Int       -- ^ [日本語]: 総パス数の上限 (安全弁)。 [English]: Upper bound on the total number of passes (safety valve).
+  , svmHyper     :: !SVMHyper  -- ^ [日本語]: ハイパラの決め方 (固定 or CV グリッド探索)。 GP の
+                               --   @HyperStrategy@ と同型: 調整は config に畳み動詞は @svmCls@ 一本。
+                               --   [English]: How hyperparameters are decided (fixed, or CV grid
+                               --   search). Mirrors GP's @HyperStrategy@: tuning is folded into
+                               --   the config, and there is a single verb @svmCls@.
   } deriving (Show)
 
 defaultSVM :: SVMConfig
@@ -87,17 +119,20 @@ defaultSVM = SVMConfig
   , svmTol = 1e-3, svmMaxPasses = 5, svmMaxIter = 1000
   , svmHyper = SVMFixed }
 
--- | 学習済カーネル SVM。 **α>0 のサポートベクタのみ**保持 (スパース)。
+-- | [日本語]: 学習済カーネル SVM。 __α>0 のサポートベクタのみ__保持 (スパース)。
+--   [English]: A fitted kernel SVM. Retains
+--   __only the support vectors with α>0__ (sparse).
 data SVM = SVM
-  { svmSVx    :: !(LA.Matrix Double)  -- ^ サポートベクタ (n_sv × d)。
-  , svmSVy    :: !(VU.Vector Double)  -- ^ その符号ラベル ±1。
-  , svmSVa    :: !(VU.Vector Double)  -- ^ 双対係数 α (>0)。
-  , svmB      :: !Double              -- ^ バイアス。
-  , svmKern   :: !Kernel              -- ^ 共有カーネル。
-  , svmKParams :: !KernelParams       -- ^ カーネルハイパラ (予測時に再利用)。
+  { svmSVx    :: !(LA.Matrix Double)  -- ^ [日本語]: サポートベクタ (n_sv × d)。 [English]: Support vectors (n_sv × d).
+  , svmSVy    :: !(VU.Vector Double)  -- ^ [日本語]: その符号ラベル ±1。 [English]: Their sign labels ±1.
+  , svmSVa    :: !(VU.Vector Double)  -- ^ [日本語]: 双対係数 α (>0)。 [English]: Dual coefficients α (>0).
+  , svmB      :: !Double              -- ^ [日本語]: バイアス。 [English]: Bias.
+  , svmKern   :: !Kernel              -- ^ [日本語]: 共有カーネル。 [English]: The shared kernel.
+  , svmKParams :: !KernelParams       -- ^ [日本語]: カーネルハイパラ (予測時に再利用)。 [English]: Kernel hyperparameters (reused at prediction time).
   } deriving (Show)
 
--- | サポートベクタ数 (= α>0 の点数)。
+-- | [日本語]: サポートベクタ数 (= α>0 の点数)。
+--   [English]: Number of support vectors (= the count of points with α>0).
 numSupportVectors :: SVM -> Int
 numSupportVectors = LA.rows . svmSVx
 
@@ -105,7 +140,8 @@ numSupportVectors = LA.rows . svmSVx
 -- SMO (双対・2 クラス {0,1} → ±1)
 -- ===========================================================================
 
--- | 2 クラス C-SVC を SMO で学習 (y ∈ {0,1})。 決定的 (乱数不使用)。
+-- | [日本語]: 2 クラス C-SVC を SMO で学習 (y ∈ {0,1})。 決定的 (乱数不使用)。
+--   [English]: Fit a binary C-SVC via SMO (y ∈ {0,1}). Deterministic (no randomness).
 fitSVM :: SVMConfig -> LA.Matrix Double -> VU.Vector Int -> SVM
 fitSVM cfg x yInt =
   let !n    = LA.rows x
@@ -166,7 +202,8 @@ fitSVM cfg x yInt =
                , svmB = bF, svmKern = svmKernel cfg
                , svmKParams = svmParams cfg }
 
--- | 決定値 f(x) = Σ_{SV} α_i y_i K(x_i, x) + b (各行)。
+-- | [日本語]: 決定値 f(x) = Σ_{SV} α_i y_i K(x_i, x) + b (各行)。
+--   [English]: Decision value f(x) = Σ_{SV} α_i y_i K(x_i, x) + b (per row).
 predictSVMScore :: SVM -> LA.Matrix Double -> VU.Vector Double
 predictSVMScore m x =
   let svRows = LA.toRows (svmSVx m)
@@ -178,7 +215,8 @@ predictSVMScore m x =
               | s <- [0 .. nsv - 1] ]
   in VU.fromList (map score (LA.toRows x))
 
--- | 予測ラベル {0,1} (score ≥ 0 → 1)。
+-- | [日本語]: 予測ラベル {0,1} (score ≥ 0 → 1)。
+--   [English]: Predicted label {0,1} (score ≥ 0 → 1).
 predictSVM :: SVM -> LA.Matrix Double -> VU.Vector Int
 predictSVM m x = VU.map (\s -> if s >= 0 then 1 else 0) (predictSVMScore m x)
 
@@ -188,11 +226,12 @@ predictSVM m x = VU.map (\s -> if s >= 0 then 1 else 0) (predictSVMScore m x)
 
 data SVMMulti = SVMMulti
   { svmmClasses    :: ![Int]
-  , svmmBinaries   :: ![SVM]   -- ^ クラス順に 1-vs-rest。
-  , svmmClassNames :: ![Text]  -- ^ クラス名 (df|-> が levels 注入・空=数値表示)。
+  , svmmBinaries   :: ![SVM]   -- ^ [日本語]: クラス順に 1-vs-rest。 [English]: One-vs-rest binaries, in class order.
+  , svmmClassNames :: ![Text]  -- ^ [日本語]: クラス名 (df|-> が levels 注入・空=数値表示)。 [English]: Class names (injected as levels by df|->; empty means numeric display).
   } deriving (Show)
 
--- | 多クラス C-SVC (one-vs-rest・各 binary は 'fitSVM'・決定的)。
+-- | [日本語]: 多クラス C-SVC (one-vs-rest・各 binary は 'fitSVM'・決定的)。
+--   [English]: Multiclass C-SVC (one-vs-rest; each binary uses 'fitSVM'; deterministic).
 fitSVMMulti :: SVMConfig -> LA.Matrix Double -> VU.Vector Int -> SVMMulti
 fitSVMMulti cfg x y =
   let classes = sort (nub (VU.toList y))
@@ -200,7 +239,8 @@ fitSVMMulti cfg x y =
              | c <- classes ]
   in SVMMulti { svmmClasses = classes, svmmBinaries = bins, svmmClassNames = [] }
 
--- | 各クラスの score 最大で分類。
+-- | [日本語]: 各クラスの score 最大で分類。
+--   [English]: Classify by the maximum score across classes.
 predictSVMMulti :: SVMMulti -> LA.Matrix Double -> VU.Vector Int
 predictSVMMulti m x =
   let classes = svmmClasses m
@@ -214,29 +254,37 @@ predictSVMMulti m x =
 -- 自動最適化 (k-fold CV グリッド探索)
 --
 -- SVM は確率モデルでないため GP の周辺尤度最適化は使えない。 代わりに
--- **k-fold 交差検証の accuracy を最大化**する格子探索 (sklearn `GridSearchCV` /
+-- **k-fold 交差検証の accuracy を最大化**する格子探索 (sklearn @GridSearchCV@ /
 -- R `e1071::tune.svm` 相当)。 SMO は乱数不使用・fold 分割も固定 seed の
 -- 'Hanalyze.Stat.CV.kFold' を 'runST' で回すため **完全に決定的**。
 -- ===========================================================================
 
--- | ハイパラの決め方 (GP の 'HyperStrategy' と同型)。 固定値をそのまま使うか、
+-- | [日本語]: ハイパラの決め方 (GP の @HyperStrategy@ と同型)。 固定値をそのまま使うか、
 --   CV グリッドを探索して最良を選ぶか。 'SVMConfig' の @svmHyper@ に持たせ、 動詞 @svmCls@ が
 --   これを見て分岐する (別動詞 @svmClsTuned@ は作らない)。
+--   [English]: How hyperparameters are decided (mirrors GP's
+--   @HyperStrategy@). Either use the fixed values as-is, or search a CV
+--   grid and pick the best. Held in 'SVMConfig' as @svmHyper@, and the
+--   verb @svmCls@ branches on it (no separate @svmClsTuned@ verb is made).
 data SVMHyper
-  = SVMFixed              -- ^ 'SVMConfig' の C/kernel/params をそのまま使う。
-  | SVMTuneCV SVMTuneGrid -- ^ グリッドを k-fold CV で探索し最良ハイパラで再学習。
+  = SVMFixed              -- ^ [日本語]: 'SVMConfig' の C/kernel/params をそのまま使う。 [English]: Use 'SVMConfig''s C/kernel/params as-is.
+  | SVMTuneCV SVMTuneGrid -- ^ [日本語]: グリッドを k-fold CV で探索し最良ハイパラで再学習。 [English]: Search the grid via k-fold CV and refit with the best hyperparameters.
   deriving (Show)
 
--- | SVM ハイパラ探索グリッド。 候補は C × kernel × ℓ の直積。
+-- | [日本語]: SVM ハイパラ探索グリッド。 候補は C × kernel × ℓ の直積。
 -- 'Linear' カーネルは ℓ を使わないので ℓ 軸は無視する (重複評価を避ける)。
+--   [English]: SVM hyperparameter search grid. Candidates are the product
+--   of C × kernel × ℓ. Since the 'Linear' kernel does not use ℓ, the ℓ
+--   axis is ignored for it (to avoid duplicate evaluations).
 data SVMTuneGrid = SVMTuneGrid
-  { svmtCs      :: ![Double]   -- ^ 正則化 C 候補 (0 < C)。
-  , svmtKernels :: ![Kernel]   -- ^ カーネル候補。
-  , svmtLengths :: ![Double]   -- ^ 長さスケール ℓ 候補 (距離カーネル/Poly の γ=1/2ℓ²)。
-  , svmtFolds   :: !Int        -- ^ CV fold 数 k (2 以上)。
+  { svmtCs      :: ![Double]   -- ^ [日本語]: 正則化 C 候補 (0 < C)。 [English]: Regularization C candidates (0 < C).
+  , svmtKernels :: ![Kernel]   -- ^ [日本語]: カーネル候補。 [English]: Kernel candidates.
+  , svmtLengths :: ![Double]   -- ^ [日本語]: 長さスケール ℓ 候補 (距離カーネル/Poly の γ=1/2ℓ²)。 [English]: Length-scale ℓ candidates (γ=1/2ℓ² for distance kernels/Poly).
+  , svmtFolds   :: !Int        -- ^ [日本語]: CV fold 数 k (2 以上)。 [English]: Number of CV folds k (2 or more).
   } deriving (Show)
 
--- | 既定グリッド: C ∈ {0.1,1,10,100} × RBF × ℓ ∈ {0.25,0.5,1,2,4}・5-fold。
+-- | [日本語]: 既定グリッド: C ∈ {0.1,1,10,100} × RBF × ℓ ∈ {0.25,0.5,1,2,4}・5-fold。
+--   [English]: Default grid: C ∈ {0.1,1,10,100} × RBF × ℓ ∈ {0.25,0.5,1,2,4}, 5-fold.
 defaultSVMTuneGrid :: SVMTuneGrid
 defaultSVMTuneGrid = SVMTuneGrid
   { svmtCs      = [0.1, 1, 10, 100]
@@ -245,13 +293,15 @@ defaultSVMTuneGrid = SVMTuneGrid
   , svmtFolds   = 5
   }
 
--- | グリッドの 1 点に対応する 'SVMConfig' を作る (base から C/kernel/ℓ を差し替え)。
+-- | [日本語]: グリッドの 1 点に対応する 'SVMConfig' を作る (base から C/kernel/ℓ を差し替え)。
+--   [English]: Build the 'SVMConfig' for one grid point (swaps C/kernel/ℓ from base).
 tuneCandidate :: SVMConfig -> Double -> Kernel -> Double -> SVMConfig
 tuneCandidate base c ker l =
   base { svmC = c, svmKernel = ker
        , svmParams = (svmParams base) { kpLengthScale = l } }
 
--- | グリッドの全候補 'SVMConfig' (Linear は ℓ 軸を畳む)。
+-- | [日本語]: グリッドの全候補 'SVMConfig' (Linear は ℓ 軸を畳む)。
+--   [English]: All candidate 'SVMConfig's from the grid (Linear collapses the ℓ axis).
 tuneCandidates :: SVMConfig -> SVMTuneGrid -> [SVMConfig]
 tuneCandidates base grid =
   [ tuneCandidate base c ker l
@@ -262,14 +312,17 @@ tuneCandidates base grid =
     lengthsFor Linear = take 1 (svmtLengths grid ++ [1.0])  -- ℓ 無関係 → 1 点
     lengthsFor _      = svmtLengths grid
 
--- | 行添字リストで行列の行とラベルを抜き出す。
+-- | [日本語]: 行添字リストで行列の行とラベルを抜き出す。
+--   [English]: Extract matrix rows and labels by a list of row indices.
 sliceRows :: V.Vector (LA.Vector Double) -> VU.Vector Int -> [Int]
           -> (LA.Matrix Double, VU.Vector Int)
 sliceRows rows y idx =
   ( LA.fromRows [ rows V.! i | i <- idx ]
   , VU.fromList [ y VU.! i | i <- idx ] )
 
--- | 1 候補の平均 CV accuracy。 各 fold で train に学習し test の正解率を測る。
+-- | [日本語]: 1 候補の平均 CV accuracy。 各 fold で train に学習し test の正解率を測る。
+--   [English]: Average CV accuracy for one candidate. Fits on train and
+--   measures test accuracy for each fold.
 cvAccuracy :: SVMConfig -> [Fold]
            -> V.Vector (LA.Vector Double) -> VU.Vector Int -> Double
 cvAccuracy cfg folds rows y =
@@ -284,9 +337,13 @@ cvAccuracy cfg folds rows y =
         in fromIntegral ok / fromIntegral nTe
   in if null accs then 0 else sum accs / fromIntegral (length accs)
 
--- | k-fold CV で SVM のハイパラ (C × kernel × ℓ) を調律する。 CV accuracy を
--- 最大化する 'SVMConfig' と、 その平均 CV accuracy を返す。 **決定的** (固定 seed の
--- fold 分割・SMO は乱数不使用)。 sklearn `GridSearchCV` / R `tune.svm` 相当。
+-- | [日本語]: k-fold CV で SVM のハイパラ (C × kernel × ℓ) を調律する。 CV accuracy を
+-- 最大化する 'SVMConfig' と、 その平均 CV accuracy を返す。 __決定的__ (固定 seed の
+-- fold 分割・SMO は乱数不使用)。 sklearn @GridSearchCV@ / R `tune.svm` 相当。
+--   [English]: Tune the SVM hyperparameters (C × kernel × ℓ) via k-fold CV.
+--   Returns the 'SVMConfig' that maximizes CV accuracy along with its mean
+--   CV accuracy. __Deterministic__ (fixed-seed fold splits; SMO uses no
+--   randomness). Equivalent to sklearn's @GridSearchCV@ \/ R's `tune.svm`.
 tuneSVM :: SVMConfig -> SVMTuneGrid -> LA.Matrix Double -> VU.Vector Int
         -> (SVMConfig, Double)
 tuneSVM base grid x y =

@@ -1,11 +1,10 @@
-{-# LANGUAGE CPP               #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- | Phase 78.A/B: DOE ワークフロー (設計オブジェクト + runsheet + designModel)。
 --
--- 大半は standalone (flag plot-integration off・upstream portable) で build/run できるが、
--- 一部の診断テスト (tracesOf / MultiVarModel の事後予測帯) は plot 連携層
--- (Hanalyze.Plot.*) に依存するため @PLOT_INTEGRATION@ CPP で囲む
--- (= flag plot-integration on のときだけ compile)。
+-- standalone (upstream portable) で build/run できるテストのみを置く。
+-- plot 連携層 (Hanalyze.Plot.*) 依存の診断テスト (tracesOf /
+-- MultiVarModel の事後予測帯) は Phase 106.4 で hanalyze-plot-test
+-- (hanalyze-plot/test-plot/Spec.hs) へ移行した。
 module Hanalyze.Design.WorkflowSpec (spec) where
 
 import qualified Data.Text as T
@@ -22,17 +21,8 @@ import qualified DataFrame.Internal.DataFrame  as DX
 import           Test.Hspec
 import           Hanalyze.Design.Workflow
 import           Hanalyze.Fit             (designModel, designModelGP, defaultGP, gpMulti, GPConfig (..), (|->), ranIntercept, ranSlope, designHBMProgram, designModelHBM, DesignHBMFit (..), multiOutput, modelFor)
-#ifdef PLOT_INTEGRATION
-import           Hanalyze.Plot.Bayes      (tracesOf)
-#endif
 import           Hanalyze.Model.HBM       (sampleNames, ModelP)
 import           Hanalyze.Model.Wrappers  (MultiLMModel (..), GPRegModelN (..), GPMethod (..), HyperStrategy (..), defaultHBM, HBMConfig (..))
-#ifdef PLOT_INTEGRATION
--- ModelFrame/VarRole は MultiVarModel 事後予測帯テスト (guarded) 専用ゆえ一緒に囲む。
-import           Hanalyze.Model.Formula.Frame (ModelFrame (..), VarRole (..))
-import           Hanalyze.Plot.Core       (MultiVarModel (..))
-import           Hanalyze.Plot.ML         ()  -- instance MultiVarModel DesignHBMFit
-#endif
 import           Hanalyze.Model.GP        (GPParams (..), Kernel (..))
 import           Hanalyze.Model.Core      (rSquared1)
 import           Hanalyze.Model.Formula.RFormula (parseRFormula)
@@ -191,23 +181,6 @@ spec = do
           bTemp = mean0 (drawsFor "temp" m)
       bTemp `shouldSatisfy` (\b -> abs (b - 3) < 1.0)
 
-#ifdef PLOT_INTEGRATION
-    -- Phase 78.J: designModelHBM の学習済 HBM を dhfModel で露出し、 診断抽出子
-    -- (tracesOf / dagOf 等) に渡せる (DesignHBMFit から診断が出せる)。
-    -- ※ tracesOf は plot 連携層 (Hanalyze.Plot.Bayes)・plot-integration 限定。
-    it "designModelHBM: dhfModel で診断 (tracesOf) が出せる" $ do
-      let temps  = [-1, 1, -1, 1, -1, 1, -1, 1] :: [Double]
-          lots   = ["A","A","A","A","B","B","B","B"] :: [T.Text]
-          ys     = [ 2 + 3 * t + (if l == "A" then -1 else 1) | (t, l) <- zip temps lots ]
-          df     = DX.insertColumn "lot"  (DX.fromList lots)
-                 $ DX.insertColumn "temp" (DX.fromList temps)
-                 $ DX.insertColumn "y"    (DX.fromList ys)
-                 $ DX.empty
-          plan   = factorialDesign [contFactor "temp" (-1, 1)]
-          m      = df |-> designModelHBM defaultHBM plan [ranIntercept "lot"] "y"
-      length (tracesOf (dhfModel m)) `shouldSatisfy` (> 0)   -- param ごとの trace が出る
-#endif
-
     -- Phase 78.G-f 回帰: NA 行 drop と群 idx の行ずれ (code review 指摘)。
     -- 'modelFrame' (DropRows) は formula 関与列 (temp/y) に NA を含む行を落として
     -- designX/ys を作るが、 群 idx (prepRE) が raw df (NA 除去前・行数不変) から
@@ -314,40 +287,6 @@ spec = do
         (mkFrameP (\l -> if l=="A" then 5 else 1)
            |-> designModelHBM (tinyCfg 100) planP [ranSlope ["temp"] "lot"] "y")
       True `shouldBe` True
-
-#ifdef PLOT_INTEGRATION
-    -- Phase 78.G-f Task 4: profiler/contour が designModelHBM に載る事後予測帯。
-    -- designMatrixF (dhfFormula m) ef を直接叩き、 fit 時と同じ列順の設計行列を作る
-    -- ( evalFrameAt 相当の helper は無いので eval ModelFrame を手組みする)。
-    -- ★mfParams (合成パラメータ名 "_p0"/"_p1"…) は formula 内部表現なので手で推測せず、
-    --   訓練済 'dhfFrame' (= mvFrame m) を土台に mfRoles/mfNRows だけ差し替える
-    --   (本番の Core.hs evalFrame と同じ据え置き方)。
-    -- ※ MultiVarModel (mvFrame/mvEvalFrame) は plot 連携層・plot-integration 限定。
-    it "MultiVarModel DesignHBMFit は事後予測帯を返す" $ do
-      let temps  = [-1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1] :: [Double]
-          lots   = ["A","A","A","A","A","A","B","B","B","B","B","B"] :: [T.Text]
-          noise  = [0.05, -0.03, 0.02, -0.04, 0.01, -0.02, 0.03, -0.01, 0.04, -0.05, 0.02, -0.03]
-          lotShift l = if l == "A" then (-1.0) else 1.0
-          ys     = [ 2 + 3 * t + lotShift l + e
-                   | (t, l, e) <- zip3 temps lots noise ]
-          mkFrameHBM = DX.insertColumn "lot"  (DX.fromList lots)
-                     $ DX.insertColumn "temp" (DX.fromList temps)
-                     $ DX.insertColumn "y"    (DX.fromList ys)
-                     $ DX.empty
-          plan = factorialDesign [contFactor "temp" (-1, 1)]
-          m    = mkFrameHBM |-> designModelHBM defaultHBM plan [ranIntercept "lot"] "y"
-          ef   = (mvFrame m)
-                   { mfRoles  = [ ("y",    RoleResponse (V.fromList [0, 0, 0]))
-                                , ("temp", RoleContinuous (V.fromList [-1, 0, 1]))
-                                ]
-                   , mfNRows  = 3
-                   }
-          (mu, band) = mvEvalFrame m 0.95 ef
-      length mu `shouldBe` 3
-      band `shouldSatisfy` isJust
-      -- 中心 μ は temp とともに増加 (真の傾き ≈ 3)。
-      (last mu - head mu) `shouldSatisfy` (> 3)
-#endif
 
     -- Phase 78.G-f Task 5: multiOutput が designModelHBM とも対称に使えること
     -- (LM/GP と同じ「カレー化 spec (Text -> spec) を渡せば複数応答へ一括適用」 が

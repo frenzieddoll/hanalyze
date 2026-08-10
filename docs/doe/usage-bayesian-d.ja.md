@@ -1,7 +1,5 @@
 # Bayesian D-optimal Design の使い方
 
-> 🌐 [English](usage-bayesian-d.md) | **日本語**
-
 > Phase 24 / 25 の Custom Design を前提に、 DuMouchel-Jones (1994) の Bayesian
 > modification + Compound (alphabetic) criterion + 多変量 Cp の組み合わせ評価を扱う。
 > 型シグネチャ・最小例は [api-guide 09-doe](../api-guide/09-doe.ja.md) を一次根拠に、

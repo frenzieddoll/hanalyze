@@ -5,7 +5,7 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Gradient Boosting Machine (回帰 + 二値分類).
+-- [日本語]: Gradient Boosting Machine (回帰 + 二値分類)。
 --
 -- 弱学習器は 'Hanalyze.Model.RandomForest' の回帰木 ('RF.Tree' /
 -- 'RF.buildTreeV') を流用 (bootstrap 無 + mtry = d で full-data /
@@ -19,8 +19,27 @@
 --
 -- 損失:
 --
---   * 回帰: 二乗誤差 (negative gradient = 残差)
---   * 分類 (binary): log-loss (negative gradient = y - sigmoid(F))
+--   - 回帰: 二乗誤差 (negative gradient = 残差)
+--   - 分類 (binary): log-loss (negative gradient = y - sigmoid(F))
+--
+-- [English]: Gradient Boosting Machine (regression + binary classification).
+--
+-- The weak learner reuses the regression tree from
+-- 'Hanalyze.Model.RandomForest' ('RF.Tree' \/ 'RF.buildTreeV'),
+-- reduced to an ordinary GBM tree that uses full data \/ all features (no
+-- bootstrap, mtry = d).
+--
+-- @
+-- import qualified Hanalyze.Model.GradientBoosting as GB
+-- gb <- GB.fitGBRegressor GB.defaultGBM x y
+-- let yhat = GB.predictGBR gb x
+-- @
+--
+-- Loss:
+--
+--   - Regression: squared error (negative gradient = the residual).
+--   - Classification (binary): log-loss (negative gradient =
+--     y - sigmoid(F)).
 module Hanalyze.Model.GradientBoosting
   ( GBConfig (..)
   , defaultGBM
@@ -42,12 +61,13 @@ import qualified Hanalyze.Model.RandomForest as RF
 -- Config
 -- ---------------------------------------------------------------------------
 
--- | GBM 設定。
+-- | [日本語]: GBM 設定。
+--   [English]: The GBM configuration.
 data GBConfig = GBConfig
-  { gbNRounds    :: !Int     -- ^ ブースティング回数 M。
-  , gbMaxDepth   :: !Int     -- ^ 各弱学習器の最大深さ (典型 3-5)。
-  , gbMinSamples :: !Int     -- ^ 葉最小サンプル数。
-  , gbLearnRate  :: !Double  -- ^ 学習率 η (typ 0.1)。
+  { gbNRounds    :: !Int     -- ^ [日本語]: ブースティング回数 M。 [English]: The number of boosting rounds M.
+  , gbMaxDepth   :: !Int     -- ^ [日本語]: 各弱学習器の最大深さ (典型 3-5)。 [English]: The maximum depth of each weak learner (typically 3-5).
+  , gbMinSamples :: !Int     -- ^ [日本語]: 葉最小サンプル数。 [English]: The minimum number of samples per leaf.
+  , gbLearnRate  :: !Double  -- ^ [日本語]: 学習率 η (typ 0.1)。 [English]: The learning rate η (typically 0.1).
   } deriving (Show)
 
 defaultGBM :: GBConfig
@@ -58,7 +78,9 @@ defaultGBM = GBConfig
   , gbLearnRate  = 0.1
   }
 
--- | 弱学習器設定 (full-data / 全特徴利用、 木の深さは gbMaxDepth)。
+-- | [日本語]: 弱学習器設定 (full-data / 全特徴利用、 木の深さは gbMaxDepth)。
+--   [English]: The weak-learner configuration (uses full data \/ all
+--   features; tree depth is gbMaxDepth).
 weakRFCfg :: Int -> GBConfig -> RF.RFConfig
 weakRFCfg d cfg = RF.RFConfig
   { RF.rfTrees      = 1
@@ -72,7 +94,8 @@ weakRFCfg d cfg = RF.RFConfig
 -- Regressor
 -- ---------------------------------------------------------------------------
 
--- | 回帰 GBM。 予測 = init + η · Σ tree_m(x).
+-- | [日本語]: 回帰 GBM。 予測 = init + η · Σ tree_m(x)。
+--   [English]: A regression GBM. Prediction = init + η · Σ tree_m(x).
 data GBRegressor = GBRegressor
   { gbrInit  :: !Double
   , gbrTrees :: ![RF.Tree]
@@ -80,8 +103,8 @@ data GBRegressor = GBRegressor
   } deriving (Show)
 
 fitGBRegressor :: GBConfig
-               -> LA.Matrix Double   -- ^ X (n × d)
-               -> VU.Vector Double   -- ^ y (n)
+               -> LA.Matrix Double   -- ^ [日本語]: X (n × d)。 [English]: X (n × d).
+               -> VU.Vector Double   -- ^ [日本語]: y (n)。 [English]: y (n).
                -> GBRegressor
 fitGBRegressor cfg x y =
   let !n     = VU.length y
@@ -103,17 +126,21 @@ fitGBRegressor cfg x y =
       (_, treesRev) = foldl step (preds0, []) [1 .. gbNRounds cfg]
   in GBRegressor f0 (reverse treesRev) lr
 
--- | 1 行を [Double] 化 (predictTree のための一時変換)。
+-- | [日本語]: 1 行を [Double] 化 (predictTree のための一時変換)。
+--   [English]: Converts a single row to [Double] (a temporary conversion
+--   for predictTree).
 rowList :: LA.Matrix Double -> Int -> [Double]
 rowList x i = LA.toList (LA.flatten (x LA.? [i]))
 
--- | 1 サンプルの予測。
+-- | [日本語]: 1 サンプルの予測。
+--   [English]: Predicts a single sample.
 predictGBRRow :: GBRegressor -> [Double] -> Double
 predictGBRRow gb xs =
   gbrInit gb
     + gbrLR gb * sum [ RF.predictTree t xs | t <- gbrTrees gb ]
 
--- | 行列入力に対する予測 (n).
+-- | [日本語]: 行列入力に対する予測 (n)。
+--   [English]: Predicts for matrix input (n).
 predictGBR :: GBRegressor -> LA.Matrix Double -> VU.Vector Double
 predictGBR gb x =
   let !n = LA.rows x
@@ -123,9 +150,11 @@ predictGBR gb x =
 -- Classifier (binary)
 -- ---------------------------------------------------------------------------
 
--- | 二値分類 GBM (logit + log-loss)。 ラベルは 0/1。
+-- | [日本語]: 二値分類 GBM (logit + log-loss)。 ラベルは 0/1。
+--   [English]: A binary-classification GBM (logit + log-loss). Labels are
+--   0\/1.
 data GBClassifier = GBClassifier
-  { gbcInit  :: !Double          -- ^ logit(p̂_0)
+  { gbcInit  :: !Double          -- ^ [日本語]: logit(p̂_0)。 [English]: logit(p̂_0).
   , gbcTrees :: ![RF.Tree]
   , gbcLR    :: !Double
   } deriving (Show)
@@ -137,8 +166,8 @@ clamp :: Double -> Double -> Double -> Double
 clamp lo hi v = max lo (min hi v)
 
 fitGBClassifier :: GBConfig
-                -> LA.Matrix Double   -- ^ X (n × d)
-                -> VU.Vector Int      -- ^ y ∈ {0,1} (n)
+                -> LA.Matrix Double   -- ^ [日本語]: X (n × d)。 [English]: X (n × d).
+                -> VU.Vector Int      -- ^ [日本語]: y ∈ {0,1} (n)。 [English]: y ∈ {0,1} (n).
                 -> GBClassifier
 fitGBClassifier cfg x y =
   let !n    = VU.length y
@@ -162,7 +191,8 @@ fitGBClassifier cfg x y =
       (_, treesRev) = foldl step (logits0, []) [1 .. gbNRounds cfg]
   in GBClassifier f0 (reverse treesRev) lr
 
--- | クラス確率 p(y=1 | x) を返す。
+-- | [日本語]: クラス確率 p(y=1 | x) を返す。
+--   [English]: Returns the class probability p(y=1 | x).
 predictGBCProbs :: GBClassifier -> LA.Matrix Double -> VU.Vector Double
 predictGBCProbs gb x =
   let !n = LA.rows x
@@ -170,7 +200,8 @@ predictGBCProbs gb x =
                    + gbcLR gb * sum [ RF.predictTree t xs | t <- gbcTrees gb ]
   in VU.generate n (\i -> sigmoid (logit (rowList x i)))
 
--- | クラス予測 (閾値 0.5)。
+-- | [日本語]: クラス予測 (閾値 0.5)。
+--   [English]: Predicts the class (threshold 0.5).
 predictGBC :: GBClassifier -> LA.Matrix Double -> VU.Vector Int
 predictGBC gb x =
   VU.map (\p -> if p >= 0.5 then 1 else 0) (predictGBCProbs gb x)

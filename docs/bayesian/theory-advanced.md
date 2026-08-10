@@ -518,7 +518,7 @@ Combine the two mechanisms when building the likelihood. In hanalyze these are s
 
 Suggested order for newcomers:
 
-1. **Run and read the demos** ([demo](../../demo/)):
+1. **Run and read the demos** ([demo](../../hanalyze-demos/demo/)):
    - `clinical-trial`, `simpson-paradox` (basics)
    - `mixture-demo` (Mixture)
    - `lkj-demo`, `lkj3d-demo` (LKJ)

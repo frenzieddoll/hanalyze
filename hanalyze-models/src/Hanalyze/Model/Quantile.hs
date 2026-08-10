@@ -20,6 +20,8 @@
 -- Algorithm: Hunter & Lange (2000) Majorization-Minimization. Locally
 -- approximate @|u|@ by a quadratic and iterate weighted least squares:
 --
+-- [日本語]:
+--
 -- 1. β₀ = OLS 解で初期化
 -- 2. 反復 k:
 --    - r = y - X β_k
@@ -30,6 +32,19 @@
 --
 -- 評価指標 (Koenker-Machado 1999): R¹_τ = 1 - V̂_τ(model) / V̂_τ(intercept-only)
 -- where V̂_τ(m) = Σ ρ_τ(r_i^m)。
+--
+-- [English]:
+--
+-- 1. Initialize β₀ with the OLS solution.
+-- 2. Iteration k:
+--    - r = y - X β_k
+--    - w_i = 1 / (2 max(|r_i|, ε))
+--    - y'_i = y_i + (τ - ½) / w_i
+--    - β_{k+1} = (Xᵀ W X)⁻¹ Xᵀ W y'
+-- 3. Stop when ||β_{k+1} - β_k|| < tol (max 100 iterations).
+--
+-- Evaluation metric (Koenker-Machado 1999): R¹_τ = 1 - V̂_τ(model) / V̂_τ(intercept-only)
+-- where V̂_τ(m) = Σ ρ_τ(r_i^m).
 module Hanalyze.Model.Quantile
   ( QRFit (..)
   , fitQuantile
@@ -158,7 +173,9 @@ quantile p xs
           frac   = ix - fromIntegral lo
       in (1 - frac) * (sorted !! lo) + frac * (sorted !! hi)
 
--- | Pseudo R¹_τ を別途計算 (model loss と baseline loss から)。
+-- | [日本語]: Pseudo R¹_τ を別途計算 (model loss と baseline loss から)。
+--   [English]: Compute the pseudo R¹_τ separately (from the model loss
+--   and baseline loss).
 pseudoR1 :: Double            -- ^ model V̂_τ
          -> Double            -- ^ baseline (intercept-only) V̂_τ
          -> Double

@@ -14,7 +14,7 @@
 --   * 'gd'             — Generational Distance (distance from the
 --     approximation to the true front).
 --
--- All objectives are treated as **minimized**, matching the NSGA-II
+-- All objectives are treated as __minimized__, matching the NSGA-II
 -- convention.
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE OverloadedStrings #-}

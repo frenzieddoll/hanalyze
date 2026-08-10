@@ -145,21 +145,37 @@ class Model m where
 -- これらは plot 非依存 = hanalyze-portable (toPlot/Plottable は別途 Hanalyze.Plot)。
 -- ===========================================================================
 
--- | 残差を取り出せるフィット結果。 'toPlot' の残差診断図 (残差 vs fitted / QQ)
--- が要求する最小能力。
+-- | [日本語]: 残差を取り出せるフィット結果。 @toPlot@ の残差診断図 (残差 vs fitted / QQ)
+--   が要求する最小能力。
+--   [English]: A fit result from which residuals can be extracted; the
+--   minimum capability required by 'toPlot''s residual diagnostic plots
+--   (residuals vs. fitted / QQ).
 class ResidualModel r where
-  -- | 残差ベクトル (単出力 @q = 1@ を想定。 多出力は 'residualsCol' を使う)。
+  -- | [日本語]: 残差ベクトル (単出力 @q = 1@ を想定。 多出力は 'residualsCol' を使う)。
+  --   [English]: Residual vector (assumes single-output @q = 1@; for
+  --   multi-output use 'residualsCol').
   residualsOf :: r -> LA.Vector Double
 
--- | 新しい入力に対し予測できるフィット結果。 'toPlot' の回帰線・予測 band が
--- 要求する最小能力。
+-- | [日本語]: 新しい入力に対し予測できるフィット結果。 @toPlot@ の回帰線・予測 band が
+--   要求する最小能力。
 --
--- ⚠ 既定の意味は **線形予測子** @η = X_new · β@ (列 = 各応答)。 LM では平均応答に
--- 一致するが、 GLM の平均応答 @μ = g⁻¹(η)@ には逆リンクが要る (モデルタグ依存)
--- ため、 GLM は 'Model' の 'predict' を使うこと。 本 class は線形スケールの予測を
--- 与える低レベル能力と位置づける。
+--   ⚠ 既定の意味は __線形予測子__ @η = X_new · β@ (列 = 各応答)。 LM では平均応答に
+--   一致するが、 GLM の平均応答 @μ = g⁻¹(η)@ には逆リンクが要る (モデルタグ依存)
+--   ため、 GLM は 'Model' の 'predict' を使うこと。 本 class は線形スケールの予測を
+--   与える低レベル能力と位置づける。
+--   [English]: A fit result that can predict on new input. The minimum
+--   capability required by 'toPlot''s regression line \/ prediction band.
+--
+--   ⚠ The default meaning is the __linear predictor__ @η = X_new · β@
+--   (columns = each response). This coincides with the mean response for
+--   LM, but the GLM mean response @μ = g⁻¹(η)@ needs the inverse link
+--   (model-tag dependent), so GLM should use 'Model''s 'predict' instead.
+--   This class is positioned as the low-level capability that gives
+--   predictions on the linear scale.
 class PredictiveModel r where
-  -- | @X_new (m×p)@ に対する線形予測子 @ŷ = X_new · β (m×q)@。
+  -- | [日本語]: @X_new (m×p)@ に対する線形予測子 @ŷ = X_new · β (m×q)@。
+  --   [English]: The linear predictor @ŷ = X_new · β (m×q)@ for
+  --   @X_new (m×p)@.
   predictAt :: r -> LA.Matrix Double -> LA.Matrix Double
 
 -- ---------------------------------------------------------------------------

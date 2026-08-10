@@ -7,14 +7,24 @@
 --
 -- HBM の純粋な数値・線形代数 leaf ユーティリティ。
 --
--- ここに集めた定義は HBM のいずれの型 (Distribution / Model / Track 等) にも
--- 依存しない葉 (leaf) であり、 Floating / Ord のみで多相に書かれている。
--- AD (Reverse.Double) でも Track でも評価できるよう型クラス制約を最小に保つ。
--- 'Hanalyze.Model.HBM' は本モジュールを import して内部利用 + 一部を re-export する
--- (公開シンボル: 'lgammaApprox' / 'digamma')。
+-- [日本語]: ここに集めた定義は HBM のいずれの型 (Distribution / Model /
+--   Track 等) にも依存しない葉 (leaf) であり、 Floating / Ord のみで多相に
+--   書かれている。 AD (Reverse.Double) でも Track でも評価できるよう型クラス
+--   制約を最小に保つ。 'Hanalyze.Model.HBM' は本モジュールを import
+--   して内部利用 + 一部を re-export する (公開シンボル: 'lgammaApprox' /
+--   'digamma')。
+--   [English]: The definitions gathered here are leaves that depend on none
+--   of HBM's types (Distribution / Model / Track, etc.), written
+--   polymorphically with only @Floating@ / @Ord@ constraints, kept minimal
+--   so they can be evaluated via AD (@Reverse.Double@) or @Track@ alike.
+--   'Hanalyze.Model.HBM' imports this module for internal use and
+--   re-exports part of it (public symbols: 'lgammaApprox' / 'digamma').
 --
--- Phase 58.2 で 'Hanalyze.Model.HBM' (5,519 行) から責務分離して抽出。
--- 数値は 1 bit も変えていない (純粋な移設)。
+-- [日本語]: 'Hanalyze.Model.HBM' (5,519 行) から責務分離して抽出。
+--   数値は 1 bit も変えていない (純粋な移設)。
+--   [English]: Extracted from 'Hanalyze.Model.HBM' (5,519 lines) as
+--   a responsibility split; the numerics are unchanged to the bit (a pure
+--   relocation).
 module Hanalyze.Model.HBM.Util
   ( -- * 線形代数 (下三角ソルバ / Cholesky / リスト整形)
     backSubLT
@@ -57,13 +67,23 @@ import qualified Data.Vector as V
 --   ※さらなる高速化には interface 自体の Vector 化 (呼出側の per-call 変換除去) が
 --   要・大 N 密行列モデル出現時の TODO。
 
--- | Phase 95 B-dsl: RBF (exponentiated-quadratic) GP カーネルの共分散行列を
+-- | [日本語]: RBF (exponentiated-quadratic) GP カーネルの共分散行列を
 --   nested list で構築する。 @Σ_ij = α² exp(-0.5 (x_i-x_j)²/ρ²) + [i=j](1e-10 + σ)@。
---   'Hanalyze.Model.HBM.gpExpQuadCov' (jitter 1e-10 込) + 対角 σ と一致する
---   = 'MvNormalGpRBF' 密度が呼ぶ (値は既存 gp-regr モデルと bit 一致)。 下層 (Util)
---   に置くことで 'Distribution' の @obsLogSum@ から参照できる (Model 層の
---   'gpExpQuadCov' は上層ゆえ密度からは呼べない)。 ★ホット経路 (Gradient の
---   'gpRBFAnalyticVG') は本 list 版を使わず hmatrix Matrix で直接組む (脱リスト)。
+--   @Hanalyze.Model.HBM.gpExpQuadCov@ (jitter 1e-10 込) + 対角 σ と一致する
+--   = @MvNormalGpRBF@ 密度が呼ぶ (値は既存 gp-regr モデルと bit 一致)。 下層 (Util)
+--   に置くことで @Distribution@ の @obsLogSum@ から参照できる (Model 層の
+--   @gpExpQuadCov@ は上層ゆえ密度からは呼べない)。 ★ホット経路 (Gradient の
+--   @gpRBFAnalyticVG@) は本 list 版を使わず hmatrix Matrix で直接組む (脱リスト)。
+--   [English]: Builds the RBF (exponentiated-quadratic) GP kernel's
+--   covariance matrix as a nested list:
+--   @Σ_ij = α² exp(-0.5 (x_i-x_j)²/ρ²) + [i=j](1e-10 + σ)@. Matches
+--   @Hanalyze.Model.HBM.gpExpQuadCov@ (including the 1e-10 jitter)
+--   plus the diagonal σ — called by the @MvNormalGpRBF@ density (bit-identical
+--   to existing gp-regr models). Placed in this lower layer (Util) so
+--   'Distribution''s @obsLogSum@ can reference it (the Model-layer
+--   @gpExpQuadCov@ sits above and cannot be called from a density). ★The hot
+--   path (Gradient's @gpRBFAnalyticVG@) does not use this list version but
+--   builds directly with an hmatrix @Matrix@ instead (delisted).
 {-# INLINABLE gpRBFCovList #-}
 gpRBFCovList :: forall a. Floating a => [a] -> a -> a -> a -> [[a]]
 gpRBFCovList xs alpha rho sigma =
@@ -73,7 +93,7 @@ gpRBFCovList xs alpha rho sigma =
     | (j, xj) <- zip [0 :: Int ..] xs ]
   | (i, xi) <- zip [0 :: Int ..] xs ]
 
--- | 下三角 L から Lᵀ x = b を後退代入で解く (L は @choleskyL@ 形式)。
+-- | [日本語]: 下三角 L から Lᵀ x = b を後退代入で解く (L は @choleskyL@ 形式)。 [English]: Solves Lᵀ x = b by back-substitution given lower-triangular L (in @choleskyL@ form).
 {-# INLINABLE backSubLT #-}
 backSubLT :: forall a. Floating a => [[a]] -> [a] -> [a]
 backSubLT l b =
@@ -94,14 +114,19 @@ backSubLT l b =
             in go (i - 1) (V.cons xi acc)
   in V.toList (go (n - 1) V.empty)
 
--- | リストを長さ @n@ ごとに分割。最後が短ければそのまま (本実装では使わない想定)。
+-- | [日本語]: リストを長さ @n@ ごとに分割。 最後が短ければそのまま (本実装では使わない想定)。 [English]: Splits a list into chunks of length @n@; the last chunk stays short if it doesn't divide evenly (unused in this implementation).
 chunksOf :: Int -> [a] -> [[a]]
 chunksOf _ [] = []
 chunksOf n xs = let (h, t) = splitAt n xs in h : chunksOf n t
 
--- | 対称正定値行列 Σ の Cholesky 下三角分解 L (Σ = L Lᵀ)。
--- 行列は行リスト @[[a]]@ で、l[i] は長さ @i+1@ の下三角行 ([L[i][0]..L[i][i]])。
--- 対角が非正になれば @Nothing@。
+-- | [日本語]: 対称正定値行列 Σ の Cholesky 下三角分解 L (Σ = L Lᵀ)。
+--   行列は行リスト @[[a]]@ で、 l[i] は長さ @i+1@ の下三角行
+--   ([L[i][0]..L[i][i]])。 対角が非正になれば @Nothing@。
+--   [English]: Cholesky lower-triangular decomposition L of a symmetric
+--   positive-definite matrix Σ (Σ = L Lᵀ). The matrix is a list of rows
+--   @[[a]]@, where l[i] is the length-@i+1@ lower-triangular row
+--   ([L[i][0]..L[i][i]]). Returns @Nothing@ if a diagonal entry becomes
+--   non-positive.
 {-# INLINABLE choleskyL #-}
 choleskyL :: forall a. (Floating a, Ord a) => [[a]] -> Maybe [[a]]
 choleskyL a0 =
@@ -133,7 +158,7 @@ choleskyL a0 =
                  Just nr -> step (i + 1) (V.snoc prev nr)
   in fmap (\v -> [ V.toList r | r <- V.toList v ]) (step 0 V.empty)
 
--- | 下三角系 L z = b の前進代入 (L は @choleskyL@ 形式、長さ各 i+1)。
+-- | [日本語]: 下三角系 L z = b の前進代入 (L は @choleskyL@ 形式、 長さ各 i+1)。 [English]: Solves the lower-triangular system L z = b by forward substitution (L in @choleskyL@ form, each row length i+1).
 {-# INLINABLE forwardSub #-}
 forwardSub :: forall a. Floating a => [[a]] -> [a] -> [a]
 forwardSub l b =
@@ -160,8 +185,11 @@ forwardSub l b =
 negInf :: Floating a => a
 negInf = -1/0
 
--- | 多相 log-sum-exp。AD でも Track でも使えるよう Floating + Ord で書く。
--- @logSumExpA xs = log (Σ exp x)@ を最大値シフトで安定化。
+-- | [日本語]: 多相 log-sum-exp。 AD でも Track でも使えるよう Floating + Ord
+--   で書く。 @logSumExpA xs = log (Σ exp x)@ を最大値シフトで安定化。
+--   [English]: Polymorphic log-sum-exp, written with @Floating@ + @Ord@ so
+--   it works under both AD and @Track@. Stabilizes
+--   @logSumExpA xs = log (Σ exp x)@ via a max-value shift.
 {-# INLINABLE logSumExpA #-}
 logSumExpA :: (Floating a, Ord a) => [a] -> a
 logSumExpA []  = negInf
@@ -177,23 +205,30 @@ logSumExpA xs  =
 -- HMM forward algorithm (状態列の周辺化)
 -- ===========================================================================
 -- Phase 92 A2 (2026-07-17): Model.hs:1071 から純粋移設 (数値は 1 bit も不変)。
--- 'Distribution' の 'HmmForwardNormal' 密度 ('obsLogSum') が呼ぶため、
+-- @Distribution@ の 'HmmForwardNormal' 密度 ('obsLogSum') が呼ぶため、
 -- Model 非依存の leaf である本モジュールへ降ろした。
 -- 'Hanalyze.Model.HBM.Model' が従来どおり re-export する。
 
--- | 隠れマルコフモデルの周辺対数尤度 (forward algorithm)。
+-- | [日本語]: 隠れマルコフモデルの周辺対数尤度 (forward algorithm)。
+--   [English]: The hidden Markov model's marginal log-likelihood (forward
+--   algorithm).
 --
--- Recursion in log-space (underflow 防止):
--- * @α_1[k] = log π_0[k] + emit[0][k]@
--- * @α_{t+1}[k'] = logSumExp_j (α_t[j] + log T[j][k']) + emit[t+1][k']@
--- * @log P(y_{1..T}) = logSumExp_k α_T[k]@
+-- Recursion in log-space (underflow 防止 / to prevent underflow):
 --
--- 多相 (@Floating a, Ord a@) のため Track / AD 経由でも動く。
--- 計算量 @O(T K²)@。 大 T では list-based なので O(K²) の内部ループは
--- そのまま、 step は foldl' で過去 α を破棄しメモリは @O(K)@。
+-- - @α_1[k] = log π_0[k] + emit[0][k]@
+-- - @α_{t+1}[k'] = logSumExp_j (α_t[j] + log T[j][k']) + emit[t+1][k']@
+-- - @log P(y_{1..T}) = logSumExp_k α_T[k]@
+--
+-- [日本語]: 多相 (@Floating a, Ord a@) のため Track / AD 経由でも動く。
+--   計算量 @O(T K²)@。 大 T では list-based なので O(K²) の内部ループは
+--   そのまま、 step は foldl' で過去 α を破棄しメモリは @O(K)@。
+--   [English]: Polymorphic (@Floating a, Ord a@), so it also works via
+--   @Track@ / AD. Complexity is @O(T K²)@; for large T the inner O(K²) loop
+--   stays list-based, but @step@ uses @foldl'@ to discard past α, keeping
+--   memory at @O(K)@.
 hmmForwardLogLik :: forall a. (Floating a, Ord a)
-                 => [a]     -- ^ 初期分布 π_0 (length K)
-                 -> [[a]]   -- ^ 遷移行列 (K×K rows of length K)
+                 => [a]     -- ^ [日本語]: 初期分布 π_0 (length K)。 [English]: Initial distribution π_0 (length K).
+                 -> [[a]]   -- ^ [日本語]: 遷移行列 (K×K rows of length K)。 [English]: Transition matrix (K×K rows of length K).
                  -> [[a]]   -- ^ log emission [T][K]
                  -> a
 hmmForwardLogLik pi0 trans emit
@@ -221,8 +256,11 @@ hmmForwardLogLik pi0 trans emit
 -- 不完全ガンマ関数 P(a, x) = γ(a, x) / Γ(a)  (Numerical Recipes 6.2)
 -- ===========================================================================
 
--- | 正則化された下側不完全ガンマ関数 P(a, x) = γ(a, x) / Γ(a) ∈ [0, 1]。
--- これは Gamma(shape=a, rate=1) の CDF F(x)。
+-- | [日本語]: 正則化された下側不完全ガンマ関数 P(a, x) = γ(a, x) / Γ(a) ∈ [0, 1]。
+--   これは Gamma(shape=a, rate=1) の CDF F(x)。
+--   [English]: The regularized lower incomplete gamma function
+--   P(a, x) = γ(a, x) / Γ(a) ∈ [0, 1] — this is the CDF F(x) of
+--   Gamma(shape=a, rate=1).
 {-# INLINABLE incGammaPA #-}
 incGammaPA :: (Floating a, Ord a) => a -> a -> a
 incGammaPA a x
@@ -284,9 +322,11 @@ igammCF a x = exp (-x + a * log x - lgammaApprox a) * h
 -- 正則化された不完全ベータ関数 I_x(a, b) = B(x; a, b) / B(a, b)
 -- ===========================================================================
 
--- | 正則化された不完全ベータ関数 I_x(a, b) ∈ [0, 1]。
--- これは Beta(a, b) の CDF F(x)。
--- StudentT の CDF にも内部で使用。
+-- | [日本語]: 正則化された不完全ベータ関数 I_x(a, b) ∈ [0, 1]。
+--   これは Beta(a, b) の CDF F(x)。 StudentT の CDF にも内部で使用。
+--   [English]: The regularized incomplete beta function I_x(a, b) ∈ [0, 1]
+--   — this is the CDF F(x) of Beta(a, b). Also used internally by
+--   StudentT's CDF.
 {-# INLINABLE incBetaA #-}
 incBetaA :: (Floating a, Ord a) => a -> a -> a -> a
 incBetaA x a b
@@ -341,7 +381,7 @@ betaCFA x a b = iterate' (1 :: Int) 1 d0 h0
 -- 数値ユーティリティ (Γ / digamma / 階乗 / Bessel)
 -- ===========================================================================
 
--- | log Γ(z) の Stirling 近似 (z > 0)。AD でも Track でも使える多相版。
+-- | [日本語]: log Γ(z) の Stirling 近似 (z > 0)。 AD でも Track でも使える多相版。 [English]: Stirling's approximation of log Γ(z) (z > 0); a polymorphic version usable under both AD and @Track@.
 {-# INLINABLE lgammaApprox #-}
 lgammaApprox :: (Floating a, Ord a) => a -> a
 lgammaApprox z
@@ -349,23 +389,39 @@ lgammaApprox z
   | otherwise = (z - 0.5) * log z - z + 0.5 * log (2 * pi)
               + 1 / (12 * z) - 1 / (360 * z ^ (3::Int))
 
--- | ψ(z) = d/dz log Γ(z) (z > 0・Phase 56.1)。 記号微分 IR の lgamma 単項 op
--- ('SLgammaO' 予定) の導関数用。 'lgammaApprox' と同一の recurrence
--- (z < 12 を押し上げ) + 漸近級数を lgammaApprox の Stirling 微分より 1 項深く
--- (-1/(252 z⁶) まで) 打切り: 真の ψ との差は z=12 で ~1e-11、
--- lgammaApprox の数値微分との差は lgammaApprox 側の打切り由来 ~1.3e-9
--- (試験許容 1e-8 内)。 z ≤ 0 は未対応 (利用箇所は正値前提)。
+-- | [日本語]: ψ(z) = d/dz log Γ(z) (z > 0)。 記号微分 IR の lgamma 単項 op
+--   (@SLgammaO@ 予定) の導関数用。 'lgammaApprox' と同一の recurrence
+--   (z < 12 を押し上げ) + 漸近級数を lgammaApprox の Stirling 微分より 1 項深く
+--   (-1/(252 z⁶) まで) 打切り: 真の ψ との差は z=12 で ~1e-11、
+--   lgammaApprox の数値微分との差は lgammaApprox 側の打切り由来 ~1.3e-9
+--   (試験許容 1e-8 内)。 z ≤ 0 は未対応 (利用箇所は正値前提)。
+--   [English]: ψ(z) = d/dz log Γ(z) (z > 0). For the derivative of the
+--   symbolic-differentiation IR's lgamma unary op (planned @SLgammaO@).
+--   Uses the same recurrence as 'lgammaApprox' (push up z < 12), but
+--   truncates the asymptotic series one term deeper than lgammaApprox's
+--   Stirling derivative (down to -1/(252 z⁶)): the difference from the true
+--   ψ is ~1e-11 at z=12, and the difference from lgammaApprox's numerical
+--   derivative is ~1.3e-9, coming from lgammaApprox's own truncation
+--   (within the 1e-8 test tolerance). z ≤ 0 is unsupported (call sites
+--   assume positive values).
 digamma :: Double -> Double
 digamma z
   | z < 12    = digamma (z + 1) - 1 / z
   | otherwise = log z - 1 / (2 * z) - 1 / (12 * z * z)
               + 1 / (120 * z ^ (4 :: Int)) - 1 / (252 * z ^ (6 :: Int))
 
--- | 'lgammaApprox' の**厳密な項別導関数** (Phase 56.4)。 'digamma' とは最終項
--- 1/(252z⁶) の有無だけ違う (digamma は真の ψ に 1 項深い分この差 ~1.3e-9 が
--- z=12 境界で出る・実測)。 記号微分 IR ('SLgammaO') の導関数は、 評価関数
--- (lgammaApprox) の AD 微分 = walk+ad fallback / 参照勾配と一致させる必要が
--- あるためこちらを使う。
+-- | [日本語]: 'lgammaApprox' の __厳密な項別導関数__。 'digamma' とは最終項
+--   1/(252z⁶) の有無だけ違う (digamma は真の ψ に 1 項深い分この差 ~1.3e-9 が
+--   z=12 境界で出る・実測)。 記号微分 IR (@SLgammaO@) の導関数は、 評価関数
+--   (lgammaApprox) の AD 微分 = walk+ad fallback / 参照勾配と一致させる必要が
+--   あるためこちらを使う。
+--   [English]: The __exact term-by-term derivative__ of 'lgammaApprox'.
+--   Differs from 'digamma' only in whether the final term 1/(252z⁶) is
+--   included (digamma is one term deeper toward the true ψ, so this ~1.3e-9
+--   gap shows up at the z=12 boundary, measured). The symbolic-differentiation
+--   IR's (@SLgammaO@) derivative must match the AD derivative of the
+--   evaluation function (lgammaApprox) — i.e. the walk+ad fallback /
+--   reference gradient — so this one is used for that purpose.
 lgammaApproxDeriv :: Double -> Double
 lgammaApproxDeriv z
   | z < 12    = lgammaApproxDeriv (z + 1) - 1 / z
@@ -380,10 +436,15 @@ logFactorial n
 logBinomCoeff :: Int -> Int -> Double
 logBinomCoeff n k = logFactorial n - logFactorial k - logFactorial (n - k)
 
--- | log I_0(x) — 修正 Bessel 関数 (第一種・order 0) の対数。VonMises 用。
--- 小 x: 級数 I_0(x) = Σ (x/2)^(2k) / (k!)² (k = 0..)
--- 大 x: 漸近展開 I_0(x) ≈ exp(x) / √(2πx) × [1 + 1/(8x) + 9/(128x²) + …]
--- AD/Track 互換のため (Floating a, Ord a) 多相。
+-- | [日本語]: log I_0(x) — 修正 Bessel 関数 (第一種・order 0) の対数。
+--   VonMises 用。 小 x: 級数 I_0(x) = Σ (x/2)^(2k) / (k!)² (k = 0..)。
+--   大 x: 漸近展開 I_0(x) ≈ exp(x) / √(2πx) × [1 + 1/(8x) + 9/(128x²) + …]。
+--   AD/Track 互換のため (Floating a, Ord a) 多相。
+--   [English]: log I_0(x) — the log of the modified Bessel function (first
+--   kind, order 0), used for VonMises. Small x: series
+--   I_0(x) = Σ (x/2)^(2k) / (k!)² (k = 0..). Large x: asymptotic expansion
+--   I_0(x) ≈ exp(x) / √(2πx) × [1 + 1/(8x) + 9/(128x²) + …]. Polymorphic
+--   over (@Floating a, Ord a@) for AD/@Track@ compatibility.
 {-# INLINABLE logBesselI0 #-}
 logBesselI0 :: (Floating a, Ord a) => a -> a
 logBesselI0 x

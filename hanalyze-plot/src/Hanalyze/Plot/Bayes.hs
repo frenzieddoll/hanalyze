@@ -4,23 +4,39 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- hgg 連携層 — **ベイズ / HBM 連携族** の図化 instance + 抽出子 (Phase 71.6)。
+-- [日本語]: hgg 連携層 — __ベイズ / HBM 連携族__ の図化 instance + 抽出子。
 --
--- ⚠ 親 'Hanalyze.Plot' と同じ cabal flag @plot-integration@ (既定 off) を
--- on にしたときのみ build される。 共通基盤 (class / ModelSpec / grid 評価核) は
+-- ⚠ 親 'Hanalyze.Plot' と同じく別パッケージ @hanalyze-plot@ に属し、
+-- @cabal build --project-file=cabal.project.plot@ で build される。 共通基盤 (class / ModelSpec / grid 評価核) は
 -- 'Hanalyze.Plot.Core' を import して取り込む (orphan instance を許容)。
 --
 -- 担当する型・抽出子 (= MCMC chain / HBM 出力):
---   ChainModel の trace / 周辺事後密度・HBM の trace/forest/epred/ppc/dag 抽出子 (Phase 74 統一)・
+--   ChainModel の trace / 周辺事後密度・HBM の trace/forest/epred/ppc/dag 抽出子 (統一済)・
 --   GLMMResultRE の caterpillar plot。 HBM の *学習* (hbmModel 等) は
 --   'Hanalyze.Fit' / 'Hanalyze.Model.Wrappers' 側 (こちらは描画連携のみ)。
+--
+-- [English]: hgg integration layer — __Bayesian / HBM family__
+-- plotting instances and extractors.
+--
+-- ⚠ Lives in the same separate package @hanalyze-plot@ as the parent
+-- module 'Hanalyze.Plot', built via @cabal build --project-file=cabal.project.plot@.
+-- It imports the
+-- shared foundation (the class \/ ModelSpec \/ grid-evaluation core) from
+-- 'Hanalyze.Plot.Core' (orphan instances are allowed here).
+--
+-- Types and extractors covered (= MCMC chains \/ HBM output):
+--   'ChainModel'\'s trace \/ marginal posterior density; HBM's unified
+--   trace\/forest\/epred\/ppc\/dag extractors; and 'GLMMResultRE'\'s
+--   caterpillar plot. HBM *training* (@hbmModel@ etc.) lives on the
+--   'Hanalyze.Fit' \/ 'Hanalyze.Model.Wrappers' side (this
+--   module handles plotting integration only).
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
 module Hanalyze.Plot.Bayes
-  ( -- * HBM の出力抽出子 — Phase 49 A2 / Phase 74 (trace / forest)
+  ( -- * HBM の出力抽出子 (trace / forest)
     hbmParamNames
   , TraceOpts (..)
   , defaultTraceOpts
@@ -28,7 +44,7 @@ module Hanalyze.Plot.Bayes
   , tracesOfWith
   , marginalsOf
   , marginalsByChainOf
-    -- * HBM のサンプリング診断 — Phase 59 (divergence 可視化)
+    -- * HBM のサンプリング診断 (divergence 可視化)
   , divergencesOf
   , pairOf
   , energyOf
@@ -41,15 +57,15 @@ module Hanalyze.Plot.Bayes
   , ForestSpec (..)
   , forestOf
   , forestOfLevel
-    -- * HBM の出力抽出子 — Phase 49 A3 (epred = 事後予測平均 + HDI band)
+    -- * HBM の出力抽出子 (epred = 事後予測平均 + HDI band)
   , epred
   , epredAt
   , epredPredRange
-    -- * 応答曲面 3D / 散布 (HBM 固有) — Phase 71.7
+    -- * 応答曲面 3D / 散布 (HBM 固有)
   , epredSurfaceOf
   , epredSurfaceOfWith
   , dataScatterOf
-    -- * HBM の出力抽出子 — Phase 49 A4 (ppc = 事後予測チェック)
+    -- * HBM の出力抽出子 (ppc = 事後予測チェック)
   , PPCConfig (..)
   , defaultPPC
   , PPCSpec (..)
@@ -57,13 +73,13 @@ module Hanalyze.Plot.Bayes
   , ppcOfWith
   , ppcOfIO
   , ppcOfWithIO
-    -- * HBM の出力抽出子 — Phase 49 A5 (dag = モデル構造の DAG)
+    -- * HBM の出力抽出子 (dag = モデル構造の DAG)
   , DagSpec (..)
   , dagOf
   , dagOfRaw
   , dagOfModel
   , dagOfModelWith
-    -- * HBM 診断ダッシュボード — Phase 74.8 (抽出子束ね)
+    -- * HBM 診断ダッシュボード (抽出子束ね)
   , dashboardOf
   , dashboardFullOf
   , traceDensityOf
@@ -121,7 +137,7 @@ import           Hanalyze.Model.GLMM   (GLMMResultRE (..))
 --
 -- 'Chain' (Hanalyze.MCMC.Core) は post-burn-in の draw 列 'chainSamples' を保持する
 -- (各 draw は Map パラメータ名→値)。 ベイズの「出入口」 = サンプラの収束診断と周辺事後の
--- 可視化。 1 つのパラメータを選び、 代表図 ('toPlot') は **trace plot** (draw index 対値、
+-- 可視化。 1 つのパラメータを選び、 代表図 (@toPlot@) は **trace plot** (draw index 対値、
 -- = 混合・定常性の目視)、 診断束 ('diagnosticPlots') に **周辺事後密度** (MDensity) を加える。
 -- trace と density は座標系が異なる (index-値 vs 値-密度) ため 1 枚に混ぜず別図にする。
 -- ===========================================================================
@@ -145,31 +161,41 @@ instance Plottable ChainModel where
 -- HBM の出力抽出子 — Phase 49 A2 / Phase 74 (trace / forest)
 --
 -- 'HBMModel' は直接 'Plottable' にしない (確率プログラムは単一の図に一意に落ちない)。
--- 代わりに抽出子を明示する。 trace は 'tracesOf' / 'tracesOfWith' に統一:
---   * 'tracesOf'     = 各 latent パラメータの trace plot を **param ごと独立パネル**
+-- 代わりに抽出子を明示する。 trace は @tracesOf@ / 'tracesOfWith' に統一:
+--   * @tracesOf@     = 各 latent パラメータの trace plot を **param ごと独立パネル**
 --                      ('[VisualSpec]') で返す。 divergence rug は既定 ON (ArviZ 流)。
 --   * 'tracesOfWith' = 'TraceOpts' で divergence on/off と chain 別重畳を切り替える。
 --   * 'forestOf'     = 各 latent の事後区間 (事後平均 + 94% HDI) を 'MForest' mark で。
 --
--- ★ Phase 74 で旧 'traceOf' ([ChainModel]) / 'tracesByChainOf' /
--- 'tracesWithDivergencesOf' の 3 本を統合した。 戻り型を兄弟抽出子 (marginalsOf 等)
+-- ★ Phase 74 で旧 @traceOf@ ([ChainModel]) / @tracesByChainOf@ /
+-- @tracesWithDivergencesOf@ の 3 本を統合した。 戻り型を兄弟抽出子 (marginalsOf 等)
 -- と同じ '[VisualSpec]' に揃え、 @vconcat (tracesOf m)@ で param ごと縦並びに描ける
 -- (旧 docs の @foldMap toPlot (traceOf m)@ = 全 param を 1 軸に重畳する誤りを排除)。
 -- ===========================================================================
 
--- | 学習済モデルの latent パラメータ名 (= 事後を持つ未知数の一覧)。
+-- | [日本語]: 学習済モデルの latent パラメータ名 (= 事後を持つ未知数の一覧)。
+--   [English]: The trained model's latent parameter names (= the list of
+--   unknowns that have a posterior).
 hbmParamNames :: HBMModel -> [Text]
 hbmParamNames = sampleNames . hbmModelSpec
 
--- | 1 パラメータの post-burn-in draw を全 chain 連結で取り出す。
+-- | [日本語]: 1 パラメータの post-burn-in draw を全 chain 連結で取り出す。
+--   [English]: Retrieves one parameter's post-burn-in draws, concatenated
+--   across all chains.
 hbmDraws :: Text -> HBMModel -> [Double]
 hbmDraws name = concatMap (chainVals name) . hbmChainsR
 
--- | 全 chain の draw を 1 本に連結した 'Chain' (trace 表示用)。 index は
--- chain を端から端へ並べた通し番号になる (A2 の trace は混合の目視が目的)。
--- Phase 59.4: divergence index も同じ連結順の通し番号に変換する
--- ('pooledDivergences' が正本。 chain 内 index のまま連結すると merged frame で
--- 別の draw を指してしまう)。
+-- | [日本語]: 全 chain の draw を 1 本に連結した 'Chain' (trace 表示用)。 index は
+--   chain を端から端へ並べた通し番号になる (trace は混合の目視が目的)。
+--   divergence index も同じ連結順の通し番号に変換する ('pooledDivergences' が正本。
+--   chain 内 index のまま連結すると merged frame で別の draw を指してしまう)。
+--   [English]: A single 'Chain' with all chains' draws concatenated (for
+--   trace display). The index becomes a running number across the
+--   end-to-end chains (the trace's purpose is to visually check mixing).
+--   Divergence indices are converted to the same concatenated running
+--   numbering ('pooledDivergences' is the canonical source; concatenating
+--   with raw within-chain indices would point at the wrong draw in the
+--   merged frame).
 mergeChains :: [Chain] -> Chain
 mergeChains []  = Chain [] 0 0 [] [] []
 mergeChains chs = Chain
@@ -181,35 +207,60 @@ mergeChains chs = Chain
   , chainTreeDepths  = concatMap chainTreeDepths chs
   }
 
--- | trace 診断の設定 ('ppcOf' / 'PPCConfig' と同じ「関数 + config」 慣用)。
+-- | [日本語]: trace 診断の設定 ('ppcOf' / 'PPCConfig' と同じ「関数 + config」 慣用)。
+--   [English]: Trace-diagnostic settings (the same "function + config" idiom
+--   as 'ppcOf' \/ 'PPCConfig').
 data TraceOpts = TraceOpts
-  { toShowDivergences :: !Bool  -- ^ 発散 draw の rug を重ねる (既定 True・ArviZ 流)。
-  , toByChain         :: !Bool  -- ^ True で chain 別重畳、 False で全 chain merged (既定)。
+  { toShowDivergences :: !Bool  -- ^ [日本語]: 発散 draw の rug を重ねる (既定 True・ArviZ 流)。 [English]: Overlay a rug of divergent draws (default True, ArviZ-style).
+  , toByChain         :: !Bool  -- ^ [日本語]: True で chain 別重畳、 False で全 chain merged (既定)。 [English]: True overlays chains separately; False merges all chains (the default).
   } deriving (Show, Eq)
 
--- | 既定の trace 設定 = divergence rug ON・全 chain merged。
+-- | [日本語]: 既定の trace 設定 = divergence rug ON・全 chain merged。
+--   [English]: Default trace settings = divergence rug ON, all chains
+--   merged.
 defaultTraceOpts :: TraceOpts
 defaultTraceOpts = TraceOpts { toShowDivergences = True, toByChain = False }
 
--- | 各 latent パラメータの trace plot を **param ごと独立パネル** ('[VisualSpec]')
--- で返す (divergence rug 既定 ON)。 @noDf |>> vconcat (tracesOf m)@ で param ごとに
--- 縦並びの trace になる (= ArviZ @plot_trace@ 右列)。 設定は 'tracesOfWith'。
+-- | [日本語]: 各 latent パラメータの trace plot を __param ごと独立パネル__ ('[VisualSpec]')
+--   で返す (divergence rug 既定 ON)。 @noDf |>> vconcat (tracesOf m)@ で param ごとに
+--   縦並びの trace になる (= ArviZ @plot_trace@ 右列)。 設定は 'tracesOfWith'。
+--   [English]: Returns the trace plot of each latent parameter as an
+--   __independent panel per param__ ('[VisualSpec]') with the divergence rug
+--   on by default. @noDf |>> vconcat (tracesOf m)@ stacks the traces
+--   vertically per param (= ArviZ's @plot_trace@ right column). Use
+--   'tracesOfWith' to configure it.
 tracesOf :: HBMModel -> [VisualSpec]
 tracesOf = tracesOfWith defaultTraceOpts
 
--- | 'TraceOpts' を明示する 'tracesOf'。 旧 'traceOf' (merged 単線) /
--- 'tracesByChainOf' (chain 別重畳) / 'tracesWithDivergencesOf' (chain 別 + rug) の
--- 3 本を 1 つに統合したもの:
+-- | [日本語]: 'TraceOpts' を明示する @tracesOf@。 旧 @traceOf@ (merged 単線) /
+--   @tracesByChainOf@ (chain 別重畳) / @tracesWithDivergencesOf@ (chain 別 + rug) の
+--   3 本を 1 つに統合したもの:
 --
---   * @tracesOfWith (TraceOpts False False)@ = 旧 'traceOf' 相当 (merged 単線・rug 無し)
---   * @tracesOfWith (TraceOpts False True )@ = 旧 'tracesByChainOf' (chain 別重畳・rug 無し)
---   * @tracesOfWith (TraceOpts True  True )@ = 旧 'tracesWithDivergencesOf' (chain 別 + rug)
---   * 既定 @tracesOf@ = @TraceOpts True False@ (merged + rug)
+--     * @tracesOfWith (TraceOpts False False)@ = 旧 @traceOf@ 相当 (merged 単線・rug 無し)
+--     * @tracesOfWith (TraceOpts False True )@ = 旧 @tracesByChainOf@ (chain 別重畳・rug 無し)
+--     * @tracesOfWith (TraceOpts True  True )@ = 旧 @tracesWithDivergencesOf@ (chain 別 + rug)
+--     * 既定 @tracesOf@ = @TraceOpts True False@ (merged + rug)
 --
--- divergence rug は各図下端 (y = 当該 param の全 chain 最小値) に発散 draw の x 位置を
--- 縦棒 ('lineRange') で打つ。 merged では通し index ('divergencesOf')、 chain 別では
--- chain 内 1-based iteration を x にする (それぞれの trace の x 軸と整合)。
--- divergence が無ければ rug レイヤは付かない。
+--   divergence rug は各図下端 (y = 当該 param の全 chain 最小値) に発散 draw の x 位置を
+--   縦棒 ('lineRange') で打つ。 merged では通し index ('divergencesOf')、 chain 別では
+--   chain 内 1-based iteration を x にする (それぞれの trace の x 軸と整合)。
+--   divergence が無ければ rug レイヤは付かない。
+--   [English]: @tracesOf@ with an explicit 'TraceOpts'. Unifies the former
+--   three functions — @traceOf@ (merged single line), @tracesByChainOf@
+--   (overlaid per chain), and @tracesWithDivergencesOf@ (per chain + rug) —
+--   into one:
+--
+--     * @tracesOfWith (TraceOpts False False)@ = the old @traceOf@ (merged single line, no rug)
+--     * @tracesOfWith (TraceOpts False True )@ = the old @tracesByChainOf@ (overlaid per chain, no rug)
+--     * @tracesOfWith (TraceOpts True  True )@ = the old @tracesWithDivergencesOf@ (per chain + rug)
+--     * default @tracesOf@ = @TraceOpts True False@ (merged + rug)
+--
+--   The divergence rug draws a vertical tick ('lineRange') at each divergent
+--   draw's x position, at the bottom of each panel (y = that param's minimum
+--   across all chains). Merged mode uses the running index
+--   ('divergencesOf'); per-chain mode uses the 1-based iteration within the
+--   chain (matching each trace's own x axis). No rug layer is added when
+--   there are no divergences.
 tracesOfWith :: TraceOpts -> HBMModel -> [VisualSpec]
 tracesOfWith opts hbm =
   [ traceLayers nm <> rugLayer nm <> title nm | nm <- hbmParamNames hbm ]
@@ -246,14 +297,25 @@ tracesOfWith opts hbm =
                                         (inline (replicate nDiv (tick / 2)))
                               <> color (fromHex divergenceColor))
 
--- | 各 latent パラメータの **周辺事後密度** を per-param で list 返しする。
--- 'tracesOf' (per-param trace) の密度版で、 'ChainModel' の @diagnosticPlots@ が出す
--- 周辺事後密度 (@density@、 root: 'diagnosticPlots' ChainModel 経路) を 1 パラメータ
--- 1 図に切り出したもの。 全 chain の post-burn-in draw をプール ('hbmDraws') した
--- 周辺分布を描き、 図タイトルにパラメータ名を付す。
+-- | [日本語]: 各 latent パラメータの __周辺事後密度__ を per-param で list 返しする。
+--   @tracesOf@ (per-param trace) の密度版で、 'ChainModel' の @diagnosticPlots@ が出す
+--   周辺事後密度 (@density@、 root: 'diagnosticPlots' ChainModel 経路) を 1 パラメータ
+--   1 図に切り出したもの。 全 chain の post-burn-in draw をプール ('hbmDraws') した
+--   周辺分布を描き、 図タイトルにパラメータ名を付す。
 --
--- @subplots (map toPlot (marginalsOf fit)) <> subplotCols 1@ で周辺事後の grid を組め、
--- B1 の入れ子 subplots と合わせて HBM ダッシュボードの 1 列になる。
+--   @subplots (map toPlot (marginalsOf fit)) <> subplotCols 1@ で周辺事後の grid を組め、
+--   入れ子 subplots と合わせて HBM ダッシュボードの 1 列になる。
+--   [English]: Returns each latent parameter's __marginal posterior density__
+--   as a per-param list. This is the density counterpart of
+--   @tracesOf@ (per-param trace): it slices out the marginal posterior
+--   density (@density@; sourced from 'ChainModel'\'s @diagnosticPlots@ path)
+--   into one figure per parameter. It plots the marginal distribution built
+--   by pooling all chains' post-burn-in draws ('hbmDraws'), with the
+--   parameter name as the figure title.
+--
+--   @subplots (map toPlot (marginalsOf fit)) <> subplotCols 1@ builds a grid
+--   of marginal posteriors, which combined with nested subplots becomes one
+--   column of an HBM dashboard.
 marginalsOf :: HBMModel -> [VisualSpec]
 marginalsOf hbm =
   [ layer (density (inline (hbmDraws nm hbm))) <> title nm
@@ -269,31 +331,50 @@ marginalsOf hbm =
 -- trace の divergence rug 自体は 'tracesOfWith' (Phase 74 統合) に移譲した。
 -- ===========================================================================
 
--- | [Chain] の発散 draw を連結順の通し index に変換する内部正本
--- (chain c の offset = それ以前の chain の draw 数合計)。 'mergeChains' /
--- 'divergencesOf' の双方がこれを使う (重複実装しない)。
+-- | [日本語]: [Chain] の発散 draw を連結順の通し index に変換する内部正本
+--   (chain c の offset = それ以前の chain の draw 数合計)。 'mergeChains' /
+--   'divergencesOf' の双方がこれを使う (重複実装しない)。
+--   [English]: The internal canonical function converting each 'Chain'\'s
+--   divergent draws into a running, concatenated index (chain c's offset =
+--   the total draw count of the chains before it). Both 'mergeChains' and
+--   'divergencesOf' use this (no duplicated implementation).
 pooledDivergences :: [Chain] -> [Int]
 pooledDivergences chs =
   concat [ map (+ off) (chainDivergences ch)
          | (off, ch) <- zip offsets chs ]
   where offsets = scanl (+) 0 (map (length . chainSamples) chs)
 
--- | 全 chain を pool した発散 draw の通し index ('mergeChains' の連結順と整合)。
--- 'tracesOf' (merged trace) の rug 位置や、 発散 draw の抽出
--- (@map (chainSamples merged !!) (divergencesOf fit)@) に使う。
+-- | [日本語]: 全 chain を pool した発散 draw の通し index ('mergeChains' の連結順と整合)。
+--   @tracesOf@ (merged trace) の rug 位置や、 発散 draw の抽出
+--   (@map (chainSamples merged !!) (divergencesOf fit)@) に使う。
+--   [English]: The running index of divergent draws pooled across all
+--   chains (consistent with 'mergeChains'\'s concatenation order). Used for
+--   the rug position in @tracesOf@ (merged trace) and to extract divergent
+--   draws (@map (chainSamples merged !!) (divergencesOf fit)@).
 divergencesOf :: HBMModel -> [Int]
 divergencesOf = pooledDivergences . hbmChainsR
 
--- | divergence rug / 強調点の色 ('Hanalyze.Viz.MCMC' の pairScatterDiv と同じ赤)。
+-- | [日本語]: divergence rug / 強調点の色 ('Hanalyze.Viz.MCMC' の pairScatterDiv と同じ赤)。
+--   [English]: The color for the divergence rug \/ highlighted points (the
+--   same red as 'Hanalyze.Viz.MCMC'\'s @pairScatterDiv@).
 divergenceColor :: Text
 divergenceColor = "#dd2222"   -- 小文字 (toCss 出力と byte 一致・視覚は #DD2222 と同一)
 
--- | ArviZ @plot_pair(divergences=True)@ 流: 指定パラメータ対の joint 散布
--- (全 chain pool・薄表示) + 発散 draw を強調色で重畳。 funnel 診断の本命
--- (例: @pairOf fit [("tau_b1", "b1_2")]@ で漏斗の首に発散が集中するのが見える)。
--- 発散 draw の抽出は 'divergencesOf' の通し index を pool 後の draw 列に引く
--- (chain 連結順は 'hbmDraws' = 'mergeChains' と同一)。
--- divergence が無ければ強調レイヤは付かない。
+-- | [日本語]: ArviZ @plot_pair(divergences=True)@ 流: 指定パラメータ対の joint 散布
+--   (全 chain pool・薄表示) + 発散 draw を強調色で重畳。 funnel 診断の本命
+--   (例: @pairOf fit [("tau_b1", "b1_2")]@ で漏斗の首に発散が集中するのが見える)。
+--   発散 draw の抽出は 'divergencesOf' の通し index を pool 後の draw 列に引く
+--   (chain 連結順は 'hbmDraws' = 'mergeChains' と同一)。
+--   divergence が無ければ強調レイヤは付かない。
+--   [English]: ArviZ @plot_pair(divergences=True)@-style: the joint scatter
+--   of a given parameter pair (pooled across all chains, drawn faintly),
+--   with divergent draws overlaid in a highlight color. This is the go-to
+--   funnel diagnostic (e.g. @pairOf fit [("tau_b1", "b1_2")]@ shows
+--   divergences concentrated at the neck of the funnel). Divergent draws are
+--   extracted by indexing the pooled draw list with 'divergencesOf'\'s
+--   running index (the chain concatenation order matches 'hbmDraws' =
+--   'mergeChains'). No highlight layer is added when there are no
+--   divergences.
 pairOf :: HBMModel -> [(Text, Text)] -> [VisualSpec]
 pairOf hbm prs =
   [ let xs   = hbmDraws xn hbm
@@ -310,19 +391,39 @@ pairOf hbm prs =
        <> xLabel xn <> yLabel yn <> title (xn <> " × " <> yn)
   | (xn, yn) <- prs ]
 
--- | ArviZ @plot_energy@ 流: marginal energy (E − Ē、 chain 別中心化) と
--- transition energy (ΔE = E_{i+1} − E_i、 chain 内差分・境界を跨がない) の密度重畳。
--- ΔE 分布が marginal より極端に狭ければ、 サンプラが posterior の energy 分布を
--- 探索しきれていないサイン (低 BFMI 相当。 数値は 'Hanalyze.Viz.MCMC' の bfmi)。
--- energy ('chainEnergy' = draw ごとの Hamiltonian) は HMC / NUTS のみ記録される
--- ため、 MH / Gibbs 等の fit では空図になる。 系列名は Viz 側 energyPlot と同一。
+-- | [日本語]: ArviZ @plot_energy@ 流: marginal energy (E − Ē、 chain 別中心化) と
+--   transition energy (ΔE = E_{i+1} − E_i、 chain 内差分・境界を跨がない) の密度重畳。
+--   ΔE 分布が marginal より極端に狭ければ、 サンプラが posterior の energy 分布を
+--   探索しきれていないサイン (低 BFMI 相当。 数値は 'Hanalyze.Viz.MCMC' の bfmi)。
+--   energy ('chainEnergy' = draw ごとの Hamiltonian) は HMC / NUTS のみ記録される
+--   ため、 MH / Gibbs 等の fit では空図になる。 系列名は Viz 側 energyPlot と同一。
 --
--- ★mark は 'density' でなく KDE ('Hanalyze.Stat.MCMC' の kde 200 = Viz energyPlot と
--- 同一) + 'line'。 理由: 固定色 'color' と categorical 'colorBy' は同一 field (lyColor) の
--- Last で相互排他、 かつ renderDensity は categorical 色を見ない (staticColorOr のみ) ため、
--- density mark では「2 色の曲線 + 凡例」 が両立できない。 line は群色対応済なので
--- 多モデル重畳 (line + color inlineCat + scaleColorManual + legend) の確立パターンに
--- 乗せる。
+--   ★mark は 'density' でなく KDE ('Hanalyze.Stat.MCMC' の kde 200 = Viz energyPlot と
+--   同一) + 'line'。 理由: 固定色 'color' と categorical 'colorBy' は同一 field (lyColor) の
+--   Last で相互排他、 かつ renderDensity は categorical 色を見ない (staticColorOr のみ) ため、
+--   density mark では「2 色の曲線 + 凡例」 が両立できない。 line は群色対応済なので
+--   多モデル重畳 (line + color inlineCat + scaleColorManual + legend) の確立パターンに
+--   乗せる。
+--   [English]: ArviZ @plot_energy@-style: overlaid densities of the marginal
+--   energy (E − Ē, centered per chain) and the transition energy
+--   (ΔE = E_{i+1} − E_i, within-chain difference, never crossing a chain
+--   boundary). If the ΔE distribution is markedly narrower than the
+--   marginal, that's a sign the sampler hasn't fully explored the
+--   posterior's energy distribution (equivalent to low BFMI; the numeric
+--   diagnostic is 'Hanalyze.Viz.MCMC'\'s @bfmi@). Energy
+--   ('chainEnergy' = the per-draw Hamiltonian) is only recorded for HMC \/
+--   NUTS, so fits from MH \/ Gibbs etc. yield an empty figure. Series names
+--   match the Viz-side @energyPlot@.
+--
+--   ★The mark is KDE ('Hanalyze.Stat.MCMC'\'s @kde@ with 200 points,
+--   the same as Viz's @energyPlot@) + 'line', not 'density'. Reason: a fixed
+--   'color' and a categorical 'colorBy' both target the same field
+--   (@lyColor@) under Last-wins semantics, and are mutually exclusive; also
+--   @renderDensity@ ignores categorical color (it only looks at
+--   @staticColorOr@), so a @density@ mark cannot produce "two colored curves
+--   + a legend" at once. @line@ already supports group coloring, so this
+--   rides the established pattern for overlaying multiple models (@line@ +
+--   @color inlineCat@ + @scaleColorManual@ + legend).
 energyOf :: HBMModel -> VisualSpec
 energyOf hbm =
   curve lblMar eMar <> curve lblTr eTrans <> legendSpec
@@ -348,9 +449,14 @@ energyOf hbm =
                       -- 外・右だと右に余白が出て subplot/dashboard が不格好になる。
                       <> legendPos LegendInsideTopRight
 
--- | chain 別の **周辺事後密度** を 1 図に重畳した per-param list (= ArviZ @plot_trace@ 左側 /
--- @plot_posterior@ の chain 重ね)。 'marginalsOf' が全 chain プールの 1 本を描くのに対し、
--- こちらは chain ごとに別レイヤを 'color' ('fromHex') で重ねる。
+-- | [日本語]: chain 別の __周辺事後密度__ を 1 図に重畳した per-param list (= ArviZ @plot_trace@ 左側 /
+--   @plot_posterior@ の chain 重ね)。 'marginalsOf' が全 chain プールの 1 本を描くのに対し、
+--   こちらは chain ごとに別レイヤを 'color' ('fromHex') で重ねる。
+--   [English]: A per-param list overlaying each chain's __marginal posterior density__
+--   in one figure (= ArviZ's @plot_trace@ left column \/
+--   the chain overlay in @plot_posterior@). Where 'marginalsOf' draws a
+--   single pooled curve across all chains, this overlays a separate layer
+--   per chain, colored via 'color' \/ 'fromHex'.
 marginalsByChainOf :: HBMModel -> [VisualSpec]
 marginalsByChainOf hbm =
   [ foldMap (\(k, ch) -> layer (density (inline (chainVals nm ch)) <> color (fromHex (chainColor k))))
@@ -358,20 +464,31 @@ marginalsByChainOf hbm =
     <> title nm
   | nm <- hbmParamNames hbm ]
 
--- | 自己相関 plot の既定最大ラグ (= ArviZ @plot_autocorr@ の見やすさに合わせた 30。
--- ArviZ 既定の 100 は SVG では横に潰れるので短めにする)。
+-- | [日本語]: 自己相関 plot の既定最大ラグ (= ArviZ @plot_autocorr@ の見やすさに合わせた 30。
+--   ArviZ 既定の 100 は SVG では横に潰れるので短めにする)。
+--   [English]: The default maximum lag for the autocorrelation plot (= 30,
+--   chosen for readability with ArviZ's @plot_autocorr@; ArviZ's default of
+--   100 gets squashed horizontally in SVG, so this is kept shorter).
 defaultAutocorrMaxLag :: Int
 defaultAutocorrMaxLag = 30
 
--- | 各 latent パラメータの **自己相関** を per-param list で返す (= ArviZ @plot_autocorr@)。
--- lag 0..'defaultAutocorrMaxLag' の ACF を縦棒 ('bar') で描く。 chain 連結の境界アーティ
--- ファクトを避けるため **chain ごとに 'autocorr' を計算し lag ごとに平均**する
--- ('energyOf' が chain 別に算出して連結するのと同方針)。 ACF が速く 0 に減衰するほど
--- mixing が良い (高い自己相関 = ESS 低下のサイン)。
+-- | [日本語]: 各 latent パラメータの __自己相関__ を per-param list で返す (= ArviZ @plot_autocorr@)。
+--   lag 0..'defaultAutocorrMaxLag' の ACF を縦棒 ('bar') で描く。 chain 連結の境界アーティ
+--   ファクトを避けるため __chain ごとに 'autocorr' を計算し lag ごとに平均__する
+--   ('energyOf' が chain 別に算出して連結するのと同方針)。 ACF が速く 0 に減衰するほど
+--   mixing が良い (高い自己相関 = ESS 低下のサイン)。
+--   [English]: Returns each latent parameter's __autocorrelation__ as a
+--   per-param list (= ArviZ's @plot_autocorr@). Plots the ACF for lags
+--   0..'defaultAutocorrMaxLag' as vertical bars ('bar'). To avoid boundary
+--   artifacts from concatenating chains, this __computes 'autocorr' per chain and averages per lag__
+--   (the same policy as 'energyOf' computing
+--   per chain before concatenating). The faster the ACF decays to 0, the
+--   better the mixing (high autocorrelation is a sign of reduced ESS).
 autocorrOf :: HBMModel -> [VisualSpec]
 autocorrOf = autocorrOfLag defaultAutocorrMaxLag
 
--- | 最大ラグを明示する 'autocorrOf'。
+-- | [日本語]: 最大ラグを明示する 'autocorrOf'。
+--   [English]: 'autocorrOf' with an explicit maximum lag.
 autocorrOfLag :: Int -> HBMModel -> [VisualSpec]
 autocorrOfLag maxLag hbm =
   [ acSpec nm | nm <- hbmParamNames hbm ]
@@ -391,19 +508,31 @@ autocorrOfLag maxLag hbm =
              in layer (bar (inline lags) (inline meanACF))
                   <> title nm <> xLabel "lag"
 
--- | rank plot の既定ビン数 (= PyMC @plot_rank@ 既定 20)。
+-- | [日本語]: rank plot の既定ビン数 (= PyMC @plot_rank@ 既定 20)。
+--   [English]: The default number of bins for the rank plot (= 20, matching
+--   PyMC's @plot_rank@ default).
 defaultRankBins :: Int
 defaultRankBins = 20
 
--- | 各 latent パラメータの **rank plot** を per-param list で返す (= ArviZ @plot_rank@・
--- Vehtari et al. 2021)。 全 chain をプールした値の rank を chain ごとにヒストグラム化し、
--- chain 別の棒を色分けして重畳する。 **収束時は各 chain がほぼ一様** (= どのビンも同程度)。
--- chain が偏る (= 山ができる) と R̂ 悪化のサイン。 rank 計算は 'rankHist' (Stat.MCMC) に
--- 一元化し Viz 経路と共有する。 **要 chain ≥ 2** (1 本だと rank が自明に一様ゆえ空図)。
+-- | [日本語]: 各 latent パラメータの __rank plot__ を per-param list で返す (= ArviZ @plot_rank@・
+--   Vehtari et al. 2021)。 全 chain をプールした値の rank を chain ごとにヒストグラム化し、
+--   chain 別の棒を色分けして重畳する。 __収束時は各 chain がほぼ一様__ (= どのビンも同程度)。
+--   chain が偏る (= 山ができる) と R̂ 悪化のサイン。 rank 計算は 'rankHist' (Stat.MCMC) に
+--   一元化し Viz 経路と共有する。 __要 chain ≥ 2__ (1 本だと rank が自明に一様ゆえ空図)。
+--   [English]: Returns each latent parameter's __rank plot__ as a per-param
+--   list (= ArviZ's @plot_rank@; Vehtari et al. 2021). Ranks the values
+--   pooled across all chains, histograms them per chain, and overlays the
+--   per-chain bars in distinct colors. __At convergence each chain is nearly uniform__
+--   (i.e. every bin has roughly equal counts); a chain skewing
+--   toward a bump is a sign of worse R̂. Rank computation is centralized in
+--   'rankHist' (Stat.MCMC) and shared with the Viz path. __Requires chain ≥ 2__
+--   (with a single chain the rank is trivially uniform, so the
+--   figure is empty).
 rankOf :: HBMModel -> [VisualSpec]
 rankOf = rankOfBins defaultRankBins
 
--- | ビン数を明示する 'rankOf'。
+-- | [日本語]: ビン数を明示する 'rankOf'。
+--   [English]: 'rankOf' with an explicit number of bins.
 rankOfBins :: Int -> HBMModel -> [VisualSpec]
 rankOfBins nBins hbm =
   [ rankSpec nm | nm <- hbmParamNames hbm ]
@@ -435,21 +564,34 @@ rankOfBins nBins hbm =
                   <> title nm <> xLabel "rank bin" <> legendOff
 
 
--- | 係数 forest plot の描画仕様。 'HBMModel' を直接 'Plottable' にしないため、
--- 抽出後の図を包む薄い newtype (後続 sub の ppc/epred/dag も同型に揃える)。
+-- | [日本語]: 係数 forest plot の描画仕様。 'HBMModel' を直接 'Plottable' にしないため、
+--   抽出後の図を包む薄い newtype (後続 sub の ppc/epred/dag も同型に揃える)。
+--   [English]: The plotting spec for a coefficient forest plot. Since
+--   'HBMModel' isn't made directly 'Plottable', this is a thin newtype
+--   wrapping the extracted figure (the later ppc \/ epred \/ dag specs
+--   follow the same shape).
 newtype ForestSpec = ForestSpec { unForestSpec :: VisualSpec }
 
 instance Plottable ForestSpec where
   toPlot = unForestSpec
 
--- | 各 latent パラメータの事後区間を 1 枚の forest plot にする (94% HDI 既定)。
+-- | [日本語]: 各 latent パラメータの事後区間を 1 枚の forest plot にする (94% HDI 既定)。
+--   [English]: Renders each latent parameter's posterior interval as a
+--   single forest plot (default 94% HDI).
 forestOf :: HBMModel -> ForestSpec
 forestOf = forestOfLevel 0.94
 
--- | 信頼水準を明示する 'forestOf'。 point = 事後平均、 bar 半幅 = HDI 半幅。
+-- | [日本語]: 信頼水準を明示する 'forestOf'。 point = 事後平均、 bar 半幅 = HDI 半幅。
 --
--- ★ 'forest' mark は対称 CI (± 半幅) のみ対応するため、 非対称な HDI は
--- 「事後平均 ± (hi−lo)/2」 の対称バーで近似表示する (mark 側の TODO = 非対称 forest)。
+--   ★ 'forest' mark は対称 CI (± 半幅) のみ対応するため、 非対称な HDI は
+--   「事後平均 ± (hi−lo)/2」 の対称バーで近似表示する (mark 側の TODO = 非対称 forest 未対応)。
+--   [English]: 'forestOf' with an explicit confidence level. The point is
+--   the posterior mean; the bar half-width is the HDI half-width.
+--
+--   ★ Since the 'forest' mark only supports a symmetric CI (± half-width),
+--   the asymmetric HDI is approximated as a symmetric bar of "posterior mean
+--   ± (hi−lo)/2" (a TODO on the mark side: asymmetric forest bars are not
+--   yet supported).
 forestOfLevel :: Double -> HBMModel -> ForestSpec
 forestOfLevel level hbm = ForestSpec $
   layer (forest (inlineCat names) (inline ests) (inline errs) <> forestNull 0)
@@ -467,7 +609,7 @@ forestOfLevel level hbm = ForestSpec $
 -- ===========================================================================
 -- HBM の事後予測平均 — Phase 49 A3 (epred = E[y|x] の grid 評価 + HDI band)
 --
--- ベイズ回帰の代表図。 予測子 (@predName@、 学習時 'dataNamed' の参照名) を grid 上で
+-- ベイズ回帰の代表図。 予測子 (@predName@、 学習時 @dataNamed@ の参照名) を grid 上で
 -- 1 点ずつ動かし、 各 posterior draw でモデル中の deterministic ノード (@muName@、
 -- 通常は線形予測子の平均 μ) を 'runDeterministics' で評価する。 これで grid 点ごとに
 -- N draws 分の μ サンプルが得られ、 その **事後平均** (線) と **94% HDI** (帯、 ArviZ 既定)
@@ -494,30 +636,44 @@ forestOfLevel level hbm = ForestSpec $
 -- 帯 ON = ArviZ 流の HDI 帯を焼き込む。 epred の帯はオプトアウト不可)。
 -- ===========================================================================
 
--- | 1 つの予測子値 @x@ における事後予測平均と HDI (非軸予測子は bind データのまま)。
--- @predName@ を @[x]@ に差し替え、 全 chain の各 draw で deterministic @muName@ を
--- 評価し、 (事後平均, (lo, hi)) を返す。 非軸予測子を固定する版は 'epredAtHeld'。
+-- | [日本語]: 1 つの予測子値 @x@ における事後予測平均と HDI (非軸予測子は bind データのまま)。
+--   @predName@ を @[x]@ に差し替え、 全 chain の各 draw で deterministic @muName@ を
+--   評価し、 (事後平均, (lo, hi)) を返す。 非軸予測子を固定する版は 'epredAtHeld'。
+--   [English]: The posterior predictive mean and HDI at a single predictor
+--   value @x@ (non-axis predictors stay at their bound data). Substitutes
+--   @[x]@ for @predName@, evaluates the deterministic @muName@ node for
+--   every draw across all chains, and returns (posterior mean, (lo, hi)).
+--   The variant that also fixes non-axis predictors is 'epredAtHeld'.
 epredAt
   :: HBMModel
-  -> Text     -- ^ 予測子の data 参照名 (@dataNamed@ / @withData@ の名前)。
-  -> Text     -- ^ 平均の deterministic ノード名。
-  -> Double   -- ^ HDI 水準 (例 0.94)。
-  -> Double   -- ^ 予測子値 x。
+  -> Text     -- ^ [日本語]: 予測子の data 参照名 (@dataNamed@ / @withData@ の名前)。 [English]: The predictor's data reference name (the name used by @dataNamed@ \/ @withData@).
+  -> Text     -- ^ [日本語]: 平均の deterministic ノード名。 [English]: The deterministic node name for the mean.
+  -> Double   -- ^ [日本語]: HDI 水準 (例 0.94)。 [English]: The HDI level (e.g. 0.94).
+  -> Double   -- ^ [日本語]: 予測子値 x。 [English]: The predictor value x.
   -> (Double, (Double, Double))
 epredAt hbm = epredAtHeld hbm []
 
--- | (slot 名, 固定値) のリストを @withData@ で 1 点ずつ bind してネストする。
--- 'ModelP' は impredicative (@forall a. Model a r@) ゆえ foldr では多相が逃げる。
--- トップレベル再帰なら各 'withData' が @ModelP r -> ModelP r@ を保つので通る。
+-- | [日本語]: (slot 名, 固定値) のリストを @withData@ で 1 点ずつ bind してネストする。
+--   'ModelP' は impredicative (@forall a. Model a r@) ゆえ foldr では多相が逃げる。
+--   トップレベル再帰なら各 'withData' が @ModelP r -> ModelP r@ を保つので通る。
+--   [English]: Binds a list of (slot name, fixed value) pairs one at a time
+--   via @withData@, nesting them. Since 'ModelP' is impredicative
+--   (@forall a. Model a r@), @foldr@ would let the polymorphism escape; a
+--   top-level recursion works because each @withData@ preserves
+--   @ModelP r -> ModelP r@.
 bindHolds :: [(Text, Double)] -> ModelP r -> ModelP r
 bindHolds []              m = m
 bindHolds ((nm, v) : rest) m = withData nm [v] (bindHolds rest m)
 
--- | 'epredAt' の多予測子版。 @holds@ = 非軸予測子の (slot 名, 固定値) を 1 点ずつ
--- @withData@ で bind し ('head' でその値が読める)、 軸 @predName@ を @[gx]@ に差し替える。
+-- | [日本語]: 'epredAt' の多予測子版。 @holds@ = 非軸予測子の (slot 名, 固定値) を 1 点ずつ
+--   @withData@ で bind し ('head' でその値が読める)、 軸 @predName@ を @[gx]@ に差し替える。
+--   [English]: The multi-predictor variant of 'epredAt'. @holds@ = the
+--   non-axis predictors' (slot name, fixed value) pairs, each bound via
+--   @withData@ (readable with @head@), while the axis predictor @predName@
+--   is substituted with @[gx]@.
 epredAtHeld
   :: HBMModel
-  -> [(Text, Double)]   -- ^ 非軸予測子の固定 (slot 名, 値)。
+  -> [(Text, Double)]   -- ^ [日本語]: 非軸予測子の固定 (slot 名, 値)。 [English]: The fixed (slot name, value) pairs for non-axis predictors.
   -> Text -> Text -> Double -> Double
   -> (Double, (Double, Double))
 epredAtHeld hbm holds predName muName level gx =
@@ -529,20 +685,33 @@ epredAtHeld hbm holds predName muName level gx =
       mean  = if null mus then 0 else sum mus / fromIntegral (length mus)
   in (mean, highestDensityInterval level mus)
 
--- | grid 点 @gx@ における事後予測区間 (PI = 観測ノイズ込みの新規 1 点の HDI)。
--- 'epredAtHeld' が deterministic μ の HDI (= CI 相当) を返すのに対し、 こちらは
--- **観測ノードの予測分布から y をサンプルしてプール**し HDI を取る。 観測ノード名は
--- 引数に取らず 'runObserveDists' でモデルから自動検出する (頻度論 'svGridPI' が obs 名を
--- 要らないのと対称)。 単一 likelihood の通常ケースが対象で、 observe が複数なら全プール。
--- 任意の観測分布 (Normal/Poisson/NegBinom…) に効く ('ppc' の 'sampleDist' を再利用)。
--- @runST@ + 固定 seed (既定 'epredPISeed' = 42・'ppcOfWith' と同方式) で純粋・決定的。
+-- | [日本語]: grid 点 @gx@ における事後予測区間 (PI = 観測ノイズ込みの新規 1 点の HDI)。
+--   'epredAtHeld' が deterministic μ の HDI (= CI 相当) を返すのに対し、 こちらは
+--   __観測ノードの予測分布から y をサンプルしてプール__し HDI を取る。 観測ノード名は
+--   引数に取らず 'runObserveDists' でモデルから自動検出する (頻度論 @svGridPI@ が obs 名を
+--   要らないのと対称)。 単一 likelihood の通常ケースが対象で、 observe が複数なら全プール。
+--   任意の観測分布 (Normal/Poisson/NegBinom…) に効く (@ppc@ の @sampleDist@ を再利用)。
+--   @runST@ + 固定 seed (既定 'epredPISeed' = 42・'ppcOfWith' と同方式) で純粋・決定的。
+--   [English]: The posterior predictive interval at grid point @gx@
+--   (PI = the HDI of a new single point, including observation noise).
+--   Where 'epredAtHeld' returns the HDI of the deterministic μ (equivalent
+--   to a CI), this one __samples y from the observation node's predictive distribution and pools it__
+--   before taking the HDI. It doesn't take the
+--   observation node name as an argument; it auto-detects it from the model
+--   via 'runObserveDists' (symmetric with how the frequentist @svGridPI@
+--   doesn't need an obs name either). It targets the usual single-likelihood
+--   case; with multiple observe nodes, everything is pooled. It works with
+--   any observation distribution (Normal\/Poisson\/NegBinom…) by reusing
+--   @ppc@'s @sampleDist@. It stays pure and deterministic via @runST@ + a
+--   fixed seed (default 'epredPISeed' = 42, the same scheme as
+--   'ppcOfWith').
 epredPIAtHeld
   :: HBMModel
-  -> [(Text, Double)]   -- ^ 非軸予測子の固定 (slot 名, 値)。
-  -> Text               -- ^ 軸予測子の data 参照名。
-  -> Word32             -- ^ サンプリング seed。
-  -> Double             -- ^ HDI 水準。
-  -> Double             -- ^ 予測子値 x。
+  -> [(Text, Double)]   -- ^ [日本語]: 非軸予測子の固定 (slot 名, 値)。 [English]: The fixed (slot name, value) pairs for non-axis predictors.
+  -> Text               -- ^ [日本語]: 軸予測子の data 参照名。 [English]: The axis predictor's data reference name.
+  -> Word32             -- ^ [日本語]: サンプリング seed。 [English]: The sampling seed.
+  -> Double             -- ^ [日本語]: HDI 水準。 [English]: The HDI level.
+  -> Double             -- ^ [日本語]: 予測子値 x。 [English]: The predictor value x.
   -> (Double, Double)
 epredPIAtHeld hbm holds predName seed level gx =
   let bound :: ModelP ()
@@ -557,14 +726,22 @@ epredPIAtHeld hbm holds predName seed level gx =
           draws
   in if null samples then (0, 0) else highestDensityInterval level samples
 
--- | 'epredPIAtHeld' の既定サンプリング seed (純粋・決定的に閉じる。 'ppcOfWith' と同値)。
+-- | [日本語]: @epredPIAtHeld@ の既定サンプリング seed (純粋・決定的に閉じる。 'ppcOfWith' と同値)。
+--   [English]: The default sampling seed for @epredPIAtHeld@ (keeps it pure
+--   and deterministic; the same value as 'ppcOfWith').
 epredPISeed :: Word32
 epredPISeed = 42
 
--- | 非軸予測子 1 slot の固定値を 'HoldAgg' (+ byVar override) から決める。
--- @override@ (byVar の明示固定) が 'HoldAgg' より優先。 HBM データは数値列ゆえ
--- factor / Reference は無く、 Reference\/Marginalize は安全側に Mean とする
--- (Marginalize の真の周辺化は epred では未対応)。
+-- | [日本語]: 非軸予測子 1 slot の固定値を 'HoldAgg' (+ byVar override) から決める。
+--   @override@ (byVar の明示固定) が 'HoldAgg' より優先。 HBM データは数値列ゆえ
+--   factor / Reference は無く、 Reference\/Marginalize は安全側に Mean とする
+--   (Marginalize の真の周辺化は epred では未対応)。
+--   [English]: Determines a single non-axis predictor slot's fixed value
+--   from 'HoldAgg' (plus a byVar override). @override@ (an explicit byVar
+--   fixed value) takes priority over 'HoldAgg'. Since HBM data is numeric
+--   columns, there is no factor \/ Reference notion, so Reference \/
+--   Marginalize safely fall back to Mean (true marginalization for
+--   Marginalize is not yet supported in epred).
 epredHoldValue :: HoldAgg -> Text -> [Double] -> [(Text, Double)] -> Double
 epredHoldValue hold nm vs override =
   case lookup nm override of
@@ -586,11 +763,19 @@ epredHoldValue hold nm vs override =
                  then (s !! (k `div` 2 - 1) + s !! (k `div` 2)) / 2
                  else s !! (k `div` 2)
 
--- | grid 上の事後予測平均線 + HDI 帯を組む 'GridOpts' クロージャ ('epred' が設定)。
--- 'renderGridMulti' (頻度論 effect plot) と同型: 非軸予測子を 'goHoldAt' で固定し、
--- 'goByVar' があれば第2予測子の水準ごとに曲線を色分け重畳する。 各曲線は帯 (先) +
--- 線 (後)。 'goPredAt' 指定点は lineRange (区間) + scatter (事後平均) で重畳する。
--- 帯は非対称な HDI を lo/hi で忠実に描く。
+-- | [日本語]: grid 上の事後予測平均線 + HDI 帯を組む 'GridOpts' クロージャ (@epred@ が設定)。
+--   'renderGridMulti' (頻度論 effect plot) と同型: 非軸予測子を 'goHoldAt' で固定し、
+--   'goByVar' があれば第2予測子の水準ごとに曲線を色分け重畳する。 各曲線は帯 (先) +
+--   線 (後)。 'goPredAt' 指定点は lineRange (区間) + scatter (事後平均) で重畳する。
+--   帯は非対称な HDI を lo/hi で忠実に描く。
+--   [English]: The 'GridOpts' closure that builds the posterior predictive
+--   mean line + HDI band on the grid (set up by @epred@). Shaped the same
+--   as 'renderGridMulti' (the frequentist effect plot): non-axis predictors
+--   are fixed via 'goHoldAt', and if 'goByVar' is present, a distinctly
+--   colored curve is overlaid per level of the second predictor. Each curve
+--   draws its band first, then its line. Points given via 'goPredAt' are
+--   overlaid with a @lineRange@ (interval) + @scatter@ (posterior mean).
+--   The band faithfully draws the asymmetric HDI using lo\/hi.
 renderEpred :: HBMModel -> Text -> Text -> GridOpts -> VisualSpec
 renderEpred hbm predName muName opts =
   let (lo0, hi0) = epredPredRange hbm predName
@@ -649,24 +834,36 @@ renderEpred hbm predName muName opts =
                  <> layer (scatter (inline pts) (inline pmu))
   in curves <> predLayers <> labelLegend opts
 
--- | 予測子列の観測範囲 (grid 既定範囲)。 bind 済みデータ ('hbmData') から引く。
+-- | [日本語]: 予測子列の観測範囲 (grid 既定範囲)。 bind 済みデータ ('hbmData') から引く。
+--   [English]: The predictor column's observed range (the default grid
+--   range). Looked up from the bound data ('hbmData').
 epredPredRange :: HBMModel -> Text -> (Double, Double)
 epredPredRange hbm predName =
   case lookup predName (hbmData hbm) of
     Just vs | not (null vs) -> (minimum vs, maximum vs)
     _                       -> (0, 1)
 
--- | HBM の事後予測平均 (E[y|x]) を grid 評価する 'ModelSpec' を作る。 既定は 94% HDI 帯
--- (ArviZ 流・帯 ON 焼き込み)、 grid 100 点、 範囲 = 予測子の観測 min/max。 @\<\>@ で
--- 'grid' / 'gridRange' / 'statLevel' / 'predAt' を合成できる (Phase 16 C1 と同綴り)。
+-- | [日本語]: HBM の事後予測平均 (E[y|x]) を grid 評価する 'ModelSpec' を作る。 既定は 94% HDI 帯
+--   (ArviZ 流・帯 ON 焼き込み)、 grid 100 点、 範囲 = 予測子の観測 min/max。 @\<\>@ で
+--   'grid' / 'gridRange' / 'statLevel' / 'predAt' を合成できる (既存コンビネータと同じ綴り)。
 --
--- @
--- noDf |>> toPlot (epred fit \"x\" \"mu\" \<\> grid 200 \<\> statLevel 0.9)
--- @
+--   @
+--   noDf |>> toPlot (epred fit \"x\" \"mu\" \<\> grid 200 \<\> statLevel 0.9)
+--   @
+--   [English]: Builds a 'ModelSpec' that grid-evaluates the HBM's posterior
+--   predictive mean (E[y|x]). Defaults to a 94% HDI band (ArviZ-style, band
+--   baked on by default), a grid of 100 points, and a range spanning the
+--   predictor's observed min\/max. Composable via @\<\>@ with 'grid' \/
+--   'gridRange' \/ 'statLevel' \/ 'predAt' (using the same spelling as the
+--   existing combinators).
+--
+--   @
+--   noDf |>> toPlot (epred fit \"x\" \"mu\" \<\> grid 200 \<\> statLevel 0.9)
+--   @
 epred
   :: HBMModel
-  -> Text   -- ^ 予測子の data 参照名。
-  -> Text   -- ^ 平均の deterministic ノード名。
+  -> Text   -- ^ [日本語]: 予測子の data 参照名。 [English]: The predictor's data reference name.
+  -> Text   -- ^ [日本語]: 平均の deterministic ノード名。 [English]: The deterministic node name for the mean.
   -> ModelSpec
 epred hbm predName muName = mempty
   { msRender = Just (renderEpred hbm predName muName)
@@ -679,7 +876,7 @@ epred hbm predName muName = mempty
 --
 -- 観測 y の分布に対して、 学習済モデルが再現する複製データ y_rep の分布を重ねる
 -- (ArviZ @az.plot_ppc@ 相当)。 各 posterior draw について 'runObserveDists' で
--- observe ノードの分布 (= 観測ノイズ込みの予測分布) を取り出し、 'sampleDist' で
+-- observe ノードの分布 (= 観測ノイズ込みの予測分布) を取り出し、 @sampleDist@ で
 -- 1 セット y_rep をサンプリングする。 これを N draw 分重ねると「観測がモデルの予測
 -- 分布の典型から外れていないか」 を目視できる。
 --
@@ -693,38 +890,55 @@ epred hbm predName muName = mempty
 -- 'ecdf' に差し替える ('ppcCumulative')。
 -- ===========================================================================
 
--- | ppc の設定: 重ねる複製データ本数 ('ppcReps')、 乱数シード、 累積版 (ecdf) 切替。
+-- | [日本語]: ppc の設定: 重ねる複製データ本数 ('ppcReps')、 乱数シード、 累積版 (ecdf) 切替。
+--   [English]: The ppc settings: the number of overlaid replicated datasets
+--   ('ppcReps'), the RNG seed, and whether to switch to the cumulative
+--   (ecdf) variant.
 data PPCConfig = PPCConfig
-  { ppcReps       :: !Int            -- ^ 重ねる y_rep 本数 (既定 40・draw から等間隔抽出)。
-  , ppcSeed       :: !(Maybe Word32) -- ^ サンプリングのシード (Nothing = system)。
-  , ppcCumulative :: !Bool           -- ^ True で density を ecdf (累積分布) に差し替える。
+  { ppcReps       :: !Int            -- ^ [日本語]: 重ねる y_rep 本数 (既定 40・draw から等間隔抽出)。 [English]: The number of overlaid y_rep replicates (default 40, evenly sampled from the draws).
+  , ppcSeed       :: !(Maybe Word32) -- ^ [日本語]: サンプリングのシード (Nothing = system)。 [English]: The sampling seed (Nothing = system RNG).
+  , ppcCumulative :: !Bool           -- ^ [日本語]: True で density を ecdf (累積分布) に差し替える。 [English]: True switches the density to an ecdf (cumulative distribution).
   } deriving (Show, Eq)
 
--- | 既定 ppc 設定: y_rep 40 本・system 乱数・density 表示。
+-- | [日本語]: 既定 ppc 設定: y_rep 40 本・system 乱数・density 表示。
+--   [English]: The default ppc settings: 40 y_rep replicates, the system
+--   RNG, and density display.
 defaultPPC :: PPCConfig
 defaultPPC = PPCConfig { ppcReps = 40, ppcSeed = Nothing, ppcCumulative = False }
 
--- | 事後予測チェック plot の描画仕様 ('forestOf' 等と同型の薄い newtype)。
+-- | [日本語]: 事後予測チェック plot の描画仕様 ('forestOf' 等と同型の薄い newtype)。
+--   [English]: The plotting spec for a posterior predictive check (a thin
+--   newtype shaped like 'forestOf' and friends).
 newtype PPCSpec = PPCSpec { unPPCSpec :: VisualSpec }
 
 instance Plottable PPCSpec where
   toPlot = unPPCSpec
 
--- | observe ノード名が prefix に一致するか。 単一 @observe \"obs\"@ (n == prefix) と
--- 'observeColumns' 由来の @\"obs_0\"@.. (prefix <> \"_\" が接頭辞) の両方を拾う。
+-- | [日本語]: observe ノード名が prefix に一致するか。 単一 @observe \"obs\"@ (n == prefix) と
+--   @observeColumns@ 由来の @\"obs_0\"@.. (prefix <> \"_\" が接頭辞) の両方を拾う。
+--   [English]: Whether an observe node name matches the prefix. Matches
+--   both a single @observe \"obs\"@ (n == prefix) and @observeColumns@-style
+--   names like @\"obs_0\"@.. (where @prefix <> \"_\"@ is a prefix).
 ppcMatches :: Text -> Text -> Bool
 ppcMatches prefix n = n == prefix || (prefix <> "_") `T.isPrefixOf` n
 
--- | 1 draw 分の複製データ y_rep をサンプリングする。 prefix 一致の各 observe ノードの
--- 分布から、 観測値と同数だけ引いてプールする。 Phase 50: 'PrimMonad' に一般化
--- (IO でも ST でも引ける → 純粋な 'ppcOf' が runST で決定的にサンプリングできる)。
+-- | [日本語]: 1 draw 分の複製データ y_rep をサンプリングする。 prefix 一致の各 observe ノードの
+--   分布から、 観測値と同数だけ引いてプールする。 'PrimMonad' に一般化してあるため
+--   IO でも ST でも引ける (→ 純粋な 'ppcOf' が runST で決定的にサンプリングできる)。
+--   [English]: Samples one draw's worth of replicated data y_rep. Draws the
+--   same count as the observed values from each prefix-matching observe
+--   node's distribution, and pools them. Generalized over 'PrimMonad', so it
+--   can be run in either IO or ST (which lets the pure 'ppcOf' sample
+--   deterministically via @runST@).
 sampleYRep :: PrimMonad m
            => Gen (PrimState m) -> ModelP () -> Text -> Map.Map Text Double -> m [Double]
 sampleYRep gen spec prefix ps =
   let nodes = [ (d, ys) | (n, d, ys) <- runObserveDists spec ps, ppcMatches prefix n ]
   in concat <$> mapM (\(d, ys) -> sampleObsRep gen d ys) nodes
 
--- | 観測値 (prefix 一致 observe ノードの ys をプール)。 params に依らないので任意 draw から。
+-- | [日本語]: 観測値 (prefix 一致 observe ノードの ys をプール)。 params に依らないので任意 draw から。
+--   [English]: The observed values (pooling the ys of prefix-matching
+--   observe nodes). Independent of the params, so any draw can be used.
 ppcObserved :: HBMModel -> Text -> [Double]
 ppcObserved hbm prefix =
   case concatMap chainSamples (hbmChainsR hbm) of
@@ -732,18 +946,33 @@ ppcObserved hbm prefix =
                           , ppcMatches prefix n ]
     []     -> []
 
--- | ppc の対象 draw 群 ('ppcReps' 本に間引き)。
+-- | [日本語]: ppc の対象 draw 群 ('ppcReps' 本に間引き)。
+--   [English]: The draws targeted for ppc (thinned down to 'ppcReps'
+--   replicates).
 ppcDrawsFor :: PPCConfig -> HBMModel -> [Map.Map Text Double]
 ppcDrawsFor cfg hbm = selectEvenly (ppcReps cfg) (concatMap chainSamples (hbmChainsR hbm))
 
--- | 観測値・y_rep 群から ppc plot を組む (純粋)。 薄い y_rep 群 (背景・各 draw) を先に、
--- 観測 (濃) を上に重ねる。 純粋 'ppcOfWith' と IO 'ppcOfWithIO' で共有。
+-- | [日本語]: 観測値・y_rep 群から ppc plot を組む (純粋)。 薄い y_rep 群 (背景・各 draw) を先に、
+--   観測 (濃) を上に重ねる。 純粋 'ppcOfWith' と IO 'ppcOfWithIO' で共有。
 --
--- ★ 旧実装はプール y_rep (全 draw 連結) の密度を赤破線で重ねていたが、 KDE の Silverman
--- バンド幅が **n 依存** (@h ∝ n^(-0.2)@) ゆえ、 n=Σ(draw×n_obs) のプールは観測 (n=n_obs) より
--- バンド幅が小さく過小平滑になり、 観測と異なる形 (外側へ膨らむ) に見えて誤解を招いた。
--- 比較は観測 (黒) vs 各 draw の y_rep (青・同じ n) で行うべきなので、 プール線は削除した
--- (ArviZ @plot_ppc@ もプール KDE は描かない)。
+--   ★ 旧実装はプール y_rep (全 draw 連結) の密度を赤破線で重ねていたが、 KDE の Silverman
+--   バンド幅が __n 依存__ (@h ∝ n^(-0.2)@) ゆえ、 n=Σ(draw×n_obs) のプールは観測 (n=n_obs) より
+--   バンド幅が小さく過小平滑になり、 観測と異なる形 (外側へ膨らむ) に見えて誤解を招いた。
+--   比較は観測 (黒) vs 各 draw の y_rep (青・同じ n) で行うべきなので、 プール線は削除した
+--   (ArviZ @plot_ppc@ もプール KDE は描かない)。
+--   [English]: Builds the ppc plot from the observed values and the y_rep
+--   replicates (pure). Draws the faint y_rep replicates (background, one per
+--   draw) first, then overlays the observed (dark) on top. Shared between
+--   the pure 'ppcOfWith' and the IO 'ppcOfWithIO'.
+--
+--   ★ The former implementation overlaid a red dashed density of the pooled
+--   y_rep (all draws concatenated), but since the KDE's Silverman bandwidth
+--   is __n-dependent__ (@h ∝ n^(-0.2)@), the pool (n=Σ(draw×n_obs)) has a
+--   smaller bandwidth than the observed (n=n_obs), under-smoothing it into a
+--   shape that looked different from the observed (bulging outward) and was
+--   misleading. Since the comparison should be observed (black) vs. each
+--   draw's y_rep (blue, same n), the pooled line was removed (ArviZ's
+--   @plot_ppc@ doesn't draw a pooled KDE either).
 buildPPCSpec :: PPCConfig -> [Double] -> [[Double]] -> PPCSpec
 buildPPCSpec cfg observed yreps =
   let densLayer = if ppcCumulative cfg then ecdf else density
@@ -753,20 +982,30 @@ buildPPCSpec cfg observed yreps =
       obsLayer    = layer (densLayer (inline observed) <> color (fromHex "#000000"))
   in PPCSpec (repLayers <> obsLayer)
 
--- | draw 列から 'ppcReps' 本を等間隔で抽出する (本数以下ならそのまま)。
+-- | [日本語]: draw 列から 'ppcReps' 本を等間隔で抽出する (本数以下ならそのまま)。
+--   [English]: Extracts 'ppcReps' replicates evenly spaced from the draw
+--   list (returns the input as-is if it already has fewer).
 selectEvenly :: Int -> [a] -> [a]
 selectEvenly k xs
   | k <= 0 || n <= k = xs
   | otherwise        = [ xs !! (i * n `div` k) | i <- [0 .. k - 1] ]
   where n = length xs
 
--- | 既定設定の事後予測チェック (純粋・決定的が**正本**。 'ppcOfWith' 'defaultPPC')。
--- y_rep サンプリングを @runST@ で閉じ、 @ppcSeed@ 既定 (42) で常に再現可能。 IO 版は 'ppcOfIO'。
+-- | [日本語]: 既定設定の事後予測チェック (純粋・決定的が__正本__。 'ppcOfWith' 'defaultPPC')。
+--   y_rep サンプリングを @runST@ で閉じ、 @ppcSeed@ 既定 (42) で常に再現可能。 IO 版は 'ppcOfIO'。
+--   [English]: The posterior predictive check with default settings (the
+--   pure, deterministic version is __canonical__; 'ppcOfWith' 'defaultPPC').
+--   Closes the y_rep sampling over @runST@, always reproducible via the
+--   default @ppcSeed@ (42). The IO variant is 'ppcOfIO'.
 ppcOf :: HBMModel -> Text -> PPCSpec
 ppcOf = ppcOfWith defaultPPC
 
--- | 事後予測チェックを組む (純粋・正本)。 @prefix@ は observe ノード名 (@observeColumns@ なら接頭辞)。
--- y_rep サンプリングを @runST@ で閉じる。 @ppcSeed@ が 'Nothing' のときは固定既定 seed (42) で再現可能。
+-- | [日本語]: 事後予測チェックを組む (純粋・正本)。 @prefix@ は observe ノード名 (@observeColumns@ なら接頭辞)。
+--   y_rep サンプリングを @runST@ で閉じる。 @ppcSeed@ が 'Nothing' のときは固定既定 seed (42) で再現可能。
+--   [English]: Builds the posterior predictive check (pure, canonical).
+--   @prefix@ is the observe node name (or the prefix, for
+--   @observeColumns@). Closes the y_rep sampling over @runST@. When
+--   @ppcSeed@ is 'Nothing', a fixed default seed (42) keeps it reproducible.
 ppcOfWith :: PPCConfig -> HBMModel -> Text -> PPCSpec
 ppcOfWith cfg hbm prefix =
   let spec :: ModelP ()
@@ -778,12 +1017,18 @@ ppcOfWith cfg hbm prefix =
         mapM (sampleYRep gen spec prefix) draws
   in buildPPCSpec cfg (ppcObserved hbm prefix) yreps
 
--- | 既定設定の事後予測チェック (IO 版・'ppcOfWithIO' 'defaultPPC')。 通常は純粋な 'ppcOf' を使う
--- (将来 deprecate 予定)。 @ppcSeed@ 'Nothing' でシステム乱数を引きたいときだけ IO 版が要る。
+-- | [日本語]: 既定設定の事後予測チェック (IO 版・'ppcOfWithIO' 'defaultPPC')。 通常は純粋な 'ppcOf' を使う
+--   (将来 deprecate 予定)。 @ppcSeed@ 'Nothing' でシステム乱数を引きたいときだけ IO 版が要る。
+--   [English]: The posterior predictive check with default settings (IO
+--   variant; 'ppcOfWithIO' 'defaultPPC'). Normally use the pure 'ppcOf'
+--   instead (this is slated for future deprecation). The IO variant is only
+--   needed when you want to draw the system RNG with @ppcSeed@ 'Nothing'.
 ppcOfIO :: HBMModel -> Text -> IO PPCSpec
 ppcOfIO = ppcOfWithIO defaultPPC
 
--- | 事後予測チェックを組む (IO 版)。 @ppcSeed@ 'Nothing' で 'createSystemRandom' を引く。
+-- | [日本語]: 事後予測チェックを組む (IO 版)。 @ppcSeed@ 'Nothing' で 'createSystemRandom' を引く。
+--   [English]: Builds the posterior predictive check (IO variant). Draws
+--   'createSystemRandom' when @ppcSeed@ is 'Nothing'.
 ppcOfWithIO :: PPCConfig -> HBMModel -> Text -> IO PPCSpec
 ppcOfWithIO cfg hbm prefix = do
   let spec :: ModelP ()
@@ -809,8 +1054,11 @@ ppcOfWithIO cfg hbm prefix = do
 -- ESS 定量は個別 'autocorrOf'、 chain 一様性は 'rankOf' で見る)。
 -- ===========================================================================
 
--- | コンパクト健全性 2×2 のパネル群 (左上から 構造 / 推定値 / 当てはまり / サンプラ健全性)。
--- 'dashboardOf' (単体) と 'dashboardFullOf' (上段) で共有する内部ヘルパ。
+-- | [日本語]: コンパクト健全性 2×2 のパネル群 (左上から 構造 / 推定値 / 当てはまり / サンプラ健全性)。
+--   'dashboardOf' (単体) と 'dashboardFullOf' (上段) で共有する内部ヘルパ。
+--   [English]: The compact 2×2 health-panel group (from top-left: structure
+--   \/ estimates \/ fit \/ sampler health). An internal helper shared by
+--   'dashboardOf' (standalone) and 'dashboardFullOf' (its top section).
 dashboardHealthPanels :: HBMModel -> Text -> [VisualSpec]
 dashboardHealthPanels hbm obsName =
   [ toPlot (dagOf hbm)         <> title "構造 (DAG)"
@@ -818,38 +1066,66 @@ dashboardHealthPanels hbm obsName =
   , toPlot (ppcOf hbm obsName) <> title "当てはまり (PPC: 観測 vs 事後予測)"
   , energyOf hbm               <> title "サンプラ健全性 (energy / BFMI)" ]
 
--- | コンパクトな HBM 診断ダッシュボード (2×2)。 **構造** ('dagOf'・左上)・**推定値**
--- ('forestOf'・94% HDI)・**当てはまり** ('ppcOf'・観測 vs 事後予測の密度重ね)・**サンプラ
--- 健全性** ('energyOf'・BFMI) を 1 パネルずつ。 各 1 パネルゆえ param 数に依らず見やすい
--- (係数が増えても forest が縦に密になるだけ。 収束 R̂/trace は 'dashboardFullOf' で見る)。
+-- | [日本語]: コンパクトな HBM 診断ダッシュボード (2×2)。 __構造__ (@dagOf@・左上)・__推定値__
+--   ('forestOf'・94% HDI)・__当てはまり__ ('ppcOf'・観測 vs 事後予測の密度重ね)・
+--   __サンプラ健全性__ ('energyOf'・BFMI) を 1 パネルずつ。 各 1 パネルゆえ param 数に依らず見やすい
+--   (係数が増えても forest が縦に密になるだけ。 収束 R̂/trace は 'dashboardFullOf' で見る)。
+--   [English]: A compact HBM diagnostic dashboard (2×2). One panel each for
+--   __structure__ (@dagOf@, top-left), __estimates__ ('forestOf', 94% HDI),
+--   __fit__ ('ppcOf', observed vs. posterior predictive density overlay),
+--   and __sampler health__ ('energyOf', BFMI). Since it's one panel each, it
+--   stays readable regardless of the parameter count (more coefficients
+--   just make the forest more densely packed vertically; check convergence
+--   R̂ \/ trace via 'dashboardFullOf' instead).
 dashboardOf :: HBMModel -> Text -> VisualSpec
 dashboardOf hbm obsName =
   subplots (dashboardHealthPanels hbm obsName)
     <> subplotCols 2 <> width 1100 <> height 760
 
--- | param ごと **[事後分布 (左) | trace (右)]** のパネル群 (ArviZ @plot_trace@ の中身)。
--- 'traceDensityOf' (単体) と 'dashboardFullOf' (下段) で共有する内部ヘルパ。 事後分布・
--- trace とも chain 別を色違いで重畳する ('marginalsByChainOf' / 'tracesOfWith' byChain)。
+-- | [日本語]: param ごと __[事後分布 (左) | trace (右)]__ のパネル群 (ArviZ @plot_trace@ の中身)。
+--   'traceDensityOf' (単体) と 'dashboardFullOf' (下段) で共有する内部ヘルパ。 事後分布・
+--   trace とも chain 別を色違いで重畳する ('marginalsByChainOf' / 'tracesOfWith' byChain)。
+--   [English]: A per-param panel group of __[posterior (left) | trace (right)]__
+--   (the content of ArviZ's @plot_trace@). An internal helper
+--   shared by 'traceDensityOf' (standalone) and 'dashboardFullOf' (its
+--   bottom section). Both the posterior and the trace overlay each chain in
+--   a distinct color ('marginalsByChainOf' \/ 'tracesOfWith' with
+--   @byChain@).
 tracePostPanels :: HBMModel -> [VisualSpec]
 tracePostPanels hbm =
   concat (zipWith (\p t -> [p, t])
             (marginalsByChainOf hbm)
             (tracesOfWith defaultTraceOpts { toByChain = True } hbm))
 
--- | trace と事後分布だけのダッシュボード (= ArviZ @plot_trace@ 相当)。 param ごとに
--- **[事後分布 (左) | trace (右)]** を 2 列で並べる (chain は色違いで重畳)。 収束 (定常・
--- chain 一致) と事後の形を同時に確認する定番。 係数が増えると下に行が増える。
+-- | [日本語]: trace と事後分布だけのダッシュボード (= ArviZ @plot_trace@ 相当)。 param ごとに
+--   __[事後分布 (左) | trace (右)]__ を 2 列で並べる (chain は色違いで重畳)。 収束 (定常・
+--   chain 一致) と事後の形を同時に確認する定番。 係数が増えると下に行が増える。
+--   [English]: A dashboard of just the trace and posterior (= equivalent to
+--   ArviZ's @plot_trace@). Lays out __[posterior (left) | trace (right)]__
+--   in two columns per param (chains overlaid in distinct colors). The
+--   standard way to check convergence (stationarity, chain agreement) and
+--   the posterior's shape at the same time. More coefficients add more
+--   rows below.
 traceDensityOf :: HBMModel -> VisualSpec
 traceDensityOf hbm =
   let np = max 1 (length (hbmParamNames hbm))
   in subplots (tracePostPanels hbm)
        <> subplotCols 2 <> width 900 <> height (180 * fromIntegral np)
 
--- | フルの HBM 診断ダッシュボード。 上段に 'dashboardOf' と同じ健全性 2×2、 その下に
--- param ごと **[事後分布 (左) | trace (右)]** を 2 列で連結する (ArviZ @plot_trace@ 流・
--- chain は色違いで重畳)。 全体が 1 つの 2 列グリッドなので、 **係数が増えると下に行が
--- 増えるだけ** (高さを行数 = 2 + param 数 に比例させ各パネルを潰さない)。 epred (予測曲線)
--- はモデル固有の予測子/平均ノード名と df が要るためここには含めない (個別に描く)。
+-- | [日本語]: フルの HBM 診断ダッシュボード。 上段に 'dashboardOf' と同じ健全性 2×2、 その下に
+--   param ごと __[事後分布 (左) | trace (右)]__ を 2 列で連結する (ArviZ @plot_trace@ 流・
+--   chain は色違いで重畳)。 全体が 1 つの 2 列グリッドなので、
+--   __係数が増えると下に行が増えるだけ__ (高さを行数 = 2 + param 数 に比例させ各パネルを潰さない)。 epred (予測曲線)
+--   はモデル固有の予測子/平均ノード名と df が要るためここには含めない (個別に描く)。
+--   [English]: The full HBM diagnostic dashboard. The top section is the
+--   same 2×2 health group as 'dashboardOf'; below it, __[posterior (left) | trace (right)]__
+--   is appended per param in two columns (ArviZ
+--   @plot_trace@-style, chains overlaid in distinct colors). Since the
+--   whole thing is one 2-column grid, __adding coefficients only adds more rows below__
+--   (the height scales with the row count = 2 + the number of
+--   params, so no panel gets squashed). epred (the prediction curve) isn't
+--   included here, since it needs a model-specific predictor \/ mean node
+--   name and a df (draw it separately instead).
 dashboardFullOf :: HBMModel -> Text -> VisualSpec
 dashboardFullOf hbm obsName =
   let np   = max 1 (length (hbmParamNames hbm))
@@ -860,7 +1136,7 @@ dashboardFullOf hbm obsName =
 -- ===========================================================================
 -- HBM のモデル構造 DAG — Phase 49 A5 (dag = 確率プログラムの依存グラフ)
 --
--- 確率プログラム ('ModelP') の依存構造を 'buildModelGraph' (= 'extractDeps' +
+-- 確率プログラム ('ModelP') の依存構造を @buildModelGraph@ (= @extractDeps@ +
 -- 同名ノード統合) で 'ModelGraph' (nodes / edges / plates) にし、 plot-core の
 -- DAG 描画 ('dagFromListsWithPlates'、 Sugiyama 階層 layout) に橋渡しする。 PyMC の
 -- @pm.model_to_graphviz@ に相当する「モデルの絵」。
@@ -868,50 +1144,83 @@ dashboardFullOf hbm obsName =
 -- ノード種 (latent / observed) と分布名は 'Node' のメタデータをそのまま 'DAGNode' に
 -- 写す。 plate ('plate' で囲んだ繰り返し) は 'mgPlates' を 'DAGPlate' に変換する
 -- (plate メンバは 'nodePlates' から逆引き)。 plate を使わないモデルでは
--- 'observeColumns' 由来の @obs_0..@ が個別ノードとして出る (collapse したい場合は
+-- @observeColumns@ 由来の @obs_0..@ が個別ノードとして出る (collapse したい場合は
 -- モデル側を 'plate' で囲む)。
 -- ===========================================================================
 
--- | モデル構造 DAG の描画仕様 ('forestOf' 等と同型の薄い newtype)。
+-- | [日本語]: モデル構造 DAG の描画仕様 ('forestOf' 等と同型の薄い newtype)。
+--   [English]: The plotting spec for a model-structure DAG (a thin newtype
+--   shaped like 'forestOf' and friends).
 newtype DagSpec = DagSpec { unDagSpec :: VisualSpec }
 
 instance Plottable DagSpec where
   toPlot = unDagSpec
 
--- | 学習済モデルの構造を DAG にする ('buildModelGraph' → plate-collapse →
--- plot-core DAG)。 layout は階層 ('LayoutHierarchical')。 学習結果には依存しない
--- (構造のみ)。 Phase 59.3: plate 内の indexed RV (@b0_0..b0_2@ 等) を
--- 'collapseIndexedPlateNodes' で 1 ノードに畳むのが既定 (PyMC
--- @model_to_graphviz@ と同じ見た目)。 indexed 個別ノードのまま見たい場合は
--- 'dagOfRaw'。
+-- | [日本語]: 学習済モデルの構造を DAG にする (@buildModelGraph@ → plate-collapse →
+--   plot-core DAG)。 layout は階層 ('LayoutHierarchical')。 学習結果には依存しない
+--   (構造のみ)。 plate 内の indexed RV (@b0_0..b0_2@ 等) を
+--   'collapseIndexedPlateNodes' で 1 ノードに畳むのが既定 (PyMC
+--   @model_to_graphviz@ と同じ見た目)。 indexed 個別ノードのまま見たい場合は
+--   'dagOfRaw'。
+--   [English]: Turns a trained model's structure into a DAG
+--   (@buildModelGraph@ → plate-collapse → plot-core DAG). The layout is
+--   hierarchical ('LayoutHierarchical'). Independent of the training result
+--   (structure only). By default, indexed RVs inside a plate (e.g.
+--   @b0_0..b0_2@) are collapsed into a single node via
+--   'collapseIndexedPlateNodes' (matching PyMC's @model_to_graphviz@ look).
+--   Use 'dagOfRaw' to see the indexed nodes individually instead.
 dagOf :: HBMModel -> DagSpec
 dagOf = dagFromModelGraph . collapseIndexedPlateNodes . buildModelGraph . hbmModelSpec
 
--- | 'dagOf' の plate-collapse 無し版 (Phase 49-59.2 の旧既定。 plate 内 indexed RV を
--- 個別ノードで列挙する。 展開後の全ノード/エッジを確認するデバッグ用)。
+-- | [日本語]: @dagOf@ の plate-collapse 無し版 (かつての旧既定。 plate 内 indexed RV を
+--   個別ノードで列挙する。 展開後の全ノード/エッジを確認するデバッグ用)。
+--   [English]: The plate-collapse-free variant of @dagOf@ (the former
+--   default; enumerates plate-internal indexed RVs as individual nodes).
+--   Useful for debugging by inspecting all expanded nodes \/ edges.
 dagOfRaw :: HBMModel -> DagSpec
 dagOfRaw = dagFromModelGraph . buildModelGraph . hbmModelSpec
 
--- | **学習前**にモデル構造だけを DAG にする (PyMC @pm.model_to_graphviz@ 相当。 Phase 74.9)。
--- 'dagOf' が学習済 'HBMModel' を取るのに対し、 こちらは生の 'ModelP' を直接取り
--- **サンプリングを一切しない** (構造は事後に依らないため)。 @noDf |>> toPlot (dagOfModel m)@。
+-- | [日本語]: __学習前__にモデル構造だけを DAG にする (PyMC @pm.model_to_graphviz@ 相当)。
+--   @dagOf@ が学習済 'HBMModel' を取るのに対し、 こちらは生の 'ModelP' を直接取り
+--   __サンプリングを一切しない__ (構造は事後に依らないため)。 @noDf |>> toPlot (dagOfModel m)@。
 --
--- ★ 注意: データ駆動 plate (@plateForM_@ / @observeColumns@ で plate サイズを **データ長**から
--- 決めるモデル) は、 データ未束縛 (slot が @[]@) だとループ本体が回らず plate 内ノード
--- (mu / obs 等) が出ない。 その場合は 'dagOfModelWith' でダミーでないデータを束ねてから描く
--- (サンプリングは走らない)。 明示 plate (@plate name N@ / @plateI@ で N を直書き) のモデルは
--- データ無しでも構造が完全に出る。
+--   ★ 注意: データ駆動 plate (@plateForM_@ / @observeColumns@ で plate サイズを __データ長__から
+--   決めるモデル) は、 データ未束縛 (slot が @[]@) だとループ本体が回らず plate 内ノード
+--   (mu / obs 等) が出ない。 その場合は 'dagOfModelWith' でダミーでないデータを束ねてから描く
+--   (サンプリングは走らない)。 明示 plate (@plate name N@ / @plateI@ で N を直書き) のモデルは
+--   データ無しでも構造が完全に出る。
+--   [English]: Turns just the model structure into a DAG __before training__
+--   (equivalent to PyMC's @pm.model_to_graphviz@). Where @dagOf@
+--   takes a trained 'HBMModel', this one takes a raw 'ModelP' directly and
+--   __never samples__ (structure doesn't depend on the posterior).
+--   @noDf |>> toPlot (dagOfModel m)@.
+--
+--   ★ Caution: for data-driven plates (models where @plateForM_@ \/
+--   @observeColumns@ determine the plate size from the __data length__),
+--   leaving the data unbound (an empty @[]@ slot) means the loop body never
+--   runs, so plate-internal nodes (mu \/ obs etc.) won't appear. In that
+--   case, bind non-dummy data first with 'dagOfModelWith' before drawing
+--   (still no sampling runs). Models with explicit plates (@plate name N@ \/
+--   @plateI@ hard-coding N) show the full structure even without data.
 dagOfModel :: ModelP () -> DagSpec
 dagOfModel = dagFromModelGraph . collapseIndexedPlateNodes . buildModelGraph
 
--- | 'dagOfModel' のデータ束ね版 (PyMC で観測を渡してから @model_to_graphviz@ する形)。
--- @dat@ を 'bindCols' でモデルへ束ねてから DAG を組む = **データ駆動 plate のサイズが
--- 正しく出る**。 'hbmModel' と同じ束ね方だが **NUTS は走らない** (学習前のプレビュー)。
--- @noDf |>> toPlot (dagOfModelWith [("x", xs), ("y", ys)] m)@。
+-- | [日本語]: 'dagOfModel' のデータ束ね版 (PyMC で観測を渡してから @model_to_graphviz@ する形)。
+--   @dat@ を 'bindCols' でモデルへ束ねてから DAG を組む =
+--   __データ駆動 plate のサイズが正しく出る__。 'hbmModel' と同じ束ね方だが __NUTS は走らない__ (学習前のプレビュー)。
+--   @noDf |>> toPlot (dagOfModelWith [("x", xs), ("y", ys)] m)@。
+--   [English]: The data-bound variant of 'dagOfModel' (like passing
+--   observations to PyMC before calling @model_to_graphviz@). Binds @dat@
+--   to the model via 'bindCols' before building the DAG, so
+--   __data-driven plate sizes come out correctly__. Binds the same way as 'hbmModel', but
+--   __NUTS never runs__ (it's a pre-training preview).
+--   @noDf |>> toPlot (dagOfModelWith [("x", xs), ("y", ys)] m)@.
 dagOfModelWith :: [(Text, [Double])] -> ModelP () -> DagSpec
 dagOfModelWith dat = dagOfModel . bindCols dat
 
--- | 'ModelGraph' → plot-core DAG 描画仕様 ('dagOf' / 'dagOfRaw' の共通部)。
+-- | [日本語]: 'ModelGraph' → plot-core DAG 描画仕様 (@dagOf@ / 'dagOfRaw' の共通部)。
+--   [English]: 'ModelGraph' → plot-core DAG plotting spec (the shared part
+--   of @dagOf@ \/ 'dagOfRaw').
 dagFromModelGraph :: ModelGraph -> DagSpec
 dagFromModelGraph mg =
   -- ★ renderDAG は dnX/dnY をそのまま使い layout を実行しない。 ゆえに描画前に
@@ -947,8 +1256,12 @@ dagFromModelGraph mg =
       , dnY     = 0
       }
 
--- | random-effect 第 @k@ 列の caterpillar plot。 BLUP を group ごとに取り、
--- **値で昇順ソート**して forest mark (errs=0 の点) で並べ、 0 に 'forestNull' 参照線。
+-- | [日本語]: random-effect 第 @k@ 列の caterpillar plot。 BLUP を group ごとに取り、
+--   __値で昇順ソート__して forest mark (errs=0 の点) で並べ、 0 に 'forestNull' 参照線。
+--   [English]: The caterpillar plot for random-effect column @k@. Takes the
+--   BLUPs per group, __sorts them ascending by value__, lays them out with
+--   the forest mark (points with errs=0), and draws a 'forestNull'
+--   reference line at 0.
 caterpillarColumn :: GLMMResultRE -> Int -> VisualSpec
 caterpillarColumn res k =
   let cols   = LA.toColumns (reBLUPs res)
@@ -968,10 +1281,17 @@ instance Plottable GLMMResultRE where
   diagnosticPlots res =
     [ caterpillarColumn res k | k <- [0 .. LA.cols (reBLUPs res) - 1] ]
 
--- | HBM の事後予測平均 (epred) 応答曲面。 2 つの予測子 slot (@p1@, @p2@) を
+-- | [日本語]: HBM の事後予測平均 (epred) 応答曲面。 2 つの予測子 slot (@p1@, @p2@) を
 --   grid で動かし、 各点で deterministic @muName@ の事後平均を取る
 --   ('epredAt' の 2 変数版・O1 規約は 'renderEpred' の節を参照)。
 --   ★コスト = grid 点数² × 全 draw のモデル評価。 既定 n=30 (900 点)。
+--   [English]: The HBM posterior predictive mean (epred) response surface.
+--   Moves two predictor slots (@p1@, @p2@) across a grid, taking the
+--   posterior mean of the deterministic @muName@ at each point (the
+--   two-variable version of 'epredAt'; see the note on the O1 convention in
+--   'renderEpred'\'s section).
+--   ★Cost = (grid points)² × model evaluations across all draws. Default
+--   n=30 (900 points).
 epredSurfaceOf :: HBMModel -> Text -> Text -> Text -> P3.VisualSpec3D
 epredSurfaceOf hbm p1 p2 muName =
   epredSurfaceOfWith hbm p1 p2 muName defaultSurfaceOpts { soN = 30 }
@@ -996,14 +1316,24 @@ epredSurfaceOfWith hbm p1 p2 muName opts =
                <> P3.yRange3D (ylo, yhi)
                <> P3.colormap3D )
 
--- | 学習済 HBM が保持するデータ列 ('hbmData') から散布図層を作る (B10)。
+-- | [日本語]: 学習済 HBM が保持するデータ列 ('hbmData') から散布図層を作る。
 --
--- @df |-> hbm cfg model@ で学習した後、 @dataScatterOf m \"x\" \"y\"@ で
--- 観測散布図を出せるので、 epred\/forest 等の抽出子と重畳するとき
--- **df を学習時 1 回だけ**書けばよい:
+--   @df |-> hbm cfg model@ で学習した後、 @dataScatterOf m \"x\" \"y\"@ で
+--   観測散布図を出せるので、 epred\/forest 等の抽出子と重畳するとき
+--   __df を学習時 1 回だけ__書けばよい:
 --
--- > let m = df |-> hbm defaultHBM model
--- > noDf |>> (dataScatterOf m "x" "y" <> toPlot (epred m "x" "mu"))
+--   > let m = df |-> hbm defaultHBM model
+--   > noDf |>> (dataScatterOf m "x" "y" <> toPlot (epred m "x" "mu"))
+--   [English]: Builds a scatter layer from the trained HBM's retained data
+--   columns ('hbmData').
+--
+--   After training with @df |-> hbm cfg model@, @dataScatterOf m \"x\"
+--   \"y\"@ produces the observed scatter, so when overlaying it with
+--   extractors like epred \/ forest, you only need to
+--   __write the df once, at training time__:
+--
+--   > let m = df |-> hbm defaultHBM model
+--   > noDf |>> (dataScatterOf m "x" "y" <> toPlot (epred m "x" "mu"))
 dataScatterOf :: HBMModel -> Text -> Text -> VisualSpec
 dataScatterOf m xn yn =
   case (lookup xn (hbmData m), lookup yn (hbmData m)) of

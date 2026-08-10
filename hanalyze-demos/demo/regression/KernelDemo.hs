@@ -10,7 +10,7 @@ import Text.Printf (printf)
 import System.Random.MWC (createSystemRandom)
 import qualified System.Random.MWC.Distributions as MWC
 
-import Hanalyze.Model.Kernel (Kernel (..), nwRegression, kernelRidge,
+import Hanalyze.Model.KernelRegression (Kernel (..), nwRegression, kernelRidge,
                      predictKernelRidge, gridSearchBandwidth)
 import Hanalyze.Viz.Core (defaultConfig, OutputFormat (..), PlotConfig (..),
                  writeSpec)

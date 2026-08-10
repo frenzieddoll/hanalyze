@@ -10,9 +10,10 @@
 layer 文法 (`df |>> (layer (scatter ..) <> toPlot fit)`) にそのまま重ねるための連携層。
 **系統 A (モデル・アウト型)** の実装 (analyze Phase 46 / plot Phase 15)。
 
-> ⚠ **Experimental + flag 隔離**。 この機能は cabal `flag plot-integration` (既定 **off**) を
-> on にしたときのみ build される。 off のままなら analyze は plot 非依存の standalone
-> (upstream hanalyze 互換) を保つ。 → [§6 ビルドと依存](#6-ビルドと依存) を先に読むこと。
+> ⚠ **Experimental + パッケージ隔離**。 この機能は別パッケージ `hanalyze-plot`
+> に切り出されており、 `cabal build --project-file=cabal.project.plot` で build する。
+> 本体 `hanalyze` は plot 非依存の standalone (upstream hanalyze 互換) を保ち、
+> このパッケージには依存しない。 → [§6 ビルドと依存](#6-ビルドと依存) を先に読むこと。
 
 ---
 
@@ -29,9 +30,9 @@ layer 文法 (`df |>> (layer (scatter ..) <> toPlot fit)`) にそのまま重ね
 {-# LANGUAGE OverloadedStrings #-}
 import qualified Data.Vector              as V
 import qualified Numeric.LinearAlgebra    as LA
-import           Hgg.Plot.Backend.SVG (saveSVGBound)
-import           Hgg.Plot.Frame       ((|>>))
-import           Hgg.Plot.Spec        (ColData (..), layer, scatter)
+import           Graphics.Hgg.Backend.SVG (saveSVGBound)
+import           Graphics.Hgg.Frame       ((|>>))
+import           Graphics.Hgg.Spec        (ColData (..), layer, scatter)
 import           Hanalyze.Plot            (lm, (|->), toPlot)
 
 main :: IO ()
@@ -140,18 +141,18 @@ LM/GLM/GLMM 共有の `FitResult` に instance がある。 `Plottable` (plot �
 
 ## 6. ビルドと依存
 
-| | flag off (既定) | flag on |
+| | 既定 build (`cabal.project`) | plot build (`cabal.project.plot`) |
 |---|---|---|
-| `Hanalyze.Plot` | build されない | build (`hgg-core`/`-svg` 依存) |
+| `Hanalyze.Plot` | build されない (`hanalyze-plot` 側にある) | build (`hgg-core`/`-svg` 依存) |
 | standalone 性 | ✅ plot 非依存・upstream 互換 | analyze → plot-core (一方向) |
 
 ```bash
-# flag on の統合 build root は cabal.project.plot
-cabal build --project-file=cabal.project.plot hanalyze
+# hanalyze-plot は独立パッケージ・専用 project file が build root
+cabal build --project-file=cabal.project.plot hanalyze-plot
 cabal test  --project-file=cabal.project.plot hanalyze-plot-test
 cabal run   --project-file=cabal.project.plot plot-integration-demo
 
-# flag off の standalone 回帰 (portable)
+# 既定の standalone build/test (portable、plot 非依存)
 cabal test hanalyze-test
 ```
 
@@ -164,8 +165,8 @@ cabal test hanalyze-test
 個別に SVG/Text が欲しい場合:
 
 ```haskell
-import Hgg.Plot.Backend.SVG (renderBound, saveSVGBound)  -- BoundPlot → Text / file
-import Hgg.Plot.Backend.SVG (renderSVG, saveSVG)         -- inline 列のみの VisualSpec
+import Graphics.Hgg.Backend.SVG (renderBound, saveSVGBound)  -- BoundPlot → Text / file
+import Graphics.Hgg.Backend.SVG (renderSVG, saveSVG)         -- inline 列のみの VisualSpec
 ```
 
 ## 8. portability / cherry-pick 規律
@@ -173,7 +174,7 @@ import Hgg.Plot.Backend.SVG (renderSVG, saveSVG)         -- inline 列のみの 
 - **portable** (`(hanalyze-portable)`、 upstream 候補): 中立 protocol (`PredictiveModel` /
   `ResidualModel`) + umbrella `module Hanalyze` (plot 非依存)。
 - **非 portable** (cherry-pick しない): `Hanalyze.Plot.*` 一式 (`Plottable` / `toPlot` / `LMModel` /
-  `GPResult` instance)。 `hgg-core` 依存ゆえ flag `plot-integration` 配下に隔離。
+  `GPResult` instance)。 `hgg-core` 依存ゆえ別パッケージ `hanalyze-plot` に隔離。
 
 ## 9. 「同等」 表現の注意 (geom_smooth との差)
 
@@ -188,14 +189,14 @@ import Hgg.Plot.Backend.SVG (renderSVG, saveSVG)         -- inline 列のみの 
 §1-§9 はモデルを先に作って描く **系統 A** (`toPlot`)。 これに対し **系統 B** は ggplot の
 `geom_smooth(method="lm")` のように **図の文法の中に stat を書き、 回帰計算を analyze に委譲**します。
 
-`hgg-analyze-bridge` の `Hgg.Plot.Bridge.Stat` で提供 (逆エッジ `plot → analyze` ゆえ
+`hgg-analyze-bridge` の `Graphics.Hgg.Bridge.Stat` で提供 (逆エッジ `plot → analyze` ゆえ
 隔離 package。 `hgg-core` は analyze 非依存を維持し循環なし)。
 
 ```haskell
 {-# LANGUAGE OverloadedStrings #-}
-import Hgg.Plot.Backend.SVG (saveSVGWith)
-import Hgg.Plot.Bridge.Stat (compileStats, lm, smooth)
-import Hgg.Plot.Spec        (ColData(..), Resolver, layer, scatter)
+import Graphics.Hgg.Backend.SVG (saveSVGWith)
+import Graphics.Hgg.Bridge.Stat (compileStats, lm, smooth)
+import Graphics.Hgg.Spec        (ColData(..), Resolver, layer, scatter)
 import qualified Data.Vector as V
 
 main :: IO ()

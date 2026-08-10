@@ -6,7 +6,31 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Random Fourier Features (RFF) — kernel approximation.
+-- [日本語]: Random Fourier Features (RFF) — kernel 近似。
+--
+-- Bochner の定理により、 定常カーネル
+-- @k(x, x') = ∫ p(ω) e^{iω(x-x')} dω@ は、 @p(ω)@ からサンプリングした @D@ 個の
+-- 周波数 @ω_j@ と一様位相 @b_j@ を介した明示的な特徴写像を持つ:
+--
+-- @
+-- φ(x) = σ_f √(2/D) [cos(ω_j x + b_j)]_{j=1..D}
+-- @
+--
+-- これにより @k(x, x') ≈ φ(x)·φ(x')@ となる (Rahimi & Recht 2007)。
+--
+-- 利点:
+--
+--   - @O(n³)@ の kernel 計算が @O(n D + D³)@ に削減される — @n@ について線形。
+--   - Ridge 回帰と GP 事後分布が @D@ 次元の線形代数になる。
+--
+-- 本モジュールは単変量・多変量入力の両方 (@MV@ 接尾辞の API) をサポートする。
+-- - 'sampleRFFRBF':      RBF カーネル (ω ~ N(0, 1/ℓ²))
+-- - 'sampleRFFMatern52': Matérn 5/2 (ω ~ scaled t with df = 5)
+-- - 'rffFeatures':  特徴行列 Φ を構築 (n × D)
+-- - 'rffRidge':     RFF + Ridge 回帰 (=O(n³) Kernel Ridge の近似)
+-- - 'rffGP':        RFF + ベイズ線形回帰 = GP 事後の近似 (mean + variance)
+--
+-- [English]: Random Fourier Features (RFF) — kernel approximation.
 --
 -- By Bochner's theorem, a stationary kernel
 -- @k(x, x') = ∫ p(ω) e^{iω(x-x')} dω@ admits an explicit feature map
@@ -21,17 +45,17 @@
 --
 -- Benefits:
 --
---   * @O(n³)@ kernel computation reduces to @O(n D + D³)@ — linear in @n@.
---   * Ridge regression and GP posterior become @D@-dimensional linear
+--   - @O(n³)@ kernel computation reduces to @O(n D + D³)@ — linear in @n@.
+--   - Ridge regression and GP posterior become @D@-dimensional linear
 --     algebra.
 --
 -- This module supports both univariate and multivariate inputs (the
 -- @MV@-suffixed APIs).
--- - 'sampleRFFRBF':      RBF カーネル (ω ~ N(0, 1/ℓ²))
+-- - 'sampleRFFRBF':      RBF kernel (ω ~ N(0, 1/ℓ²))
 -- - 'sampleRFFMatern52': Matérn 5/2 (ω ~ scaled t with df = 5)
--- - 'rffFeatures':  特徴行列 Φ を構築 (n × D)
--- - 'rffRidge':     RFF + Ridge 回帰 (=O(n³) Kernel Ridge の近似)
--- - 'rffGP':        RFF + ベイズ線形回帰 = GP 事後の近似 (mean + variance)
+-- - 'rffFeatures':  builds the feature matrix Φ (n × D)
+-- - 'rffRidge':     RFF + Ridge regression (= approximation of O(n³) Kernel Ridge)
+-- - 'rffGP':        RFF + Bayesian linear regression = approximation of the GP posterior (mean + variance)
 module Hanalyze.Model.RFF
   ( RFFKernel (..)
   , RFFFeatures (..)
@@ -131,13 +155,22 @@ rffDim = V.length . rffOmegas
 -- 周波数サンプリング
 -- ---------------------------------------------------------------------------
 
--- | Sample RFF features for the RBF kernel: @ω_j ~ N(0, 1/ℓ²)@,
--- @b_j ~ U(0, 2π)@.
+-- | [日本語]: RBF カーネル用の RFF 特徴をサンプリングする:
+--   @ω_j ~ N(0, 1/ℓ²)@、 @b_j ~ U(0, 2π)@。
 --
--- 'PrimMonad' 汎用 (mwc は 'PrimMonad' 汎用ゆえ ST/IO 両経路で同コード)。
--- IO 呼び出しは @GenIO = Gen (PrimState IO)@ ゆえ従来どおり。 純粋 (seed) 経路は
--- 'sampleRFFRBFPure' (Phase 70.5 = 'gp' spec の RFF 近似象限を pure 'fitWith' で完結
--- させるため・[[kMeansPure]]/[[fitRFVPure]] と一貫)。
+--   'PrimMonad' 汎用 (mwc は 'PrimMonad' 汎用ゆえ ST/IO 両経路で同コード)。
+--   IO 呼び出しは @GenIO = Gen (PrimState IO)@ ゆえ従来どおり。 純粋 (seed) 経路は
+--   'sampleRFFRBFPure' (@gp@ spec の RFF 近似象限を pure @fitWith@ で完結
+--   させるため・[[kMeansPure]]/[[fitRFVPure]] と一貫)。
+--   [English]: Sample RFF features for the RBF kernel: @ω_j ~ N(0, 1/ℓ²)@,
+--   @b_j ~ U(0, 2π)@.
+--
+--   Generic over 'PrimMonad' (mwc is generic over 'PrimMonad', so the same
+--   code serves both the ST and IO paths). IO calls use
+--   @GenIO = Gen (PrimState IO)@ as before. The pure (seed) path is
+--   'sampleRFFRBFPure' (a bridge letting the @gp@ spec's RFF-approximation
+--   quadrant be completed with a pure @fitWith@, consistent with
+--   [[kMeansPure]]\/[[fitRFVPure]]).
 sampleRFFRBF :: PrimMonad m
              => Int      -- ^ Feature dimension @D@.
              -> Double   -- ^ Length scale @ℓ@.
@@ -177,13 +210,19 @@ sampleRFFMatern52 d ell sf gen = do
     , rffLengthScale = ell
     }
 
--- | 純粋 (seed) 版 'sampleRFFRBF'。 同 seed → 同 'RFFFeatures' (ST/IO ビット一致)。
--- 'gp' spec の @GpRff@/@RidgeRff@ 象限を pure 'fitWith' で完結させる継ぎ目。
+-- | [日本語]: 純粋 (seed) 版 'sampleRFFRBF'。 同 seed → 同 'RFFFeatures'
+--   (ST\/IO ビット一致)。 @gp@ spec の @GpRff@\/@RidgeRff@ 象限を pure
+--   @fitWith@ で完結させる継ぎ目。
+--   [English]: Pure (seed) version of 'sampleRFFRBF'. The same seed yields
+--   the same 'RFFFeatures' (bit-identical across ST\/IO). The bridge that
+--   lets the @gp@ spec's @GpRff@\/@RidgeRff@ quadrant be completed with a
+--   pure @fitWith@.
 sampleRFFRBFPure :: Int -> Double -> Double -> Word32 -> RFFFeatures
 sampleRFFRBFPure d ell sf seed =
   runST (initialize (V.singleton seed) >>= sampleRFFRBF d ell sf)
 
--- | 純粋 (seed) 版 'sampleRFFMatern52'。
+-- | [日本語]: 純粋 (seed) 版 'sampleRFFMatern52'。
+--   [English]: Pure (seed) version of 'sampleRFFMatern52'.
 sampleRFFMatern52Pure :: Int -> Double -> Double -> Word32 -> RFFFeatures
 sampleRFFMatern52Pure d ell sf seed =
   runST (initialize (V.singleton seed) >>= sampleRFFMatern52 d ell sf)
@@ -391,12 +430,14 @@ sampleRFFMatern52MV p d ell sf gen = do
     , rffmvLengthScale = ell
     }
 
--- | 純粋 (seed) 版 'sampleRFFRBFMV'。
+-- | [日本語]: 純粋 (seed) 版 'sampleRFFRBFMV'。
+--   [English]: Pure (seed) version of 'sampleRFFRBFMV'.
 sampleRFFRBFMVPure :: Int -> Int -> Double -> Double -> Word32 -> RFFFeaturesMV
 sampleRFFRBFMVPure p d ell sf seed =
   runST (initialize (V.singleton seed) >>= sampleRFFRBFMV p d ell sf)
 
--- | 純粋 (seed) 版 'sampleRFFMatern52MV'。
+-- | [日本語]: 純粋 (seed) 版 'sampleRFFMatern52MV'。
+--   [English]: Pure (seed) version of 'sampleRFFMatern52MV'.
 sampleRFFMatern52MVPure :: Int -> Int -> Double -> Double -> Word32 -> RFFFeaturesMV
 sampleRFFMatern52MVPure p d ell sf seed =
   runST (initialize (V.singleton seed) >>= sampleRFFMatern52MV p d ell sf)
@@ -564,15 +605,25 @@ predictRFFRidgeMVMulti fit xNew =
 -- 周辺尤度最大化 (RFF GP 流の HP チューニング、Phase 2)
 -- ---------------------------------------------------------------------------
 
--- | Log marginal likelihood under the RBF kernel for multivariate input
--- @X@ (@n × p@) and observations @y@.
+-- | [日本語]: 多変量入力 @X@ (@n × p@) と観測 @y@ に対する、 RBF カーネル下での
+--   周辺対数尤度。
 --
 --   K_ij = σ_f² · exp(-‖x_i - x_j‖² / (2 ℓ²))
 --   y | θ ~ N(0, K + σ_n² I)
 --
 --   log p(y|θ) = -½ yᵀ (K+σ_n² I)⁻¹ y - ½ log|K+σ_n² I| - n/2 log(2π)
 --
--- Cholesky 分解で安定計算。ℓ が極小で K が特異化したら -∞ 近似値を返す。
+--   Cholesky 分解で安定計算。 ℓ が極小で K が特異化したら -∞ 近似値を返す。
+--   [English]: Log marginal likelihood under the RBF kernel for multivariate
+--   input @X@ (@n × p@) and observations @y@.
+--
+--   K_ij = σ_f² · exp(-‖x_i - x_j‖² / (2 ℓ²))
+--   y | θ ~ N(0, K + σ_n² I)
+--
+--   log p(y|θ) = -½ yᵀ (K+σ_n² I)⁻¹ y - ½ log|K+σ_n² I| - n/2 log(2π)
+--
+--   Computed stably via Cholesky decomposition. If @ℓ@ is extremely small
+--   and @K@ becomes singular, an approximate value of -∞ is returned.
 logMarginalLikRBFMV
   :: LA.Matrix Double      -- ^ X (n × p)
   -> LA.Vector Double      -- ^ y (n)
@@ -617,21 +668,36 @@ data MLikResult = MLikResult
   , mlSigmaF   :: !Double
   , mlSigmaN   :: !Double
   , mlLogMlik  :: !Double
-  , mlGridPts  :: !Int      -- ^ 評価したグリッド点数 (debug 用)
+  , mlGridPts  :: !Int      -- ^ [日本語]: 評価したグリッド点数 (debug 用)。 [English]: The number of grid points evaluated (for debugging).
   } deriving (Show)
 
--- | Maximize the marginal likelihood by grid search over @(ℓ, σ_f, σ_n)@.
+-- | [日本語]: @(ℓ, σ_f, σ_n)@ に対するグリッドサーチで周辺尤度を最大化する。
 --
--- 戦略:
+--   戦略:
 --
--- 1. ℓ は median pairwise distance を中心に log 等間隔で n_ℓ 点
--- 2. σ_f は std(y) を中心に log で n_σf 点
--- 3. σ_n は std(y)·{0.001..0.5} の log 等間隔で n_σn 点
--- 4. 全 n_ℓ × n_σf × n_σn 点で log-mlik を評価し最良を取る
--- 5. 最良点周辺で 1/3 の幅で同点数のグリッドを再探索 (1 段の coarse-to-fine)
+--   1. ℓ は median pairwise distance を中心に log 等間隔で n_ℓ 点
+--   2. σ_f は std(y) を中心に log で n_σf 点
+--   3. σ_n は std(y)·{0.001..0.5} の log 等間隔で n_σn 点
+--   4. 全 n_ℓ × n_σf × n_σn 点で log-mlik を評価し最良を取る
+--   5. 最良点周辺で 1/3 の幅で同点数のグリッドを再探索 (1 段の coarse-to-fine)
 --
--- デフォルトは (20, 8, 8) = 1280 点。最終的に 2560 点 (再探索込)。
--- n=200 までは数秒。
+--   デフォルトは (20, 8, 8) = 1280 点。 最終的に 2560 点 (再探索込)。
+--   n=200 までは数秒。
+--   [English]: Maximize the marginal likelihood by grid search over
+--   @(ℓ, σ_f, σ_n)@.
+--
+--   Strategy:
+--
+--   1. @ℓ@: n_ℓ log-evenly-spaced points centered on the median pairwise
+--      distance
+--   2. @σ_f@: n_σf log-spaced points centered on std(y)
+--   3. @σ_n@: n_σn log-evenly-spaced points over std(y)·{0.001..0.5}
+--   4. Evaluate log-mlik at all n_ℓ × n_σf × n_σn points and take the best
+--   5. Re-search a grid of the same size within 1\/3 of the width around
+--      the best point (one stage of coarse-to-fine)
+--
+--   The default is (20, 8, 8) = 1280 points, 2560 points total (including
+--   the re-search). Takes a few seconds up to n=200.
 maximizeMarginalLikRBFMV
   :: LA.Matrix Double
   -> LA.Vector Double
@@ -659,14 +725,27 @@ maximizeMarginalLikRBFMV x y mGrid =
   in MLikResult ell2 sf2 sn2 ml2
        (nL * nSF * nSN * 2)
 
--- | Differential-Evolution variant of 'maximizeMarginalLikRBFMV'.
+-- | [日本語]: 'maximizeMarginalLikRBFMV' の Differential-Evolution 版。
 --
--- coarse stage を Differential Evolution (`Hanalyze.Optim.DifferentialEvolution`) で
--- 行い、fine stage は従来通りグリッド。
+--   coarse stage を Differential Evolution
+--   (`Hanalyze.Optim.DifferentialEvolution`) で行い、 fine stage は
+--   従来通りグリッド。
 --
--- DE の探索空間は log 空間 (log_ℓ, log_σ_f, log_σ_n) の 3 次元。
--- 評価予算は generations 引数で制御 (典型 30-100 で集団 30、合計 900-3000 評価)。
--- グリッド版より広範囲を効率的に探索でき、log-mlik の局所解にハマりにくい。
+--   DE の探索空間は log 空間 (log_ℓ, log_σ_f, log_σ_n) の 3 次元。 評価予算は
+--   generations 引数で制御 (典型 30-100 で集団 30、 合計 900-3000 評価)。
+--   グリッド版より広範囲を効率的に探索でき、 log-mlik の局所解にハマりにくい。
+--   [English]: Differential-Evolution variant of 'maximizeMarginalLikRBFMV'.
+--
+--   The coarse stage uses Differential Evolution
+--   (`Hanalyze.Optim.DifferentialEvolution`); the fine stage remains
+--   grid-based as before.
+--
+--   DE's search space is the 3-dimensional log space (log_ℓ, log_σ_f,
+--   log_σ_n). The evaluation budget is controlled by the generations
+--   argument (typically 30-100 with a population of 30, for a total of
+--   900-3000 evaluations). It searches a wider range more efficiently than
+--   the grid version and is less prone to getting stuck in local optima of
+--   log-mlik.
 maximizeMarginalLikRBFMV_DE
   :: LA.Matrix Double
   -> LA.Vector Double
@@ -727,7 +806,7 @@ logSpace lo hi n
 
 -- | Median pairwise distance between rows (the standard median heuristic
 -- for an RBF length scale).
--- | Phase 11b (2026-05-14): rewritten to use BLAS gram matrix
+-- | Rewritten to use BLAS gram matrix
 -- ('KD.pairwiseSqDist') + 'Intro.sort' on a flat 'VS.Vector'. The previous
 -- implementation built an @O(n²)@ list of pair distances with @rows !! i@
 -- (each @O(i)@) and ran a naive list quicksort, which exploded space to
@@ -770,22 +849,33 @@ sampleStd xs
 -- | Result of LOOCV-based hyperparameter search.
 data LOOCVResult = LOOCVResult
   { lcEll      :: !Double
-  , lcSigmaF   :: !Double   -- ^ 信号 sd (= std(y) を使う簡易版)
-  , lcLambda   :: !Double   -- ^ Ridge 正則化
+  , lcSigmaF   :: !Double   -- ^ [日本語]: 信号 sd (= std(y) を使う簡易版)。 [English]: Signal SD (a simplified version using std(y)).
+  , lcLambda   :: !Double   -- ^ [日本語]: Ridge 正則化。 [English]: Ridge regularization.
   , lcLOOCV    :: !Double   -- ^ LOOCV(λ) = mean square LOO residual
   , lcGridPts  :: !Int
   } deriving (Show)
 
--- | Closed-form LOOCV for RFF ridge regression using a Cholesky
--- factorization plus the hat-matrix diagonal.
+-- | [日本語]: Cholesky 分解とハット行列の対角を使った、 RFF ridge 回帰の
+--   closed-form LOOCV。
 --
 --   H = Φ (ΦᵀΦ + λI)⁻¹ Φᵀ
 --   ŷ = H y
 --   LOOCV(λ) = (1/n) Σᵢ ((y_i - ŷ_i) / (1 - H_ii))²
 --
--- 本関数は与えられた特徴行列 @feats@ (= 既に ω/b/σ_f が決まったもの) と
--- Ridge λ に対して LOOCV を返す。グリッドサーチ側ではこれを多数の λ で
--- 呼び出すが、Φ は 1 度だけ計算すれば良いので外側でキャッシュする。
+--   本関数は与えられた特徴行列 @feats@ (= 既に ω/b/σ_f が決まったもの) と
+--   Ridge λ に対して LOOCV を返す。 グリッドサーチ側ではこれを多数の λ で
+--   呼び出すが、 Φ は 1 度だけ計算すれば良いので外側でキャッシュする。
+--   [English]: Closed-form LOOCV for RFF ridge regression using a Cholesky
+--   factorization plus the hat-matrix diagonal.
+--
+--   H = Φ (ΦᵀΦ + λI)⁻¹ Φᵀ
+--   ŷ = H y
+--   LOOCV(λ) = (1/n) Σᵢ ((y_i - ŷ_i) / (1 - H_ii))²
+--
+--   This function returns the LOOCV for a given feature matrix @feats@
+--   (with ω\/b\/σ_f already fixed) and Ridge λ. The grid-search side calls
+--   this repeatedly for many λ values, so Φ only needs to be computed once
+--   and is cached by the caller.
 loocvRFFRidgeMV
   :: RFFFeaturesMV
   -> LA.Matrix Double           -- ^ X (n × p)
@@ -796,8 +886,13 @@ loocvRFFRidgeMV feats x y lam =
   let phi = rffFeaturesMV feats x      -- n × D
   in loocvFromPhi phi y lam
 
--- | Φ から LOOCV を計算する内部実装 (グリッドサーチでキャッシュ用)。
--- Cholesky ベース (Φ_ridge = Φᵀ Φ + λI、A = chol(Φ_ridge))。
+-- | [日本語]: Φ から LOOCV を計算する内部実装 (グリッドサーチでキャッシュ用)。
+--   Cholesky ベース (Φ_ridge = Φᵀ Φ + λI、 A = chol(Φ_ridge))。
+--   H = Φ Φ_ridge⁻¹ Φᵀ
+--   T = Φ Φ_ridge⁻¹  → diag(H) = row-sum(T ⊙ Φ)
+--   [English]: Internal implementation that computes the LOOCV from Φ
+--   (for caching on the grid-search side). Cholesky-based
+--   (Φ_ridge = Φᵀ Φ + λI, A = chol(Φ_ridge)).
 --   H = Φ Φ_ridge⁻¹ Φᵀ
 --   T = Φ Φ_ridge⁻¹  → diag(H) = row-sum(T ⊙ Φ)
 loocvFromPhi :: LA.Matrix Double -> LA.Vector Double -> Double -> Double
@@ -825,17 +920,27 @@ loocvFromPhi phi y lam =
   where
     divList xs ys = zipWith (/) xs ys
 
--- | Search a log-spaced @(ℓ, λ)@ grid for the smallest LOOCV.
+-- | [日本語]: log 等間隔の @(ℓ, λ)@ グリッドを探索し、 最小の LOOCV を求める。
 --
--- ℓ ごとに ω を新規サンプリングするため IO。グリッドサイズ default (8, 20):
--- ℓ 8 点 × λ 20 点 = 160 fit。各 fit O(n D + D³) で n=545, D=200 程度なら
--- 全体で数秒程度。
+--   ℓ ごとに ω を新規サンプリングするため IO。 グリッドサイズ default (8, 20):
+--   ℓ 8 点 × λ 20 点 = 160 fit。 各 fit O(n D + D³) で n=545, D=200 程度なら
+--   全体で数秒程度。
 --
--- σ_f は std(y) 固定 (Ridge ↔ GP 等価では σ_f は ω 分散と一緒に動くべきだが、
--- λ で吸収できるので簡易化)。
+--   σ_f は std(y) 固定 (Ridge ↔ GP 等価では σ_f は ω 分散と一緒に動くべきだが、
+--   λ で吸収できるので簡易化)。
+--   [English]: Search a log-spaced @(ℓ, λ)@ grid for the smallest LOOCV.
+--
+--   IO because @ω@ is resampled for each @ℓ@. Default grid size (8, 20):
+--   8 points for @ℓ@ × 20 points for @λ@ = 160 fits. With each fit costing
+--   O(n D + D³), the whole search takes a few seconds for n=545, D=200 or
+--   so.
+--
+--   @σ_f@ is fixed to std(y) (under the Ridge ↔ GP equivalence, @σ_f@
+--   should ideally move together with the @ω@ variance, but it can be
+--   absorbed by @λ@, so this is simplified).
 gridSearchLOOCVRBFMV
-  :: Int                               -- ^ p (入力次元)
-  -> Int                               -- ^ D (特徴次元)
+  :: Int                               -- ^ [日本語]: p (入力次元)。 [English]: p (input dimension).
+  -> Int                               -- ^ [日本語]: D (特徴次元)。 [English]: D (feature dimension).
   -> LA.Matrix Double                  -- ^ X
   -> LA.Vector Double                  -- ^ y
   -> Maybe (Int, Int)                  -- ^ (n_ℓ, n_λ) default (8, 20)
@@ -868,14 +973,20 @@ gridSearchLOOCVRBFMV p d x y mGrid gen = do
     , lcGridPts = nL * nLam
     }
 
--- | Differential-Evolution variant of 'gridSearchLOOCVRBFMV'.
+-- | [日本語]: 'gridSearchLOOCVRBFMV' の Differential-Evolution 版。
 --
--- (log_ℓ, log_λ) の 2 次元空間を Differential Evolution で探索。
--- ω は ℓ ごとに新規サンプリング (RFF の特性上避けられない) のでコストは
--- グリッド版と同程度。グリッドの離散性が問題になる場合に有効。
+--   (log_ℓ, log_λ) の 2 次元空間を Differential Evolution で探索。
+--   ω は ℓ ごとに新規サンプリング (RFF の特性上避けられない) のでコストは
+--   グリッド版と同程度。 グリッドの離散性が問題になる場合に有効。
+--   [English]: Differential-Evolution variant of 'gridSearchLOOCVRBFMV'.
+--
+--   Searches the 2-dimensional space (log_ℓ, log_λ) with Differential
+--   Evolution. @ω@ is resampled for each @ℓ@ (unavoidable given RFF's
+--   nature), so the cost is comparable to the grid version. Useful when
+--   the discreteness of the grid is a problem.
 gridSearchLOOCVRBFMV_DE
-  :: Int                               -- ^ p (入力次元)
-  -> Int                               -- ^ D (特徴次元)
+  :: Int                               -- ^ [日本語]: p (入力次元)。 [English]: p (input dimension).
+  -> Int                               -- ^ [日本語]: D (特徴次元)。 [English]: D (feature dimension).
   -> LA.Matrix Double                  -- ^ X
   -> LA.Vector Double                  -- ^ y
   -> Int                               -- ^ DE generations
@@ -921,24 +1032,41 @@ gridSearchLOOCVRBFMV_DE p d x y nGen gen = do
     , lcGridPts = OCM.orIters r * DEM.dePopSize cfg
     }
 
--- | Bayesian-optimization variant of 'gridSearchLOOCVRBFMV'
--- (金子流: 初期点 + GP 代理モデル + 獲得関数で評価回数を削減)。
+-- | [日本語]: 'gridSearchLOOCVRBFMV' のベイズ最適化版
+--   (金子流: 初期点 + GP 代理モデル + 獲得関数で評価回数を削減)。
 --
--- グリッドの 160 点 (8 ℓ × 20 λ) に対し、 既定 30 評価 (init 8 + iter 22) で
--- 同等の @(ℓ, λ)@ を (log ℓ, log λ) の 2 次元 BO ('BO.bayesOptND') で求める。
+--   グリッドの 160 点 (8 ℓ × 20 λ) に対し、 既定 30 評価 (init 8 + iter 22) で
+--   同等の @(ℓ, λ)@ を (log ℓ, log λ) の 2 次元 BO ('BO.bayesOptND') で求める。
 --
--- **RFF + BO の肝**: RFF の周波数 ω~N(0, 1/ℓ) はランダムなので、 同じ @(ℓ,λ)@ でも
--- 引き直すと LOOCV が変わる (stochastic)。 BO は決定的目的関数を仮定するため、
--- ここでは **基底 ω₀~N(0,1) と bias b を 1 度だけ引いて固定**し、 ℓ ごとに
--- @ω = ω₀ / ℓ@ とスケールする。 これで LOOCV(ℓ,λ) は ℓ の決定的関数になり、 GP 代理
--- が綺麗に乗る。 ℓ ごとに ω を引き直す grid / DE 版 (上記) より MC ノイズが小さく
--- **むしろ安定**。 D を上げるほど RFF の分散は減る。
+--   __RFF + BO の肝__: RFF の周波数 ω~N(0, 1/ℓ) はランダムなので、 同じ @(ℓ,λ)@
+--   でも引き直すと LOOCV が変わる (stochastic)。 BO は決定的目的関数を仮定する
+--   ため、 ここでは __基底 ω₀~N(0,1) と bias b を 1 度だけ引いて固定__し、 ℓ
+--   ごとに @ω = ω₀ / ℓ@ とスケールする。 これで LOOCV(ℓ,λ) は ℓ の決定的関数
+--   になり、 GP 代理が綺麗に乗る。 ℓ ごとに ω を引き直す grid \/ DE 版 (上記) より
+--   MC ノイズが小さく __むしろ安定__。 D を上げるほど RFF の分散は減る。
+--   [English]: Bayesian-optimization variant of 'gridSearchLOOCVRBFMV'
+--   (Kaneko-style: reduces the number of evaluations with initial points +
+--   a GP surrogate model + an acquisition function).
+--
+--   For the 160-point grid (8 @ℓ@ × 20 @λ@), the equivalent @(ℓ, λ)@ is
+--   found with a default of 30 evaluations (init 8 + iter 22) via a
+--   2-dimensional BO over (log ℓ, log λ) ('BO.bayesOptND').
+--
+--   __The key to RFF + BO__: because the RFF frequencies ω~N(0, 1/ℓ) are
+--   random, resampling changes the LOOCV even for the same @(ℓ,λ)@
+--   (stochastic). Since BO assumes a deterministic objective function,
+--   here the __base ω₀~N(0,1) and bias b are drawn once and fixed__, and
+--   scaled per @ℓ@ as @ω = ω₀ / ℓ@. This makes LOOCV(ℓ,λ) a deterministic
+--   function of @ℓ@, letting the GP surrogate fit cleanly. This has less
+--   MC noise — __in fact it is more stable__ — than the grid \/ DE
+--   versions above that resample @ω@ per @ℓ@. The larger @D@ is, the
+--   smaller the RFF variance becomes.
 bayesOptLOOCVRBFMV
-  :: Int                               -- ^ p (入力次元)
-  -> Int                               -- ^ D (特徴次元)
+  :: Int                               -- ^ [日本語]: p (入力次元)。 [English]: p (input dimension).
+  -> Int                               -- ^ [日本語]: D (特徴次元)。 [English]: D (feature dimension).
   -> LA.Matrix Double                  -- ^ X
   -> LA.Vector Double                  -- ^ y
-  -> Maybe (Int, Int)                  -- ^ (initPoints, iterations) default (8, 22) = 30 評価
+  -> Maybe (Int, Int)                  -- ^ [日本語]: (initPoints, iterations) default (8, 22) = 30 評価。 [English]: (initPoints, iterations), default (8, 22) = 30 evaluations.
   -> System.Random.MWC.GenIO
   -> IO LOOCVResult
 bayesOptLOOCVRBFMV p d x y mBudget gen = do
@@ -983,20 +1111,34 @@ bayesOptLOOCVRBFMV p d x y mBudget gen = do
     , lcGridPts = nInit + nIter
     }
 
--- | L-BFGS variant of 'gridSearchLOOCVRBFMV' (固定基底 + 数値勾配 L-BFGS の多始点)。
+-- | [日本語]: 'gridSearchLOOCVRBFMV' の L-BFGS 版 (固定基底 + 数値勾配 L-BFGS の
+--   多始点)。
 --
--- 'bayesOptLOOCVRBFMV' と同じく **基底 ω₀~N(0,1) を 1 度引いて固定**し ℓ で
--- スケールすることで LOOCV(log ℓ, log λ) を決定的・微分可能化し、 数値勾配 L-BFGS
--- ('LBFGS.runLBFGSNumeric'、 GP の 'optimizeGP' と同じ engine) を複数始点から回して
--- LOOCV 最小を採る。 GP の多始点 L-BFGS の RFF 版で、 評価は O(D³) なので大 n でも
--- スケーラブル (厳密 GP marginal likelihood の O(n³) を回避)。 grid の離散性も BO の
--- 粗いサロゲートも避け、 連続最適化で (ℓ,λ) を精密に当てる。
+--   'bayesOptLOOCVRBFMV' と同じく __基底 ω₀~N(0,1) を 1 度引いて固定__し ℓ で
+--   スケールすることで LOOCV(log ℓ, log λ) を決定的・微分可能化し、 数値勾配
+--   L-BFGS ('LBFGS.runLBFGSNumeric'、 GP の @optimizeGP@ と同じ engine) を複数
+--   始点から回して LOOCV 最小を採る。 GP の多始点 L-BFGS の RFF 版で、 評価は
+--   O(D³) なので大 n でもスケーラブル (厳密 GP marginal likelihood の O(n³) を
+--   回避)。 grid の離散性も BO の粗いサロゲートも避け、 連続最適化で (ℓ,λ) を
+--   精密に当てる。
+--   [English]: L-BFGS variant of 'gridSearchLOOCVRBFMV' (fixed basis +
+--   multi-start numerical-gradient L-BFGS).
+--
+--   As with 'bayesOptLOOCVRBFMV', __the base ω₀~N(0,1) is drawn once and fixed__,
+--   then scaled by ℓ, making LOOCV(log ℓ, log λ) deterministic and
+--   differentiable. Numerical-gradient L-BFGS
+--   ('LBFGS.runLBFGSNumeric', the same engine as GP's @optimizeGP@) is run
+--   from multiple starting points to find the LOOCV minimum. This is the
+--   RFF analogue of GP's multi-start L-BFGS; evaluation is O(D³), so it
+--   scales even for large n (avoiding the O(n³) of the exact GP marginal
+--   likelihood). It avoids both grid discreteness and BO's coarse
+--   surrogate, pinpointing @(ℓ,λ)@ via continuous optimization.
 lbfgsLOOCVRBFMV
-  :: Int                               -- ^ p (入力次元)
-  -> Int                               -- ^ D (特徴次元)
+  :: Int                               -- ^ [日本語]: p (入力次元)。 [English]: p (input dimension).
+  -> Int                               -- ^ [日本語]: D (特徴次元)。 [English]: D (feature dimension).
   -> LA.Matrix Double                  -- ^ X
   -> LA.Vector Double                  -- ^ y
-  -> Maybe Int                         -- ^ multi-start 数 (default 4)
+  -> Maybe Int                         -- ^ [日本語]: multi-start 数 (default 4)。 [English]: Number of multi-starts (default 4).
   -> System.Random.MWC.GenIO
   -> IO LOOCVResult
 lbfgsLOOCVRBFMV p d x y mStarts gen = do

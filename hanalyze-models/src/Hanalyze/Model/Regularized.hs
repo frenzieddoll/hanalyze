@@ -6,7 +6,23 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Regularized regression (Ridge / Lasso / Elastic Net) in one module.
+-- [日本語]: 正則化回帰 (Ridge / Lasso / Elastic Net) を単一モジュールに統合。
+--
+-- ペナルティは合成型 'Penalty' として符号化され、 'fitRegularized' が
+-- 以下の 4 モデルすべてを扱う:
+--
+-- > NoPen                          -- 通常の OLS
+-- > L2 lambda                      -- Ridge 回帰
+-- > L1 lambda                      -- Lasso 回帰
+-- > ElasticNet lambda1 lambda2     -- Elastic Net (L1 + L2)
+--
+-- Ridge は閉形式解を持つ。 Lasso と Elastic Net は座標降下法を用いる。
+--
+-- 注意: Lasso / Elastic Net は X の列スケールに敏感。事前に
+-- standardize (各列を平均 0、分散 1 に) しておくのが一般的。
+--
+-- [English]: Regularized regression (Ridge / Lasso / Elastic Net) in one
+-- module.
 --
 -- The penalty is encoded as the sum type 'Penalty', and 'fitRegularized'
 -- handles all four models:
@@ -18,8 +34,9 @@
 --
 -- Ridge has a closed form; Lasso and Elastic Net use coordinate descent.
 --
--- 注意: Lasso / Elastic Net は X の列スケールに敏感。事前に
--- standardize (各列を平均 0、分散 1 に) しておくのが一般的。
+-- Note: Lasso / Elastic Net are sensitive to the column scale of X; it
+-- is common practice to standardize (each column to mean 0, variance 1)
+-- beforehand.
 module Hanalyze.Model.Regularized
   ( Penalty (..)
   , RegFit (..)
@@ -440,24 +457,37 @@ unstandardizeBeta sds betaStd =
 -- 多出力対応 (主 API)
 -- ---------------------------------------------------------------------------
 
--- | Multi-output regularized-regression fit result.
--- Y は n × q、係数 B は p × q、予測 Ŷ = X B。
--- 'rfmFits' は列ごとの単出力 'RegFit' (R²、|β|>0 の数、反復回数を提供)。
+-- | [日本語]: 多出力正則化回帰の fit 結果。
+--   Y は n × q、係数 B は p × q、予測 Ŷ = X B。
+--   'rfmFits' は列ごとの単出力 'RegFit' (R²、|β|>0 の数、反復回数を提供)。
+--   [English]: Multi-output regularized-regression fit result.
+--   Y is n x q, the coefficients B are p x q, and predictions are
+--   Ŷ = X B. 'rfmFits' holds the per-column single-output 'RegFit'
+--   (provides R², the count of |β|>0, and the iteration count).
 data RegFitMulti = RegFitMulti
-  { rfmFits     :: [RegFit]            -- ^ 列ごとの単出力 fit
+  { rfmFits     :: [RegFit]            -- ^ [日本語]: 列ごとの単出力 fit。 [English]: Per-column single-output fit.
   , rfmBeta     :: LA.Matrix Double    -- ^ p × q
   , rfmYHat     :: LA.Matrix Double    -- ^ n × q
   , rfmResid    :: LA.Matrix Double    -- ^ n × q
-  , rfmR2       :: [Double]            -- ^ 列ごとの R²
+  , rfmR2       :: [Double]            -- ^ [日本語]: 列ごとの R²。 [English]: Per-column R².
   , rfmPenalty  :: Penalty
   } deriving (Show)
 
--- | Multi-output regularized regression with sklearn-compatible default
--- convergence parameters (@maxIter = 1000@, @tol = 1e-4@). Use
--- 'fitRegularizedMultiWith' to override.
+-- | [日本語]: sklearn 互換の既定収束パラメータ (@maxIter = 1000@,
+--   @tol = 1e-4@) を使う多出力正則化回帰。 上書きするには
+--   'fitRegularizedMultiWith' を使う。
 --
--- - OLS / Ridge: 行列形式 1 回の線形求解で全 q 列を一括処理 (高速)。
--- - Lasso / Elastic Net: 列ごと座標降下 (列間に依存なし、独立並列可)。
+--   - OLS / Ridge: 行列形式 1 回の線形求解で全 q 列を一括処理 (高速)。
+--   - Lasso / Elastic Net: 列ごと座標降下 (列間に依存なし、独立並列可)。
+--
+--   [English]: Multi-output regularized regression with sklearn-compatible
+--   default convergence parameters (@maxIter = 1000@, @tol = 1e-4@). Use
+--   'fitRegularizedMultiWith' to override.
+--
+--   - OLS / Ridge: all q columns are handled in one batch via a single
+--     matrix-form linear solve (fast).
+--   - Lasso / Elastic Net: per-column coordinate descent (no dependency
+--     between columns, so independently parallelizable).
 fitRegularizedMulti :: Penalty -> LA.Matrix Double -> LA.Matrix Double
                     -> RegFitMulti
 fitRegularizedMulti = fitRegularizedMultiWith 1000 1e-4
@@ -494,7 +524,9 @@ fitOLSMulti x y =
   let beta = x LA.<\> y
   in mkRegFitMulti beta x y NoPen (replicate (LA.cols y) 0)
 
--- | 行列形式の Ridge: B = (XᵀX + λI)⁻¹ XᵀY (1 回の Cholesky/LU)。
+-- | [日本語]: 行列形式の Ridge: B = (XᵀX + λI)⁻¹ XᵀY (1 回の Cholesky/LU)。
+--   [English]: Matrix-form Ridge: B = (XᵀX + λI)⁻¹ XᵀY (a single
+--   Cholesky/LU solve).
 fitRidgeMulti :: Double -> LA.Matrix Double -> LA.Matrix Double -> RegFitMulti
 fitRidgeMulti lambda x y =
   let p    = LA.cols x
@@ -503,11 +535,18 @@ fitRidgeMulti lambda x y =
       beta = reg LA.<\> xty
   in mkRegFitMulti beta x y (L2 lambda) (replicate (LA.cols y) 0)
 
--- | 列ごと CD (Lasso / Elastic Net 用)。
+-- | [日本語]: 列ごと CD (Lasso / Elastic Net 用)。
 --
--- @maxIter@ / @tol@ は呼び元から指定する (旧版は 1000 / 1e-7 を hardcoded
--- していたが、これは sklearn の規定値 1000 / 1e-4 より tol 側が 1000×
--- 厳しく、bench 比較が不公平だったため明示パラメタ化)。
+--   @maxIter@ / @tol@ は呼び元から指定する (旧版は 1000 / 1e-7 を
+--   hardcoded していたが、 これは sklearn の規定値 1000 / 1e-4 より tol
+--   側が 1000× 厳しく、 bench 比較が不公平だったため明示パラメタ化)。
+--
+--   [English]: Per-column CD (for Lasso / Elastic Net).
+--
+--   @maxIter@ / @tol@ are supplied by the caller (an earlier version
+--   hardcoded 1000 / 1e-7, but that tol was 1000x stricter than
+--   sklearn's default of 1000 / 1e-4, making bench comparisons unfair;
+--   hence explicit parameterization).
 fitColumnwise
   :: (LA.Matrix Double -> LA.Vector Double -> Int -> Double -> RegFit)
   -> Int                    -- ^ @maxIter@
@@ -525,7 +564,9 @@ fitColumnwise fitCol maxIter tol pen x y =
       r2s   = [rfR2 f | f <- fits]
   in RegFitMulti fits bMat yHat res r2s pen
 
--- | 共通: B 行列から RegFitMulti を組み立て。各列の R² と非零係数数も計算。
+-- | [日本語]: 共通: B 行列から RegFitMulti を組み立て。各列の R² と非零係数数も計算。
+--   [English]: Shared: assembles a RegFitMulti from the B matrix. Also
+--   computes each column's R² and nonzero-coefficient count.
 mkRegFitMulti :: LA.Matrix Double -> LA.Matrix Double -> LA.Matrix Double
               -> Penalty -> [Int] -> RegFitMulti
 mkRegFitMulti beta x y pen iters =
@@ -545,23 +586,35 @@ mkRegFitMulti beta x y pen iters =
 -- Regularization path
 -- ---------------------------------------------------------------------------
 
--- | 与えられた λ の系列に対して係数推移を計算する (regularization path)。
--- 戻り値: 各 λ に対する係数ベクトル。
+-- | [日本語]: 与えられた λ の系列に対して係数推移を計算する
+--   (regularization path)。 戻り値: 各 λ に対する係数ベクトル。
 --
--- 利用例 (Ridge):
+--   利用例 (Ridge):
 --
--- @
--- let lams = [10 ** (-4 + 0.1 * i) | i <- [0..60]]
---     path = regularizationPath L2 lams xMat yVec
--- -- path :: [(Double, [Double])]  -- (λ, [β₀, β₁, ...])
--- @
+--   @
+--   let lams = [10 ** (-4 + 0.1 * i) | i <- [0..60]]
+--       path = regularizationPath L2 lams xMat yVec
+--   -- path :: [(Double, [Double])]  -- (λ, [β₀, β₁, ...])
+--   @
+--
+--   [English]: Computes the coefficient trajectory
+--   (regularization path) over a given sequence of λ. Returns the
+--   coefficient vector for each λ.
+--
+--   Usage example (Ridge):
+--
+--   @
+--   let lams = [10 ** (-4 + 0.1 * i) | i <- [0..60]]
+--       path = regularizationPath L2 lams xMat yVec
+--   -- path :: [(Double, [Double])]  -- (λ, [β₀, β₁, ...])
+--   @
 regularizationPath
   :: (Double -> Penalty)         -- ^ λ → Penalty (e.g. @L2@, @L1@,
                                  --   @\\l -> ElasticNet (l*α) (l*(1-α))@)
-  -> [Double]                    -- ^ λ 系列
-  -> LA.Matrix Double            -- ^ X (intercept 列付き)
+  -> [Double]                    -- ^ [日本語]: λ 系列。 [English]: The λ sequence.
+  -> LA.Matrix Double            -- ^ [日本語]: X (intercept 列付き)。 [English]: X (with an intercept column).
   -> LA.Vector Double            -- ^ y
-  -> [(Double, [Double])]        -- ^ [(λ, 係数ベクトル)]
+  -> [(Double, [Double])]        -- ^ [日本語]: [(λ, 係数ベクトル)]。 [English]: [(λ, coefficient vector)].
 regularizationPath mkPen lambdas x y =
   [ (lam, LA.toList (rfBeta (fitRegularized (mkPen lam) x y)))
   | lam <- lambdas ]
@@ -571,42 +624,63 @@ regularizationPath mkPen lambdas x y =
 -- λ 自動選択 (Phase 4.4、 request/150)
 -- ===========================================================================
 
--- | Penalty の "形" (λ 抜き)。 'selectLambdaCV' の grid 探索で λ を変化させる
--- 際の penalty family を指定する。
+-- | [日本語]: Penalty の "形" (λ 抜き)。 'selectLambdaCV' の grid 探索で λ を
+--   変化させる際の penalty family を指定する。
+--   [English]: The "shape" of a Penalty (without λ). Specifies the
+--   penalty family to vary λ over during 'selectLambdaCV''s grid search.
 data PenaltyKind
   = KindRidge                -- ^ Ridge (= 'L2' λ)
   | KindLasso                -- ^ Lasso (= 'L1' λ)
-  | KindElasticNet !Double   -- ^ ElasticNet。 @α@ = L1 比率 (0 ≤ α ≤ 1)。
+  | KindElasticNet !Double   -- ^ [日本語]: ElasticNet。 @α@ = L1 比率 (0 ≤ α ≤ 1)。
                              --   total penalty = λ·(α·L1 + (1-α)/2·L2)、 内部で
                              --   'ElasticNet' (α·λ) ((1-α)·λ) に展開。
+                             --   [English]: ElasticNet. @α@ = L1 ratio
+                             --   (0 ≤ α ≤ 1). total penalty =
+                             --   λ·(α·L1 + (1-α)/2·L2), expanded
+                             --   internally into 'ElasticNet' (α·λ)
+                             --   ((1-α)·λ).
   deriving (Show, Eq)
 
--- | λ 自動選択の結果。
+-- | [日本語]: λ 自動選択の結果。
+--   [English]: The result of automatic λ selection.
 data LambdaSelection = LambdaSelection
-  { lsBestLambda  :: !Double      -- ^ CV MSE が最小の λ
-  , lsLambdas     :: ![Double]    -- ^ 検証した λ 値 (入力順)
-  , lsCVScores    :: ![Double]    -- ^ 各 λ の CV MSE (lsLambdas と対応)
-  , lsCVScoreSE   :: ![Double]    -- ^ 各 λ の CV MSE の標準誤差 (fold 間 SD)
-  , lsOneSeLambda :: !Double      -- ^ 1-SE rule の λ (best ± 1·SE 範囲内で
-                                  --   最大スパース = 最大 λ)
-  , lsKind        :: !PenaltyKind -- ^ 入力 PenaltyKind を保持 (canvas 側参照用)
+  { lsBestLambda  :: !Double      -- ^ [日本語]: CV MSE が最小の λ。 [English]: The λ with the smallest CV MSE.
+  , lsLambdas     :: ![Double]    -- ^ [日本語]: 検証した λ 値 (入力順)。 [English]: The λ values tested (in input order).
+  , lsCVScores    :: ![Double]    -- ^ [日本語]: 各 λ の CV MSE (lsLambdas と対応)。 [English]: Each λ's CV MSE (corresponds to lsLambdas).
+  , lsCVScoreSE   :: ![Double]    -- ^ [日本語]: 各 λ の CV MSE の標準誤差 (fold 間 SD)。 [English]: The standard error of each λ's CV MSE (SD across folds).
+  , lsOneSeLambda :: !Double      -- ^ [日本語]: 1-SE rule の λ (best ± 1·SE 範囲内で
+                                  --   最大スパース = 最大 λ)。
+                                  --   [English]: The λ from the 1-SE rule
+                                  --   (the largest λ, i.e. the sparsest,
+                                  --   within best ± 1 SE).
+  , lsKind        :: !PenaltyKind -- ^ [日本語]: 入力 PenaltyKind を保持 (canvas 側参照用)。 [English]: Retains the input PenaltyKind (for reference by the canvas side).
   } deriving (Show)
 
--- | k-fold CV で λ を自動選択。
+-- | [日本語]: k-fold CV で λ を自動選択。
 --
--- 入力 'PenaltyKind' に従って λ grid を Ridge/Lasso/EN の 'Penalty' に展開し、
--- 各 λ について k-fold CV を実行、 fold 平均 MSE を計算する。
+--   入力 'PenaltyKind' に従って λ grid を Ridge/Lasso/EN の 'Penalty' に展開し、
+--   各 λ について k-fold CV を実行、 fold 平均 MSE を計算する。
 --
--- 返り値の 'lsBestLambda' は MSE 最小の λ、 'lsOneSeLambda' は 1-SE rule
--- (= best MSE から 1·SE 以内で最大スパースな λ) の λ。
+--   返り値の 'lsBestLambda' は MSE 最小の λ、 'lsOneSeLambda' は 1-SE rule
+--   (= best MSE から 1·SE 以内で最大スパースな λ) の λ。
+--
+--   [English]: Automatically selects λ via k-fold CV.
+--
+--   Expands the λ grid into Ridge\/Lasso\/EN 'Penalty' values according
+--   to the input 'PenaltyKind', runs k-fold CV for each λ, and computes
+--   the fold-averaged MSE.
+--
+--   The returned 'lsBestLambda' is the λ with the smallest MSE;
+--   'lsOneSeLambda' is the λ from the 1-SE rule (the sparsest λ within
+--   1 SE of the best MSE).
 selectLambdaCV
   :: PrimMonad m
-  => Int               -- ^ k-fold の k (≥ 2)
+  => Int               -- ^ [日本語]: k-fold の k (≥ 2)。 [English]: The k of k-fold (≥ 2).
   -> PenaltyKind       -- ^ Ridge / Lasso / ElasticNet
-  -> [Double]          -- ^ 検証する λ grid (log-spaced 推奨)
+  -> [Double]          -- ^ [日本語]: 検証する λ grid (log-spaced 推奨)。 [English]: The λ grid to validate (log-spaced recommended).
   -> LA.Matrix Double  -- ^ X (n × p)
   -> LA.Vector Double  -- ^ y (n)
-  -> MWC.Gen (PrimState m)  -- ^ shuffle 用 (ST/IO 両用)
+  -> MWC.Gen (PrimState m)  -- ^ [日本語]: shuffle 用 (ST/IO 両用)。 [English]: For shuffling (works with both ST/IO).
   -> m LambdaSelection
 selectLambdaCV k kind lambdas xMat yVec gen = do
   let n = LA.rows xMat
@@ -644,22 +718,33 @@ selectLambdaCV k kind lambdas xMat yVec gen = do
     , lsKind        = kind
     }
 
--- | 純粋 (seed) 版 'selectLambdaCV'。 同 seed → 同 λ 選択 (ST/IO ビット一致)。
--- 罰則回帰の高レベル spec (Phase 70.7 = `df |-> lasso …`) を pure 'fitWith' で完結
--- させる継ぎ目 (GP の `AutoCV` / `kMeansPure` / `fitRFVPure` と一貫)。
+-- | [日本語]: 純粋 (seed) 版 'selectLambdaCV'。 同 seed → 同 λ 選択 (ST/IO
+--   ビット一致)。 罰則回帰の高レベル spec (`df |-> lasso …`) を pure
+--   @fitWith@ で完結させる継ぎ目 (GP の @AutoCV@ / @kMeansPure@ /
+--   @fitRFVPure@ と一貫)。
+--   [English]: Pure (seed) variant of 'selectLambdaCV'. Same seed →
+--   same λ selection (bit-identical across ST/IO). This is the seam
+--   that lets the high-level spec for regularized regression
+--   (`df |-> lasso …`) be completed with a pure @fitWith@ (consistent
+--   with GP's @AutoCV@ \/ @kMeansPure@ \/ @fitRFVPure@).
 selectLambdaCVPure
   :: Int -> PenaltyKind -> [Double] -> LA.Matrix Double -> LA.Vector Double
   -> Word32 -> LambdaSelection
 selectLambdaCVPure k kind lambdas xMat yVec seed =
   runST (MWC.initialize (V.singleton seed) >>= selectLambdaCV k kind lambdas xMat yVec)
 
--- | 内部 helper: PenaltyKind と λ から具体 'Penalty' を組み立てる。
+-- | [日本語]: 内部 helper: PenaltyKind と λ から具体 'Penalty' を組み立てる。
+--   [English]: Internal helper: builds a concrete 'Penalty' from a
+--   PenaltyKind and λ.
 penaltyOf :: PenaltyKind -> Double -> Penalty
 penaltyOf KindRidge          lam = L2 lam
 penaltyOf KindLasso          lam = L1 lam
 penaltyOf (KindElasticNet a) lam = ElasticNet (a * lam) ((1 - a) * lam)
 
--- | 1 fold の MSE を返す。 train index で fit、 test index で predict + 残差²平均。
+-- | [日本語]: 1 fold の MSE を返す。 train index で fit、 test index で
+--   predict + 残差²平均。
+--   [English]: Returns the MSE for one fold. Fits on the train index,
+--   predicts on the test index, then averages the squared residuals.
 mseForFold
   :: Penalty
   -> LA.Matrix Double

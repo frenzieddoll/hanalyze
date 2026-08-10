@@ -14,7 +14,7 @@ import Text.Printf (printf)
 
 import qualified Hanalyze.DataIO.CSV as IO
 import qualified Hanalyze.DataIO.Convert as Conv
-import qualified Hanalyze.Model.Kernel as K
+import qualified Hanalyze.Model.KernelRegression as K
 import Hanalyze.Viz.ReportBuilder
 
 zGrid :: [Double]

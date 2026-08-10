@@ -12,7 +12,9 @@
 --   p(M_k | y) ∝ p(y | M_k) · p(M_k)
 -- @
 --
--- 入力: 各モデルの **Bridge Sampling 推定 log marginal likelihood** +
+-- [日本語]:
+--
+-- 入力: 各モデルの __Bridge Sampling 推定 log marginal likelihood__ +
 -- prior model weights (省略時 uniform 1/K)。
 --
 -- 出力: posterior model weights + 重み付き予測の helper。
@@ -21,8 +23,25 @@
 --
 -- 既存 'Hanalyze.Stat.ModelSelect' の pseudo-BMA (= PSIS-LOO ベース近似) は
 -- 軽量だが marginal likelihood を正しく計算していない (= LOO予測精度を代理
--- 指標として使う)。 本 module は Bridge Sampling 経由で **真の log marginal**
+-- 指標として使う)。 本 module は Bridge Sampling 経由で __真の log marginal__
 -- を使う BMA で、 解釈が一貫している (= Bayes Factor / 仮説検定と同じ基盤)。
+--
+-- [English]:
+--
+-- Input: each model's __Bridge-Sampling-estimated log marginal likelihood__,
+-- plus prior model weights (default: uniform 1/K).
+--
+-- Output: posterior model weights + a helper for weighted prediction.
+--
+-- ## Positioning relative to the existing pseudo-BMA
+--
+-- The existing pseudo-BMA in 'Hanalyze.Stat.ModelSelect' (= a
+-- PSIS-LOO-based approximation) is lightweight but does not correctly
+-- compute the marginal likelihood (it uses LOO predictive accuracy as a
+-- proxy metric instead). This module performs BMA using the
+-- __true log marginal__ via Bridge Sampling, giving a consistent
+-- interpretation (= the same foundation as a Bayes Factor / hypothesis
+-- testing).
 --
 -- Reference: Hoeting, Madigan, Raftery, Volinsky (1999) "Bayesian Model
 -- Averaging: A Tutorial". Statistical Science 14(4):382-417.
@@ -39,22 +58,33 @@ import qualified Numeric.LinearAlgebra    as LA
 -- ---------------------------------------------------------------------------
 
 data BMAResult = BMAResult
-  { bmaWeights      :: ![Double]   -- ^ posterior model weights @p(M_k|y)@、 Σ = 1
-  , bmaLogMarginals :: ![Double]   -- ^ 入力された per-model @log p(y|M_k)@ (引き継ぎ)
-  , bmaLogPriors    :: ![Double]   -- ^ 入力された per-model @log p(M_k)@ (引き継ぎ)
+  { bmaWeights      :: ![Double]   -- ^ [日本語]: posterior model weights @p(M_k|y)@、 Σ = 1 [English]: The posterior model weights @p(M_k|y)@, summing to 1.
+  , bmaLogMarginals :: ![Double]   -- ^ [日本語]: 入力された per-model @log p(y|M_k)@ (引き継ぎ) [English]: The input per-model @log p(y|M_k)@ (passed through).
+  , bmaLogPriors    :: ![Double]   -- ^ [日本語]: 入力された per-model @log p(M_k)@ (引き継ぎ) [English]: The input per-model @log p(M_k)@ (passed through).
   } deriving (Show)
 
--- | log marginal + log prior weights (省略時 uniform) から posterior model
--- weights を計算 (softmax 安定化)。
+-- | [日本語]: log marginal + log prior weights (省略時 uniform) から
+--   posterior model weights を計算 (softmax 安定化)。
 --
--- @
---   p(M_k | y) ∝ exp(log p(y|M_k) + log p(M_k))
--- @
+--   @
+--     p(M_k | y) ∝ exp(log p(y|M_k) + log p(M_k))
+--   @
 --
--- 引数の長さは同じである必要 (異なる場合は短い方に合わせる)。 全 log
--- marginal が -∞ なら uniform fallback。
+--   引数の長さは同じである必要 (異なる場合は短い方に合わせる)。 全 log
+--   marginal が -∞ なら uniform fallback。
+--   [English]: Computes posterior model weights from the log marginals +
+--   log prior weights (default: uniform), via a numerically stabilized
+--   softmax.
+--
+--   @
+--     p(M_k | y) ∝ exp(log p(y|M_k) + log p(M_k))
+--   @
+--
+--   The argument lists must have equal length (if not, truncated to the
+--   shorter one). Falls back to uniform weights if all log marginals are
+--   -∞.
 bayesianModelAveraging
-  :: [Double]          -- ^ log marginals (Bridge Sampling 推定値 等)
+  :: [Double]          -- ^ [日本語]: log marginals (Bridge Sampling 推定値 等) [English]: The log marginals (e.g. Bridge Sampling estimates)
   -> Maybe [Double]    -- ^ optional log prior weights (Nothing = uniform)
   -> BMAResult
 bayesianModelAveraging logMs mPriors =
@@ -77,8 +107,11 @@ bayesianModelAveraging logMs mPriors =
        , bmaLogPriors    = logPriors
        }
 
--- | per-model 予測ベクトル (= 各モデルから出した y* の posterior mean 等) を
--- BMA weights で加重平均。 全ベクトルは同じ長さである必要。
+-- | [日本語]: per-model 予測ベクトル (= 各モデルから出した y* の posterior mean 等) を
+--   BMA weights で加重平均。 全ベクトルは同じ長さである必要。
+--   [English]: Computes a weighted average of per-model prediction vectors
+--   (e.g. each model's posterior mean of y*), using the BMA weights. All
+--   vectors must have the same length.
 averagePredictions :: BMAResult -> [LA.Vector Double] -> LA.Vector Double
 averagePredictions bma preds
   | null preds = LA.fromList []

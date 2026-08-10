@@ -78,8 +78,11 @@ cohenD xs ys =
 -- > SE(d) ≈ √( (n1+n2)/(n1·n2) + d² / (2(n1+n2)) )
 -- > CI    = d ± z_{1-α/2} · SE(d)
 --
--- 厳密な非中心 t 分布の逆変換ではないが、 サンプルサイズ ≥ 20 程度で
--- 十分実用的 (Cumming 2012)。
+-- [日本語]: 厳密な非中心 t 分布の逆変換ではないが、 サンプルサイズ ≥ 20 程度で
+--   十分実用的 (Cumming 2012)。
+-- [English]: Not an exact inversion of the noncentral t distribution,
+--   but practical enough once the sample size is roughly ≥ 20 (Cumming
+--   2012).
 cohenDCI :: LA.Vector Double -> LA.Vector Double -> Double
          -> (Double, (Double, Double))
 cohenDCI xs ys alpha =
@@ -136,14 +139,21 @@ eta2 groups
 -- | η² with (1-α) confidence interval from F-statistic + df via the
 --   noncentrality parameter inversion.
 --
---   F-statistic, df_between, df_within を入力に取り、 η² の (lo, hi) CI を
---   返す。 信頼区間は noncentrality parameter λ の (lo, hi) を二分探索で
---   求め、 そこから η² = λ / (λ + df_total + 1) に変換する近似版。
+--   [日本語]: F-statistic, df_between, df_within を入力に取り、 η² の (lo, hi) CI を
+--     返す。 信頼区間は noncentrality parameter λ の (lo, hi) を二分探索で
+--     求め、 そこから η² = λ / (λ + df_total + 1) に変換する近似版。
 --
---   既存 @anovaOneWay@ 等で得た F 値を入れて使う。
+--     既存 @anovaOneWay@ 等で得た F 値を入れて使う。
+--   [English]: Takes the F-statistic, df_between, and df_within, and
+--     returns the (lo, hi) CI for η². This is an approximation that
+--     finds the (lo, hi) range of the noncentrality parameter λ via
+--     binary search, then converts it to η² = λ / (λ + df_total + 1).
+--
+--     Feed it the F value obtained from an existing @anovaOneWay@ (or
+--     similar) call.
 eta2CI :: Double            -- ^ F statistic
        -> (Int, Int)        -- ^ (df_between, df_within)
-       -> Double            -- ^ α (例: 0.05)
+       -> Double            -- ^[日本語]:  [日本語]: α (例: 0.05)。 [English]: α (e.g. 0.05).
        -> (Double, (Double, Double))
 eta2CI fStat (dfB, dfW) alpha =
   let dfBd = fromIntegral dfB :: Double

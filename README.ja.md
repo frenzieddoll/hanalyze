@@ -15,7 +15,7 @@
 
 - **Haskell-native**: 型で dtype/API の取り違えを減らし、必要な形状チェックは実行時に行う
 - **算法は Haskell で実装、数値計算は BLAS**: 線形代数は hmatrix/BLAS/LAPACK 経由。R/Stan/Python ブリッジ不要
-- **Native plotting**: [hgg](https://github.com/frenzieddoll/hgg) 統合で 90+ の図種を実装 (`plot-integration` フラグ) — 純 Haskell SVG 出力、ブラウザ不要 ([Gallery](#gallery) 参照)
+- **Native plotting**: [hgg](https://github.com/frenzieddoll/hgg) 統合で 90+ の図種を実装 (別パッケージ `hanalyze-plot`、`cabal build --project-file=cabal.project.plot` でビルド) — 純 Haskell SVG 出力、ブラウザ不要 ([Gallery](#gallery) 参照)
 - **HTML レポート統合**: MathJax/Mermaid + Vega-Lite 可視化を 1 関数で生成。PNG/SVG 出力は対応プロットで利用可
 - **汚いデータ防衛**: 8 種類の警告 + 自動推論 (delim/header/encoding) + クリーニング DSL
 - **Hackage `dataframe`**: Polars-like DF を直接利用。CSV ネイティブ、Parquet/JSON は `dataframe` 経由
@@ -39,158 +39,92 @@
 
 ## できること
 
-機能を**ジャンル別**に整理。各機能は専用 docs (使い方) + theory docs (理論) にリンク。
-完全な API リファレンスは [`docs/api-guide/`](docs/api-guide/README.md) (12 章) を参照。
+機能はジャンル別に整理し、**詳細は各ジャンルの docs と package README へ委譲**している。
+全体の目次は [`docs/README.ja.md`](docs/README.ja.md)、API の網羅的な辞書は
+[`docs/api-guide/`](docs/api-guide/README.md) (12 章) を参照。
 
-### 統計推測 (`Hanalyze.Stat.*`)
-
-| 機能 | モジュール | 使い方 | 理論 |
+| ジャンル | 主なもの | 使い方 | API |
 |---|---|---|---|
-| 仮説検定 12 種 (t/χ²/ANOVA/Wilcoxon/KS/Shapiro/Levene/Bartlett/...) | `Hanalyze.Stat.Test` | [stat/01-test.ja.md](docs/stat/01-test.ja.md) | — |
-| 多重比較補正 (Bonferroni/Holm/BH/BY) | `Hanalyze.Stat.MultipleTesting` | [stat/06-multipletesting.ja.md](docs/stat/06-multipletesting.ja.md) | — |
-| Bootstrap CI / 並べ替え検定 | `Hanalyze.Stat.Bootstrap` | [stat/07-bootstrap.ja.md](docs/stat/07-bootstrap.ja.md) | — |
-| 効果量 + Power 解析 (Cohen's d/η²/Cramér V/n推定) | `Hanalyze.Stat.Effect` | [stat/09-effect.ja.md](docs/stat/09-effect.ja.md) | — |
-| Cross-validation (k-fold/stratified/LOO) + Grid search | `Hanalyze.Stat.CV` | [stat/04-cv.ja.md](docs/stat/04-cv.ja.md) | — |
+| 統計推測 | 仮説検定 12 種・多重比較補正・Bootstrap CI・効果量 + Power・交差検証 | [stat/](docs/stat/) | [10 stat](docs/api-guide/10-stat.md) |
+| 回帰 | LM / GLM / GLMM / ロバスト / 分位点 / 罰則付き (Ridge〜SCAD) / スプライン / GAM / GP / RFF | [regression/](docs/regression/) | [02 regression](docs/api-guide/02-regression.md) |
+| 機械学習 | RandomForest / GBM / 決定木 / k-NN / Naive Bayes / SVM / MLP / MDS / PDP・ICE | [ml/](docs/ml/) | [05 ml](docs/api-guide/05-ml.md) |
+| 多変量 | PCA / PLS / RRR / CCA / 判別分析 / クラスタリング / FDA | [fda/](docs/fda/) | [04 multivariate](docs/api-guide/04-multivariate.md) |
+| 因果 | 傾向スコア / IPW / DR / CATE / LiNGAM 全 7 variant | [causal/](docs/causal/) | [08 causal](docs/api-guide/08-causal.md) |
+| ベイズ | HBM DSL (plate・階層) / MH・HMC・NUTS・Gibbs・ADVI / 収束診断 / 事後予測 | [bayesian/](docs/bayesian/) | [03 bayesian-hbm](docs/api-guide/03-bayesian-hbm.md) |
+| 時系列・生存 | AR / VAR / GARCH / カルマン / Kaplan-Meier / 競合リスク / AFT / Cox | [timeseries/](docs/timeseries/) | [06](docs/api-guide/06-timeseries.md) / [07](docs/api-guide/07-survival.md) |
+| 最適化 | Nelder-Mead / L-BFGS / DE / CMA-ES / NSGA-II / ベイズ最適化 / 拡張ラグランジュ | [optim/](docs/optim/) | — |
+| 実験計画 | 要因計画 / RSM / D・A・I・G 最適計画 / 直交表 / タグチ / Custom Design / 検出力 | [doe/](docs/doe/) | [09 doe](docs/api-guide/09-doe.md) |
+| データ I/O | CSV / Parquet / JSON 読込・クリーニング・整形 (`Data.Transform` / `Data.Wrangle`) | [io/](docs/io/) | [11 data](docs/api-guide/11-data.md) |
+| 可視化 | Vega-Lite ベースの図・統合 HTML レポート・HBM の DAG 描画 | [visualization/](docs/visualization/) | [12 plot](docs/api-guide/12-plot.md) |
 
-### 回帰 (`Hanalyze.Model.*`)
+**統一エントリーポイント**: どのモデルも `df |-> spec` で当てはめ、`toPlot` で描ける。
+plot 連携は別 package `hanalyze-plot` にあり
+(`cabal build --project-file=cabal.project.plot`)。
 
-| 機能 | モジュール | 使い方 | 理論 |
-|---|---|---|---|
-| 線形回帰 (LM) + 推論統計 (SE/t/p, F, AIC/BIC, leverage, Cook's) | `Hanalyze.Model.LM` / `Hanalyze.Model.LM.Diagnostics` | [regression/01-lm.ja.md](docs/regression/01-lm.ja.md) | [principles/lm.ja.md](docs/principles/lm.ja.md) |
-| GLM (Binomial / Poisson / Gaussian) | `Hanalyze.Model.GLM` | [regression/02-glm.ja.md](docs/regression/02-glm.ja.md) | [principles/glm.ja.md](docs/principles/glm.ja.md) |
-| GLMM / 混合効果モデル (LME) | `Hanalyze.Model.GLMM` | [regression/03-glmm.ja.md](docs/regression/03-glmm.ja.md) | [principles/glmm.ja.md](docs/principles/glmm.ja.md) |
-| スプライン回帰 (B-spline / NaturalCubic) | `Hanalyze.Model.Spline` | [regression/04-spline.ja.md](docs/regression/04-spline.ja.md) | [regression/theory-regression-extensions.ja.md](docs/regression/theory-regression-extensions.ja.md) |
-| カーネル回帰 (NW / Kernel Ridge) + 多次元入力 | `Hanalyze.Model.Kernel` | [regression/04-kernel.ja.md](docs/regression/04-kernel.ja.md) | 同上 |
-| 正則化 (Ridge / Lasso / ElasticNet) | `Hanalyze.Model.Regularized` | [regression/04-regularized.ja.md](docs/regression/04-regularized.ja.md) | 同上 |
-| 頑健回帰 (Huber / Tukey biweight M-estimators、IRLS) | `Hanalyze.Model.Robust` | [regression/usage-regularized-advanced.md](docs/regression/usage-regularized-advanced.md) | — |
-| ガウス過程 (RBF / Matérn / Periodic + ARD + 多入力) | `Hanalyze.Model.GP` | [regression/04-gp.ja.md](docs/regression/04-gp.ja.md) | [principles/gp.ja.md](docs/principles/gp.ja.md) |
-| Random Fourier Features (大規模 GP 近似) | `Hanalyze.Model.RFF` | [regression/04-rff.ja.md](docs/regression/04-rff.ja.md) | [regression/theory-regression-extensions.ja.md](docs/regression/theory-regression-extensions.ja.md) |
-| 多変量回帰 / 多出力 GP | `Hanalyze.Model.{Multivariate,MultiGP,MultiOutput}` | [regression/05-multivariate.ja.md](docs/regression/05-multivariate.ja.md) | [regression/theory-multivariate.ja.md](docs/regression/theory-multivariate.ja.md) |
-| 分位点回帰 (Quantile) | `Hanalyze.Model.Quantile` | [regression/06-quantile.ja.md](docs/regression/06-quantile.ja.md) | [regression/theory-regression-extensions.ja.md](docs/regression/theory-regression-extensions.ja.md) |
-| 一般化加法モデル (GAM) | `Hanalyze.Model.GAM` | [regression/06-gam.ja.md](docs/regression/06-gam.ja.md) | 同上 |
-| ランダムフォレスト (回帰) | `Hanalyze.Model.RandomForest` | [regression/06-randomforest.ja.md](docs/regression/06-randomforest.ja.md) | 同上 |
-| 多出力回帰 + 対話 HTML | `Hanalyze.Model.MultiOutput` | [regression/07-multireg.ja.md](docs/regression/07-multireg.ja.md) | [regression/theory-multivariate.ja.md](docs/regression/theory-multivariate.ja.md) |
+## インストール
 
-### 機械学習 (`Hanalyze.Model.*` / `Hanalyze.Stat.*`)
+### 動作環境
 
-| 機能 | モジュール | 使い方 | 理論 |
-|---|---|---|---|
-| PCA + 累積寄与率 + 標準化 | `Hanalyze.Model.PCA` | [stat/02-pca.ja.md](docs/stat/02-pca.ja.md) | — |
-| クラスタリング (K-means + k-means++ + silhouette) | `Hanalyze.Model.Cluster` | [stat/05-cluster.ja.md](docs/stat/05-cluster.ja.md) | — |
-| 決定木 (CART 分類器) | `Hanalyze.Model.DecisionTree` | [regression/08-decisiontree.ja.md](docs/regression/08-decisiontree.ja.md) | — |
-| Kernel SVM (C-SVC、SMO dual solver) + CV ハイパーパラメータチューニング | `Hanalyze.Model.SVM` | [ml/usage-ml-extensions.md](docs/ml/usage-ml-extensions.md) | — |
-| Gradient boosting (回帰 + 二値分類) | `Hanalyze.Model.GradientBoosting` | [ml/usage-ml-extensions.md](docs/ml/usage-ml-extensions.md) | — |
-| k-NN / Naive Bayes (Gaussian + Multinomial) / MLP ニューラルネット (mini-batch SGD + Adam) | `Hanalyze.Model.{KNN,NaiveBayes,NeuralNetwork}` | [ml/usage-ml-extensions.md](docs/ml/usage-ml-extensions.md) + [api-guide/05-ml.md](docs/api-guide/05-ml.md) | — |
-| Random forest 分類器 (+ permutation importance) | `Hanalyze.Model.RandomForestClassifier` | [api-guide/05-ml.md](docs/api-guide/05-ml.md) | — |
-| MDS (古典的 / Sammon) | `Hanalyze.Model.MDS` | [ml/usage-ml-extensions.md](docs/ml/usage-ml-extensions.md) | — |
-| 階層クラスタリング (agglomerative + dendrogram) | `Hanalyze.Model.HierarchicalCluster` | [stat/05-cluster.ja.md](docs/stat/05-cluster.ja.md) | — |
-| 潜在クラス分析 (EM) + graphical-lasso 相関ネットワーク | `Hanalyze.Model.LatentClassAnalysis` / `Hanalyze.Stat.CorrelationNetwork` | [stat/usage-misc-stat.md](docs/stat/usage-misc-stat.md) | — |
-| 関数型データ解析 (basis smoothing + FPCA) | `Hanalyze.Model.FDA` | [fda/usage-fda.md](docs/fda/usage-fda.md) | — |
-| 時系列 (ARIMA / Holt-Winters / STL / ACF / PACF) | `Hanalyze.Model.TimeSeries` | [regression/09-timeseries.ja.md](docs/regression/09-timeseries.ja.md) | — |
-| GARCH(1,1) ボラティリティ / 線形ガウス状態空間 (Kalman filter + RTS smoother) / VAR(p) | `Hanalyze.Model.{GARCH,StateSpace,VAR}` | [timeseries/usage-ts-surv-advanced.md](docs/timeseries/usage-ts-surv-advanced.md) | — |
-| 生存解析 (Kaplan-Meier / Nelson-Aalen / Log-rank / Cox PH) | `Hanalyze.Model.Survival` | [regression/10-survival.ja.md](docs/regression/10-survival.ja.md) | — |
-| パラメトリック生存 (AFT) + 競合リスク (CIF) | `Hanalyze.Model.{AFT,CompetingRisks}` | [api-guide/07-survival.md](docs/api-guide/07-survival.md) | — |
-| 分類評価メトリクス (Confusion / AUC / F1 / MCC / log-loss / Brier) | `Hanalyze.Stat.ClassMetrics` | [stat/03-classmetrics.ja.md](docs/stat/03-classmetrics.ja.md) | — |
-| モデル解釈 (Permutation imp / PDP / ICE) | `Hanalyze.Stat.Interpret` | [stat/13-interpret.ja.md](docs/stat/13-interpret.ja.md) | — |
+| 項目 | 要件 |
+|---|---|
+| GHC | **9.6.7** (全 package の `tested-with`) |
+| cabal | 3.14.2 以上 (3.16.1 で動作確認) |
+| BLAS / LAPACK | **必須**。`hmatrix` が要求する (Debian/Ubuntu: `libblas-dev liblapack-dev gfortran` / Arch: `blas lapack gcc-fortran`)。OpenBLAS は `--constraint='hmatrix +openblas'` |
+| Graphviz | 任意。`ModelGraphDot` の DOT 出力を画像化する場合のみ |
 
-### 因果推論 (`Hanalyze.Model.LiNGAM.*` / `Hanalyze.Stat.Causal.*`)
+### ライブラリとして使う
 
-| 機能 | モジュール | 使い方 | 理論 |
-|---|---|---|---|
-| LiNGAM 因果探索 (DirectLiNGAM / ICA-LiNGAM / Pairwise / VAR-LiNGAM / MultiGroup / ParceLiNGAM + bootstrap edge confidence) | `Hanalyze.Model.LiNGAM.*` | [api-guide/08-causal.md](docs/api-guide/08-causal.md) | — |
-| 処置効果 (傾向スコア / IPW / doubly robust AIPW / CATE S-T-X meta-learners) | `Hanalyze.Stat.Causal.*` | [causal/usage-causal.md](docs/causal/usage-causal.md) | — |
+本リポジトリは **10 package の multi-package 構成**で、まだ package として配布して
+いない。clone して自分の project の `cabal.project` に並べる。
 
-### ベイズ (`Hanalyze.MCMC.*` / `Hanalyze.Stat.*` / `Hanalyze.Model.HBM`)
-
-| 機能 | モジュール | 使い方 | 理論 |
-|---|---|---|---|
-| 確率分布 27 種 (Truncated/Censored/MvNormal/LKJ/Multinomial/...) | `Hanalyze.Stat.Distribution` | [bayesian/01-distributions.ja.md](docs/bayesian/01-distributions.ja.md) | [bayesian/theory-distributions.ja.md](docs/bayesian/theory-distributions.ja.md) |
-| 確率モデル DSL (HBM 多相 free monad、`deterministic` / `dataNamed` 含む) | `Hanalyze.Model.HBM` | [bayesian/02-probabilistic-model.ja.md](docs/bayesian/02-probabilistic-model.ja.md) | [principles/hbm.ja.md](docs/principles/hbm.ja.md) |
-| MCMC サンプラー (MH / HMC / NUTS / Slice / tempered SMC) | `Hanalyze.MCMC.{MH,HMC,NUTS,Slice,SMC}` | [bayesian/03-mcmc-samplers.ja.md](docs/bayesian/03-mcmc-samplers.ja.md) | [bayesian/theory-mcmc.ja.md](docs/bayesian/theory-mcmc.ja.md) / [theory-hmc-nuts.ja.md](docs/bayesian/theory-hmc-nuts.ja.md) |
-| Gibbs サンプリング (共役自動検出 + Hybrid) | `Hanalyze.MCMC.Gibbs` | [bayesian/04-gibbs.ja.md](docs/bayesian/04-gibbs.ja.md) | [bayesian/theory-mcmc.ja.md](docs/bayesian/theory-mcmc.ja.md) |
-| 変分推論 (ADVI 平均場 Adam) | `Hanalyze.Stat.VI` | [bayesian/05-vi.ja.md](docs/bayesian/05-vi.ja.md) | [bayesian/theory-advanced.ja.md](docs/bayesian/theory-advanced.ja.md) |
-| モデル比較 (WAIC / PSIS-LOO / Pseudo-BMA) | `Hanalyze.Stat.ModelSelect` | [bayesian/06-model-comparison.ja.md](docs/bayesian/06-model-comparison.ja.md) | [bayesian/theory-bayesian-basics.ja.md](docs/bayesian/theory-bayesian-basics.ja.md) |
-| 事後予測チェック; 一部の PyMC 風モデリング機能 | `Hanalyze.Stat.PosteriorPredictive` | [02-pymc-comparison.ja.md](docs/02-pymc-comparison.ja.md) | — |
-| 周辺尤度 (bridge sampling) / ベイズ因子 / ベイズモデル平均化 | `Hanalyze.Stat.{BridgeSampling,BayesFactor,BayesianModelAveraging}` | — | — |
-| ベイズ A/B テスト (NUTS 経由の平均差 + ROPE/HDI 判定) | `Hanalyze.MCMC.BayesianTest` | — | — |
-| 連鎖診断 (R̂、ESS incl. arviz 互換 `essBulk`、HDI、BFMI、rank histogram、KDE、自己相関) | `Hanalyze.Stat.MCMC` | [bayesian/viz-diagnostics.md](docs/bayesian/viz-diagnostics.md) | — |
-
-### 最適化 (`Hanalyze.Optim.*`)
-
-| 機能 | モジュール | 使い方 | 理論 |
-|---|---|---|---|
-| 単目的 (勾配法): NM / L-BFGS / Brent | `Hanalyze.Optim.NelderMead`<br>`Hanalyze.Optim.LBFGS`<br>`Hanalyze.Optim.LineSearch` | [optim/01-singleobj.ja.md](docs/optim/01-singleobj.ja.md) | [optim/theory-singleobj.ja.md](docs/optim/theory-singleobj.ja.md) |
-| 単目的 (進化計算): DE / CMA-ES / SA / PSO | `Hanalyze.Optim.DifferentialEvolution`<br>`Hanalyze.Optim.CMAES`<br>`Hanalyze.Optim.SimulatedAnnealing`<br>`Hanalyze.Optim.ParticleSwarm` | [optim/01-singleobj.ja.md](docs/optim/01-singleobj.ja.md) | [optim/theory-singleobj.ja.md](docs/optim/theory-singleobj.ja.md) |
-| 多目的 (NSGA-II + Pareto) | `Hanalyze.Optim.{NSGA,Pareto}` | [optim/02-multi-objective.ja.md](docs/optim/02-multi-objective.ja.md) | [optim/theory-pareto-moo.ja.md](docs/optim/theory-pareto-moo.ja.md) |
-| 獲得関数 (EHVI / ParEGO / EI / LCB / PI) | `Hanalyze.Optim.Acquisition` | [optim/02-multi-objective.ja.md](docs/optim/02-multi-objective.ja.md) | [optim/theory-bayesopt.ja.md](docs/optim/theory-bayesopt.ja.md) |
-| ベイズ最適化 (BO + GP-Hedge + 解析勾配) | `Hanalyze.Optim.BayesOpt` | [optim/01-singleobj.ja.md](docs/optim/01-singleobj.ja.md) | [optim/theory-bayesopt.ja.md](docs/optim/theory-bayesopt.ja.md) |
-| アルゴリズム選択ガイド | — | [optim/03-algorithm-guide.ja.md](docs/optim/03-algorithm-guide.ja.md) | — |
-
-### 実験計画 (`Hanalyze.Design.*`)
-
-| 機能 | モジュール | 使い方 | 理論 |
-|---|---|---|---|
-| DOE (Factorial / Block / Mixed / RSM / Optimal / Power / Quality) | `Hanalyze.Design.{Factorial,Block,Mixed,RSM,Optimal,Power,Quality,MultiRSM,Anova}` | [doe/01-doe.ja.md](docs/doe/01-doe.ja.md) | [doe/theory-doe.ja.md](docs/doe/theory-doe.ja.md) |
-| 直交表 (L4/L8/L9/L12/L16/L18) + タグチ法 (SN比 + 内/外配置) + 工程能力 (Cp/Cpk) | `Hanalyze.Design.{Orthogonal,Taguchi,Quality}` | [doe/02-orthogonal-taguchi.ja.md](docs/doe/02-orthogonal-taguchi.ja.md) | [doe/theory-doe.ja.md](docs/doe/theory-doe.ja.md) |
-| カスタム最適設計 (coordinate exchange + modified Fedorov: D/A/G/I criteria、ベイズ D、線形制約、split-plot、augment メニュー、設計比較 via efficiency/FDS/alias) | `Hanalyze.Design.Custom.*` | [doe/usage-custom-design.md](docs/doe/usage-custom-design.md) + [manual](docs/doe/manual-custom-design.md) | — |
-| DOE workflow layer (R 風の対話的 `Design` object over low-level design functions) | `Hanalyze.Design.Workflow` | [api-guide/09-doe.md](docs/api-guide/09-doe.md) | — |
-
-### 可視化 (`Hanalyze.Viz.*`)
-
-| 機能 | モジュール | 使い方 |
-|---|---|---|
-| 散布図 / Bar / ヒストグラム / MCMC 診断 / GP 描画 / Pareto 描画 | `Hanalyze.Viz.{Scatter,Bar,Histogram,MCMC,GP,Pareto,ModelGraph,Taguchi}` | [visualization/01-visualization.ja.md](docs/visualization/01-visualization.ja.md) |
-| 統合 HTML レポート (MathJax + Mermaid + 対話的) | `Hanalyze.Viz.ReportBuilder` | [visualization/02-report-builder.ja.md](docs/visualization/02-report-builder.ja.md) |
-| 統一 fit-and-plot 演算子 `df \|-> spec` (LM/GLM/GAM/GP/HBM/... 全モデルの統一エントリーポイント) + plot 不要な係数診断 | `Hanalyze.Fit` / `Hanalyze.Diagnostics` | [io/04-fit-api.md](docs/io/04-fit-api.md) |
-| **hgg 統合** (experimental): `toPlot`/`Plottable` が fitted model (LM line+CI / GP mean+credible band) を layer grammar に重ね合わせ。`module Hanalyze` quickstart エントリー。フラグ制御 (`plot-integration`、default off)。 | `Hanalyze.Plot` + `module Hanalyze` | [visualization/03-plot-integration.md](docs/visualization/03-plot-integration.md) |
-| **HBM ModelGraph (3 ルート)**: Mermaid HTML / Graphviz DOT / hgg 直 SVG | `Hanalyze.Viz.{ModelGraph,ModelGraphDot}` + `Hgg.Plot.Bridge.Analyze` | 下記「ModelGraph の 3 ルート」 参照 |
-
-#### ModelGraph — 3 ルート
-
-HBM モデルの DAG を可視化する方法は 3 つあり、用途に応じて使い分ける:
-
-| ルート | モジュール | 出力 / 依存 | 推奨用途 |
-|---|---|---|---|
-| **Mermaid HTML** | `Hanalyze.Viz.ModelGraph.renderModelGraph` | `.html` + Mermaid CDN script | GitHub / GitLab README、 ノート添付 — GitHub 上で自動 render |
-| **Graphviz DOT** | `Hanalyze.Viz.ModelGraphDot.renderModelGraphDot` | `.dot` text + `dot` CLI (要 install) | graphviz エコシステム連携 (xdot / gephi / `dot -Tpng`)、細かい directive 制御 (`rank=same` / `constraint=false` 等) |
-| **hgg 直** | `Hgg.Plot.Bridge.Analyze.renderModelGraphSVG` ([hgg-analyze-bridge](https://github.com/frenzieddoll/hgg)) | `.svg` (**依存ゼロ**、純 Haskell) | production アプリ組込み、offline batch、大規模 DAG の高速生成 |
-
-3 ルートとも同じ `Hanalyze.Model.HBM.ModelGraph` を入力とする。品質と依存のトレードオフ:
-
-- Mermaid: 軽量、ただし offline 不可
-- Graphviz DOT: 最高品質 layout、ただし dot CLI 必須
-- hgg: 中間品質 (graphviz dot の 70-80% 同等、純 Haskell)。依存ゼロが必要なら唯一の選択肢
-
-コード例 (`hgg-analyze-bridge` を依存に追加した場合):
-
-```haskell
-import qualified Hanalyze.Viz.ModelGraph    as Mermaid
-import qualified Hanalyze.Viz.ModelGraphDot as Dot
-import qualified Data.Text.IO               as TIO
-import           Hgg.Plot.Bridge.Analyze (renderModelGraphSVG)
-import           Hanalyze.Model.HBM          (buildModelGraph)
-
-main = do
-  let mg = buildModelGraph myHBM
-  Mermaid.renderModelGraph "out/dag.html" "My HBM" mg            -- Route 1
-  TIO.writeFile "out/dag.dot" (Dot.renderModelGraphDot mg)       -- Route 2
-  renderModelGraphSVG     "out/dag.svg"  "My HBM" mg             -- Route 3
+```bash
+git clone https://github.com/frenzieddoll/hanalyze
 ```
 
-注記: 標準プロット用には hgg も native PNG (Rasterific) と PDF backend を備えています。
-ModelGraph SVG ルートの PNG / PDF が必要な場合は、`rsvg-convert` / `inkscape` 等で変換してください。
+```cabal
+-- cabal.project
+packages: .
+          ./hanalyze/hanalyze
+          ./hanalyze/hanalyze-core
+          ./hanalyze/hanalyze-frame
+          ./hanalyze/hanalyze-bayes
+          ./hanalyze/hanalyze-models
+          ./hanalyze/hanalyze-design
+          ./hanalyze/hanalyze-viz
+```
 
-### データ I/O (`Hanalyze.DataIO.*`)
+`build-depends` は **迷ったら `hanalyze` 一本**でよい (module 名は層を跨いでも
+変わらない)。依存を絞りたいときだけ層を直接指定する。**各 package の README に
+module 地図と単体利用の例**がある。
 
-| 機能 | モジュール | 使い方 |
-|---|---|---|
-| CSV/TSV/SSV (cassava) + Parquet/JSON (Hackage `dataframe`) | `Hanalyze.DataIO.{CSV,External,Convert}` | [io/01-dirty-data.ja.md](docs/io/01-dirty-data.ja.md) |
-| 汚いデータ防衛 (W001-W008 警告 + 自動 sniff + クリーニング DSL) | `Hanalyze.DataIO.{Health,Sniff,Clean,Log}` | [io/01-dirty-data.ja.md](docs/io/01-dirty-data.ja.md) |
-| 整形 (pivot_wider / one-hot / lag-lead / rolling window) | `Hanalyze.DataIO.Reshape` | [io/02-reshape.ja.md](docs/io/02-reshape.ja.md) |
-| 前処理 (impute / groupBy / derived columns / melt) | `Hanalyze.DataIO.Preprocess` | [io/01-dirty-data.ja.md](docs/io/01-dirty-data.ja.md) |
-| Long-form regrid (`regridLong`) | `Hanalyze.DataIO.Preprocess` + `Hanalyze.Stat.Interpolate` | [io/03-regrid.ja.md](docs/io/03-regrid.ja.md) |
+| package | 役割 |
+|---|---|
+| [`hanalyze`](hanalyze/README.ja.md) | 全層を再輸出する umbrella (通常はこれ) |
+| [`-core`](hanalyze-core/README.ja.md) | 記述統計・検定・最適化・数値核 |
+| [`-frame`](hanalyze-frame/README.ja.md) | DataFrame 連携・読込・整形・Fit API |
+| [`-models`](hanalyze-models/README.ja.md) | 回帰・機械学習・時系列・生存・因果 |
+| [`-bayes`](hanalyze-bayes/README.ja.md) | MCMC・HBM |
+| [`-design`](hanalyze-design/README.ja.md) | 実験計画 |
+| [`-viz`](hanalyze-viz/README.ja.md) | Vega-Lite 可視化・HTML レポート |
+| [`-plot`](hanalyze-plot/README.ja.md) | hgg 連携 (`toPlot`)。別 build root |
+| [`-cli`](hanalyze-cli/README.ja.md) | `hanalyze` コマンド |
+| [`-demos`](hanalyze-demos/README.ja.md) | demo / bench の exe 群 |
 
----
+### opt-in の build root
+
+既定の `cabal.project` は plot 非依存。用途に応じて root を切り替える。
+
+| build root | 含むもの |
+|---|---|
+| `cabal.project` (既定) | library + test (plot 非依存) |
+| `cabal.project.plot` | 上記 + `hanalyze-plot` (sibling の hgg が必要) |
+| `cabal.project.demos` | 上記 + demo / bench の exe 群 |
+
+### CLI だけ使う
+
+```bash
+cabal install hanalyze-cli    # hanalyze コマンドが入る
+```
 
 ## クイックスタート
 
@@ -199,10 +133,9 @@ ModelGraph SVG ルートの PNG / PDF が必要な場合は、`rsvg-convert` / `
 ```bash
 git clone https://github.com/frenzieddoll/hanalyze
 cd hanalyze
-cabal build all
 
 # price と promo で sales を回帰し、HTML レポートを出力。
-hanalyze regress data/readme/sales.csv "price promo" sales --report sales.html
+cabal run hanalyze -- regress data/readme/sales.csv "price promo" sales --report sales.html
 # β₀=185.05  β(price)=-4.37  β(promo)=+32.29  R²=0.995
 ```
 
@@ -221,7 +154,7 @@ main = do
       ys = LA.fromList [18, 22, 20, 19, 25, 17]
       result = ST.tTestWelch xs ys ST.TwoSided
   print (ST.trPValue result, ST.trEffect result)
-  -- (0.012, Just ("Cohen's d", -1.85))
+  -- (1.688e-3, Just ("Cohen's d", -2.527))
 ```
 
 詳しい入門は [docs/01-quickstart.ja.md](docs/01-quickstart.ja.md) 参照。
@@ -252,18 +185,18 @@ hanalyze clean <file> --rule ...  汚いデータのクリーニング
 
 ## サンプル / デモ
 
-`demo/` 配下に多数のデモ (このリリース時点で 76)。代表例:
+`hanalyze-demos/demo/` 配下に多数のデモ (このリリース時点で 76)。代表例:
 
 | デモ | 概要 |
 |---|---|
-| `demo/regression/HBMRegressionDemo.hs` | HBM ベイズ線形回帰 + NUTS + HTML |
-| `demo/regression/RFFDemo.hs` | RFF で大規模 GP の高速近似 |
-| `demo/regression/RobustGPDemo.hs` | StudentT 観測尤度の頑健 GP |
-| `demo/doe-optim/NSGADemo.hs` | ZDT 問題で NSGA-II + Pareto |
-| `demo/doe-optim/BayesOptDemo.hs` | Branin/Hartmann6 で BO |
-| `demo/bayesian/HBMComparisonDemo.hs` | WAIC/LOO で HBM 比較 |
-| `demo/bayesian/SimpsonParadoxDemo.hs` | 階層モデルでパラドックスを解明 |
-| `demo/io/DirtyDataDemo.hs` | 19 種の汚い CSV を自動防衛 |
+| `hanalyze-demos/demo/regression/HBMRegressionDemo.hs` | HBM ベイズ線形回帰 + NUTS + HTML |
+| `hanalyze-demos/demo/regression/RFFDemo.hs` | RFF で大規模 GP の高速近似 |
+| `hanalyze-demos/demo/regression/RobustGPDemo.hs` | StudentT 観測尤度の頑健 GP |
+| `hanalyze-demos/demo/doe-optim/NSGADemo.hs` | ZDT 問題で NSGA-II + Pareto |
+| `hanalyze-demos/demo/doe-optim/BayesOptDemo.hs` | Branin/Hartmann6 で BO |
+| `hanalyze-demos/demo/bayesian/HBMComparisonDemo.hs` | WAIC/LOO で HBM 比較 |
+| `hanalyze-demos/demo/bayesian/SimpsonParadoxDemo.hs` | 階層モデルでパラドックスを解明 |
+| `hanalyze-demos/demo/io/DirtyDataDemo.hs` | 19 種の汚い CSV を自動防衛 |
 
 実行: `dist-newstyle/build/x86_64-linux/ghc-9.6.7/hanalyze-0.2.0.0/x/<demo-name>/build/<demo-name>/<demo-name>` で起動。
 
@@ -368,37 +301,32 @@ graph TD
 ## ロードマップと API 安定性
 
 - **Stable** (minor 更新で API 後方互換を維持予定): `Hanalyze.DataIO.*`、`Hanalyze.Stat.{Test, Bootstrap, MultipleTesting, ClassMetrics, CV, Effect, Distribution}`、`Hanalyze.Model.{LM, GLM, Spline, Regularized, RandomForest, DecisionTree, TimeSeries, Survival, GAM}`、`Hanalyze.Optim.{NelderMead, LBFGS, DifferentialEvolution, CMAES, NSGA, BayesOpt, SimulatedAnnealing, ParticleSwarm}`、`Hanalyze.Design.*`、`Hanalyze.Viz.{Scatter, Bar, Histogram}`
-- **Experimental** (API は変動の可能性): `Hanalyze.Model.HBM` DSL、`Hanalyze.MCMC.NUTS` (mass-matrix adaptation は opt-in)、`Hanalyze.Stat.VI` (ADVI)、`Hanalyze.Model.{GP, RFF, GPRobust, GLMM}`、`Hanalyze.Model.{SVM, GradientBoosting, NeuralNetwork}`、`Hanalyze.Model.LiNGAM.*`、`Hanalyze.Design.Custom.*`、`df |-> spec` fit 演算子 (`Hanalyze.Fit`)、hgg 統合 (`plot-integration` フラグ)、`Hanalyze.Viz.ReportBuilder`。挙動はベンチで検証済ですが型シグネチャが変わる可能性あり
+- **Experimental** (API は変動の可能性): `Hanalyze.Model.HBM` DSL、`Hanalyze.MCMC.NUTS` (mass-matrix adaptation は opt-in)、`Hanalyze.Stat.VI` (ADVI)、`Hanalyze.Model.{GP, RFF, GPRobust, GLMM}`、`Hanalyze.Model.{SVM, GradientBoosting, NeuralNetwork}`、`Hanalyze.Model.LiNGAM.*`、`Hanalyze.Design.Custom.*`、`df |-> spec` fit 演算子 (`Hanalyze.Fit`)、hgg 統合 (別パッケージ `hanalyze-plot`)、`Hanalyze.Viz.ReportBuilder`。挙動はベンチで検証済ですが型シグネチャが変わる可能性あり
 - **将来検討**: hmatrix/Massiv/Accelerate を切替えるバックエンド typeclass。実装スケジュールは未定。(以前計画していたトップレベル統一 API と fit 演算子 API は 0.2.0.0 で `module Hanalyze` と `Hanalyze.Fit` として実現済み。)
 
 ---
 
 ## モジュール構成
 
-```
-src/
-  DataIO/      — CSV/JSON/Parquet IO + 健全性検査 + sniff + clean DSL + reshape (9 mod)
-  Stat/        — 検定/分布/補間/効果量/CV/Bootstrap/解釈 etc. (21 mod)
-  Model/       — LM/GLM/GLMM/Spline/Kernel/GP/RFF/HBM/PCA/Cluster/Tree/TS/Survival 等 (23 mod)
-  Optim/       — 単目的 (NM/LBFGS/DE/CMAES/SA/PSO) + 多目的 (NSGA/BO/Pareto) (18 mod)
-  Design/      — Factorial/Block/RSM/Optimal/Orthogonal/Taguchi 等 (11 mod)
-  Viz/         — Vega-Lite ベース可視化 + ReportBuilder (15 mod)
-  MCMC/        — MH/HMC/NUTS/Gibbs/Slice (6 mod)
-```
+module 名は package を跨いでも `Hanalyze.*` で一貫している (どの層に居るかを
+利用者が意識しなくてよい)。どの package に何があるかは
+[インストール](#インストール)の package 表と、各 package の README を参照。
 
-このリリース時点で 212 モジュール、~1,390 テスト例。
+212 module / 2417 テスト例。
 
 ---
 
 ## ビルド
 
 ```bash
-cabal build all                  # ライブラリ + 全実行ファイル (76 demo)
-cabal test                       # hspec test suite
-cabal repl                       # 対話実行
+cabal build all                                    # library + test (plot 非依存)
+cabal test all                                     # hspec test suite
+cabal build all --project-file=cabal.project.plot  # + plot 連携 (sibling の hgg が必要)
+cabal build all --project-file=cabal.project.demos # + demo / bench の exe 群
 ```
 
-主要依存: `hmatrix` (BLAS/LAPACK)、`hvega` (Vega-Lite)、`statistics`、`mwc-random`、`dataframe` (Hackage Polars-like)、`massiv` (並列配列)、`ad` (自動微分)、`async`。
+主要依存: `hmatrix` (BLAS/LAPACK)・`hvega` (Vega-Lite)・`statistics`・`mwc-random`・
+`dataframe`・`massiv` (並列配列)・`ad` (自動微分)・`async`。
 
 GHC 9.6.7 + cabal 3.14.2 で確認済。
 
@@ -408,11 +336,13 @@ GHC 9.6.7 + cabal 3.14.2 で確認済。
 
 ```bash
 # 1. 共通テストデータ生成 (固定 seed、deterministic)
-cabal run bench-data-gen
+#    bench の exe は demos package にあるので build root を指定する
+cabal run --project-file=cabal.project.demos bench-data-gen
 
 # 2. Haskell 側
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
-  cabal run bench-regression bench-kernel bench-optim bench-mo bench-bo
+  cabal run --project-file=cabal.project.demos \
+    bench-regression bench-kernel bench-optim bench-mo bench-bo
 
 # 3. Python 側 (venv 必要、bench/requirements.txt)
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
@@ -429,7 +359,7 @@ bench/venv/bin/python bench/aggregate.py > bench/results/SUMMARY.md
 
 - **Issue / PR**: [github.com/frenzieddoll/hanalyze](https://github.com/frenzieddoll/hanalyze)
 - **テスト追加**: `test/Spec.hs` に hspec 形式で
-- **ベンチ追加**: `bench/haskell/Bench*.hs` + 対応 Python 版
+- **ベンチ追加**: `hanalyze-demos/bench/haskell/Bench*.hs` + 対応 Python 版
 - **コーディング規約**: `CONTRIBUTING.md` に詳細 (hot path で list 経由禁止、unsafe 最小限、等)
 
 ---

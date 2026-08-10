@@ -10,9 +10,10 @@ A bridge that turns a fitted statistical model into a **`toPlot :: m -> VisualSp
 overlays it on hgg's layer grammar (`df |>> (layer (scatter ..) <> toPlot fit)`).
 This is the **model-out track** (analyze Phase 46 / plot Phase 15).
 
-> ⚠ **Experimental + flag-isolated.** Built only when the cabal `flag plot-integration`
-> (default **off**) is on. With the flag off, analyze stays a plot-independent standalone
-> (upstream-hanalyze compatible). → read [§6 Build & dependencies](#6-build--dependencies) first.
+> ⚠ **Experimental + package-isolated.** Lives in the separate `hanalyze-plot`
+> package, built via `cabal build --project-file=cabal.project.plot`. The main
+> `hanalyze` package stays a plot-independent standalone (upstream-hanalyze
+> compatible) and never depends on it. → read [§6 Build & dependencies](#6-build--dependencies) first.
 
 ---
 
@@ -30,9 +31,9 @@ This is the **model-out track** (analyze Phase 46 / plot Phase 15).
 {-# LANGUAGE OverloadedStrings #-}
 import qualified Data.Vector              as V
 import qualified Numeric.LinearAlgebra    as LA
-import           Hgg.Plot.Backend.SVG (saveSVGBound)
-import           Hgg.Plot.Frame       ((|>>))
-import           Hgg.Plot.Spec        (ColData (..), layer, scatter)
+import           Graphics.Hgg.Backend.SVG (saveSVGBound)
+import           Graphics.Hgg.Frame       ((|>>))
+import           Graphics.Hgg.Spec        (ColData (..), layer, scatter)
 import           Hanalyze.Plot            (lm, (|->), toPlot)
 
 main :: IO ()
@@ -147,18 +148,18 @@ Instances exist for the shared `FitResult` (LM/GLM/GLMM). `Plottable` (plot-depe
 
 ## 6. Build & dependencies
 
-| | flag off (default) | flag on |
+| | default build (`cabal.project`) | plot build (`cabal.project.plot`) |
 |---|---|---|
-| `Hanalyze.Plot` | not built | built (depends on `hgg-core`/`-svg`) |
+| `Hanalyze.Plot` | not built (lives in `hanalyze-plot`) | built (depends on `hgg-core`/`-svg`) |
 | standalone | ✅ plot-independent, upstream-compatible | analyze → plot-core (one-way) |
 
 ```bash
-# the flag-on integration build root is cabal.project.plot
-cabal build --project-file=cabal.project.plot hanalyze
+# hanalyze-plot is a separate package; its own project file is the build root
+cabal build --project-file=cabal.project.plot hanalyze-plot
 cabal test  --project-file=cabal.project.plot hanalyze-plot-test
 cabal run   --project-file=cabal.project.plot plot-integration-demo
 
-# flag-off standalone regression (portable)
+# default standalone build/test (portable, no plot dependency)
 cabal test hanalyze-test
 ```
 
@@ -171,8 +172,8 @@ It tiles the integration figures (LM / GP) with plain examples (scatter / line /
 For individual SVG text/files:
 
 ```haskell
-import Hgg.Plot.Backend.SVG (renderBound, saveSVGBound)  -- BoundPlot → Text / file
-import Hgg.Plot.Backend.SVG (renderSVG, saveSVG)         -- inline-column VisualSpec
+import Graphics.Hgg.Backend.SVG (renderBound, saveSVGBound)  -- BoundPlot → Text / file
+import Graphics.Hgg.Backend.SVG (renderSVG, saveSVG)         -- inline-column VisualSpec
 ```
 
 ## 8. Portability / cherry-pick discipline
@@ -197,15 +198,15 @@ Sections 1-9 cover **Branch A** (`toPlot`): build a model first, then plot it. *
 writes the stat *inside* the plot grammar — like ggplot's `geom_smooth(method="lm")` — and
 **delegates the regression to analyze**.
 
-Provided by `Hgg.Plot.Bridge.Stat` in `hgg-analyze-bridge` (the reverse edge
+Provided by `Graphics.Hgg.Bridge.Stat` in `hgg-analyze-bridge` (the reverse edge
 `plot → analyze` lives in this isolated package; `hgg-core` stays analyze-independent, so
 there is no cycle).
 
 ```haskell
 {-# LANGUAGE OverloadedStrings #-}
-import Hgg.Plot.Backend.SVG (saveSVGWith)
-import Hgg.Plot.Bridge.Stat (compileStats, lm, smooth)
-import Hgg.Plot.Spec        (ColData(..), Resolver, layer, scatter)
+import Graphics.Hgg.Backend.SVG (saveSVGWith)
+import Graphics.Hgg.Bridge.Stat (compileStats, lm, smooth)
+import Graphics.Hgg.Spec        (ColData(..), Resolver, layer, scatter)
 import qualified Data.Vector as V
 
 main :: IO ()

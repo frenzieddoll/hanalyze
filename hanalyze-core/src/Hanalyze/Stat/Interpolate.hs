@@ -73,7 +73,9 @@ interp1d kind pts0       =
 -- 共通: x が含まれる区間 [x_i, x_{i+1}] の i を二分探索
 -- ---------------------------------------------------------------------------
 
--- | x の挿入位置を返す。範囲外は端 (0 or n-2) にクランプ。
+-- | [日本語]: x の挿入位置を返す。範囲外は端 (0 or n-2) にクランプ。
+--   [English]: Returns the insertion position for x. Out-of-range values
+--   are clamped to the ends (0 or n-2).
 findSegment :: U.Vector Double -> Double -> Int
 findSegment xs x =
   let n = U.length xs
@@ -102,7 +104,9 @@ linearAt xs ys x =
 -- Natural cubic spline (端点で y'' = 0)
 -- ---------------------------------------------------------------------------
 
--- | 端点で 2 階導関数 0 の自然スプラインの 2 階導関数 m を Thomas algorithm で解く。
+-- | [日本語]: 端点で 2 階導関数 0 の自然スプラインの 2 階導関数 m を Thomas algorithm で解く。
+--   [English]: Solves for the natural spline's second derivatives m
+--   (second derivative = 0 at the endpoints) via the Thomas algorithm.
 naturalSplineAt :: U.Vector Double -> U.Vector Double -> Double -> Double
 naturalSplineAt xs ys =
   let n = U.length xs
@@ -126,7 +130,9 @@ naturalSplineAt xs ys =
        in a * y0 + b * y1
         + ((a*a*a - a) * m0 + (b*b*b - b) * m1) * (hi * hi) / 6
 
--- | n 次元 m を Thomas で解く (端 m_0 = m_{n-1} = 0)。
+-- | [日本語]: n 次元 m を Thomas で解く (端 m_0 = m_{n-1} = 0)。
+--   [English]: Solves the n-dimensional m via the Thomas algorithm
+--   (endpoints m_0 = m_{n-1} = 0).
 solveNatural :: U.Vector Double -> U.Vector Double -> U.Vector Double
 solveNatural h ys =
   let n = U.length ys
@@ -147,7 +153,8 @@ solveNatural h ys =
              mInner = thomas a b c d
          in U.fromList (0 : U.toList mInner ++ [0])
 
--- | 三重対角線形系 (Thomas algorithm)。
+-- | [日本語]: 三重対角線形系 (Thomas algorithm)。
+--   [English]: Tridiagonal linear system (Thomas algorithm).
 --
 -- P38 (2026-05-07): the previous implementation rebuilt the @cp@ and
 -- @dp@ vectors each iteration with @U.// [(i, x)]@, which is a
@@ -203,7 +210,9 @@ thomas a b c d = U.create $ do
 -- PCHIP (Fritsch-Carlson 1980; monotone cubic Hermite)
 -- ---------------------------------------------------------------------------
 
--- | PCHIP の傾き m_i を Fritsch-Carlson 法で計算してから区間ごとの 3 次 Hermite で評価。
+-- | [日本語]: PCHIP の傾き m_i を Fritsch-Carlson 法で計算してから区間ごとの 3 次 Hermite で評価。
+--   [English]: Computes PCHIP's slopes m_i via the Fritsch-Carlson method,
+--   then evaluates the piecewise cubic Hermite polynomial per interval.
 pchipAt :: U.Vector Double -> U.Vector Double -> Double -> Double
 pchipAt xs ys =
   let n  = U.length xs
@@ -225,7 +234,8 @@ pchipAt xs ys =
        in h00 * y0 + h10 * hi * (m U.! i)
         + h01 * y1 + h11 * hi * (m U.! (i + 1))
 
--- | Fritsch-Carlson 単調保存スロープ。
+-- | [日本語]: Fritsch-Carlson 単調保存スロープ。
+--   [English]: Fritsch-Carlson monotonicity-preserving slope.
 slopeAt :: U.Vector Double -> U.Vector Double -> Int -> Int -> Double
 slopeAt h d n i
   | n < 2     = 0
@@ -245,7 +255,9 @@ slopeAt h d n i
                  w2 = hCur + 2 * hPrev
              in (w1 + w2) / (w1 / dPrev + w2 / dCur)
 
--- | 端点の 3 点 quadratic estimate + Fritsch-Carlson の符号調整。
+-- | [日本語]: 端点の 3 点 quadratic estimate + Fritsch-Carlson の符号調整。
+--   [English]: Endpoint 3-point quadratic estimate with Fritsch-Carlson
+--   sign adjustment.
 endpointSlope :: Double -> Double -> Double -> Double -> Double
 endpointSlope d0 d1 h0 h1 =
   let m = ((2 * h0 + h1) * d0 - h0 * d1) / (h0 + h1)

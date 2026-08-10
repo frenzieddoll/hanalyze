@@ -6,18 +6,34 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Multi-Layer Perceptron (MLP) — feedforward neural network。
+-- [日本語]: Multi-Layer Perceptron (MLP) — feedforward neural network。
 --
 -- Mini-batch SGD + 自前 Adam で学習。 hmatrix Matrix/Vector で全演算。
 --
 -- 対応:
 --
---   * 'fitMLPRegressor': 出力 1 次元の回帰 (MSE loss)
---   * 'fitMLPClassifier': 多クラス分類 (cross-entropy + softmax 出力)
---   * 'predictMLP': forward 推論
+--   - 'fitMLPRegressor': 出力 1 次元の回帰 (MSE loss)
+--   - 'fitMLPClassifier': 多クラス分類 (cross-entropy + softmax 出力)
+--   - 'predictMLP': forward 推論
 --
 -- 隠れ層の活性化は ReLU 既定、 出力層は task に応じて自動 (回帰=Identity、
 -- 分類=Softmax)。
+--
+-- [English]: Multi-Layer Perceptron (MLP) — a feedforward neural network.
+--
+-- Trained with mini-batch SGD + a self-contained Adam implementation.
+-- All operations use hmatrix Matrix\/Vector.
+--
+-- Supports:
+--
+--   - 'fitMLPRegressor': single-output regression (MSE loss)
+--   - 'fitMLPClassifier': multiclass classification (cross-entropy +
+--     softmax output)
+--   - 'predictMLP': forward inference
+--
+-- Hidden-layer activation defaults to ReLU; the output layer is chosen
+-- automatically based on the task (regression=Identity,
+-- classification=Softmax).
 module Hanalyze.Model.NeuralNetwork
   ( Activation (..)
   , MLPConfig (..)
@@ -70,8 +86,10 @@ data MLPConfig = MLPConfig
   , mlpBatch     :: !Int
   , mlpL2        :: !Double
   , mlpStandardize :: !Bool
-    -- ^ True で X を z-score 標準化してから学習 (predict 時は同じ
-    --   mean/std で逆変換)。 Phase 17.3 で追加、 default True。
+    -- ^ [日本語]: True で X を z-score 標準化してから学習 (predict 時は同じ
+    --   mean/std で逆変換)。 default True。
+    --   [English]: When True, z-score standardizes X before training
+    --   (predict inverts using the same mean\/std). Default True.
   } deriving (Show)
 
 defaultMLP :: MLPConfig
@@ -89,14 +107,19 @@ data MLPFit = MLPFit
   { mlpLayers   :: ![Layer]
   , mlpLossHist :: ![Double]
   , mlpClasses  :: ![Int]
-    -- ^ 分類器の場合の class label 順 (sorted)。 回帰時は空。
+    -- ^ [日本語]: 分類器の場合の class label 順 (sorted)。 回帰時は空。
+    --   [English]: Class label order (sorted), for a classifier. Empty for regression.
   , mlpClassNames :: ![Text]
-    -- ^ クラス名 (df|-> が levels 注入・空=数値表示/回帰時は空)。
+    -- ^ [日本語]: クラス名 (df|-> が levels 注入・空=数値表示/回帰時は空)。
+    --   [English]: Class names (injected as levels by df|->; empty means
+    --   numeric display, or empty for regression).
   , mlpXMean    :: !(LA.Vector Double)
-    -- ^ X 標準化に使った列平均 (Phase 17.3、 標準化 off なら length 0)
+    -- ^ [日本語]: X 標準化に使った列平均 (標準化 off なら length 0)
+    --   [English]: Column means used for X standardization (length 0 if standardization is off)
   , mlpXStd     :: !(LA.Vector Double)
   , mlpYMean    :: !Double
-    -- ^ regressor の場合の y 平均 (標準化 off なら 0)
+    -- ^ [日本語]: regressor の場合の y 平均 (標準化 off なら 0)
+    --   [English]: y mean, for a regressor (0 if standardization is off)
   , mlpYStd     :: !Double
   } deriving (Show)
 
@@ -216,18 +239,24 @@ backprop layers x y isClass l2 =
 -- 学習ループ (Adam)
 -- ===========================================================================
 
--- | Per-epoch event emitted by 'fitMLPRegressorWithCallback' /
--- 'fitMLPClassifierWithCallback'。 Phase 21 で追加。
+-- | [日本語]: 'fitMLPRegressorWithCallback' / 'fitMLPClassifierWithCallback'
+-- が発行する epoch ごとのイベント。
+--   [English]: Per-epoch event emitted by 'fitMLPRegressorWithCallback' \/
+--   'fitMLPClassifierWithCallback'.
 data MLPEpochEvent = MLPEpochEvent
   { meEpoch     :: !Int
-    -- ^ 0-based epoch index (0..epochs-1)
+    -- ^ [日本語]: 0-based epoch index (0..epochs-1) [English]: 0-based epoch index (0..epochs-1)
   , meTrainLoss :: !Double
-    -- ^ epoch 終端での full-batch training loss
+    -- ^ [日本語]: epoch 終端での full-batch training loss [English]: Full-batch training loss at the end of the epoch
   , meValLoss   :: !(Maybe Double)
-    -- ^ validation split loss。 v1 では常に 'Nothing' (= reserved for future)
+    -- ^ [日本語]: validation split loss。 v1 では常に 'Nothing' (= reserved for future)
+    --   [English]: Validation-split loss. Always 'Nothing' in v1 (reserved for future use).
   , meCurrentLR :: !Double
-    -- ^ そのときの学習率 (現在は constant scheduler のみ、 将来 LR scheduler
+    -- ^ [日本語]: そのときの学習率 (現在は constant scheduler のみ、 将来 LR scheduler
     --   実装で意味が出る)
+    --   [English]: The learning rate at that point (currently only a
+    --   constant scheduler is implemented; this becomes meaningful once a
+    --   future LR scheduler is implemented).
   } deriving (Show)
 
 trainMLP
@@ -330,7 +359,8 @@ crossEntropyLoss yhat y =
 -- 公開 API
 -- ===========================================================================
 
--- | X の列ごと平均と標準偏差 (n-1)。
+-- | [日本語]: X の列ごと平均と標準偏差 (n-1)。
+--   [English]: Per-column mean and standard deviation of X (n-1).
 standardizeStats :: LA.Matrix Double -> (LA.Vector Double, LA.Vector Double)
 standardizeStats x =
   let n   = LA.rows x
@@ -361,9 +391,13 @@ fitMLPRegressor
 fitMLPRegressor cfg x y gen =
   fitMLPRegressorWithCallback cfg x y gen (\_ -> pure ())
 
--- | Phase 21 で追加。 epoch 終端ごとに 'MLPEpochEvent' を渡す callback 付き
+-- | [日本語]: epoch 終端ごとに 'MLPEpochEvent' を渡す callback 付き
 -- regressor 学習。 既存 'fitMLPRegressor' は no-op callback で本関数を呼ぶ
 -- 薄い wrapper として保持される。
+--   [English]: Regressor training with a callback that is passed an
+--   'MLPEpochEvent' at the end of every epoch. The existing
+--   'fitMLPRegressor' is kept as a thin wrapper that calls this function
+--   with a no-op callback.
 fitMLPRegressorWithCallback
   :: PrimMonad m
   => MLPConfig -> LA.Matrix Double -> LA.Vector Double
@@ -394,7 +428,8 @@ fitMLPClassifier
 fitMLPClassifier cfg x y gen =
   fitMLPClassifierWithCallback cfg x y gen (\_ -> pure ())
 
--- | Phase 21 で追加。 'fitMLPRegressorWithCallback' の classifier 版。
+-- | [日本語]: 'fitMLPRegressorWithCallback' の classifier 版。
+--   [English]: The classifier counterpart of 'fitMLPRegressorWithCallback'.
 fitMLPClassifierWithCallback
   :: PrimMonad m
   => MLPConfig -> LA.Matrix Double -> VU.Vector Int
@@ -428,15 +463,21 @@ fitMLPClassifierWithCallback cfg x y gen onEpoch = do
     , mlpYStd     = 1
     }
 
--- | 'fitMLPRegressor' の純粋版 (Phase 75.8)。 Word32 seed から @runST@ + MWC で重み初期化・
--- shuffle を決定的に閉じる ('fitRFVPure'/'nutsPure' と同方針・同 seed → ビット同一)。
+-- | [日本語]: 'fitMLPRegressor' の純粋版。 Word32 seed から @runST@ + MWC で重み初期化・
+-- shuffle を決定的に閉じる (@fitRFVPure@/@nutsPure@ と同方針・同 seed → ビット同一)。
 -- IO 版は進捗 callback 用に残る。
+--   [English]: A pure version of 'fitMLPRegressor'. Closes weight
+--   initialization and shuffling over @runST@ + MWC from a Word32 seed,
+--   deterministically (same policy as @fitRFVPure@\/@nutsPure@: same seed
+--   → bit-identical). The IO version remains for progress callbacks.
 fitMLPRegressorPure :: MLPConfig -> LA.Matrix Double -> LA.Vector Double -> Word32 -> MLPFit
 fitMLPRegressorPure cfg x y seed =
   runST (initialize (V.singleton seed)
            >>= \gen -> fitMLPRegressorWithCallback cfg x y gen (\_ -> pure ()))
 
--- | 'fitMLPClassifier' の純粋版 (Phase 75.8)。 seed から @runST@ で決定的に学習。
+-- | [日本語]: 'fitMLPClassifier' の純粋版。 seed から @runST@ で決定的に学習。
+--   [English]: A pure version of 'fitMLPClassifier'. Trains
+--   deterministically via @runST@ from a seed.
 fitMLPClassifierPure :: MLPConfig -> LA.Matrix Double -> VU.Vector Int -> Word32 -> MLPFit
 fitMLPClassifierPure cfg x y seed =
   runST (initialize (V.singleton seed)

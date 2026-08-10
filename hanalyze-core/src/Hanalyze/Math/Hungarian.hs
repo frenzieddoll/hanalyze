@@ -5,13 +5,13 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Hungarian (Kuhn-Munkres) アルゴリズムによる正方割当問題の最小コスト解。
+-- [日本語]: Hungarian (Kuhn-Munkres) アルゴリズムによる正方割当問題の最小コスト解。
 --
 -- ## 入出力
 --
 -- 入力: コスト行列 C (n × n、 各成分は実数、 inf 不可)。
 -- 出力: 行 i に割当てる列 j からなる長さ n のベクトル @assignment[i] = j@。
--- 目的: Σᵢ C[i, assignment[i]] を最小化、 かつ assignment が **全単射**。
+-- 目的: Σᵢ C[i, assignment[i]] を最小化、 かつ assignment が __全単射__。
 --
 -- ## 実装
 --
@@ -31,6 +31,38 @@
 --
 -- O(n³)。 n ≤ 200 程度では実用上問題なし (測定: n=100 で数十 ms オーダー、
 -- 計測値ではなく目安)。
+--
+-- [English]: Minimum-cost solution to the square assignment problem via
+-- the Hungarian (Kuhn-Munkres) algorithm.
+--
+-- ## Input/output
+--
+-- Input: a cost matrix C (n × n, real-valued entries, no inf allowed).
+-- Output: a length-n vector @assignment[i] = j@ giving the column j
+-- assigned to row i.
+-- Objective: minimize Σᵢ C[i, assignment[i]], with assignment being a
+-- __bijection__.
+--
+-- ## Implementation
+--
+-- Follows e-maxx's "Hungarian algorithm in O(V³)" lineage (Jonker-Volgenant's
+-- shortest augmenting path method). Maintains dual variables u, v and
+-- potentials, augmenting one row at a time. Internal state is managed with
+-- ST + mutable Vector, and the pure function 'hungarianMin' is exposed as
+-- the API.
+--
+-- ## Usage
+--
+-- Used in ICA-LiNGAM (Shimizu 2006)'s row\/column permutation lower-
+-- triangularization, to find the assignment that maximizes the absolute
+-- values of the W matrix's diagonal entries. Calling 'hungarianMin' with
+-- cost C[i, j] = 1 \/ (|W[i, j]| + ε) yields the global optimum, unlike
+-- greedy. Rescues cases where greedy degrades for p > 10.
+--
+-- ## Complexity
+--
+-- O(n³). No practical issue for n ≤ 200 or so (measured: on the order of
+-- tens of ms for n=100; a rough guide, not a formal benchmark).
 module Hanalyze.Math.Hungarian
   ( hungarianMin
   ) where
@@ -46,8 +78,11 @@ import qualified Numeric.LinearAlgebra       as LA
 -- 公開 API
 -- ===========================================================================
 
--- | 正方コスト行列 C (n × n) に対する最小コスト割当。
+-- | [日本語]: 正方コスト行列 C (n × n) に対する最小コスト割当。
 --   戻り値 @v@ は @v VU.! i = j@ で「行 i が列 j に割当てられる」 意味。
+--   [English]: Minimum-cost assignment for a square cost matrix C (n × n).
+--   The return value @v@ means "row i is assigned to column j" via
+--   @v VU.! i = j@.
 hungarianMin :: LA.Matrix Double -> VU.Vector Int
 hungarianMin cost
   | n == 0    = VU.empty

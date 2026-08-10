@@ -87,28 +87,30 @@ data AnalysisReportConfig = AnalysisReportConfig
 defaultAnalysisConfig :: Text -> AnalysisReportConfig
 defaultAnalysisConfig = AnalysisReportConfig
 
--- | スムーズフィット曲線データ (対話的予測チャート用)。
+-- | [日本語]: スムーズフィット曲線データ (対話的予測チャート用)。
+--   [English]: Smooth-fit curve data (for the interactive prediction chart).
 data SmoothData = SmoothData
-  { sdXs      :: [Double]  -- ^ グリッド x 値
-  , sdYs      :: [Double]  -- ^ 予測 y 値
-  , sdLower   :: [Double]  -- ^ CI/PI 下限
-  , sdUpper   :: [Double]  -- ^ CI/PI 上限
-  , sdHasBand :: Bool      -- ^ バンドを持つか
+  { sdXs      :: [Double]  -- ^ [日本語]: グリッド x 値 [English]: grid x values
+  , sdYs      :: [Double]  -- ^ [日本語]: 予測 y 値 [English]: predicted y values
+  , sdLower   :: [Double]  -- ^ [日本語]: CI/PI 下限 [English]: CI/PI lower bound
+  , sdUpper   :: [Double]  -- ^ [日本語]: CI/PI 上限 [English]: CI/PI upper bound
+  , sdHasBand :: Bool      -- ^ [日本語]: バンドを持つか [English]: whether a band is present
   } deriving (Show)
 
--- | LM / GLM の回帰サマリー。
+-- | [日本語]: LM / GLM の回帰サマリー。
+--   [English]: Regression summary for LM / GLM.
 data FitSummary = FitSummary
   { fsModelType    :: Text                       -- ^ "LM", "GLM (Poisson/Log)" etc.
   , fsFormula      :: Text                       -- ^ "y ~ x + x²"
-  , fsCoeffs       :: [(Text, Double)]           -- ^ (ラベル, 値)
+  , fsCoeffs       :: [(Text, Double)]           -- ^ [日本語]: (ラベル, 値) [English]: (label, value)
   , fsR2           :: Double                     -- ^ R² or McFadden R²
   , fsR2Label      :: Text                       -- ^ "R²" or "McFadden R²"
   , fsFitted       :: [Double]                   -- ^ fitted values
   , fsResiduals    :: [Double]                   -- ^ residuals
   , fsLinkName     :: Text                       -- ^ "identity"|"log"|"logit"|"sqrt"
-  , fsXColDegs     :: [(Text, Int)]              -- ^ x列と次数 (JS予測用)
-  , fsSmoothData   :: Maybe (Text, SmoothData)   -- ^ (x列名, スムーズデータ) 単回帰のみ
-  , fsModelSelect  :: Maybe (WAICResult, LOOResult) -- ^ WAIC/LOO-CV (--waic 時のみ)
+  , fsXColDegs     :: [(Text, Int)]              -- ^ [日本語]: x列と次数 (JS予測用) [English]: x column and its degree (for JS prediction)
+  , fsSmoothData   :: Maybe (Text, SmoothData)   -- ^ [日本語]: (x列名, スムーズデータ) 単回帰のみ [English]: (x column name, smooth data); single-regression only
+  , fsModelSelect  :: Maybe (WAICResult, LOOResult) -- ^ [日本語]: WAIC/LOO-CV (--waic 時のみ) [English]: WAIC/LOO-CV (only with --waic)
   } deriving (Show)
 
 mkFitSummary
@@ -132,7 +134,8 @@ mkFitSummary fam lnk colDegs mSmooth res = FitSummary
   , fsModelSelect  = Nothing
   }
 
--- | GLMM / LME のサマリー。
+-- | [日本語]: GLMM / LME のサマリー。
+--   [English]: Summary for GLMM / LME.
 data GLMMSummary = GLMMSummary
   { gsModelType    :: Text
   , gsFormula      :: Text
@@ -149,7 +152,7 @@ data GLMMSummary = GLMMSummary
   , gsLinkName     :: Text
   , gsXColDegs     :: [(Text, Int)]
   , gsSmoothData   :: Maybe (Text, SmoothData)
-  , gsModelSelect  :: Maybe (WAICResult, LOOResult)  -- ^ 条件付き WAIC/LOO (--waic 時)
+  , gsModelSelect  :: Maybe (WAICResult, LOOResult)  -- ^ [日本語]: 条件付き WAIC/LOO (--waic 時) [English]: conditional WAIC/LOO (with --waic)
   } deriving (Show)
 
 mkGLMMSummary
@@ -179,7 +182,8 @@ mkGLMMSummary fam lnk colDegs grpCol mSmooth gr = GLMMSummary
   , gsModelSelect  = Nothing
   }
 
--- | GP の1カーネルのフィット結果。
+-- | [日本語]: GP の1カーネルのフィット結果。
+--   [English]: Fit result for a single GP kernel.
 data GPKernelFit = GPKernelFit
   { gkLabel    :: Text
   , gkKernel   :: Kernel
@@ -189,28 +193,34 @@ data GPKernelFit = GPKernelFit
   , gkPredData :: GPPredData
   } deriving (Show)
 
--- | GP 回帰サマリー (複数カーネル比較)。
+-- | [日本語]: GP 回帰サマリー (複数カーネル比較)。
+--   [English]: GP regression summary (comparison across multiple kernels).
 data GPFitSummary = GPFitSummary
-  { gfKernelFits :: [GPKernelFit]   -- ^ LML 降順でソート済み
+  { gfKernelFits :: [GPKernelFit]   -- ^ [日本語]: LML 降順でソート済み [English]: sorted in descending order of LML
   , gfXCol       :: Text
   , gfYCol       :: Text
   , gfTrainXs    :: [Double]
   , gfTrainYs    :: [Double]
   } deriving (Show)
 
--- | HBM (ベイズ回帰) のサマリー。
--- 内部に LM 互換の 'FitSummary' を持ち、加えて DAG と MCMC チェーンを保持する。
+-- | [日本語]: HBM (ベイズ回帰) のサマリー。
+--   内部に LM 互換の 'FitSummary' を持ち、加えて DAG と MCMC チェーンを保持する。
+--   [English]: Summary for HBM (Bayesian regression). Holds an LM-compatible
+--   'FitSummary' internally, plus the DAG and the MCMC chain.
 data HBMRegSummary = HBMRegSummary
-  { hbmsFit           :: FitSummary    -- ^ 回帰スタイルの基本サマリー
+  { hbmsFit           :: FitSummary    -- ^ [日本語]: 回帰スタイルの基本サマリー
                                        -- (係数 = 事後平均、smoothData = 信用区間付き予測曲線)
-  , hbmsModelGraph    :: ModelGraph    -- ^ Mermaid DAG (モデル概要に表示)
-  , hbmsChain         :: Chain         -- ^ MCMC チェーン (回帰結果に診断プロット表示)
-  , hbmsParams        :: [Text]        -- ^ 全潜在変数名 (alpha/beta/sigma 等)
+                                       -- [English]: basic regression-style summary
+                                       -- (coefficients = posterior means, smoothData = prediction curve with credible interval)
+  , hbmsModelGraph    :: ModelGraph    -- ^ [日本語]: Mermaid DAG (モデル概要に表示) [English]: Mermaid DAG (shown in the model overview)
+  , hbmsChain         :: Chain         -- ^ [日本語]: MCMC チェーン (回帰結果に診断プロット表示) [English]: MCMC chain (diagnostic plots shown in the regression results)
+  , hbmsParams        :: [Text]        -- ^ [日本語]: 全潜在変数名 (alpha/beta/sigma 等) [English]: all latent variable names (alpha/beta/sigma etc.)
   , hbmsPosteriorRows :: [(Text, Double, Double, Double, Double)]
                                        -- ^ (name, mean, sd, q025, q975)
   } deriving (Show)
 
--- | モデルフィットの統一型。
+-- | [日本語]: モデルフィットの統一型。
+--   [English]: Unified type for a model fit.
 data ModelFit
   = RegFit   FitSummary
   | MixFit   GLMMSummary
@@ -218,7 +228,8 @@ data ModelFit
   | HBMFit   HBMRegSummary
   | NoRegFit
 
--- | 名前付き Vega-Lite プロット。
+-- | [日本語]: 名前付き Vega-Lite プロット。
+--   [English]: A named Vega-Lite plot.
 data NamedPlot = NamedPlot
   { npName :: Text
   , npTitle :: Text
@@ -241,16 +252,25 @@ writeAnalysisReport
 writeAnalysisReport path cfg df xCols yCol fit plots =
   TIO.writeFile path (buildHtml cfg df xCols yCol fit plots)
 
--- | レポートに含まれる Vega-Lite プロットを個別ファイルとして書き出す。
+-- | [日本語]: レポートに含まれる Vega-Lite プロットを個別ファイルとして書き出す。
 --
--- 各 'NamedPlot' を @<prefix>-<idx>-<name>.<ext>@ に出力する。
--- HTML 専用要素 (DAG, 事後分布表, 対話的予測 UI, ヒストグラム JS) は
--- vl-convert で変換できないためスキップする。
+--   各 'NamedPlot' を @<prefix>-<idx>-<name>.<ext>@ に出力する。
+--   HTML 専用要素 (DAG, 事後分布表, 対話的予測 UI, ヒストグラム JS) は
+--   vl-convert で変換できないためスキップする。
 --
--- 戻り値: 書き出したファイルパスのリスト。
+--   戻り値: 書き出したファイルパスのリスト。
+--   [English]: Writes the Vega-Lite plots contained in the report out as
+--   individual files.
+--
+--   Each 'NamedPlot' is written to @<prefix>-<idx>-<name>.<ext>@.
+--   HTML-only elements (DAG, posterior distribution table, interactive
+--   prediction UI, histogram JS) are skipped since they cannot be converted
+--   by vl-convert.
+--
+--   Return value: the list of file paths written.
 writeAnalysisReportPlots
-  :: FilePath        -- ^ ファイル名プレフィックス (拡張子なし)
-  -> OutputFormat    -- ^ PNG / SVG (HTML は 'writeAnalysisReport' を使うこと)
+  :: FilePath        -- ^ [日本語]: ファイル名プレフィックス (拡張子なし) [English]: file name prefix (without extension)
+  -> OutputFormat    -- ^ [日本語]: PNG / SVG (HTML は 'writeAnalysisReport' を使うこと) [English]: PNG / SVG (for HTML, use 'writeAnalysisReport')
   -> [NamedPlot]
   -> IO [FilePath]
 writeAnalysisReportPlots prefix fmt plots = do
@@ -527,7 +547,8 @@ gpModelRow bestLML rank fit =
        , "      </tr>"
        ]
 
--- | WAIC/LOO-CV の結果をスタットボックスで表示する HTML フラグメント。
+-- | [日本語]: WAIC/LOO-CV の結果をスタットボックスで表示する HTML フラグメント。
+--   [English]: HTML fragment displaying the WAIC/LOO-CV results as stat boxes.
 waicLooSection :: Maybe (WAICResult, LOOResult) -> [Text]
 waicLooSection Nothing = []
 waicLooSection (Just (w, l)) =
@@ -1771,27 +1792,37 @@ reportCss = T.unlines
 -- 複数モデル比較レポート
 -- ===========================================================================
 
--- | 比較レポートに含めるモデルエントリ。
+-- | [日本語]: 比較レポートに含めるモデルエントリ。
+--   [English]: A model entry included in a comparison report.
 data CompareEntry = CompareEntry
-  { ceLabel :: Text       -- ^ モデル表示名 (例: "LM (Pooled)")
-  , ceColor :: Text       -- ^ プロットの色 (CSS カラーコード, 例: "#e41a1c")
+  { ceLabel :: Text       -- ^ [日本語]: モデル表示名 (例: "LM (Pooled)") [English]: model display name (e.g. "LM (Pooled)")
+  , ceColor :: Text       -- ^ [日本語]: プロットの色 (CSS カラーコード, 例: "#e41a1c") [English]: plot color (CSS color code, e.g. "#e41a1c")
   , ceFit   :: ModelFit
   }
 
--- | 複数モデルを 1 つの HTML レポートに並べた比較レポートを生成する。
+-- | [日本語]: 複数モデルを 1 つの HTML レポートに並べた比較レポートを生成する。
 --
--- セクション構成:
---   1. データの特性 (1 度だけ)
---   2. モデル概要 (各モデルの種別・式・係数を 1 行ずつ並べた表)
---   3. 予測曲線オーバーレイ (全モデルの曲線 + 信用区間を 1 つの散布図に)
---   4. 係数比較 (forest plot 形式の表)
---   5. WAIC/LOO 比較 (利用可能なモデルのみ)
+--   セクション構成:
+--     1. データの特性 (1 度だけ)
+--     2. モデル概要 (各モデルの種別・式・係数を 1 行ずつ並べた表)
+--     3. 予測曲線オーバーレイ (全モデルの曲線 + 信用区間を 1 つの散布図に)
+--     4. 係数比較 (forest plot 形式の表)
+--     5. WAIC/LOO 比較 (利用可能なモデルのみ)
+--   [English]: Generates a comparison report that lines up multiple models
+--   in a single HTML report.
+--
+--   Section layout:
+--     1. Data characteristics (shown once).
+--     2. Model overview (a table listing each model's kind / formula / coefficients).
+--     3. Prediction curve overlay (all models' curves + credible intervals on one scatter plot).
+--     4. Coefficient comparison (a forest-plot-style table).
+--     5. WAIC/LOO comparison (only for models that have it available).
 writeComparisonReport
   :: FilePath
   -> AnalysisReportConfig
   -> DXD.DataFrame
-  -> [Text]              -- ^ x 列名 (典型的には 1 つ)
-  -> Text                -- ^ y 列名
+  -> [Text]              -- ^ [日本語]: x 列名 (典型的には 1 つ) [English]: x column names (typically one)
+  -> Text                -- ^ [日本語]: y 列名 [English]: y column name
   -> [CompareEntry]
   -> IO ()
 writeComparisonReport path cfg df xCols yCol entries =
@@ -1843,7 +1874,8 @@ compareNavBar cfg = T.unlines
   , "</nav>"
   ]
 
--- | モデル一覧表
+-- | [日本語]: モデル一覧表
+--   [English]: Model list table.
 compareModelsSection :: [CompareEntry] -> Text
 compareModelsSection entries = T.unlines $
   [ "<section id=\"sec-cmp-models\">"
@@ -1893,7 +1925,8 @@ modelR2Of (MixFit gs)  = gsR2 gs
 modelR2Of (HBMFit hs)  = fsR2 (hbmsFit hs)
 modelR2Of _            = 0
 
--- | 予測曲線オーバーレイ (描画は JS で実装)
+-- | [日本語]: 予測曲線オーバーレイ (描画は JS で実装)
+--   [English]: Prediction curve overlay (rendering is implemented in JS).
 compareOverlaySection :: [Text] -> Text -> Text
 compareOverlaySection xCols yCol = T.unlines
   [ "<section id=\"sec-cmp-overlay\">"
@@ -1908,7 +1941,8 @@ compareOverlaySection xCols yCol = T.unlines
   , "</section>"
   ]
 
--- | 係数比較表 (HBM は CI 付き)
+-- | [日本語]: 係数比較表 (HBM は CI 付き)
+--   [English]: Coefficient comparison table (HBM includes a CI).
 compareCoefSection :: [CompareEntry] -> Text
 compareCoefSection entries = T.unlines $
   [ "<section id=\"sec-cmp-coef\">"
@@ -1961,7 +1995,8 @@ extractCoefRows (HBMFit hs)  =
   | (n, m, _, lo, hi) <- hbmsPosteriorRows hs ]
 extractCoefRows _            = []
 
--- | WAIC / LOO 比較 (どれか 1 つでも持っていれば表示)
+-- | [日本語]: WAIC / LOO 比較 (どれか 1 つでも持っていれば表示)
+--   [English]: WAIC / LOO comparison (shown if at least one model has it).
 compareWaicSection :: [CompareEntry] -> Text
 compareWaicSection entries =
   let rows = [ (e, w, l) | e <- entries
@@ -2013,7 +2048,8 @@ waicLooOf (HBMFit hs) = fsModelSelect (hbmsFit hs)
 waicLooOf (MixFit gs) = gsModelSelect gs
 waicLooOf _           = Nothing
 
--- | オーバーレイ用の Vega-Lite spec を組み立てる JS (data URL 経由)
+-- | [日本語]: オーバーレイ用の Vega-Lite spec を組み立てる JS (data URL 経由)
+--   [English]: JS that assembles the Vega-Lite spec for the overlay (via data URLs).
 compareOverlayJS :: DXD.DataFrame -> [Text] -> Text -> [CompareEntry] -> Text
 compareOverlayJS df xCols yCol entries
   | length xCols /= 1 = ""
@@ -2063,7 +2099,8 @@ compareOverlayJS df xCols yCol entries
   where
     legendItem e = "{\"label\":\"" <> ceLabel e <> "\",\"color\":\"" <> ceColor e <> "\"}"
 
--- | 1 モデルの予測曲線レイヤー (smoothData があれば線 + バンド)
+-- | [日本語]: 1 モデルの予測曲線レイヤー (smoothData があれば線 + バンド)
+--   [English]: Prediction curve layer for one model (line + band if smoothData is present).
 modelLayer :: Text -> Text -> CompareEntry -> Text
 modelLayer xCol yCol e =
   case smoothDataFor (ceFit e) of

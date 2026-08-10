@@ -5,8 +5,24 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Structured warning / informational messaging shared by data loaders
--- and preprocessing.
+-- [日本語]: データローダ / 前処理が共有する構造化警告・情報メッセージ。
+--
+--   * 'LogEntry'        — 1 件のメッセージ (重大度 / コード / 本文 / ヒント)。
+--   * @LogReport@       — @[LogEntry]@ を包む 'Monoid' ラッパー。
+--   * 'Loaded'          — 各ローダが返す @(value, log)@ のペア。
+--   * 'printLogReport'  — stdout への整形出力。
+--   * @logEntriesAsHtml@ — 'Hanalyze.Viz.ReportBuilder' 用アダプタ。
+--
+-- 利用シナリオ:
+--
+-- @
+-- (df, lg) <- loadCsvSafe path  -- :: IO (Either ParseError (Loaded DataFrame))
+-- printLogReport lg              -- 警告を端末に出す
+-- when (isStrict opts && hasErrors lg) $ exitFailure
+-- @
+--
+-- [English]: Structured warning / informational messaging shared by data
+-- loaders and preprocessing.
 --
 --   * 'LogEntry'        — a single message (severity / code / body / hint).
 --   * @LogReport@       — a 'Monoid' wrapper around @[LogEntry]@.
@@ -14,11 +30,11 @@
 --   * 'printLogReport'  — stdout pretty printer.
 --   * @logEntriesAsHtml@ — adapter for 'Hanalyze.Viz.ReportBuilder'.
 --
--- 利用シナリオ:
+-- Usage scenario:
 --
 -- @
 -- (df, lg) <- loadCsvSafe path  -- :: IO (Either ParseError (Loaded DataFrame))
--- printLogReport lg              -- 警告を端末に出す
+-- printLogReport lg              -- print warnings to the terminal
 -- when (isStrict opts && hasErrors lg) $ exitFailure
 -- @
 module Hanalyze.DataIO.Log

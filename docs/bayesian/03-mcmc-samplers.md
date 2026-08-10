@@ -3,9 +3,9 @@
 > 🌐 **English** | [日本語](03-mcmc-samplers.ja.md)
 
 > Related demos:
-> - [`bench-mcmc`](../../demo/bayesian/BenchMCMC.hs) — MH/HMC/NUTS performance comparison (easy/hard cases)
-> - [`test-hmc-nuts`](../../demo/bayesian/TestHMCNUTS.hs) — HMC/NUTS sanity check on a 1D Gaussian
-> - [`hbm-example`](../../demo/bayesian/HBMExample.hs) — 4-chain NUTS + R-hat diagnostics
+> - [`bench-mcmc`](../../hanalyze-demos/demo/bayesian/BenchMCMC.hs) — MH/HMC/NUTS performance comparison (easy/hard cases)
+> - [`test-hmc-nuts`](../../hanalyze-demos/demo/bayesian/TestHMCNUTS.hs) — HMC/NUTS sanity check on a 1D Gaussian
+> - [`hbm-example`](../../hanalyze-demos/demo/bayesian/HBMExample.hs) — 4-chain NUTS + R-hat diagnostics
 
 ## Sampler comparison
 

@@ -8,17 +8,34 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- HBM の多相確率分布 ADT と密度・CDF。
+-- [日本語]: HBM の多相確率分布 ADT と密度・CDF。
 --
 -- 'Distribution' は値型 @a@ に多相な確率分布。 @a@ は @Double@ (サンプリング・
 -- 密度)、 @Reverse s Double@ (AD 勾配)、 @Track@ (依存追跡) を渡せる。 本モジュール
--- は型・名前・**事前密度** 'logDensity'・多変量密度・閉形式 CDF を提供し、 純粋
+-- は型・名前・__事前密度__ @logDensity@・多変量密度・閉形式 CDF を提供し、 純粋
 -- leaf 'Hanalyze.Model.HBM.Util' のみに依存する。
 --
--- ★観測尤度 'logDensityObs' / 'obsLogSum' は **含めない** (Eval 層へ残置。
--- Distribution→Eval の cycle を避けるため・request/254)。
+-- ★観測尤度 'logDensityObs' / 'obsLogSum' は __含めない__ (Eval 層へ残置。
+-- Distribution→Eval の cycle を避けるため)。
 --
--- Phase 58.3 で 'Hanalyze.Model.HBM' から責務分離して抽出。 数値は 1 bit 不変。
+-- 責務分離により 'Hanalyze.Model.HBM' から抽出。 数値は 1 bit 不変。
+--
+-- [English]: HBM's polymorphic probability-distribution ADT, densities, and
+-- CDFs.
+--
+-- 'Distribution' is a probability distribution polymorphic in its value
+-- type @a@. @a@ can be @Double@ (sampling and density), @Reverse s Double@
+-- (AD gradient), or @Track@ (dependency tracking). This module provides the
+-- type, names, the __prior density__ @logDensity@, multivariate densities,
+-- and closed-form CDFs, and depends only on the pure leaf
+-- 'Hanalyze.Model.HBM.Util'.
+--
+-- ★The observation likelihood 'logDensityObs' \/ 'obsLogSum' is
+-- __deliberately excluded__ (kept in the Eval layer to avoid a
+-- Distribution→Eval cycle).
+--
+-- Extracted from 'Hanalyze.Model.HBM' as part of a responsibility
+-- split. Numerically bit-identical.
 module Hanalyze.Model.HBM.Distribution
   ( Distribution (..)
   , distName
@@ -44,7 +61,7 @@ module Hanalyze.Model.HBM.Distribution
 
 import Data.List (mapAccumL, zip4)
 import Data.Text (Text)
--- Phase 92 B3: 'logDensityRD' (AD 定数正規化項の畳み込み) 用。 多相 'logDensity'
+-- Phase 92 B3: 'logDensityRD' (AD 定数正規化項の畳み込み) 用。 多相 @logDensity@
 -- 本体は AD 非依存のまま。
 import Data.Reflection (Reifies)
 import qualified Numeric.AD.Internal.Reverse.Double as ADRD
@@ -92,56 +109,105 @@ data Distribution a
     -- ^ @MvNormal(μ, Σ)@: multivariate normal (observation-only).
     --   @μ@ is a length-@k@ mean vector, @Σ@ is the @k×k@
     --   symmetric-positive-definite covariance. Pass @k@-vector
-    --   observations through 'observeMV'. Density is computed via
-    --   Cholesky. /Not supported/ as a latent ('sample' returns 0
+    --   observations through @observeMV@. Density is computed via
+    --   Cholesky. /Not supported/ as a latent (@sample@ returns 0
     --   density).
   | MvNormalChol [a] [a] [[a]]
     -- ^ @MvNormalChol(μ, σ, L)@: multivariate normal parameterized by a
     --   scale vector @σ@ (length @k@) and a /correlation/ Cholesky factor
-    --   @L@ (lower-triangular @k×k@, typically from 'lkjCorrCholesky').
+    --   @L@ (lower-triangular @k×k@, typically from @lkjCorrCholesky@).
     --   The covariance is @Σ = (diag σ · L)(diag σ · L)ᵀ@. The density
     --   uses the scaled Cholesky @M = diag σ · L@ directly (forward
     --   substitution, no re-decomposition) — numerically the most stable
     --   parameterization (Stan's @multi_normal_cholesky@ idiom).
-    --   Observation-only; pass @k@-vectors via 'observeMV'.
+    --   Observation-only; pass @k@-vectors via @observeMV@.
   | MvNormalGpRBF [a] a a a
-    -- ^ Phase 95 B-dsl: @MvNormalGpRBF(x, α, ρ, σ)@ — zero-mean GP 回帰尤度
+    -- ^ [日本語]: @MvNormalGpRBF(x, α, ρ, σ)@ — zero-mean GP 回帰尤度
     --   専用の多変量正規 (observation-only)。 共分散は RBF (exp-quad) カーネル
     --   @Σ_ij = α² exp(-0.5 (x_i-x_j)²/ρ²) + [i=j](1e-10 + σ)@ で内部構築する。
     --   汎用 'MvNormal' と密度は同値だが、 カーネルの役割 (x/α/ρ/σ) を型で明示
-    --   保持することで、 勾配コンパイラ ('gpRBFAnalyticVG') が **Cholesky を AD
-    --   tape に載せない閉形式随伴** (@∂Σ/∂α=2K'/α@・@∂Σ/∂ρ=K'∘d²/ρ³@・
+    --   保持することで、 勾配コンパイラ (@gpRBFAnalyticVG@) が
+    --   __Cholesky を AD tape に載せない閉形式随伴__
+    --   (@∂Σ/∂α=2K'/α@・@∂Σ/∂ρ=K'∘d²/ρ³@・
     --   @∂Σ/∂σ=I@) を使える。 @x@ は共変量 data (定数)、 α/ρ/σ は latent。
-    --   観測は length-@k@ ベクトルを 'observeMV' で渡す (μ=0 固定)。
+    --   観測は length-@k@ ベクトルを @observeMV@ で渡す (μ=0 固定)。
+    --   [English]: @MvNormalGpRBF(x, α, ρ, σ)@ — a multivariate normal
+    --   dedicated to zero-mean GP regression likelihoods (observation-only).
+    --   The covariance is built internally from an RBF (exp-quad) kernel
+    --   @Σ_ij = α² exp(-0.5 (x_i-x_j)²/ρ²) + [i=j](1e-10 + σ)@. Its density
+    --   is equivalent to the generic 'MvNormal', but by keeping the
+    --   kernel's roles (x\/α\/ρ\/σ) explicit at the type level, the
+    --   gradient compiler (@gpRBFAnalyticVG@) can use a
+    --   __closed-form adjoint that never puts the Cholesky on the AD tape__
+    --   (@∂Σ/∂α=2K'/α@; @∂Σ/∂ρ=K'∘d²/ρ³@; @∂Σ/∂σ=I@). @x@ is covariate
+    --   data (a constant); α\/ρ\/σ are latent. Observations are passed as
+    --   length-@k@ vectors via @observeMV@ (with @μ@ fixed at 0).
   | HmmForwardNormal [a] [[a]] [a] a
-    -- ^ Phase 92 A2: @HmmForwardNormal(π_0, trans, μs, σ)@ — Normal emission の
+    -- ^ [日本語]: @HmmForwardNormal(π_0, trans, μs, σ)@ — Normal emission の
     --   隠れマルコフモデル周辺尤度 (observation-only)。 観測列 y_{1..T} 全体を
-    --   1 つの多変量観測として 'observeMV' で渡す (@observeMV nm d [ys]@)。
+    --   1 つの多変量観測として @observeMV@ で渡す (@observeMV nm d [ys]@)。
     --   密度は @'hmmForwardLogLik' π_0 trans emit@ (emit[t][k] =
     --   Normal(μs[k], σ) の logpdf(y_t)) と同値。 状態役割 (π_0/遷移行/emission
-    --   平均/σ) を型で明示保持することで、 勾配コンパイラ ('hmmAnalyticVG') が
-    --   **forward-backward の閉形式随伴** (∂logL/∂emit = γ_t・∂logL/∂T_ij = ξ
+    --   平均/σ) を型で明示保持することで、 勾配コンパイラ (@hmmAnalyticVG@) が
+    --   __forward-backward の閉形式随伴__ (∂logL/∂emit = γ_t・∂logL/∂T_ij = ξ
     --   集計・AD tape ゼロ) を使える。 π_0 は非正規化可 (log 空間で加算されるのみ)。
+    --   [English]: @HmmForwardNormal(π_0, trans, μs, σ)@ — the marginal
+    --   likelihood of a hidden Markov model with Normal emissions
+    --   (observation-only). The whole observation sequence y_{1..T} is
+    --   passed as a single multivariate observation via @observeMV@
+    --   (@observeMV nm d [ys]@). Its density is equivalent to
+    --   @'hmmForwardLogLik' π_0 trans emit@ (where emit[t][k] = the log
+    --   pdf of y_t under Normal(μs[k], σ)). By keeping the state roles
+    --   (π_0 \/ transition matrix \/ emission mean \/ σ) explicit at the
+    --   type level, the gradient compiler (@hmmAnalyticVG@) can use a
+    --   __closed-form forward-backward adjoint__ (∂logL/∂emit = γ_t;
+    --   ∂logL/∂T_ij = aggregated ξ; zero AD tape). @π_0@ may be
+    --   unnormalized (it is only ever summed in log space).
   | ArmaNormal a a a a
-    -- ^ Phase 101 A2: @ArmaNormal(μ, φ, θ, σ)@ — ARMA(1,1) の条件付き尤度
+    -- ^ [日本語]: @ArmaNormal(μ, φ, θ, σ)@ — ARMA(1,1) の条件付き尤度
     --   (observation-only)。 観測列 y_{1..T} 全体を 1 つの多変量観測として
-    --   'observeMV' で渡す (@observeMV nm d [ys]@)。 密度は Stan 原典 arma11 の
+    --   @observeMV@ で渡す (@observeMV nm d [ys]@)。 密度は Stan 原典 arma11 の
     --   err 逐次再帰 (@err_1 = y_1 − (μ+φμ)@・@err_t = y_t − μ − φ·y_{t−1} −
     --   θ·err_{t−1}@・@err_t ~ Normal(0, σ)@) と同値。 役割 (μ/φ/θ/σ) を型で
-    --   明示保持することで、 勾配コンパイラ ('armaAnalyticVG') が **逆向き
-    --   1 パスの閉形式随伴** (@ē_t = −e_t/σ² − θ·ē_{t+1}@ の線形随伴再帰・
+    --   明示保持することで、 勾配コンパイラ (@armaAnalyticVG@) が
+    --   __逆向き 1 パスの閉形式随伴__
+    --   (@ē_t = −e_t/σ² − θ·ē_{t+1}@ の線形随伴再帰・
     --   AD tape ゼロ) を使える。
+    --   [English]: @ArmaNormal(μ, φ, θ, σ)@ — the conditional likelihood of
+    --   an ARMA(1,1) process (observation-only). The whole observation
+    --   sequence y_{1..T} is passed as a single multivariate observation
+    --   via @observeMV@ (@observeMV nm d [ys]@). Its density is equivalent
+    --   to the original Stan arma11 err recursion (@err_1 = y_1 −
+    --   (μ+φμ)@; @err_t = y_t − μ − φ·y_{t−1} − θ·err_{t−1}@; @err_t ~
+    --   Normal(0, σ)@). By keeping the roles (μ\/φ\/θ\/σ) explicit at the
+    --   type level, the gradient compiler (@armaAnalyticVG@) can use a
+    --   __closed-form adjoint computed in a single backward pass__ (the
+    --   linear adjoint recursion @ē_t = −e_t/σ² − θ·ē_{t+1}@; zero AD
+    --   tape).
   | GradedResponseIrt [a] [Int] [Double] [[Double]]
-    -- ^ Phase 101 A3: @GradedResponseIrt(θs, ncats, δs, γs)@ — graded response
+    -- ^ [日本語]: @GradedResponseIrt(θs, ncats, δs, γs)@ — graded response
     --   IRT (順序ロジット・BUGS bones) の尤度 (observation-only)。 @θs@ =
     --   受験者能力 (latent・唯一の param 側)、 @ncats[j]@/@δs[j]@/@γs[j][k]@ =
-    --   項目 j のカテゴリ数/識別力/カットポイント (**定数データ**)。 観測は
+    --   項目 j のカテゴリ数/識別力/カットポイント (__定数データ__)。 観測は
     --   grade 行列 (nChild×nItem 行優先・1-based カテゴリ・欠測 = −1) を
-    --   'observeMV' で 1 観測として渡す (@observeMV nm d [grades]@)。
+    --   @observeMV@ で 1 観測として渡す (@observeMV nm d [grades]@)。
     --   密度は @Q_k = invlogit(δ(θ−γ_k))@ の隣接差 p のカテゴリ対数確率と
     --   同値。 θ_i (スカラ) 毎に独立なため、 勾配コンパイラ
-    --   ('gradedIrtAnalyticVG') が **解析勾配** (@dQ/dθ = δ·Q(1−Q)@ の差分・
+    --   (@gradedIrtAnalyticVG@) が __解析勾配__ (@dQ/dθ = δ·Q(1−Q)@ の差分・
     --   AD tape ゼロ) を使える。
+    --   [English]: @GradedResponseIrt(θs, ncats, δs, γs)@ — the likelihood
+    --   of a graded response IRT model (ordered-logit \/ BUGS "bones",
+    --   observation-only). @θs@ = respondent ability (latent; the only
+    --   parameter side), @ncats[j]@\/@δs[j]@\/@γs[j][k]@ = item @j@'s
+    --   category count \/ discrimination \/ cutpoints (__constant data__).
+    --   Observations are passed as a single grade matrix (nChild×nItem,
+    --   row-major, 1-based categories, −1 for missing) via @observeMV@
+    --   (@observeMV nm d [grades]@). Its density is equivalent to the
+    --   category log-probability from the adjacent difference of
+    --   @Q_k = invlogit(δ(θ−γ_k))@. Since it is independent per scalar
+    --   θ_i, the gradient compiler (@gradedIrtAnalyticVG@) can use an
+    --   __analytic gradient__ (the difference @dQ/dθ = δ·Q(1−Q)@; zero
+    --   AD tape).
   | NegativeBinomial a a
     -- ^ @NegativeBinomial(μ, α)@ (PyMC parameterization).
     --   @mean = μ@, @var = μ + μ²/α@ (Poisson in the limit
@@ -151,7 +217,7 @@ data Distribution a
     -- ^ @Multinomial(n, [p_0, …, p_{K-1}])@ (observation-only).
     --   @n@ is the trial count and @p@ the probability vector.
     --   Observations are @K@-dimensional count vectors summing to @n@,
-    --   passed via 'observeMV'.
+    --   passed via @observeMV@.
   | ZeroInflatedPoisson a a
     -- ^ @ZeroInflatedPoisson(ψ, λ)@: zero-inflated Poisson.
     --   @ψ ∈ [0, 1]@ is the structural-zero probability.
@@ -187,106 +253,194 @@ data Distribution a
     --   @κ → 0@ approaches uniform; @κ → ∞@ approaches
     --   @Normal(μ, 1/√κ)@.
   | SkewNormal a a a
-    -- ^ @SkewNormal(μ location, σ scale, α shape)@ (Phase 37-A2).
+    -- ^ [日本語]: @SkewNormal(μ location, σ scale, α shape)@。
     --   @pdf = (2/σ) φ((x−μ)/σ) Φ(α(x−μ)/σ)@.
     --   @α = 0@ で標準正規。 @α > 0@ で右側に歪み、 @α < 0@ で左側。
     --   Sample は Henze 1986: @δ = α/√(1+α²)@,
     --   @X = μ + σ(δ |U₀| + √(1−δ²) U₁)@ with i.i.d. @U_i ~ N(0,1)@.
+    --   [English]: @SkewNormal(μ location, σ scale, α shape)@.
+    --   @pdf = (2/σ) φ((x−μ)/σ) Φ(α(x−μ)/σ)@. @α = 0@ gives the standard
+    --   normal; @α > 0@ skews right, @α < 0@ skews left. Sampling follows
+    --   Henze 1986: @δ = α/√(1+α²)@,
+    --   @X = μ + σ(δ |U₀| + √(1−δ²) U₁)@ with i.i.d. @U_i ~ N(0,1)@.
   | Logistic a a
-    -- ^ @Logistic(μ location, s scale)@ (Phase 37-A2).
+    -- ^ [日本語]: @Logistic(μ location, s scale)@。
     --   @pdf = e^{−z} / (s(1+e^{−z})²)@ with @z = (x−μ)/s@.
     --   平均 @μ@、 分散 @s²π²/3@。 closed-form CDF あり。
+    --   [English]: @Logistic(μ location, s scale)@.
+    --   @pdf = e^{−z} / (s(1+e^{−z})²)@ with @z = (x−μ)/s@. Mean @μ@,
+    --   variance @s²π²/3@. Has a closed-form CDF.
   | Gumbel a a
-    -- ^ @Gumbel(μ location, β scale)@ (Phase 37-A2、 最大値型極値分布)。
+    -- ^ [日本語]: @Gumbel(μ location, β scale)@ (最大値型極値分布)。
     --   @pdf = (1/β) exp(−z − e^{−z})@ with @z = (x−μ)/β@.
     --   平均 @μ + βγ@ (γ ≈ 0.5772 オイラー定数)、 分散 @β²π²/6@。
     --   closed-form CDF: @F(x) = exp(−exp(−z))@.
+    --   [English]: @Gumbel(μ location, β scale)@ (a maximum-type extreme
+    --   value distribution). @pdf = (1/β) exp(−z − e^{−z})@ with
+    --   @z = (x−μ)/β@. Mean @μ + βγ@ (γ ≈ 0.5772, the Euler-Mascheroni
+    --   constant), variance @β²π²/6@. Closed-form CDF:
+    --   @F(x) = exp(−exp(−z))@.
   | AsymmetricLaplace a a a
-    -- ^ @AsymmetricLaplace(b scale > 0, κ asymmetry > 0, μ location)@
-    --   (Phase 37-A2、 PyMC parameterization、 分位点回帰の尤度)。
+    -- ^ [日本語]: @AsymmetricLaplace(b scale > 0, κ asymmetry > 0, μ location)@
+    --   (PyMC parameterization、 分位点回帰の尤度)。
     --   @pdf = b/(κ+1/κ) · exp(−b·κ·(x−μ))@ for @x ≥ μ@、
     --   @pdf = b/(κ+1/κ) · exp(b/κ·(x−μ))@ for @x < μ@。
     --   @κ = 1@ で対称ラプラス、 @κ > 1@ で右側裾長。
+    --   [English]: @AsymmetricLaplace(b scale > 0, κ asymmetry > 0,
+    --   μ location)@ (PyMC parameterization; the likelihood used for
+    --   quantile regression). @pdf = b/(κ+1/κ) · exp(−b·κ·(x−μ))@ for
+    --   @x ≥ μ@, @pdf = b/(κ+1/κ) · exp(b/κ·(x−μ))@ for @x < μ@. @κ = 1@
+    --   gives the symmetric Laplace; @κ > 1@ gives a heavier right tail.
   | OrderedLogistic a [a]
-    -- ^ @OrderedLogistic(η linear predictor, cuts = [c₁, …, c_{K-1}])@
-    --   (Phase 37-A3、 順序ロジット回帰)。
+    -- ^ [日本語]: @OrderedLogistic(η linear predictor, cuts = [c₁, …, c_{K-1}])@
+    --   (順序ロジット回帰)。
     --   観測 @y ∈ {0, …, K-1}@、
     --   @P(y=k) = σ(c_{k+1} − η) − σ(c_k − η)@ with
     --   @σ(x) = 1/(1+e^{-x})@, @c_0 = −∞, c_K = +∞@.
-    --   cuts は **increasing** 列、 入力側で確保すること。
+    --   cuts は __increasing__ 列、 入力側で確保すること。
     --   observation-only。
+    --   [English]: @OrderedLogistic(η linear predictor, cuts = [c₁, …,
+    --   c_{K-1}])@ (ordered-logit regression). Observations
+    --   @y ∈ {0, …, K-1}@,
+    --   @P(y=k) = σ(c_{k+1} − η) − σ(c_k − η)@ with
+    --   @σ(x) = 1/(1+e^{-x})@, @c_0 = −∞, c_K = +∞@. @cuts@ must be an
+    --   __increasing__ sequence; ensure this on the caller's side.
+    --   Observation-only.
   | DiscreteUniform Int Int
-    -- ^ @DiscreteUniform(lo, hi)@ (Phase 37-A3、 包含両端)。
+    -- ^ [日本語]: @DiscreteUniform(lo, hi)@ (両端を含む)。
     --   @pmf = 1/(hi-lo+1)@ for @lo ≤ y ≤ hi@。 observation-only。
+    --   [English]: @DiscreteUniform(lo, hi)@ (both endpoints inclusive).
+    --   @pmf = 1/(hi-lo+1)@ for @lo ≤ y ≤ hi@. Observation-only.
   | Geometric a
-    -- ^ @Geometric(p)@ (Phase 37-A3、 PyMC 慣例 = 初回成功までの試行回数)。
+    -- ^ [日本語]: @Geometric(p)@ (PyMC 慣例 = 初回成功までの試行回数)。
     --   support @y = 1, 2, 3, …@、 @pmf = (1−p)^{y-1} p@。
     --   observation-only。
+    --   [English]: @Geometric(p)@ (PyMC convention = number of trials up
+    --   to and including the first success). Support @y = 1, 2, 3, …@,
+    --   @pmf = (1−p)^{y-1} p@. Observation-only.
   | HyperGeometric Int Int Int
-    -- ^ @HyperGeometric(N total, K successes, n draws)@ (Phase 37-A3、
-    --   非復元抽出の成功数)。
+    -- ^ [日本語]: @HyperGeometric(N total, K successes, n draws)@
+    --   (非復元抽出の成功数)。
     --   @pmf = C(K, y) C(N-K, n-y) / C(N, n)@、
     --   support @max(0, n+K-N) ≤ y ≤ min(n, K)@。 observation-only。
+    --   [English]: @HyperGeometric(N total, K successes, n draws)@ (the
+    --   number of successes in sampling without replacement).
+    --   @pmf = C(K, y) C(N-K, n-y) / C(N, n)@,
+    --   support @max(0, n+K-N) ≤ y ≤ min(n, K)@. Observation-only.
   | ZeroInflatedNegativeBinomial a a a
-    -- ^ @ZeroInflatedNegativeBinomial(ψ, μ, α)@ (Phase 37-A3、 過分散ゼロ過剰)。
+    -- ^ [日本語]: @ZeroInflatedNegativeBinomial(ψ, μ, α)@ (過分散ゼロ過剰)。
     --   @P(0) = ψ + (1-ψ) (α/(α+μ))^α@、
     --   @P(k>0) = (1-ψ) · NegBin(k | μ, α)@。
+    --   [English]: @ZeroInflatedNegativeBinomial(ψ, μ, α)@ (overdispersed,
+    --   zero-inflated). @P(0) = ψ + (1-ψ) (α/(α+μ))^α@,
+    --   @P(k>0) = (1-ψ) · NegBin(k | μ, α)@.
   | MvStudentT a [a] [[a]]
-    -- ^ @MvStudentT(ν, μ, Σ)@ (Phase 37-A4、 ロバスト多変量)。
+    -- ^ [日本語]: @MvStudentT(ν, μ, Σ)@ (ロバスト多変量)。
     --   @ν > 0@ 自由度、 @μ@ は @k@ 次元平均、 @Σ@ は @k×k@ SPD scale matrix。
     --   観測 (observation-only)、 @y :: [Double]@ は flatten された
     --   @k@ ベクトル列 (@observeMV@ で渡す)。
     --   @ν → ∞@ で MvNormal に収束。
+    --   [English]: @MvStudentT(ν, μ, Σ)@ (a robust multivariate
+    --   distribution). @ν > 0@ degrees of freedom, @μ@ is a @k@-dimensional
+    --   mean, @Σ@ is a @k×k@ SPD scale matrix. Observation-only;
+    --   @y :: [Double]@ is a flattened sequence of @k@-vectors (passed via
+    --   @observeMV@). Converges to MvNormal as @ν → ∞@.
   | DirichletMultinomial Int [a]
-    -- ^ @DirichletMultinomial(n trials, α concentration K-vector)@
-    --   (Phase 37-A4、 過分散 multinomial)。
+    -- ^ [日本語]: @DirichletMultinomial(n trials, α concentration K-vector)@
+    --   (過分散 multinomial)。
     --   観測 y は @K@ 次元 counts、 @Σ yᵢ = n@。
     --   @logpmf = log Γ(α₀) − log Γ(α₀+n)
     --           + Σ [log Γ(yᵢ+αᵢ) − log Γ(αᵢ)]
     --           + log n! − Σ log yᵢ!@、 @α₀ = Σαᵢ@.
     --   observation-only。
+    --   [English]: @DirichletMultinomial(n trials, α concentration
+    --   K-vector)@ (an overdispersed multinomial). Observations @y@ are
+    --   @K@-dimensional counts with @Σ yᵢ = n@.
+    --   @logpmf = log Γ(α₀) − log Γ(α₀+n)
+    --           + Σ [log Γ(yᵢ+αᵢ) − log Γ(αᵢ)]
+    --           + log n! − Σ log yᵢ!@, @α₀ = Σαᵢ@.
+    --   Observation-only.
   | Triangular a a a
-    -- ^ @Triangular(lower, c mode, upper)@ (Phase 39-A1、 弱情報事前)。
+    -- ^ [日本語]: @Triangular(lower, c mode, upper)@ (弱情報事前)。
     --   Support @[lower, upper]@、 @lower ≤ c ≤ upper@。
     --   @pdf = 2(x-lower)/((upper-lower)(c-lower))@ for @lower ≤ x ≤ c@、
     --   @pdf = 2(upper-x)/((upper-lower)(upper-c))@ for @c < x ≤ upper@。
     --   closed-form CDF / 逆 CDF sample。
+    --   [English]: @Triangular(lower, c mode, upper)@ (a weakly
+    --   informative prior). Support @[lower, upper]@, @lower ≤ c ≤ upper@.
+    --   @pdf = 2(x-lower)/((upper-lower)(c-lower))@ for @lower ≤ x ≤ c@,
+    --   @pdf = 2(upper-x)/((upper-lower)(upper-c))@ for @c < x ≤ upper@.
+    --   Has a closed-form CDF and inverse-CDF sampling.
   | Kumaraswamy a a
-    -- ^ @Kumaraswamy(a, b)@ (Phase 39-A1、 Beta 代替、 closed-form CDF)。
+    -- ^ [日本語]: @Kumaraswamy(a, b)@ (Beta の代替、 closed-form CDF)。
     --   Support @(0, 1)@、 @pdf = a·b·x^{a-1}(1-x^a)^{b-1}@。
     --   CDF @= 1 - (1-x^a)^b@、 sample @x = (1-(1-u)^{1/b})^{1/a}@。
+    --   [English]: @Kumaraswamy(a, b)@ (a Beta alternative with a
+    --   closed-form CDF). Support @(0, 1)@,
+    --   @pdf = a·b·x^{a-1}(1-x^a)^{b-1}@. CDF @= 1 - (1-x^a)^b@; sample
+    --   @x = (1-(1-u)^{1/b})^{1/a}@.
   | Rice a a
-    -- ^ @Rice(ν, σ)@ (Phase 39-A1、 MRI / Rayleigh 拡張)。
+    -- ^ [日本語]: @Rice(ν, σ)@ (MRI / Rayleigh 拡張)。
     --   Support @x ≥ 0@、 @ν ≥ 0@、 @σ > 0@。
     --   @pdf = (x/σ²) exp(-(x²+ν²)/(2σ²)) I_0(xν/σ²)@、
     --   @ν = 0@ で Rayleigh(σ)。 @logBesselI0@ で評価。
     --   sample: @X = √(Y₁² + Y₂²)@ with @Y₁ ~ N(ν, σ²), Y₂ ~ N(0, σ²)@。
+    --   [English]: @Rice(ν, σ)@ (an MRI \/ Rayleigh extension). Support
+    --   @x ≥ 0@, @ν ≥ 0@, @σ > 0@.
+    --   @pdf = (x/σ²) exp(-(x²+ν²)/(2σ²)) I_0(xν/σ²)@; reduces to
+    --   Rayleigh(σ) at @ν = 0@. Evaluated via @logBesselI0@. Sample:
+    --   @X = √(Y₁² + Y₂²)@ with @Y₁ ~ N(ν, σ²), Y₂ ~ N(0, σ²)@.
   | DiscreteWeibull a a
-    -- ^ @DiscreteWeibull(q, β)@ (Phase 39-A1、 整数 Weibull)。
+    -- ^ [日本語]: @DiscreteWeibull(q, β)@ (整数 Weibull)。
     --   Support @{0, 1, 2, …}@、 @0 < q < 1, β > 0@。
     --   @P(X ≤ k) = 1 - q^{(k+1)^β}@、
     --   @pmf(k) = q^{k^β} - q^{(k+1)^β}@。 observation-only。
     --   sample: @k = ⌈(log(1-u)/log q)^{1/β}⌉ - 1@。
+    --   [English]: @DiscreteWeibull(q, β)@ (an integer-valued Weibull).
+    --   Support @{0, 1, 2, …}@, @0 < q < 1, β > 0@.
+    --   @P(X ≤ k) = 1 - q^{(k+1)^β}@,
+    --   @pmf(k) = q^{k^β} - q^{(k+1)^β}@. Observation-only. Sample:
+    --   @k = ⌈(log(1-u)/log q)^{1/β}⌉ - 1@.
   | Wishart a [[a]]
-    -- ^ @Wishart(ν degrees, V scale matrix)@ (Phase 39-A2、 共分散プライアの直接表現)。
+    -- ^ [日本語]: @Wishart(ν degrees, V scale matrix)@ (共分散プライアの直接表現)。
     --   @ν > k-1@、 @V@ は @k×k@ SPD scale matrix。
     --   観測 (observation-only)、 @k×k@ 観測行列 W を flatten で渡す
     --   (長さ @k²@、 row-major)。 @observeMV@ で渡す想定。
     --   @logpdf(W) = -(νk/2) log 2 - (ν/2) log|V| - log Γ_k(ν/2)
     --              + ((ν-k-1)/2) log|W| - (1/2) tr(V⁻¹ W)@、
     --   @log Γ_k(z) = (k(k-1)/4) log π + Σ_{i=1}^k log Γ((z+1-i)/2)@。
+    --   [English]: @Wishart(ν degrees, V scale matrix)@ (a direct
+    --   representation of a covariance prior). @ν > k-1@, @V@ is a
+    --   @k×k@ SPD scale matrix. Observation-only; the @k×k@ observation
+    --   matrix W is passed flattened (length @k²@, row-major), intended
+    --   to be passed via @observeMV@.
+    --   @logpdf(W) = -(νk/2) log 2 - (ν/2) log|V| - log Γ_k(ν/2)
+    --              + ((ν-k-1)/2) log|W| - (1/2) tr(V⁻¹ W)@,
+    --   @log Γ_k(z) = (k(k-1)/4) log π + Σ_{i=1}^k log Γ((z+1-i)/2)@.
   | Bound (Distribution a) (Maybe a) (Maybe a)
-    -- ^ @Bound(d, lo, hi)@ (Phase 39-A3、 PyMC 互換)。
+    -- ^ [日本語]: @Bound(d, lo, hi)@ (PyMC 互換)。
     --   @d@ の支持を @[lo, hi]@ に制限する。 'Truncated' とほぼ同義
     --   (実装も委譲)。 'Nothing' は @-∞ / +∞@。
     --   違いは語用論のみ: PyMC では prior 寄りで Bound、 観測寄りで
     --   Truncated を使う慣例があるため API として並べた。
+    --   [English]: @Bound(d, lo, hi)@ (PyMC-compatible). Restricts the
+    --   support of @d@ to @[lo, hi]@. Nearly synonymous with 'Truncated'
+    --   (and delegates to its implementation). 'Nothing' bounds mean
+    --   @-∞ \/ +∞@. The difference is purely one of convention: PyMC
+    --   uses @Bound@ on the prior side and @Truncated@ on the
+    --   observation side, so both are exposed in the API to match.
   | OrderedProbit a [a]
-    -- ^ @OrderedProbit(η linear predictor, cuts = [c₁, …, c_{K-1}])@
-    --   (Phase 39-A3、 順序プロビット回帰)。
+    -- ^ [日本語]: @OrderedProbit(η linear predictor, cuts = [c₁, …, c_{K-1}])@
+    --   (順序プロビット回帰)。
     --   @P(y=k) = Φ(c_{k+1} − η) − Φ(c_k − η)@ with
     --   @c_0 = −∞, c_K = +∞@、 Φ は標準正規 CDF (@phiCdfA@)。
     --   cuts は increasing 列、 入力側で確保。 observation-only。
+    --   [English]: @OrderedProbit(η linear predictor, cuts = [c₁, …,
+    --   c_{K-1}])@ (ordered-probit regression).
+    --   @P(y=k) = Φ(c_{k+1} − η) − Φ(c_k − η)@ with
+    --   @c_0 = −∞, c_K = +∞@, where Φ is the standard normal CDF
+    --   (@phiCdfA@). @cuts@ must be an increasing sequence, ensured on the
+    --   caller's side. Observation-only.
   deriving (Show, Functor)
 
 -- | Display name of a distribution constructor (e.g. @\"Normal\"@).
@@ -342,12 +496,22 @@ distName Wishart{}              = "Wishart"
 distName Bound{}                = "Bound"
 distName OrderedProbit{}        = "OrderedProbit"
 
--- | 分布名 → NUTS が探索する **unconstrained 変換種別**。 latent の制約付き台
+-- | [日本語]: 分布名 → NUTS が探索する __unconstrained 変換種別__。 latent の制約付き台
 -- (正値・単位区間) を実数空間へ写す種別を返す。
 --
--- ★これが分布→変換の **唯一の表**。 'getTransforms'
+-- ★これが分布→変換の __唯一の表__。 @getTransforms@
 -- (@Gradient@・node walk 版) も本関数へ委譲する。 分布を latent 化して台が
 -- 変わる場合はここを更新する (1 箇所)。 未列挙は保守的に 'UnconstrainedT'。
+--
+-- [English]: Distribution name → the __unconstrained transform kind__
+-- that NUTS explores. Returns the kind that maps a latent's constrained
+-- support (positive \/ unit interval) to real space.
+--
+-- ★This is the __single source of truth__ for the distribution→transform
+-- mapping. @getTransforms@ (the @Gradient@ \/ node-walk version) also
+-- delegates to this function. Update it here (one place) whenever a
+-- distribution's support changes when latent-ized. Anything not
+-- enumerated conservatively falls back to 'UnconstrainedT'.
 nameToTransform :: Text -> Transform
 nameToTransform "Exponential"  = PositiveT
 nameToTransform "Gamma"        = PositiveT
@@ -363,7 +527,9 @@ nameToTransform "BetaBinomial" = UnitIntervalT
 nameToTransform _              = UnconstrainedT -- Normal/StudentT/Cauchy/Uniform 等
 -- 注: Uniform の真の制約変換は logit-on-(lo,hi) だが現状未実装 (unconstrained 扱い)。
 
--- | 分布 (ADT) → unconstrained 変換種別。 'nameToTransform' の値レベル版。
+-- | [日本語]: 分布 (ADT) → unconstrained 変換種別。 'nameToTransform' の値レベル版。
+--   [English]: Distribution (ADT) → unconstrained transform kind. The
+--   value-level counterpart of 'nameToTransform'.
 distToTransform :: Distribution a -> Transform
 distToTransform = nameToTransform . distName
 
@@ -385,9 +551,14 @@ multinomialLogDensity n probs counts
           dotPart = sum (zipWith (\c p -> realToFrac c * log p) counts probs)
       in logFactN - logFactSum + dotPart
 
--- | Log density of an 'MvNormal' at a single @k@-vector observation.
+-- | [日本語]: 'MvNormal' の 1 観測 (k-vector) の log density。
 --   log p(y) = -k/2 log(2π) - 0.5 log|Σ| - 0.5 (y-μ)ᵀ Σ⁻¹ (y-μ)
 --   Σ⁻¹ と log|Σ| は Cholesky 分解 Σ = L Lᵀ から計算。
+--   [English]: Log density of an 'MvNormal' at a single @k@-vector
+--   observation.
+--   log p(y) = -k/2 log(2π) - 0.5 log|Σ| - 0.5 (y-μ)ᵀ Σ⁻¹ (y-μ)
+--   Σ⁻¹ and log|Σ| are computed from the Cholesky decomposition
+--   Σ = L Lᵀ.
 {-# INLINABLE mvNormalLogDensity #-}
 mvNormalLogDensity :: forall a. (Floating a, Ord a) => [a] -> [[a]] -> [a] -> a
 mvNormalLogDensity mu cov yObs
@@ -405,7 +576,7 @@ mvNormalLogDensity mu cov yObs
               logDet = 2 * sum [ log ((l !! i) !! i) | i <- [0 .. k - 1] ]
           in -0.5 * kA * log (2 * pi) - 0.5 * logDet - 0.5 * quad
 
--- | 'MvNormalChol' の 1 観測 (k-vector) の log density (Phase 44)。
+-- | [日本語]: 'MvNormalChol' の 1 観測 (k-vector) の log density。
 --   scale vector @σ@ と /相関/ Cholesky 因子 @L@ から scaled Cholesky
 --   @M = diag σ · L@ (= @M_ij = σ_i · L_ij@) を直接構成し、 共分散
 --   @Σ = M Mᵀ@ を /再分解せず/ 評価する:
@@ -413,6 +584,17 @@ mvNormalLogDensity mu cov yObs
 --   前進代入で解く。 @log|Σ| = 2 Σ log M_ii@ なので密度の @-0.5 log|Σ|@ は
 --   @-Σ log M_ii@。 'mvNormalLogDensity' (full Σ → choleskyL) と @Σ = M Mᵀ@ で
 --   数値一致する。 Stan の @multi_normal_cholesky@ と同じ idiom。
+--   [English]: Log density of an 'MvNormalChol' at a single @k@-vector
+--   observation. Builds the scaled Cholesky factor
+--   @M = diag σ · L@ (i.e. @M_ij = σ_i · L_ij@) directly from the scale
+--   vector @σ@ and the /correlation/ Cholesky factor @L@, then evaluates
+--   the covariance @Σ = M Mᵀ@ /without re-decomposing/ it:
+--     @log p(y) = -k/2 log(2π) - Σ log M_ii - 0.5 |z|²@, where
+--   @M z = (y-μ)@ is solved by forward substitution. Since
+--   @log|Σ| = 2 Σ log M_ii@, the density's @-0.5 log|Σ|@ term becomes
+--   @-Σ log M_ii@. This is numerically identical to 'mvNormalLogDensity'
+--   (full Σ → choleskyL) under @Σ = M Mᵀ@. Same idiom as Stan's
+--   @multi_normal_cholesky@.
 {-# INLINABLE mvNormalCholLogDensity #-}
 mvNormalCholLogDensity :: forall a. (Floating a, Ord a) => [a] -> [a] -> [[a]] -> [a] -> a
 mvNormalCholLogDensity mu sigma l yObs
@@ -430,10 +612,15 @@ mvNormalCholLogDensity mu sigma l yObs
       in -0.5 * kA * log (2 * pi) - logDet - 0.5 * quad
   where k = length mu
 
--- | MvStudentT(ν, μ, Σ) の 1 観測 (k-vector) の log density (Phase 37-A4)。
+-- | [日本語]: MvStudentT(ν, μ, Σ) の 1 観測 (k-vector) の log density。
 --   @logpdf(y) = log Γ((ν+k)/2) − log Γ(ν/2) − (k/2) log(νπ) − (1/2) log|Σ|
 --              − ((ν+k)/2) log(1 + m²/ν)@、
 --   @m² = (y−μ)ᵀ Σ⁻¹ (y−μ)@ を Cholesky で評価。
+--   [English]: The log density of a single observation (k-vector) from
+--   MvStudentT(ν, μ, Σ).
+--   @logpdf(y) = log Γ((ν+k)/2) − log Γ(ν/2) − (k/2) log(νπ) − (1/2) log|Σ|
+--              − ((ν+k)/2) log(1 + m²/ν)@,
+--   evaluating @m² = (y−μ)ᵀ Σ⁻¹ (y−μ)@ via Cholesky.
 {-# INLINABLE mvStudentTLogDensity #-}
 mvStudentTLogDensity :: forall a. (Floating a, Ord a)
                      => a -> [a] -> [[a]] -> [a] -> a
@@ -457,10 +644,13 @@ mvStudentTLogDensity nu mu cov yObs
            - 0.5 * logDet
            - 0.5 * (nu + kA) * log (1 + quad / nu)
 
--- | DirichletMultinomial(n, α) の 1 観測 (K-vector counts) の log pmf
---   (Phase 37-A4)。
+-- | [日本語]: DirichletMultinomial(n, α) の 1 観測 (K-vector counts) の log pmf。
 --   @logpmf = log Γ(α₀) − log Γ(α₀+n) + Σ [log Γ(yᵢ+αᵢ) − log Γ(αᵢ)]
 --           + log n! − Σ log yᵢ!@、 @α₀ = Σ αᵢ@.
+--   [English]: The log pmf of a single observation (K-vector counts) from
+--   DirichletMultinomial(n, α).
+--   @logpmf = log Γ(α₀) − log Γ(α₀+n) + Σ [log Γ(yᵢ+αᵢ) − log Γ(αᵢ)]
+--           + log n! − Σ log yᵢ!@, where @α₀ = Σ αᵢ@.
 {-# INLINABLE dirichletMultinomialLogDensity #-}
 dirichletMultinomialLogDensity :: forall a. (Floating a, Ord a)
                                => Int -> [a] -> [Double] -> a
@@ -486,12 +676,19 @@ dirichletMultinomialLogDensity n alpha counts
        + logFactN
        - logFactSum
 
--- | Wishart(ν, V) の 1 観測 (k×k 行列を flatten した長さ k² の列) の log density
---   (Phase 39-A2)。
+-- | [日本語]: Wishart(ν, V) の 1 観測 (k×k 行列を flatten した長さ k² の列) の
+--   log density。
 --   @logpdf(W) = -(νk/2) log 2 - (ν/2) log|V| - log Γ_k(ν/2)
 --              + ((ν-k-1)/2) log|W| - (1/2) tr(V⁻¹ W)@、
 --   @log Γ_k(z) = (k(k-1)/4) log π + Σ_{i=1}^k log Γ((z+1-i)/2)@。
 --   V / W の Cholesky で log determinant と tr(V⁻¹ W) を評価。
+--   [English]: The log density of a single observation (a k×k matrix,
+--   flattened to a length-k² sequence) from Wishart(ν, V).
+--   @logpdf(W) = -(νk/2) log 2 - (ν/2) log|V| - log Γ_k(ν/2)
+--              + ((ν-k-1)/2) log|W| - (1/2) tr(V⁻¹ W)@,
+--   @log Γ_k(z) = (k(k-1)/4) log π + Σ_{i=1}^k log Γ((z+1-i)/2)@.
+--   Evaluates the log determinant and tr(V⁻¹ W) via the Cholesky
+--   factorization of V / W.
 {-# INLINABLE wishartLogDensity #-}
 wishartLogDensity :: forall a. (Floating a, Ord a)
                   => a -> [[a]] -> [a] -> a
@@ -532,8 +729,10 @@ wishartLogDensity nu vRows wFlat
 -- 多相 CDF / log-CDF (Truncated / Censored 用)
 -- ---------------------------------------------------------------------------
 
--- | 多相 erf 近似 (Abramowitz & Stegun 7.1.26)。誤差 < 1.5e-7。
--- AD でも Track でも動く。
+-- | [日本語]: 多相 erf 近似 (Abramowitz & Stegun 7.1.26)。誤差 < 1.5e-7。
+--   AD でも Track でも動く。
+--   [English]: A polymorphic erf approximation (Abramowitz & Stegun
+--   7.1.26). Error < 1.5e-7. Works with either AD or Track.
 {-# INLINABLE erfA #-}
 erfA :: (Floating a, Ord a) => a -> a
 erfA x =
@@ -549,7 +748,8 @@ erfA x =
       poly = a1*t + a2*t*t + a3*t*t*t + a4*t*t*t*t + a5*t*t*t*t*t
   in sgn * (1 - poly * exp (- ax * ax))
 
--- | 標準正規 CDF Φ(x)。
+-- | [日本語]: 標準正規 CDF Φ(x)。
+--   [English]: The standard normal CDF Φ(x).
 {-# INLINABLE phiCdfA #-}
 phiCdfA :: (Floating a, Ord a) => a -> a
 phiCdfA x = 0.5 * (1 + erfA (x / sqrt 2))
@@ -638,7 +838,9 @@ logSF d x = case distCDF d x of
          | c >= 1    -> negInf
          | otherwise -> log (1 - c)
 
--- | log(F(hi) − F(lo)) — Truncated の正規化定数。
+-- | [日本語]: log(F(hi) − F(lo)) — Truncated の正規化定数。
+--   [English]: log(F(hi) − F(lo)) — the normalization constant for
+--   Truncated.
 {-# INLINABLE logCDFInterval #-}
 logCDFInterval :: (Floating a, Ord a) => Distribution a -> Maybe a -> Maybe a -> a
 logCDFInterval d mLo mHi = case (mLo, mHi) of
@@ -875,22 +1077,48 @@ logDensity Wishart{} _ = 0           -- observation-only (k×k 行列観測)
 logDensity (Bound d mLo mHi) x = logDensity (Truncated d mLo mHi) x
 logDensity OrderedProbit{} _ = 0     -- observation-only (離散)
 
--- | 'logDensity' の AD ('ADRD.ReverseDouble') 特化版 (Phase 92 B3)。
--- hyperparameter が**定数** ('ADRD.Zero' / 'ADRD.Lift' = tape 由来でない) の
--- lgamma 正規化項を Double で 1 発計算して 'ADRD.Lift' で戻す。 'ADRD.Lift'
--- 同士の AD 演算は @Lift (f b c)@ (同一の Double 演算列・tape 追記なし) なので
--- 結果は generic 'logDensity' と **bit-identical**、 定数に勾配は流れないので
--- 微分も不変。 hyperparameter が tape 変数 (階層 prior) なら generic へ
--- fallback し勾配は AD がそのまま構成する。
+-- | [日本語]: @logDensity@ の AD ('ADRD.ReverseDouble') 特化版。
+--   hyperparameter が__定数__ ('ADRD.Zero' / 'ADRD.Lift' = tape 由来でない) の
+--   lgamma 正規化項を Double で 1 発計算して 'ADRD.Lift' で戻す。 'ADRD.Lift'
+--   同士の AD 演算は @Lift (f b c)@ (同一の Double 演算列・tape 追記なし) なので
+--   結果は generic @logDensity@ と __bit-identical__、 定数に勾配は流れないので
+--   微分も不変。 hyperparameter が tape 変数 (階層 prior) なら generic へ
+--   fallback し勾配は AD がそのまま構成する。
 --
--- 動機 (hmm reduced prof): Dirichlet(1,…,1) = 棒折り Beta(1,1) の定数濃度
--- lgamma が AD walk 上で毎 eval Stirling recurrence (z<12 の梯子 ~11 段 ×
--- lgamma 3 呼び出し) を boxed 'ADRD.Lift' で歩いていた (550,480 entries =
--- 70 call/eval・time 6.6%/alloc 14.4%)。 対象は lgamma を持つ定数 prior 3 種
--- (Beta / Gamma / StudentT の ν) のみ・折り畳み式の結合順は generic 実装と
--- 完全一致させてある (bit 一致の根拠)。
--- ※ 'lgammaApprox' への RULES 書き換えは過負荷関数 + 辞書引数で発火せず断念
---    (2026-07-17 実測)、 呼び出し点注入 ('logPriorWith') 方式にした。
+--   動機 (hmm reduced prof): Dirichlet(1,…,1) = 棒折り Beta(1,1) の定数濃度
+--   lgamma が AD walk 上で毎 eval Stirling recurrence (z<12 の梯子 ~11 段 ×
+--   lgamma 3 呼び出し) を boxed 'ADRD.Lift' で歩いていた (550,480 entries =
+--   70 call/eval・time 6.6%/alloc 14.4%)。 対象は lgamma を持つ定数 prior 3 種
+--   (Beta / Gamma / StudentT の ν) のみ・折り畳み式の結合順は generic 実装と
+--   完全一致させてある (bit 一致の根拠)。
+--   ※ 'lgammaApprox' への RULES 書き換えは過負荷関数 + 辞書引数で発火せず断念
+--      (実測)、 呼び出し点注入 (@logPriorWith@) 方式にした。
+--   [English]: The AD ('ADRD.ReverseDouble')-specialized version of
+--   @logDensity@.
+--
+--   When a hyperparameter is __constant__ ('ADRD.Zero' / 'ADRD.Lift' — not
+--   tape-derived), computes its lgamma normalization term once as a
+--   Double and wraps it back with 'ADRD.Lift'. AD operations between
+--   'ADRD.Lift' values reduce to @Lift (f b c)@ (the same sequence of
+--   Double operations, no tape entries appended), so the result is
+--   __bit-identical__ to the generic @logDensity@, and since no gradient
+--   flows through a constant, the derivative is unaffected either. When a
+--   hyperparameter is a tape variable (hierarchical prior), this falls
+--   back to the generic path and AD constructs the gradient as usual.
+--
+--   Motivation (from a reduced-model hmm profile): the constant
+--   concentration lgamma of Dirichlet(1,…,1) = stick-breaking Beta(1,1)
+--   was walking the Stirling recurrence (a ladder of ~11 steps for z<12,
+--   × 3 lgamma calls) through boxed 'ADRD.Lift' on every eval of the AD
+--   walk (550,480 entries = 70 calls/eval, 6.6% time / 14.4% alloc). The
+--   targets are only the 3 constant priors that have an lgamma (Beta /
+--   Gamma / StudentT's ν); the associativity order of the folded
+--   expression is made to exactly match the generic implementation (the
+--   basis for bit-identical results).
+--   Note: rewriting 'lgammaApprox' via RULES was abandoned since it did
+--   not fire for the overloaded function with a dictionary argument
+--   (measured), so injection at the call site (@logPriorWith@) was used
+--   instead.
 logDensityRD
   :: forall s. Reifies s ADRD.Tape
   => Distribution (ADRD.ReverseDouble s) -> ADRD.ReverseDouble s
@@ -922,12 +1150,20 @@ logDensityRD d x = case d of
     constRD (ADRD.Lift v)         = Just v
     constRD ADRD.ReverseDouble{}  = Nothing
 
--- | Log likelihood density at an observation (a fixed @Double@).
--- Observations are passed as @[Double]@, so this uses only the
--- @Floating a@ constraint.
--- Phase 58.6c: ObserveLM 評価 (lmObsLogLiks) と logJoint が AD で微分しながら呼ぶ
--- ホット経路。 58.6a で本体から移したため cross-module になった。 INLINABLE で
--- 境界跨ぎ inline を維持 (M1/M2 の +25% 劣化を解消・58.6 bench 実測)。
+-- | [日本語]: 観測点における log likelihood density (固定 @Double@)。
+--   観測値は @[Double]@ で渡されるため、 ここでは @Floating a@ 制約のみを使う。
+--
+--   ObserveLM 評価 (lmObsLogLiks) と logJoint が AD で微分しながら呼ぶ
+--   ホット経路。 本体から移したため cross-module になった。 INLINABLE で
+--   境界跨ぎ inline を維持 (M1/M2 の +25% 劣化を解消・bench 実測)。
+--   [English]: Log likelihood density at an observation (a fixed
+--   @Double@). Observations are passed as @[Double]@, so this uses only
+--   the @Floating a@ constraint.
+--
+--   A hot path called by ObserveLM evaluation (lmObsLogLiks) and logJoint
+--   while differentiating via AD. It became cross-module after being
+--   moved out of the main body. INLINABLE keeps the cross-module inline
+--   (resolving M1/M2's +25% degradation, measured by bench).
 {-# INLINABLE logDensityObs #-}
 logDensityObs :: forall a. (Floating a, Ord a) => Distribution a -> Double -> a
 logDensityObs (Normal mu sig) y
@@ -1295,12 +1531,21 @@ logDensityObs (DiscreteWeibull q beta) y
                  log1mE = log (1 - exp expArg)
              in pk * logQ + log1mE
 
--- | Sum of log likelihoods over a list of observations. For ordinary
--- distributions one observation contributes one scalar log-density.
--- For 'MvNormal' (which expects @k@-vectors), the flattened @[Double]@
--- is chunked into length-@k@ groups before evaluation.
--- Phase 58.6c: logJoint/logLikelihood の Observe 分岐が AD で呼ぶ。 cross-module
--- inline 維持のため INLINABLE。
+-- | [日本語]: 観測値のリストに対する log likelihood の和。 通常の分布では、
+--   1 観測が 1 スカラー log-density を寄与する。 'MvNormal' (@k@-vector を
+--   期待する) では、 flatten された @[Double]@ を評価前に長さ @k@ のグループに
+--   chunk する。
+--
+--   logJoint/logLikelihood の Observe 分岐が AD で呼ぶ。 cross-module
+--   inline 維持のため INLINABLE。
+--   [English]: Sum of log likelihoods over a list of observations. For
+--   ordinary distributions one observation contributes one scalar
+--   log-density. For 'MvNormal' (which expects @k@-vectors), the
+--   flattened @[Double]@ is chunked into length-@k@ groups before
+--   evaluation.
+--
+--   Called by the Observe branch of logJoint/logLikelihood while
+--   differentiating via AD. INLINABLE to keep the cross-module inline.
 {-# INLINABLE obsLogSum #-}
 obsLogSum :: forall a. (Floating a, Ord a) => Distribution a -> [Double] -> a
 obsLogSum (MvNormal mu cov) ys =
@@ -1310,7 +1555,7 @@ obsLogSum (MvNormal mu cov) ys =
          | yv <- chunks ]
 obsLogSum (MvNormalGpRBF xs alpha rho sigma) ys =
   -- Phase 95 B-dsl: zero-mean・cov = RBF カーネル + (1e-10 + σ)·I。 値は汎用
-  -- 'MvNormal' 経路と同値 (ホット勾配のみ 'gpRBFAnalyticVG' で閉形式化)。
+  -- 'MvNormal' 経路と同値 (ホット勾配のみ @gpRBFAnalyticVG@ で閉形式化)。
   let k       = length xs
       cov     = gpRBFCovList xs alpha rho sigma
       mu      = replicate k 0
@@ -1320,7 +1565,7 @@ obsLogSum (MvNormalGpRBF xs alpha rho sigma) ys =
 obsLogSum (GradedResponseIrt thetas ncats deltas gammas) ys =
   -- Phase 101 A3: grade 行列 (nChild×nItem 行優先・欠測 −1) 全体を 1 観測として
   -- 評価。 値は従来の @logCatProb + potential@ 書きと同値
-  -- (ホット勾配のみ 'gradedIrtAnalyticVG' で閉形式化)。
+  -- (ホット勾配のみ @gradedIrtAnalyticVG@ で閉形式化)。
   let nItem = length ncats
       rows  = chunksOf nItem ys
       logCatP th nc dl gm gr =
@@ -1339,7 +1584,7 @@ obsLogSum (GradedResponseIrt thetas ncats deltas gammas) ys =
 obsLogSum (ArmaNormal mu phi theta sg) ys =
   -- Phase 101 A2: 観測列全体 (長さ T) を 1 観測として err 逐次再帰で評価。
   -- 値は従来の @mapAccumL + potential@ 書きと同値
-  -- (ホット勾配のみ 'armaAnalyticVG' で閉形式化)。
+  -- (ホット勾配のみ @armaAnalyticVG@ で閉形式化)。
   case ys of
     [] -> 0
     (y1 : rest) ->
@@ -1352,7 +1597,7 @@ obsLogSum (ArmaNormal mu phi theta sg) ys =
 obsLogSum (HmmForwardNormal pi0 trans mus sg) ys =
   -- Phase 92 A2: 観測列全体 (長さ T) を 1 観測として forward algorithm で周辺化。
   -- 値は従来の @potential nm (hmmForwardLogLik pi0 trans emit)@ 書きと同値
-  -- (ホット勾配のみ 'hmmAnalyticVG' で閉形式化)。
+  -- (ホット勾配のみ @hmmAnalyticVG@ で閉形式化)。
   let emit = [ [ logDensity (Normal mu sg) (realToFrac y) | mu <- mus ] | y <- ys ]
   in hmmForwardLogLik pi0 trans emit
 obsLogSum (Multinomial n probs) ys =

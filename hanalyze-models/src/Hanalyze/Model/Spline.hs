@@ -15,7 +15,7 @@
 -- y_i = Σ_j β_j B_j(x_i) + ε_i
 -- @
 --
---   * 'bsplineBasis'       — degree-@k@ B-spline basis via the Cox-de Boor
+--   * @bsplineBasis@       — degree-@k@ B-spline basis via the Cox-de Boor
 --     recursion.
 --   * 'naturalSplineBasis' — natural cubic spline (linear outside the
 --     boundary).
@@ -127,8 +127,7 @@ bsplineBasis k intKnots xs =
 -- Natural cubic spline basis
 -- ---------------------------------------------------------------------------
 
--- | Natural cubic-spline basis (zero second derivative at the
--- boundaries; linear outside the boundary).
+-- | [日本語]: 自然三次スプライン基底 (両端点で 2 階微分が 0・境界外では線形)。
 --
 -- ノット K1 < K2 < ... < KN に対して、N 個の基底関数:
 --   N_1(x) = 1
@@ -138,6 +137,18 @@ bsplineBasis k intKnots xs =
 --   d_k(x) = [(x - K_k)_+^3 - (x - K_N)_+^3] / (K_N - K_k)
 --
 -- 出力: 行列 (n × N)。
+--
+--   [English]: Natural cubic-spline basis (zero second derivative at the
+--   boundaries; linear outside the boundary).
+--
+--   For knots K1 < K2 < ... < KN, N basis functions:
+--     N_1(x) = 1
+--     N_2(x) = x
+--     N_{k+2}(x) = d_k(x) - d_{N-1}(x)  for k = 1..N-2
+--   where
+--     d_k(x) = [(x - K_k)_+^3 - (x - K_N)_+^3] / (K_N - K_k)
+--
+--   Output: a matrix (n × N).
 naturalSplineBasis :: [Double] -> V.Vector Double -> LA.Matrix Double
 naturalSplineBasis knots xs =
   let ks = sort knots

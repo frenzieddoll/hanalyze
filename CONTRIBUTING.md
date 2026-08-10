@@ -8,8 +8,29 @@
 
 ```bash
 cabal build all      # ライブラリ + 全実行ファイル
-cabal test           # テストスイート (hspec)
+cabal test all       # テストスイート (hspec)
 ```
+
+### build root の使い分け (Phase 106)
+
+| project file | 内容 | 主な用途 |
+|---|---|---|
+| `cabal.project` | standalone (plot 非依存・upstream portable) | 通常開発。`cabal build all` + `cabal test all` |
+| `cabal.project.plot` | + `hanalyze-plot` (hgg は `cabal.project.plot.local` で sibling 参照) | plot 連携の build/test (`hanalyze-plot-test`) |
+| `cabal.project.demos` | + `hanalyze-demos` (全 demo/bench exe 137 本) | demo・bench・posteriordb 実行体を使う時だけ opt-in |
+
+```bash
+# plot 連携のテスト
+cabal test --project-file=cabal.project.plot hanalyze-plot-test
+# demo / bench / posteriordb 実行体 (既定 build には含まれない)
+cabal build --project-file=cabal.project.demos hanalyze-demos
+cabal run   --project-file=cabal.project.demos posteriordb-radon
+cabal run   --project-file=cabal.project.demos glmm-demo
+```
+
+demo/bench exe はすべて `hanalyze-demos` package にあり、既定 build
+(`cabal build all`) には含まれない (Phase 109 で umbrella の `-f demos` /
+`-f benches` フラグは廃止、opt-in は project file 切替のみ)。
 
 ## ブランチ運用
 
@@ -48,7 +69,7 @@ master ← develop ← feature/<name>
 
 ## ベンチマーク
 
-- 場所: `bench/haskell/` (Haskell) と `bench/python/` (Python 比較)
+- 場所: `hanalyze-demos/bench/haskell/` (Haskell) と `bench/python/` (Python 比較)
 - 計測時は **必ず** `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1` を付ける
   (single-thread fairness)
 - 多目的最適化 (MO) は `bench/python/bench_mo.py` が pymoo で hanalyze 側
@@ -57,13 +78,13 @@ master ← develop ← feature/<name>
 
 新規ベンチを追加する場合:
 
-- Haskell 側: `bench/haskell/Bench<Name>.hs` を作り `hanalyze.cabal` に
+- Haskell 側: `hanalyze-demos/bench/haskell/Bench<Name>.hs` を作り `hanalyze.cabal` に
   `executable bench-<name>` の stanza を追加
 - Python 側: `bench/python/bench_<name>.py` で同条件を実装
 
 ## テスト追加
 
-- `test/Spec.hs` に hspec 形式で追加
+- `hanalyze/test/Spec.hs` に hspec 形式で追加
 - 新しい数値アルゴリズムは reference 値 (Python / R / 文献) との一致を
   確認する例を含める
 

@@ -5,29 +5,56 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Custom Design の Model 定義 + 設計行列展開 (Phase 24-2)。
+-- [日本語]: Custom Design の Model 定義 + 設計行列展開。
 --
 -- spec: doe-custom-design-spec v0.1.1 §2.2 / §3.1。
 --
--- ## raw matrix の Categorical 表現規約 (重要、 型安全ではない)
+-- === raw matrix の Categorical 表現規約 (重要、 型安全ではない)
 --
 -- `expandDesignMatrix` の入力 `Matrix Double` における Categorical / Ordinal
--- 因子の列は **level index 0..K-1 を Double で保持** する。
+-- 因子の列は __level index 0..K-1 を Double で保持__ する。
 -- expandDesignMatrix は reference (treatment) coding で K-1 列に展開、
 -- 参照水準 = index 0。
 --
 -- `Matrix Double` は連続値も index も同じ型なので、 0.5 のような小数や
--- 範囲外 index を **型では防げない**。 検出は runtime check (`Left Text`)。
--- 王道再設計 (R `model.matrix` / patsy 流の型分離) は phase-plan の
--- Phase 27 候補に登録済。 詳細は specification/phases/phase-24-custom-design-core.md。
+-- 範囲外 index を __型では防げない__。 検出は runtime check (`Left Text`)。
+-- 王道再設計 (R `model.matrix` / patsy 流の型分離) は将来の拡張候補として
+-- phase-plan に登録済。 詳細は specification/phases/phase-24-custom-design-core.md。
 --
--- ## 未対応 (Phase 24 v0.2 候補)
+-- === 未対応 (v0.2 候補)
 --
---   * `mNorm` は ADT として持つが現状 'NCoded' は identity、 'NUnit' / 'NRaw' は
+--   - `mNorm` は ADT として持つが現状 'NCoded' は identity、 'NUnit' / 'NRaw' は
 --     呼び出し側で適切な値を渡す前提
---   * `TNested` / `TCustom` (`Left` を返す)
---   * `TPower` を Categorical 因子に適用するのは無意味 (indicator^k = indicator)
+--   - `TNested` / @TCustom@ (`Left` を返す)
+--   - `TPower` を Categorical 因子に適用するのは無意味 (indicator^k = indicator)
 --     なので `Left`
+--
+-- [English]: Custom Design's Model definition + design matrix expansion.
+--
+-- spec: doe-custom-design-spec v0.1.1 §2.2 / §3.1.
+--
+-- === Categorical representation convention for the raw matrix (important, not type-safe)
+--
+-- In `expandDesignMatrix`'s input `Matrix Double`, columns for
+-- Categorical \/ Ordinal factors __hold the level index 0..K-1 as a Double__.
+-- expandDesignMatrix expands them into K-1 columns using
+-- reference (treatment) coding, with the reference level = index 0.
+--
+-- Since `Matrix Double` uses the same type for both continuous values and
+-- indices, decimals like 0.5 or out-of-range indices
+-- __cannot be prevented by the type system__. Detection happens via a
+-- runtime check (`Left Text`). A more principled redesign (type separation in the style
+-- of R's `model.matrix` \/ patsy) is registered as a candidate for a
+-- future phase in the phase-plan. See
+-- specification/phases/phase-24-custom-design-core.md for details.
+--
+-- === Not yet supported (candidates for v0.2)
+--
+--   - `mNorm` is held as an ADT, but currently 'NCoded' is identity;
+--     'NUnit' \/ 'NRaw' assume the caller passes an appropriate value
+--   - `TNested` \/ @TCustom@ (returns `Left`)
+--   - Applying `TPower` to a Categorical factor is meaningless
+--     (indicator^k = indicator), so it returns `Left`
 module Hanalyze.Design.Custom.Model
   ( ParamNormalize (..)
   , ModelTerm (..)
@@ -43,30 +70,37 @@ import qualified Numeric.LinearAlgebra as LA
 
 import           Hanalyze.Design.Custom.Factor
 
--- | 因子値の正規化方針。
+-- | [日本語]: 因子値の正規化方針。
+--   [English]: The normalization policy for factor values.
 data ParamNormalize
-  = NCoded   -- ^ coded units (連続因子は @[-1, 1]@ に既に変換済前提)
-  | NUnit    -- ^ unit cube (@[0, 1]@) 想定
-  | NRaw     -- ^ raw 単位 (= 何も変換しない)
+  = NCoded   -- ^ [日本語]: coded units (連続因子は @[-1, 1]@ に既に変換済前提) [English]: coded units (assumes continuous factors are already converted to @[-1, 1]@)
+  | NUnit    -- ^ [日本語]: unit cube (@[0, 1]@) 想定 [English]: assumes the unit cube (@[0, 1]@)
+  | NRaw     -- ^ [日本語]: raw 単位 (= 何も変換しない) [English]: raw units (= no conversion at all)
   deriving (Eq, Show)
 
--- | モデル項。
+-- | [日本語]: モデル項。
+--   [English]: A model term.
 data ModelTerm
-  = TIntercept                     -- ^ 切片 (全 1 列)
-  | TMain   !Text                  -- ^ 主効果 (因子名)
-  | TInter  ![Text]                -- ^ 交互作用 (k 因子)
-  | TPower  !Text !Int             -- ^ @x^k@ (k ≥ 2 を想定、 連続因子のみ)
-  | TNested !Text !Text            -- ^ @A within B@ (未対応)
+  = TIntercept                     -- ^ [日本語]: 切片 (全 1 列) [English]: Intercept (an all-ones column)
+  | TMain   !Text                  -- ^ [日本語]: 主効果 (因子名) [English]: Main effect (factor name)
+  | TInter  ![Text]                -- ^ [日本語]: 交互作用 (k 因子) [English]: Interaction (k factors)
+  | TPower  !Text !Int             -- ^ [日本語]: @x^k@ (k ≥ 2 を想定、 連続因子のみ) [English]: @x^k@ (assumes k ≥ 2, continuous factors only)
+  | TNested !Text !Text            -- ^ [日本語]: @A within B@ (未対応) [English]: @A within B@ (not supported)
   deriving (Eq, Show)
 
--- | モデル = 項リスト + 正規化方針。
+-- | [日本語]: モデル = 項リスト + 正規化方針。
+--   [English]: A model = a term list + a normalization policy.
 data Model = Model
   { mTerms :: ![ModelTerm]
   , mNorm  :: !ParamNormalize
   } deriving (Eq, Show)
 
--- | モデル全体が設計行列に占める列数 (Categorical 因子の K-1 展開を考慮)。
--- Categorical 因子参照中の TMain / TInter / TPower は factorDimension を使う。
+-- | [日本語]: モデル全体が設計行列に占める列数 (Categorical 因子の K-1 展開を考慮)。
+--   Categorical 因子参照中の TMain / TInter / TPower は factorDimension を使う。
+--   [English]: The number of columns the whole model occupies in the
+--   design matrix (accounting for the K-1 expansion of Categorical
+--   factors). TMain \/ TInter \/ TPower referencing a Categorical factor
+--   use factorDimension.
 modelNumColumns :: [Factor] -> Model -> Int
 modelNumColumns factors m = sum (map termWidth (mTerms m))
   where
@@ -85,22 +119,37 @@ modelNumColumns factors m = sum (map termWidth (mTerms m))
         _              -> 0
       Nothing -> 0
 
--- | 因子の raw 値行列 (n × p_factors) からモデル設計行列 (n × p_terms) を展開。
+-- | [日本語]: 因子の raw 値行列 (n × p_factors) からモデル設計行列 (n × p_terms) を展開。
 --
--- 入力 @raw@ の列順は @factors@ の順序と一致する前提。
--- Categorical / Ordinal 因子の列は **level index 0..K-1 を Double で保持**
--- する規約 (上記モジュール doc 参照)。
+--   入力 @raw@ の列順は @factors@ の順序と一致する前提。
+--   Categorical / Ordinal 因子の列は __level index 0..K-1 を Double で保持__
+--   する規約 (上記モジュール doc 参照)。
 --
--- 失敗を返すケース:
---   * @TNested@ を含む
---   * 参照される因子名が見つからない
---   * Categorical の raw 値が非整数 / 範囲外
---   * @TPower@ を Categorical 因子に適用
---   * 因子行列の列数が @factors@ の長さと一致しない
+--   失敗を返すケース:
+--     - @TNested@ を含む
+--     - 参照される因子名が見つからない
+--     - Categorical の raw 値が非整数 / 範囲外
+--     - @TPower@ を Categorical 因子に適用
+--     - 因子行列の列数が @factors@ の長さと一致しない
+--   [English]: Expands the model design matrix (n × p_terms) from the
+--   factors' raw value matrix (n × p_factors).
+--
+--   Assumes the input @raw@'s column order matches the order of
+--   @factors@. Columns for Categorical \/ Ordinal factors follow the
+--   convention of __holding the level index 0..K-1 as a Double__ (see the
+--   module doc above).
+--
+--   Cases returning failure:
+--     - contains @TNested@
+--     - a referenced factor name is not found
+--     - a Categorical raw value is non-integer \/ out of range
+--     - @TPower@ applied to a Categorical factor
+--     - the factor matrix's column count doesn't match the length of
+--       @factors@
 expandDesignMatrix
   :: [Factor]
   -> Model
-  -> LA.Matrix Double            -- ^ 因子 raw 値 (n × p_factors)
+  -> LA.Matrix Double            -- ^ [日本語]: 因子 raw 値 (n × p_factors)。 [English]: Raw factor values (n × p_factors).
   -> Either Text (LA.Matrix Double)
 expandDesignMatrix factors model raw
   | LA.cols raw /= length factors =
@@ -109,8 +158,11 @@ expandDesignMatrix factors model raw
       colss <- mapM (termColumns factors raw) (mTerms model)
       pure (LA.fromColumns (concat colss))
 
--- | 単一項を 0 個以上の列に変換 (Categorical の TMain は K-1 列、
--- Categorical × Categorical の TInter はクロス積で (K1-1)(K2-1) 列等)。
+-- | [日本語]: 単一項を 0 個以上の列に変換 (Categorical の TMain は K-1 列、
+--   Categorical × Categorical の TInter はクロス積で (K1-1)(K2-1) 列等)。
+--   [English]: Converts a single term into zero or more columns
+--   (Categorical's TMain becomes K-1 columns; Categorical × Categorical's
+--   TInter becomes (K1-1)(K2-1) columns via the cross product, etc.).
 termColumns
   :: [Factor]
   -> LA.Matrix Double
@@ -163,15 +215,20 @@ termColumns factors raw (TNested aName bName) = do
         ("TNested " <> T.unpack aName <> " within " <> T.unpack bName
          <> ": both factors must be Categorical/Ordinal (Phase 28-1 制限)"))
 
--- | 2 つの列群を elementwise 積で cartesian-product 化。
--- 結果列数 = length xs * length ys。
+-- | [日本語]: 2 つの列群を elementwise 積で cartesian-product 化。
+--   結果列数 = length xs * length ys。
+--   [English]: Cartesian-products two column groups via elementwise
+--   multiplication. Resulting column count = length xs * length ys.
 crossMultiply :: [LA.Vector Double] -> [LA.Vector Double] -> [LA.Vector Double]
 crossMultiply xs ys = [x * y | x <- xs, y <- ys]
   -- Vector の Num instance は elementwise
 
--- | 因子名 → 設計行列に挿入する列群。
--- 連続系: 単一列 (raw そのまま)。
--- Categorical / Ordinal: treatment coding で K-1 列 (reference = index 0)。
+-- | [日本語]: 因子名 → 設計行列に挿入する列群。
+--   連続系: 単一列 (raw そのまま)。
+--   Categorical / Ordinal: treatment coding で K-1 列 (reference = index 0)。
+--   [English]: Factor name → the column group to insert into the design
+--   matrix. Continuous-family: a single column (raw as-is). Categorical \/
+--   Ordinal: K-1 columns via treatment coding (reference = index 0).
 factorColumns
   :: [Factor]
   -> LA.Matrix Double
@@ -187,12 +244,15 @@ factorColumns factors raw name = do
     Categorical xs  -> treatmentCoding name (length xs) col
     Ordinal     xs  -> treatmentCoding name (length xs) col
 
--- | reference (treatment) coding。 K 水準なら K-1 列、 reference = index 0。
--- 列 k (1-based: 1..K-1) の値 = 1 if raw == k else 0。
+-- | [日本語]: reference (treatment) coding。 K 水準なら K-1 列、 reference = index 0。
+--   列 k (1-based: 1..K-1) の値 = 1 if raw == k else 0。
+--   [English]: Reference (treatment) coding. K levels become K-1 columns,
+--   reference = index 0. Column k (1-based: 1..K-1) has value = 1 if
+--   raw == k else 0.
 treatmentCoding
-  :: Text                           -- ^ 因子名 (エラーメッセージ用)
-  -> Int                            -- ^ 水準数 K
-  -> LA.Vector Double               -- ^ raw 列 (level index を Double で)
+  :: Text                           -- ^ [日本語]: 因子名 (エラーメッセージ用)。 [English]: The factor name (used in error messages).
+  -> Int                            -- ^ [日本語]: 水準数 K。 [English]: The number of levels K.
+  -> LA.Vector Double               -- ^ [日本語]: raw 列 (level index を Double で)。 [English]: The raw column (level index as a Double).
   -> Either Text [LA.Vector Double]
 treatmentCoding name k col
   | k <= 0 = Left (T.pack
@@ -204,7 +264,9 @@ treatmentCoding name k col
             [ if i == lvl then 1.0 else 0.0 | i <- idxs ]
       Right [mkCol lvl | lvl <- [1 .. k - 1]]
 
--- | level index validation: 整数値かつ [0, K-1] 範囲内。
+-- | [日本語]: level index validation: 整数値かつ [0, K-1] 範囲内。
+--   [English]: Level index validation: an integer value within
+--   [0, K-1].
 validateLevelIndex :: Text -> Int -> Double -> Either Text Int
 validateLevelIndex name k x =
   let xi = round x :: Int
@@ -221,7 +283,9 @@ validateLevelIndex name k x =
                       <> " out of range [0," <> show (k - 1) <> "]"))
               else Right xi
 
--- | 連続因子の生の列 (TPower 用に分離した helper)。
+-- | [日本語]: 連続因子の生の列 (TPower 用に分離した helper)。
+--   [English]: A continuous factor's raw column (a helper factored out
+--   for TPower).
 numericFactorVector
   :: [Factor]
   -> LA.Matrix Double

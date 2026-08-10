@@ -5,9 +5,10 @@
 -- License     : BSD-3-Clause
 --
 {-# LANGUAGE OverloadedStrings #-}
--- | Graphviz DOT 出力 (Phase 40-A3、 PyMC @pm.model_to_graphviz@ 同等の plate 描画)。
+-- | [日本語]: モデル DAG の Graphviz DOT 出力
+--   (PyMC の @pm.model_to_graphviz@ 同等の plate 描画)。
 --
--- 'Hanalyze.Model.HBM.buildModelGraph' が出す 'ModelGraph' を DOT
+-- @Hanalyze.Model.HBM.buildModelGraph@ が出す 'ModelGraph' を DOT
 -- ソースに変換する。 plate は @subgraph cluster_<name>@ + @label="<name> × N"@
 -- (右下サイズ数字) で囲まれ、 PyMC 流の角丸長方形描画になる。
 --
@@ -19,20 +20,17 @@
 -- > -- graphviz CLI で PNG / SVG 化:
 -- > -- $ dot -Tpng model.dot -o model.png
 --
--- == 3 ルートの選び方 (= hgg Phase 2 で 3 ルート併存方針確立)
+-- == 3 ルートの選び方 (= hgg の過去の phase で 3 ルート併存方針を確立)
 --
 -- 同じ 'Hanalyze.Model.HBM.ModelGraph' を可視化する 3 種類のルート:
 --
--- +---------------+--------------------------------------------------+---------------------+-----------------------+
--- | ルート        | 場所                                             | 出力 / 描画依存     | 推奨用途              |
--- +===============+==================================================+=====================+=======================+
--- | Mermaid HTML  | "Hanalyze.Viz.ModelGraph".renderModelGraph       | .html + CDN script  | GitHub README、 ノート |
--- +---------------+--------------------------------------------------+---------------------+-----------------------+
--- | __本 module__ | 'renderModelGraphDot' (= Graphviz DOT)           | .dot + dot CLI 別途 | graphviz 連携、 加工  |
--- +---------------+--------------------------------------------------+---------------------+-----------------------+
--- | hgg  | @Graphics.Hgg.Bridge.Analyze.renderModelGraphSVG@| .svg (依存ゼロ)     | production、 offline  |
--- |               | (= @hgg-analyze-bridge@ package)        |                     |                       |
--- +---------------+--------------------------------------------------+---------------------+-----------------------+
+-- [@Mermaid HTML@]: "Hanalyze.Viz.ModelGraph".renderModelGraph。
+--   出力 / 描画依存 = .html + CDN script。 推奨用途 = GitHub README、 ノート。
+-- [@本 module@]: 'renderModelGraphDot' (= Graphviz DOT)。 出力 / 描画依存 =
+--   .dot + dot CLI 別途。 推奨用途 = graphviz 連携、 加工。
+-- [@hgg@]: @Graphics.Hgg.Bridge.Analyze.renderModelGraphSVG@
+--   (= @hgg-analyze-bridge@ package)。 出力 / 描画依存 = .svg
+--   (依存ゼロ)。 推奨用途 = production、 offline。
 --
 -- 3 ルートとも同じ 'Hanalyze.Model.HBM.ModelGraph' 構造 (= node / edge / plate)
 -- を表現する。 visual layout は実装ごとに異なる。 本ルート (= Graphviz DOT) の利点:
@@ -42,12 +40,66 @@
 --   * @rank=same@ @constraint=false@ @cluster@ 等 dot 固有 directive で細かい制御
 --   * 既存 graphviz エコシステム (= xdot、 gephi 等) と連携
 --
--- 弱点 (= 上記表の他ルートで補える):
+-- 弱点 (= 上記の他ルートで補える):
 --
 --   * @dot@ CLI が install 済必須 (= production 配布で外部依存)
 --   * 出力は .dot text 中間ファイル (= 描画は別 step、 pipeline 化必要)
 --
 -- __本 module は撤廃されません__。 OSS 利用者の既存ワークフローを尊重して 3 ルート併存。
+--
+-- [English]: Graphviz DOT output for model DAGs
+--   (plate rendering equivalent to PyMC's @pm.model_to_graphviz@).
+--
+-- Converts the 'ModelGraph' produced by
+-- @Hanalyze.Model.HBM.buildModelGraph@ into DOT source. Plates are
+-- wrapped in @subgraph cluster_<name>@ + @label="<name> × N"@ (the size
+-- number in the bottom-right), rendered as PyMC-style rounded rectangles.
+--
+-- Usage:
+--
+-- > let g = HBM.buildModelGraph m
+-- > let dot = renderModelGraphDot g
+-- > T.writeFile "model.dot" dot
+-- > -- Convert to PNG / SVG with the graphviz CLI:
+-- > -- $ dot -Tpng model.dot -o model.png
+--
+-- == Choosing among the 3 routes (= a policy of maintaining 3 parallel
+-- routes was established in an earlier hgg phase)
+--
+-- Three routes visualize the same 'Hanalyze.Model.HBM.ModelGraph':
+--
+-- [@Mermaid HTML@]: "Hanalyze.Viz.ModelGraph".renderModelGraph.
+--   Output / rendering dependency = .html + CDN script. Recommended use =
+--   GitHub README, notebooks.
+-- [@This module@]: 'renderModelGraphDot' (= Graphviz DOT). Output /
+--   rendering dependency = .dot + a separate dot CLI. Recommended use =
+--   graphviz integration, post-processing.
+-- [@hgg@]: @Graphics.Hgg.Bridge.Analyze.renderModelGraphSVG@
+--   (= the @hgg-analyze-bridge@ package). Output / rendering
+--   dependency = .svg (zero dependencies). Recommended use = production,
+--   offline.
+--
+-- All three routes represent the same 'Hanalyze.Model.HBM.ModelGraph'
+-- structure (= node / edge / plate); only the visual layout differs by
+-- implementation. Advantages of this route (= Graphviz DOT):
+--
+--   * graphviz dot's high-quality layout (= the original Sugiyama
+--     framework, decades of accumulated refinement)
+--   * Many output formats: @-Tpng@ @-Tsvg@ @-Tpdf@ @-Tps@, etc.
+--   * Fine-grained control via dot-specific directives such as
+--     @rank=same@, @constraint=false@, @cluster@
+--   * Integrates with the existing graphviz ecosystem (= xdot, gephi,
+--     etc.)
+--
+-- Weaknesses (compensated for by the other routes above):
+--
+--   * Requires the @dot@ CLI to be installed (= an external dependency
+--     for production distribution)
+--   * Output is an intermediate .dot text file (= rendering is a separate
+--     step, requiring a pipeline)
+--
+-- __This module will not be removed.__ All 3 routes coexist to respect
+-- OSS users' existing workflows.
 module Hanalyze.Viz.ModelGraphDot
   ( renderModelGraphDot
   , writeModelGraphDot
@@ -67,7 +119,8 @@ import Hanalyze.Model.HBM (ModelGraph (..), Node (..), NodeKind (..))
 -- Public API
 -- ---------------------------------------------------------------------------
 
--- | 'ModelGraph' を Graphviz DOT 形式の 'Text' に変換する。
+-- | [日本語]: 'ModelGraph' を Graphviz DOT 形式の 'Text' に変換する。
+--   [English]: Converts a 'ModelGraph' to Graphviz DOT-format 'Text'.
 renderModelGraphDot :: ModelGraph -> Text
 renderModelGraphDot mg = T.unlines $
   [ "digraph G {"
@@ -81,7 +134,8 @@ renderModelGraphDot mg = T.unlines $
   map mkEdgeLine (mgEdges mg) ++
   [ "}" ]
 
--- | DOT をファイルに書き出す利便 helper。
+-- | [日本語]: DOT をファイルに書き出す利便 helper。
+--   [English]: Convenience helper to write DOT out to a file.
 writeModelGraphDot :: FilePath -> ModelGraph -> IO ()
 writeModelGraphDot path mg = TIO.writeFile path (renderModelGraphDot mg)
 

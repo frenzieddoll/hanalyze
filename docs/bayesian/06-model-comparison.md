@@ -3,9 +3,9 @@
 > 🌐 **English** | [日本語](06-model-comparison.ja.md)
 
 > Related demos:
-> - [`gibbs-demo`](../../demo/bayesian/GibbsDemo.hs) — compares two models with WAIC / LOO
-> - [`simpson-paradox`](../../demo/bayesian/SimpsonParadoxDemo.hs) — places LM/GLMM/HBM WAICs side by side in one HTML
-> - [`hbm-random-slope`](../../demo/bayesian/HBMRandomSlopeDemo.hs) — ΔWAIC between random-intercept-only vs. + random-slope
+> - [`gibbs-demo`](../../hanalyze-demos/demo/bayesian/GibbsDemo.hs) — compares two models with WAIC / LOO
+> - [`simpson-paradox`](../../hanalyze-demos/demo/bayesian/SimpsonParadoxDemo.hs) — places LM/GLMM/HBM WAICs side by side in one HTML
+> - [`hbm-random-slope`](../../hanalyze-demos/demo/bayesian/HBMRandomSlopeDemo.hs) — ΔWAIC between random-intercept-only vs. + random-slope
 >
 > CLI: pass `--waic` to embed WAIC/LOO into LM / GLM / GLMM / HBM reports.
 
@@ -222,7 +222,7 @@ compareSlopeModels = do
   return (w1, w2, l1, l2)
 ```
 
-A fully working implementation lives in [`hbm-random-slope`](../../demo/bayesian/HBMRandomSlopeDemo.hs).
+A fully working implementation lives in [`hbm-random-slope`](../../hanalyze-demos/demo/bayesian/HBMRandomSlopeDemo.hs).
 On data with 3 groups that genuinely have different slopes, M2 (random slope) yields
 smaller WAIC / LOO in practice.
 

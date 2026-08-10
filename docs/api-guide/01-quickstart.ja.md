@@ -17,7 +17,7 @@ hanalyze で **データを当てはめて 1 枚出す**ための最短経路を
 >    でデータと重畳して `saveSVGBound` で保存する。
 
 このページの構成:
-**[30 秒で 1 枚 (線形回帰)](#lm-30s)** ｜ **[データ源](#data-source)** ｜ **[低レベル (行列 API)](#low-level)**
+**[30 秒で 1 枚 (LM)](#lm-30s)** ｜ **[データ源](#data-source)** ｜ **[低レベル (行列 API)](#low-level)**
 
 ---
 
@@ -29,9 +29,9 @@ hanalyze で **データを当てはめて 1 枚出す**ための最短経路を
 {-# LANGUAGE OverloadedStrings #-}
 import qualified Data.Vector              as V
 import           Hanalyze.Plot     (lm, (|->), toPlot)
-import           Hgg.Plot.Spec        (ColData (..), layer, scatter)
-import           Hgg.Plot.Frame       ((|>>))
-import           Hgg.Plot.Backend.SVG (saveSVGBound)
+import           Graphics.Hgg.Spec        (ColData (..), layer, scatter)
+import           Graphics.Hgg.Frame       ((|>>))
+import           Graphics.Hgg.Backend.SVG (saveSVGBound)
 
 main :: IO ()
 main = do
@@ -61,7 +61,7 @@ main = do
 | `Map Text ColData` | `Map.fromList [("x", NumData …), …]` |
 
 `ColData` の構成子は数値列 `NumData (V.Vector Double)` と 文字列 (カテゴリ) 列
-`TxtData (V.Vector Text)` の 2 つ ([`Hgg.Plot.Spec`](../../src/Hanalyze/Plot.hs))。 データを持たない図 (HBM の forest 等)
+`TxtData (V.Vector Text)` の 2 つ ([`Graphics.Hgg.Spec`](../../hanalyze-plot/src/Hanalyze/Plot.hs))。 データを持たない図 (HBM の forest 等)
 には空源 `noDf = [] :: [(Text, ColData)]` を渡す ([03 bayesian-hbm](03-bayesian-hbm.ja.md))。
 
 ---

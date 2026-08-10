@@ -141,9 +141,9 @@ with `toPlot` (see [io/04-fit-api.md](io/04-fit-api.md) for the full `(|->)` API
 {-# LANGUAGE OverloadedStrings #-}
 import qualified Data.Vector              as V
 import           Hanalyze.Plot     (lm, (|->), toPlot)
-import           Hgg.Plot.Spec        (ColData (..), layer, scatter)
-import           Hgg.Plot.Frame       ((|>>))
-import           Hgg.Plot.Backend.SVG (saveSVGBound)
+import           Graphics.Hgg.Spec        (ColData (..), layer, scatter)
+import           Graphics.Hgg.Frame       ((|>>))
+import           Graphics.Hgg.Backend.SVG (saveSVGBound)
 
 let df  = [ ("x", NumData (V.fromList xs))
           , ("y", NumData (V.fromList ys)) ]   -- any ColumnSource (CSV DataFrame works too)
@@ -174,9 +174,9 @@ the config). Posterior figures come from the extractors (`forestOf` / `tracesOf`
 import qualified Data.Vector              as V
 import           Hanalyze.Model.HBM (ModelP, sample, observe, dataNamedObs, Distribution (..))
 import           Hanalyze.Plot      (hbm, defaultHBM, (|->), toPlot, forestOf)
-import           Hgg.Plot.Spec         (ColData (..))
-import           Hgg.Plot.Frame        ((|>>))
-import           Hgg.Plot.Backend.SVG  (saveSVGBound)
+import           Graphics.Hgg.Spec         (ColData (..))
+import           Graphics.Hgg.Frame        ((|>>))
+import           Graphics.Hgg.Backend.SVG  (saveSVGBound)
 import           Data.Text                 (Text)
 
 myModel :: ModelP ()

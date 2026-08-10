@@ -5,33 +5,60 @@
 -- License     : BSD-3-Clause
 --
 {-# LANGUAGE OverloadedStrings #-}
--- | Compositional HTML report builder.
+-- | [日本語]: 合成的な HTML レポートビルダー。
 --
--- A unified report API across all model and analysis types: ridge, kernel,
--- spline, robust GP, Taguchi, regrid, and so on. Replaces the model-
--- specific 'Hanalyze.Viz.AnalysisReport'.
+--   ridge / kernel / spline / robust GP / Taguchi / regrid など、全モデル・
+--   解析種別に共通のレポート API。モデル固有だった
+--   'Hanalyze.Viz.AnalysisReport' を置き換える。
 --
--- Design principles:
+--   設計方針:
 --
---   * 'ReportSection' is a sum type representing one HTML section.
---   * The caller (CLI or library user) builds a @[ReportSection]@.
---   * 'renderReport' lays the sections out into a single self-contained
---     HTML file (Vega-Lite assets bundled).
---   * The @Reportable@ typeclass generates default section sets from each
---     fit type.
+--     * 'ReportSection' は 1 つの HTML セクションを表す直和型。
+--     * 呼び出し側 (CLI やライブラリ利用者) が @[ReportSection]@ を組み立てる。
+--     * 'renderReport' がセクション群を単一の自己完結 HTML ファイルへ
+--       レイアウトする (Vega-Lite アセット同梱)。
+--     * @Reportable@ 型クラスが各 fit 型から既定のセクション集合を生成する。
 --
--- 利用例:
+--   利用例:
 --
--- @
--- import Hanalyze.Viz.ReportBuilder
--- renderReport "out.html" (defaultReportConfig "My Analysis")
---   [ secDataOverview df ["x"] "y"
---   , secModelOverview "Ridge regression" "y = β₀ + β₁x" Nothing
---   , secCoefficients [("β₀", 1.2), ("β₁", 2.4)] (Just ("R²", 0.96))
---   , secFitScatter "x" "y" xs ys (Just smooth)
---   , secResiduals fitted resids
---   ]
--- @
+--   @
+--   import Hanalyze.Viz.ReportBuilder
+--   renderReport "out.html" (defaultReportConfig "My Analysis")
+--     [ secDataOverview df ["x"] "y"
+--     , secModelOverview "Ridge regression" "y = β₀ + β₁x" Nothing
+--     , secCoefficients [("β₀", 1.2), ("β₁", 2.4)] (Just ("R²", 0.96))
+--     , secFitScatter "x" "y" xs ys (Just smooth)
+--     , secResiduals fitted resids
+--     ]
+--   @
+--
+--   [English]: Compositional HTML report builder.
+--
+--   A unified report API across all model and analysis types: ridge, kernel,
+--   spline, robust GP, Taguchi, regrid, and so on. Replaces the model-
+--   specific 'Hanalyze.Viz.AnalysisReport'.
+--
+--   Design principles:
+--
+--     * 'ReportSection' is a sum type representing one HTML section.
+--     * The caller (CLI or library user) builds a @[ReportSection]@.
+--     * 'renderReport' lays the sections out into a single self-contained
+--       HTML file (Vega-Lite assets bundled).
+--     * The @Reportable@ typeclass generates default section sets from each
+--       fit type.
+--
+--   Example usage:
+--
+--   @
+--   import Hanalyze.Viz.ReportBuilder
+--   renderReport "out.html" (defaultReportConfig "My Analysis")
+--     [ secDataOverview df ["x"] "y"
+--     , secModelOverview "Ridge regression" "y = β₀ + β₁x" Nothing
+--     , secCoefficients [("β₀", 1.2), ("β₁", 2.4)] (Just ("R²", 0.96))
+--     , secFitScatter "x" "y" xs ys (Just smooth)
+--     , secResiduals fitted resids
+--     ]
+--   @
 module Hanalyze.Viz.ReportBuilder
   ( -- * 設定
     ReportConfig (..)
@@ -245,47 +272,88 @@ data InteractiveModel = InteractiveModel
 -- | A single report section. The renderer walks a @[ReportSection]@ and
 -- emits the corresponding HTML block for each variant.
 data ReportSection
-  = -- | データ概要: 列ごとの型/N/min/max/mean/SD + ヒストグラム
+  = -- | [日本語]: データ概要: 列ごとの型/N/min/max/mean/SD + ヒストグラム
+    --   [English]: Data overview: per-column type/N/min/max/mean/SD +
+    --   histogram.
     SecDataOverview DXD.DataFrame [Text] Text
-    -- | モデル概要: タイトル / 数式 / 任意の追加 info-box [(label,value)] / Mermaid DAG
+    -- | [日本語]: モデル概要: タイトル / 数式 / 任意の追加 info-box
+    --   [(label,value)] / Mermaid DAG
+    --   [English]: Model overview: title / formula / optional extra
+    --   info-box entries [(label,value)] / Mermaid DAG.
   | SecModelOverview Text Text [(Text, Text)] (Maybe Text)
-    -- | 係数表: ラベル/値 + オプションの (R² ラベル, 値)
+    -- | [日本語]: 係数表: ラベル/値 + オプションの (R² ラベル, 値)
+    --   [English]: Coefficients table: label/value pairs + an optional
+    --   (R² label, value) row.
   | SecCoefficients [(Text, Double)] (Maybe (Text, Double))
-    -- | 散布図 + 滑らか曲線 (信頼帯あれば描画)
+    -- | [日本語]: 散布図 + 滑らか曲線 (信頼帯あれば描画)
+    --   [English]: Scatter plot + smooth curve (renders the confidence
+    --   band when present).
   | SecFitScatter Text Text [Double] [Double] (Maybe SmoothCurve)
-    -- | 残差プロット (fitted vs residuals + Predicted vs Actual)
+    -- | [日本語]: 残差プロット (fitted vs residuals + Predicted vs Actual)
+    --   [English]: Residual plot (fitted vs residuals + predicted vs
+    --   actual).
   | SecResiduals [Double] [Double]
-    -- | 棒グラフ (要因効果や lambda パスなど)
+    -- | [日本語]: 棒グラフ (要因効果や lambda パスなど)
+    --   [English]: Bar chart (e.g. factor effects or the lambda path).
   | SecBarChart Text [(Text, Double)]
-    -- | 任意の Vega-Lite チャート
+    -- | [日本語]: 任意の Vega-Lite チャート
+    --   [English]: Arbitrary Vega-Lite chart.
   | SecVega Text VegaLite
-    -- | Mermaid.js DAG
+    -- | [日本語]: Mermaid.js DAG
+    --   [English]: Mermaid.js DAG.
   | SecMermaid Text
-    -- | 任意テーブル: ヘッダ / 行
+    -- | [日本語]: 任意テーブル: ヘッダ / 行
+    --   [English]: Arbitrary table: headers / rows.
   | SecTable Text [Text] [[Text]]
-    -- | "key: value" 形式の小テーブル
+    -- | [日本語]: "key: value" 形式の小テーブル
+    --   [English]: Small "key: value"-style table.
   | SecKeyValue Text [(Text, Text)]
-    -- | Markdown 風テキスト (実体は <p> 内 plain HTML)
+    -- | [日本語]: Markdown 風テキスト (実体は <p> 内 plain HTML)
+    --   [English]: Markdown-like text (actually plain HTML inside a
+    --   @\<p\>@).
   | SecMarkdown Text Text
-    -- | raw HTML 本体 (escape hatch)
+    -- | [日本語]: raw HTML 本体 (escape hatch)
+    --   [English]: Raw HTML body (an escape hatch).
   | SecHtml Text Text
-    -- | 単変数 LM/GLM の対話的予測 (スライダー + リアルタイム scatter)。
-    --   フィールド: title / xCol / yCol / xs / ys / smooth / (xSliderMin, xSliderMax)
+    -- | [日本語]: 単変数 LM/GLM の対話的予測 (スライダー + リアルタイム
+    --   scatter)。
+    --   フィールド: title / xCol / yCol / xs / ys / smooth /
+    --   (xSliderMin, xSliderMax)
+    --   [English]: Interactive prediction for a univariate LM/GLM (slider
+    --   + real-time scatter).
+    --   Fields: title / xCol / yCol / xs / ys / smooth /
+    --   (xSliderMin, xSliderMax).
   | SecInteractiveLM Text Text Text [Double] [Double] SmoothCurve (Double, Double)
-    -- | 多変量対話的予測。主軸選択 dropdown + 各副軸 slider + 散布図。
+    -- | [日本語]: 多変量対話的予測。主軸選択 dropdown + 各副軸 slider +
+    --   散布図。
+    --   [English]: Multivariate interactive prediction. Main-axis
+    --   selection dropdown + a slider per secondary axis + scatter plot.
   | SecInteractiveMulti Text InteractiveModel
-    -- | 多変量 RFF Ridge の対話的予測。横軸固定 + 副軸スライダ + 散布図。
+    -- | [日本語]: 多変量 RFF Ridge の対話的予測。横軸固定 + 副軸スライダ
+    --   + 散布図。
+    --   [English]: Interactive prediction for multivariate RFF ridge.
+    --   Fixed x-axis + secondary-axis sliders + scatter plot.
   | SecInteractiveRFFMV Text InteractiveRFFMV
-    -- | 多出力対話的予測 (1 入力 → q 出力)。
+    -- | [日本語]: 多出力対話的予測 (1 入力 → q 出力)。
+    --   [English]: Multi-output interactive prediction (1 input → q
+    --   outputs).
   | SecInteractiveMultiOut Text InteractiveMultiOut
-    -- | 折りたたみ可能なグループ。子セクションを 1 つの details で囲む。
+    -- | [日本語]: 折りたたみ可能なグループ。子セクションを 1 つの details
+    --   で囲む。
     --   フィールド: title / openByDefault / 子セクション
+    --   [English]: Collapsible group. Wraps the child sections in a
+    --   single @details@ element.
+    --   Fields: title / openByDefault / child sections.
   | SecCollapsible Text Bool [ReportSection]
-    -- | 淡い背景色の囲みカード。SecCollapsible の内部などで使い、
+    -- | [日本語]: 淡い背景色の囲みカード。SecCollapsible の内部などで使い、
     --   関連する図表をひとまとめにする (常に開いた状態)。
+    --   [English]: Lightly-shaded card. Used e.g. inside SecCollapsible to
+    --   group related figures together (always in the expanded state).
   | SecCard Text [ReportSection]
-    -- | フラットな統計行 (section 包装なし)。
+    -- | [日本語]: フラットな統計行 (section 包装なし)。
     --   info-box が横並びになる stat-row。
+    --   [English]: Flat statistics row (no surrounding section wrapper).
+    --   A stat-row where info-boxes are laid out side by side.
   | SecStatRow [(Text, Text)]
 
 -- ---------------------------------------------------------------------------
@@ -380,17 +448,26 @@ secStatRow = SecStatRow
 -- Markdown appendix
 -- ---------------------------------------------------------------------------
 
--- | Read the given markdown file, render it through the built-in
--- markdown subset
--- appendix セクションとして返す。
+-- | [日本語]: 指定した markdown ファイルを読み込み、 組み込みの markdown
+--   サブセットで変換して appendix セクションとして返す。
 --
--- サポートする markdown 機能:
--- - 見出し: @# H1@, @## H2@, @### H3@
--- - 段落: 空行で区切られた連続行
--- - 箇条書き: @- item@
--- - インライン: @**bold**@, @*italic*@, @\`code\`@
--- - リンク: @[text](url)@
--- - インラインコード周辺は等幅フォント
+--   サポートする markdown 機能:
+--   - 見出し: @# H1@, @## H2@, @### H3@
+--   - 段落: 空行で区切られた連続行
+--   - 箇条書き: @- item@
+--   - インライン: @**bold**@, @*italic*@, @\`code\`@
+--   - リンク: @[text](url)@
+--   - インラインコード周辺は等幅フォント
+--   [English]: Read the given markdown file, render it through the
+--   built-in markdown subset, and return it as an appendix section.
+--
+--   Supported markdown features:
+--   - Headings: @# H1@, @## H2@, @### H3@
+--   - Paragraphs: runs of lines separated by a blank line
+--   - Bullet lists: @- item@
+--   - Inline: @**bold**@, @*italic*@, @\`code\`@
+--   - Links: @[text](url)@
+--   - Inline code is rendered in a monospace font
 secAppendixFromMd :: Text -> FilePath -> IO ReportSection
 secAppendixFromMd title path = do
   contents <- TIO.readFile path
@@ -409,7 +486,9 @@ secAppendixFromMd title path = do
     , "</section>"
     ])
 
--- | 簡易 markdown → HTML 変換。フル機能ではない。
+-- | [日本語]: 簡易 markdown → HTML 変換。フル機能ではない。
+--   [English]: Simplified markdown-to-HTML conversion. Not a full-featured
+--   implementation.
 renderSimpleMarkdown :: Text -> Text
 renderSimpleMarkdown txt =
   let lns      = T.lines txt
@@ -417,7 +496,9 @@ renderSimpleMarkdown txt =
       htmlBlks = map renderBlock blocks
   in T.intercalate "\n" htmlBlks
 
--- | 行群を「ブロック」に分割。空行で区切る。
+-- | [日本語]: 行群を「ブロック」に分割。空行で区切る。
+--   [English]: Split a group of lines into "blocks", separated by blank
+--   lines.
 groupBlocks :: [Text] -> [[Text]]
 groupBlocks = filter (not . all T.null) . splitOn T.null
   where
@@ -427,7 +508,8 @@ groupBlocks = filter (not . all T.null) . splitOn T.null
           rest' = dropWhile p rest
       in chunk : splitOn p rest'
 
--- | ブロック (連続行のリスト) を HTML 化。
+-- | [日本語]: ブロック (連続行のリスト) を HTML 化。
+--   [English]: Render a block (a list of consecutive lines) to HTML.
 renderBlock :: [Text] -> Text
 renderBlock []       = ""
 renderBlock ls@(l:_)
@@ -449,9 +531,14 @@ renderBlock ls@(l:_)
   where
     isListLine x = "- " `T.isPrefixOf` T.stripStart x
 
--- | インラインフォーマット: bold/italic/code/link を順に置換。
--- 数式 ($...$, $$...$$) は MathJax が処理するため、ここでは触らずに保持。
--- ただし $...$ 内の '*' を italic と誤認しないよう、まず数式部分を退避してから処理する。
+-- | [日本語]: インラインフォーマット: bold/italic/code/link を順に置換。
+--   数式 ($...$, $$...$$) は MathJax が処理するため、 ここでは触らずに保持。
+--   ただし $...$ 内の '*' を italic と誤認しないよう、 まず数式部分を退避
+--   してから処理する。
+--   [English]: Inline formatting: replaces bold/italic/code/link in
+--   sequence. Math ($...$, $$...$$) is left untouched since MathJax
+--   handles it, but the math spans are first extracted so that a @'*'@
+--   inside @$...$@ isn't mistaken for italic.
 renderInline :: Text -> Text
 renderInline txt =
   let (chunks, maths) = extractMath txt
@@ -474,7 +561,9 @@ renderInline txt =
                 pre <> "<a href=\"" <> url <> "\">" <> lbl <> "</a>"
                     <> applyLinks (T.drop 1 rest2)
 
--- | 開始/終了マーカーが交互に対になるとして置換。簡易版。
+-- | [日本語]: 開始/終了マーカーが交互に対になるとして置換。簡易版。
+--   [English]: Replaces markers assuming the start/end pair alternates.
+--   A simplified implementation.
 pairReplace :: Text -> Text -> Text -> Text -> Text
 pairReplace marker startTag endTag txt = go txt True
   where
@@ -486,8 +575,11 @@ pairReplace marker startTag endTag txt = go txt True
               rest' = T.drop (T.length marker) rest
           in pre <> tag <> go rest' (not inOpen)
 
--- | $...$ や $$...$$ の数式範囲を抽出してプレースホルダ "@@MATHn@@" に置換、
--- 元の数式テキストをリストで返す。
+-- | [日本語]: $...$ や $$...$$ の数式範囲を抽出してプレースホルダ
+--   "@@MATHn@@" に置換、 元の数式テキストをリストで返す。
+--   [English]: Extracts $...$ and $$...$$ math spans, replaces them with
+--   the "@@MATHn@@" placeholder, and returns the original math text as a
+--   list.
 extractMath :: Text -> (Text, [Text])
 extractMath = go 0 ""
   where
@@ -523,31 +615,39 @@ restoreMath txt maths = foldr replaceOne txt (zip [0::Int ..] maths)
 -- MCMC セクションビルダ (Hanalyze.Viz.MCMC のラッパ)
 -- ---------------------------------------------------------------------------
 
--- | 単一チェーンの MCMC 診断 (KDE + トレース)。
-secMCMCDiagnostics :: Text       -- ^ セクションタイトル
-                   -> [Text]     -- ^ パラメータ名
+-- | [日本語]: 単一チェーンの MCMC 診断 (KDE + トレース)。
+--   [English]: Single-chain MCMC diagnostics (KDE + trace).
+secMCMCDiagnostics :: Text       -- ^ [日本語]: セクションタイトル [English]: Section title.
+                   -> [Text]     -- ^ [日本語]: パラメータ名 [English]: Parameter names.
                    -> Chain
                    -> ReportSection
 secMCMCDiagnostics title params chain =
   SecVega title (VM.mcmcDiagnostics (defaultConfig title) params chain)
 
--- | 多チェーン MCMC 診断 (KDE 合算 + 色分けトレース)。
+-- | [日本語]: 多チェーン MCMC 診断 (KDE 合算 + 色分けトレース)。
+--   [English]: Multi-chain MCMC diagnostics (combined KDE + color-coded
+--   trace).
 secMCMCDiagnosticsMulti :: Text -> [Text] -> [Chain] -> ReportSection
 secMCMCDiagnosticsMulti title params chains =
   SecVega title (VM.mcmcDiagnosticsMulti (defaultConfig title) params chains)
 
--- | 自己相関プロット。
+-- | [日本語]: 自己相関プロット。
+--   [English]: Autocorrelation plot.
 secMCMCAutocorr :: Text -> Int -> [Text] -> Chain -> ReportSection
 secMCMCAutocorr title maxLag params chain =
   SecVega title (VM.autocorrPlot (defaultConfig title) maxLag params chain)
 
--- | ペアスキャッタープロット。
+-- | [日本語]: ペアスキャッタープロット。
+--   [English]: Pair scatter plot.
 secMCMCPair :: Text -> Text -> Text -> Chain -> ReportSection
 secMCMCPair title pa pb chain =
   SecVega title (VM.pairScatter (defaultConfig title) pa pb chain)
 
--- | 事後要約テーブル (mean / SD / 2.5% / 97.5% / ESS / R-hat)。
--- 入力: パラメータごとに (name, mean, sd, q025, q975, ess, rhat)。
+-- | [日本語]: 事後要約テーブル (mean / SD / 2.5% / 97.5% / ESS / R-hat)。
+--   入力: パラメータごとに (name, mean, sd, q025, q975, ess, rhat)。
+--   [English]: Posterior summary table (mean / SD / 2.5% / 97.5% / ESS /
+--   R-hat).
+--   Input: per-parameter (name, mean, sd, q025, q975, ess, rhat).
 secPosteriorSummary
   :: Text                                                    -- title
   -> [(Text, Double, Double, Double, Double, Double, Maybe Double)]
@@ -569,14 +669,18 @@ secPosteriorSummary title rows =
 -- モデル比較・診断セクション (Cycle 1)
 -- ---------------------------------------------------------------------------
 
--- | モデル比較テーブル。'secTable' のラッパだが、
--- @mBest@ で 0-based 行 index を渡すと、その行をハイライト表示する。
--- WAIC / LOO / RMSE などを横並びにし最良モデルを強調するのに使う。
+-- | [日本語]: モデル比較テーブル。'secTable' のラッパだが、
+--   @mBest@ で 0-based 行 index を渡すと、その行をハイライト表示する。
+--   WAIC / LOO / RMSE などを横並びにし最良モデルを強調するのに使う。
+--   [English]: Model-comparison table. A wrapper around 'secTable', but
+--   passing a 0-based row index via @mBest@ highlights that row. Used to
+--   line up WAIC / LOO / RMSE etc. side by side and emphasize the best
+--   model.
 secComparisonTable
-  :: Text         -- ^ タイトル
-  -> [Text]       -- ^ ヘッダ
-  -> [[Text]]     -- ^ 行
-  -> Maybe Int    -- ^ 最良行 index (0-based、'Nothing' でハイライトなし)
+  :: Text         -- ^ [日本語]: タイトル [English]: Title.
+  -> [Text]       -- ^ [日本語]: ヘッダ [English]: Headers.
+  -> [[Text]]     -- ^ [日本語]: 行 [English]: Rows.
+  -> Maybe Int    -- ^ [日本語]: 最良行 index (0-based、'Nothing' でハイライトなし) [English]: Best-row index (0-based; 'Nothing' disables the highlight).
   -> ReportSection
 secComparisonTable title headers rows mBest = case mBest of
   Nothing  -> SecTable title headers rows
@@ -597,61 +701,83 @@ renderComparisonHtml headers rows bestIdx =
             <> "★ ハイライト行 = 最良 (黄色背景)</p>"
   in "<table class=\"datatable\">" <> hdr <> body <> "</table>" <> legend
 
--- | Forest plot — 各パラメータの中央値 + 信用 (HDI/CI) 区間を横並び。
--- ベイズモデルの coefficient 比較や階層モデルの BLUP 表示に使う。
+-- | [日本語]: Forest plot — 各パラメータの中央値 + 信用 (HDI/CI) 区間を横並び。
+--   ベイズモデルの coefficient 比較や階層モデルの BLUP 表示に使う。
+--   [English]: Forest plot — the median and credible (HDI/CI) interval of
+--   each parameter, laid out side by side. Used to compare Bayesian model
+--   coefficients or to display hierarchical-model BLUPs.
 secForestPlot
-  :: Text                                          -- ^ タイトル
-  -> [(Text, Double, Double, Double)]              -- ^ (label, lower, mean, upper)
+  :: Text                                          -- ^ [日本語]: タイトル [English]: Title.
+  -> [(Text, Double, Double, Double)]              -- ^ [日本語]: (label, lower, mean, upper) [English]: (label, lower, mean, upper).
   -> ReportSection
 secForestPlot title rows = SecVega title (forestPlotSpec rows)
 
--- | 特徴量重要度バー — 値降順にソートして 'secBarChart' に渡す。
--- Random Forest / GBM の feature importance 表示用。
+-- | [日本語]: 特徴量重要度バー — 値降順にソートして 'secBarChart' に渡す。
+--   Random Forest / GBM の feature importance 表示用。
+--   [English]: Feature-importance bar chart — sorts values in descending
+--   order and passes them to 'secBarChart'. For displaying Random
+--   Forest / GBM feature importance.
 secFeatureImportance :: Text -> [(Text, Double)] -> ReportSection
 secFeatureImportance title items =
   SecBarChart title (sortBy (comparing (Down . snd)) items)
 
--- | Posterior Predictive Check — 観測データ密度 + 事後予測サンプルの密度を重ね描き。
--- 各 replicate の KDE を薄い線で、観測の KDE を太線で描画。
+-- | [日本語]: Posterior Predictive Check — 観測データ密度 + 事後予測サンプルの密度を重ね描き。
+--   各 replicate の KDE を薄い線で、観測の KDE を太線で描画。
+--   [English]: Posterior Predictive Check — overlays the observed-data
+--   density with the density of the posterior-predictive samples. Each
+--   replicate's KDE is drawn with a thin line and the observed KDE with a
+--   thick line.
 secPPC
-  :: Text         -- ^ タイトル
-  -> [Double]     -- ^ 観測値 y_obs
-  -> [[Double]]   -- ^ 事後予測サンプル (replicate ごと、各長さ ~ length y_obs)
+  :: Text         -- ^ [日本語]: タイトル [English]: Title.
+  -> [Double]     -- ^ [日本語]: 観測値 y_obs [English]: Observed values y_obs.
+  -> [[Double]]   -- ^ [日本語]: 事後予測サンプル (replicate ごと、各長さ ~ length y_obs) [English]: Posterior-predictive samples (per replicate; each of length ~ length y_obs).
   -> ReportSection
 secPPC title observed reps = SecVega title (ppcSpec observed reps)
 
--- | Calibration plot — 二値分類器の予測確率と観測頻度の対応図。
--- 入力データを 10 個のビン (`[0,0.1)..[0.9,1.0]`) に分割し、各ビンで
--- 予測確率の平均と観測 1 の頻度を計算し、対角線 (y = x) と重ねて描画。
--- 観測値は 0/1 (Bool 相当)。
+-- | [日本語]: Calibration plot — 二値分類器の予測確率と観測頻度の対応図。
+--   入力データを 10 個のビン (`[0,0.1)..[0.9,1.0]`) に分割し、各ビンで
+--   予測確率の平均と観測 1 の頻度を計算し、対角線 (y = x) と重ねて描画。
+--   観測値は 0/1 (Bool 相当)。
+--   [English]: Calibration plot — maps a binary classifier's predicted
+--   probabilities against the observed frequency. Splits the input data
+--   into 10 bins (`[0,0.1)..[0.9,1.0]`), computes the mean predicted
+--   probability and the observed frequency of 1 in each bin, and overlays
+--   the diagonal (y = x). Observed values are 0/1 (equivalent to Bool).
 secCalibration
-  :: Text         -- ^ タイトル
-  -> [Double]     -- ^ 予測確率 p ∈ [0, 1]
-  -> [Double]     -- ^ 観測値 y ∈ {0, 1}
+  :: Text         -- ^ [日本語]: タイトル [English]: Title.
+  -> [Double]     -- ^ [日本語]: 予測確率 p ∈ [0, 1] [English]: Predicted probability p ∈ [0, 1].
+  -> [Double]     -- ^ [日本語]: 観測値 y ∈ {0, 1} [English]: Observed value y ∈ {0, 1}.
   -> ReportSection
 secCalibration title pPred yObs =
   SecVega title (calibrationSpec pPred yObs)
 
--- | 3D scatter (Vega-Lite は 3D 非対応のため、x/y 軸 + 色エンコード z で代用)。
--- z が連続なら viridis 系のグラデーション、離散ならカテゴリ色。
+-- | [日本語]: 3D scatter (Vega-Lite は 3D 非対応のため、x/y 軸 + 色エンコード z で代用)。
+--   z が連続なら viridis 系のグラデーション、離散ならカテゴリ色。
+--   [English]: 3D scatter (Vega-Lite has no 3D support, so it's
+--   approximated with x/y axes plus color-encoded z). Uses a viridis-style
+--   gradient when z is continuous, and categorical colors when discrete.
 sec3DScatter
-  :: Text         -- ^ セクションタイトル
-  -> Text         -- ^ x ラベル
-  -> Text         -- ^ y ラベル
-  -> Text         -- ^ z ラベル (色エンコード)
+  :: Text         -- ^ [日本語]: セクションタイトル [English]: Section title.
+  -> Text         -- ^ [日本語]: x ラベル [English]: x-axis label.
+  -> Text         -- ^ [日本語]: y ラベル [English]: y-axis label.
+  -> Text         -- ^ [日本語]: z ラベル (色エンコード) [English]: z label (color-encoded).
   -> [Double] -> [Double] -> [Double]
   -> ReportSection
 sec3DScatter title xL yL zL xs ys zs =
   SecVega title (scatter3DSpec xL yL zL xs ys zs)
 
--- | 2D heatmap (rect mark + 値の色エンコード)。
--- 行ラベル × 列ラベルのグリッドに値を配置し、色強度で表現。
--- 例: 相関行列、混同行列、要因 × 水準の効果。
+-- | [日本語]: 2D heatmap (rect mark + 値の色エンコード)。
+--   行ラベル × 列ラベルのグリッドに値を配置し、色強度で表現。
+--   例: 相関行列、混同行列、要因 × 水準の効果。
+--   [English]: 2D heatmap (rect mark + color-encoded value). Places
+--   values on a row-label × column-label grid, expressed with color
+--   intensity. E.g. correlation matrices, confusion matrices, factor ×
+--   level effects.
 secHeatmap
-  :: Text         -- ^ タイトル
-  -> [Text]       -- ^ 列ラベル
-  -> [Text]       -- ^ 行ラベル
-  -> [[Double]]   -- ^ 値 (rows × cols)
+  :: Text         -- ^ [日本語]: タイトル [English]: Title.
+  -> [Text]       -- ^ [日本語]: 列ラベル [English]: Column labels.
+  -> [Text]       -- ^ [日本語]: 行ラベル [English]: Row labels.
+  -> [[Double]]   -- ^ [日本語]: 値 (rows × cols) [English]: Values (rows × cols).
   -> ReportSection
 secHeatmap title colLabels rowLabels values =
   SecVega title (heatmapSpec colLabels rowLabels values)
@@ -660,16 +786,28 @@ secHeatmap title colLabels rowLabels values =
 -- 対話的予測 (LM/GLM 単変数)
 -- ---------------------------------------------------------------------------
 
--- | 単変数 LM/GLM の対話的予測セクション。
--- 与えられた x グリッド + 予測 y + バンドから埋め込み JS を生成し、
--- スライダーで予測点をリアルタイム移動できる scatter+chart を表示。
+-- | [日本語]: 単変数 LM/GLM の対話的予測セクション。
+--   与えられた x グリッド + 予測 y + バンドから埋め込み JS を生成し、
+--   スライダーで予測点をリアルタイム移動できる scatter+chart を表示。
 --
--- 引数:
---   * title         — セクション見出し
---   * xCol / yCol   — 軸ラベル
---   * xs / ys       — 観測データ
---   * sc            — グリッド + 予測曲線 (信頼帯付きなら band も描画)
---   * (xMin, xMax)  — スライダー範囲 (データ範囲 ±50% 推奨)
+--   引数:
+--     * title         — セクション見出し
+--     * xCol / yCol   — 軸ラベル
+--     * xs / ys       — 観測データ
+--     * sc            — グリッド + 予測曲線 (信頼帯付きなら band も描画)
+--     * (xMin, xMax)  — スライダー範囲 (データ範囲 ±50% 推奨)
+--   [English]: Interactive prediction section for a univariate LM/GLM.
+--   Generates embedded JS from the given x grid + predicted y + band, and
+--   displays a scatter+chart where the slider moves the predicted point in
+--   real time.
+--
+--   Arguments:
+--     * title         — section heading
+--     * xCol / yCol   — axis labels
+--     * xs / ys       — observed data
+--     * sc            — grid + prediction curve (also draws the band, if
+--                        there's a confidence band)
+--     * (xMin, xMax)  — slider range (data range ±50% is recommended)
 secInteractiveLM
   :: Text             -- title
   -> Text             -- x 列名
@@ -681,20 +819,30 @@ secInteractiveLM
   -> ReportSection
 secInteractiveLM = SecInteractiveLM
 
--- | 多変量対話的予測 (主軸 dropdown + 副軸 slider + 散布図)。
+-- | [日本語]: 多変量対話的予測 (主軸 dropdown + 副軸 slider + 散布図)。
+--   [English]: Multivariate interactive prediction (main-axis dropdown +
+--   secondary-axis slider + scatter plot).
 secInteractiveMulti :: Text -> InteractiveModel -> ReportSection
 secInteractiveMulti = SecInteractiveMulti
 
--- | 多変量 RFF Ridge の対話的予測セクション。
+-- | [日本語]: 多変量 RFF Ridge の対話的予測セクション。
+--   [English]: Interactive prediction section for multivariate RFF ridge.
 secInteractiveRFFMV :: Text -> InteractiveRFFMV -> ReportSection
 secInteractiveRFFMV = SecInteractiveRFFMV
 
--- | 多出力対話的予測セクション (1 入力 → q 出力カーブ)。
+-- | [日本語]: 多出力対話的予測セクション (1 入力 → q 出力カーブ)。
+--   [English]: Multi-output interactive prediction section (1 input → q
+--   output curves).
 secInteractiveMultiOut :: Text -> InteractiveMultiOut -> ReportSection
 secInteractiveMultiOut = SecInteractiveMultiOut
 
--- | 線形多出力 fit から 'InteractiveMultiOut' を作る。
--- 入力: 列名・観測 x・観測 Y (n×q)・出力グリッド・intercepts (q)・slopes (q)・スライダ範囲
+-- | [日本語]: 線形多出力 fit から 'InteractiveMultiOut' を作る。
+--   入力: 列名・観測 x・観測 Y (n×q)・出力グリッド・intercepts (q)・
+--   slopes (q)・スライダ範囲
+--   [English]: Builds an 'InteractiveMultiOut' from a linear multi-output
+--   fit.
+--   Input: column names, observed x, observed Y (n×q), output grid,
+--   intercepts (q), slopes (q), slider range.
 mkInteractiveMOLinear
   :: Text          -- xCol
   -> Text          -- yCol
@@ -709,8 +857,10 @@ mkInteractiveMOLinear
 mkInteractiveMOLinear xc yc oa grid xs ys ints slps slider =
   InteractiveMultiOut xc yc oa grid xs ys slider (PredLinearMO ints slps)
 
--- | RBF Kernel Ridge 多出力 fit から 'InteractiveMultiOut' を作る。
--- alpha 行列は (n × q)、行 = sample。
+-- | [日本語]: RBF Kernel Ridge 多出力 fit から 'InteractiveMultiOut' を作る。
+--   alpha 行列は (n × q)、行 = sample。
+--   [English]: Builds an 'InteractiveMultiOut' from an RBF kernel-ridge
+--   multi-output fit. The alpha matrix is (n × q), rows = samples.
 mkInteractiveMOKernelRBF
   :: Text          -- xCol
   -> Text          -- yCol
@@ -730,10 +880,15 @@ mkInteractiveMOKernelRBF xc yc oa grid xs ys xtr alpha h slider =
 -- Reportable typeclass
 -- ---------------------------------------------------------------------------
 
--- | フィット結果から既定セクション群を生成する型クラス。
--- ライブラリ利用者が `renderReport file cfg (toReport cfg df xCols yCol fit)` の
--- 形で簡潔に書ける。各モデル型 (RegFit / SplineFit / RobustGPFit 等) は
--- このクラスのインスタンスで既定セクションを定義する。
+-- | [日本語]: フィット結果から既定セクション群を生成する型クラス。
+--   ライブラリ利用者が `renderReport file cfg (toReport cfg df xCols yCol fit)` の
+--   形で簡潔に書ける。各モデル型 (RegFit / SplineFit / RobustGPFit 等) は
+--   このクラスのインスタンスで既定セクションを定義する。
+--   [English]: A typeclass that generates a default section set from a
+--   fit result. Lets a library user write it concisely as
+--   `renderReport file cfg (toReport cfg df xCols yCol fit)`. Each model
+--   type (RegFit / SplineFit / RobustGPFit, etc.) defines its default
+--   sections via an instance of this class.
 class Reportable a where
   toReport :: ReportConfig -> DXD.DataFrame -> [Text] -> Text -> a -> [ReportSection]
 
@@ -741,7 +896,8 @@ class Reportable a where
 -- レンダリング
 -- ---------------------------------------------------------------------------
 
--- | 単一の自己完結 HTML ファイルとして書き出す。
+-- | [日本語]: 単一の自己完結 HTML ファイルとして書き出す。
+--   [English]: Writes it out as a single self-contained HTML file.
 renderReport :: FilePath -> ReportConfig -> [ReportSection] -> IO ()
 renderReport path cfg sections =
   TIO.writeFile path (buildHtml cfg sections)
@@ -791,7 +947,8 @@ buildHtml cfg sections =
        , "</html>"
        ]
 
--- | ナビバーを構築。各 section のタイトルから生成。
+-- | [日本語]: ナビバーを構築。各 section のタイトルから生成。
+--   [English]: Builds the nav bar. Generated from each section's title.
 mkNavBar :: ReportConfig -> [(Text, ReportSection)] -> Text
 mkNavBar cfg pairs =
   let links = [ "  <a class=\"nav-link\" href=\"#" <> sid <> "\">"
@@ -867,8 +1024,11 @@ wrapSection sid title inner = T.unlines
   , "</section>"
   ]
 
--- | 折りたたみ可能な section 箱 (white bg、h2 をクリックで折りたたみ)。
--- データの特性 / モデル概要などで使う。
+-- | [日本語]: 折りたたみ可能な section 箱 (white bg、h2 をクリックで折りたたみ)。
+--   データの特性 / モデル概要などで使う。
+--   [English]: Collapsible section box (white background; clicking the h2
+--   collapses it). Used for things like data characteristics / model
+--   overview.
 collapsibleSection :: Text -> Text -> Bool -> Text -> Text
 collapsibleSection sid title open inner =
   let attr = if open then " open" else ""
@@ -885,8 +1045,11 @@ collapsibleSection sid title open inner =
 
 -- データ概要 -----------------------------------------------------------------
 
--- | 列ごとの簡易分類: 数値列なら @NumCol [Double]@、Text 列なら @TxtCol [Text]@、
--- 取得不能なら 'NoCol'。ReportBuilder 内部のみで使用。
+-- | [日本語]: 列ごとの簡易分類: 数値列なら @NumCol [Double]@、Text 列なら
+--   @TxtCol [Text]@、取得不能なら 'NoCol'。ReportBuilder 内部のみで使用。
+--   [English]: A simplified per-column classification: @NumCol [Double]@
+--   for a numeric column, @TxtCol [Text]@ for a text column, and 'NoCol'
+--   when it can't be retrieved. Used internally by ReportBuilder only.
 data ColView = NumCol [Double] | TxtCol [Text] | NoCol
 
 classifyCol :: Text -> DXD.DataFrame -> ColView
@@ -977,7 +1140,9 @@ renderDataOverview sid df xCols yCol =
     td x = "<td>" <> x <> "</td>"
     unique = foldr (\x acc -> if x `elem` acc then acc else x : acc) []
 
--- | データ概要セクションのスクリプト: 各 numeric 列のヒストグラムを embed。
+-- | [日本語]: データ概要セクションのスクリプト: 各 numeric 列のヒストグラムを embed。
+--   [English]: Script for the data-overview section: embeds a histogram
+--   for each numeric column.
 dataOverviewScript :: Text -> DXD.DataFrame -> [Text] -> Text -> Text
 dataOverviewScript sid df xCols yCol =
   let allCols = xCols ++ [yCol]
@@ -991,7 +1156,8 @@ dataOverviewScript sid df xCols yCol =
   in T.intercalate "\n"
        [ embed i v | (i, _, Just v) <- pairs ]
 
--- | 単純なヒストグラム Vega-Lite spec。
+-- | [日本語]: 単純なヒストグラム Vega-Lite spec。
+--   [English]: A simple histogram Vega-Lite spec.
 histogramSpec :: Text -> [Double] -> VegaLite
 histogramSpec col vals =
   toVegaLite
@@ -1351,7 +1517,9 @@ renderCollapsible sid title open children =
        , "</section>"
        ]
 
--- | 淡い背景色のカード。子セクションの section ラッパは CSS で flat 化される。
+-- | [日本語]: 淡い背景色のカード。子セクションの section ラッパは CSS で flat 化される。
+--   [English]: A lightly-shaded card. The child sections' section wrapper
+--   is flattened via CSS.
 renderCard :: Text -> Text -> [ReportSection] -> Text
 renderCard sid title children =
   let childHtml = T.intercalate "\n"
@@ -1366,7 +1534,8 @@ renderCard sid title children =
        , "</div>"
        ]
 
--- | フラットな統計行 (section box なし)。
+-- | [日本語]: フラットな統計行 (section box なし)。
+--   [English]: Flat statistics row (no section box).
 renderStatRow :: Text -> [(Text, Text)] -> Text
 renderStatRow sid kvs =
   let boxes = T.intercalate "\n"
@@ -1447,8 +1616,12 @@ sectionScript sid sec = case sec of
       let json = decodeUtf8 . toStrict . encode . fromVL $ spec
       in "vegaEmbed('#vl-" <> s <> "', " <> json <> ", {actions:false});"
 
--- | Interactive LM の JS: scatter+曲線を描画し、スライダーで予測点を更新。
--- グリッド (sc) で線形補間して予測値を計算する (モデル係数を JS に渡さなくて済む)。
+-- | [日本語]: Interactive LM の JS: scatter+曲線を描画し、スライダーで予測点を更新。
+--   グリッド (sc) で線形補間して予測値を計算する (モデル係数を JS に渡さなくて済む)。
+--   [English]: Interactive LM's JS: draws the scatter+curve and updates
+--   the predicted point via the slider. Computes the predicted value by
+--   linearly interpolating on the grid (sc), so the model coefficients
+--   never need to be passed to JS.
 interactiveLMScript :: Text -> Text -> Text -> [Double] -> [Double]
                     -> SmoothCurve -> Text
 interactiveLMScript sid xc yc xs ys sc =
@@ -1611,10 +1784,14 @@ residualsSpec fitted resids =
     , height 280
     ]
 
--- | Regularization path (lambda 対 各係数) をログスケール x 軸の多線グラフで描く。
--- 入力: 係数ラベル + (λ, 係数ベクトル) のリスト。intercept は除外推奨。
+-- | [日本語]: Regularization path (lambda 対 各係数) をログスケール x 軸の多線グラフで描く。
+--   入力: 係数ラベル + (λ, 係数ベクトル) のリスト。intercept は除外推奨。
+--   [English]: Draws the regularization path (lambda vs. each coefficient)
+--   as a multi-line chart on a log-scale x-axis.
+--   Input: coefficient labels + a list of (λ, coefficient vector).
+--   Excluding the intercept is recommended.
 regPathSpec
-  :: [Text]                    -- ^ 係数ラベル (length = 係数数)
+  :: [Text]                    -- ^ [日本語]: 係数ラベル (length = 係数数) [English]: Coefficient labels (length = number of coefficients).
   -> [(Double, [Double])]      -- ^ (λ, [coef])
   -> VegaLite
 regPathSpec labels path =
@@ -1667,7 +1844,9 @@ barChartSpec _title vs =
        , height 220
        ]
 
--- | Forest plot — 各パラメータの中央値 (点) と HDI/CI (横棒)。
+-- | [日本語]: Forest plot — 各パラメータの中央値 (点) と HDI/CI (横棒)。
+--   [English]: Forest plot — each parameter's median (point) and HDI/CI
+--   (horizontal bar).
 forestPlotSpec :: [(Text, Double, Double, Double)] -> VegaLite
 forestPlotSpec rows =
   let names = [n | (n, _, _, _) <- rows]
@@ -1704,7 +1883,9 @@ forestPlotSpec rows =
        , heightStep 28
        ]
 
--- | Posterior Predictive Check — 観測 KDE + 各 replicate KDE 重ね描き。
+-- | [日本語]: Posterior Predictive Check — 観測 KDE + 各 replicate KDE 重ね描き。
+--   [English]: Posterior Predictive Check — overlays the observed KDE with
+--   each replicate's KDE.
 ppcSpec :: [Double] -> [[Double]] -> VegaLite
 ppcSpec observed reps =
   let nGrid = 200
@@ -1751,7 +1932,9 @@ ppcSpec observed reps =
        , height 280
        ]
 
--- | Calibration spec: 10 ビンに分割し (mean p, observed freq) を点 + 対角線で描画。
+-- | [日本語]: Calibration spec: 10 ビンに分割し (mean p, observed freq) を点 + 対角線で描画。
+--   [English]: Calibration spec: splits into 10 bins and draws (mean p,
+--   observed freq) as points plus the diagonal.
 calibrationSpec :: [Double] -> [Double] -> VegaLite
 calibrationSpec pPred yObs =
   let pairs = zip pPred yObs
@@ -1811,7 +1994,8 @@ calibrationSpec pPred yObs =
        , height 380
        ]
 
--- | 3D scatter (z は色エンコード)。
+-- | [日本語]: 3D scatter (z は色エンコード)。
+--   [English]: 3D scatter (z is color-encoded).
 scatter3DSpec :: Text -> Text -> Text -> [Double] -> [Double] -> [Double]
               -> VegaLite
 scatter3DSpec xL yL zL xs ys zs =
@@ -1835,7 +2019,8 @@ scatter3DSpec xL yL zL xs ys zs =
     , height 380
     ]
 
--- | 2D heatmap (rect + 色エンコード)。
+-- | [日本語]: 2D heatmap (rect + 色エンコード)。
+--   [English]: 2D heatmap (rect + color-encoded).
 heatmapSpec :: [Text] -> [Text] -> [[Double]] -> VegaLite
 heatmapSpec colLabels rowLabels values =
   let rows = [ (rLbl, cLbl, v)
@@ -2311,35 +2496,52 @@ interactiveMultiOutScript sid imo =
 -- 補間 / regrid レポート (Phase G4)
 -- ---------------------------------------------------------------------------
 
--- | regrid 結果を可視化するためのデータ。
+-- | [日本語]: regrid 結果を可視化するためのデータ。
 --
--- R1-R7 は必須情報、R8-R10 はオプション (空リスト/Nothing で非表示)。
--- 'Hanalyze.DataIO.Preprocess.RegridResult' から構築する想定だが、
--- セクション側ではプリミティブ型のみで受けて柔軟性を保つ。
+--   R1-R7 は必須情報、R8-R10 はオプション (空リスト/Nothing で非表示)。
+--   'Hanalyze.DataIO.Preprocess.RegridResult' から構築する想定だが、
+--   セクション側ではプリミティブ型のみで受けて柔軟性を保つ。
+--   [English]: Data for visualizing a regrid result.
+--
+--   R1-R7 are required information; R8-R10 are optional (hidden with an
+--   empty list/Nothing). Intended to be built from
+--   'Hanalyze.DataIO.Preprocess.RegridResult', but the section side
+--   accepts only primitive types to keep it flexible.
 data InterpReport = InterpReport
   { irTitle         :: !Text
   , irInterpKind    :: !Text                       -- ^ "Linear" | "NaturalSpline" | "PCHIP"
   , irGridKind      :: !Text                       -- ^ "Uniform" | "Adaptive"
-  , irN             :: !Int                        -- ^ 出力 grid 点数
+  , irN             :: !Int                        -- ^ [日本語]: 出力 grid 点数 [English]: Number of output grid points.
   , irZBoundsMode   :: !Text                       -- ^ "intersect" | "union"
   , irZMin          :: !Double
   , irZMax          :: !Double
   , irPerIdObserved :: ![(Text, [(Double, Double)])]
-                          -- ^ id ごとの元観測点 [(z, y)]
+                          -- ^ [日本語]: id ごとの元観測点 [(z, y)]
+                          --   [English]: The original observed points
+                          --   [(z, y)] per id.
   , irPerIdInterpY  :: ![(Text, [(Double, Double)])]
-                          -- ^ id ごとの (z_grid, y_interp) (R2 ライン用)
-  , irGrid          :: ![Double]                   -- ^ 共通 grid (R3 spacing 用)
-  , irDensity       :: ![(Double, Double)]         -- ^ (z, peak |dy/dz|) — adaptive 時のみ
+                          -- ^ [日本語]: id ごとの (z_grid, y_interp) (R2 ライン用)
+                          --   [English]: (z_grid, y_interp) per id (for
+                          --   the R2 line).
+  , irGrid          :: ![Double]                   -- ^ [日本語]: 共通 grid (R3 spacing 用) [English]: Common grid (for R3 spacing).
+  , irDensity       :: ![(Double, Double)]         -- ^ [日本語]: (z, peak |dy/dz|) — adaptive 時のみ [English]: (z, peak |dy/dz|) — adaptive mode only.
   , irPerIdSummary  :: ![(Text, Int, Double, Double, Double, Double, Double)]
-                          -- ^ (id, n_obs, zmin, zmax, extrap_below, extrap_above, residual_max)
-                          -- R4 用
+                          -- ^ [日本語]: (id, n_obs, zmin, zmax, extrap_below, extrap_above, residual_max)
+                          --   R4 用
+                          --   [English]: (id, n_obs, zmin, zmax,
+                          --   extrap_below, extrap_above, residual_max).
+                          --   For R4.
     -- R8-R10 オプション
-  , irExtraEnabled  :: !Bool                       -- ^ True で R8-R10 を出力
+  , irExtraEnabled  :: !Bool                       -- ^ [日本語]: True で R8-R10 を出力 [English]: When True, outputs R8-R10.
   , irPerIdYRange   :: ![(Text, Double, Double, Double, Double)]
-                          -- ^ (id, ymin_orig, ymax_orig, ymin_grid, ymax_grid) — R10 用
+                          -- ^ [日本語]: (id, ymin_orig, ymax_orig, ymin_grid, ymax_grid) — R10 用
+                          --   [English]: (id, ymin_orig, ymax_orig,
+                          --   ymin_grid, ymax_grid) — for R10.
   } deriving (Show)
 
--- | 最低限のフィールドだけ埋めた InterpReport (テスト/ダミー用)。
+-- | [日本語]: 最低限のフィールドだけ埋めた InterpReport (テスト/ダミー用)。
+--   [English]: An InterpReport with only the minimal fields filled in
+--   (for testing/dummy use).
 defaultInterpReport :: Text -> InterpReport
 defaultInterpReport t = InterpReport
   { irTitle         = t
@@ -2358,21 +2560,38 @@ defaultInterpReport t = InterpReport
   , irPerIdYRange   = []
   }
 
--- | 補間 / regrid のレポートセクションを構築。
+-- | [日本語]: 補間 / regrid のレポートセクションを構築。
 --
--- 出力構造:
+--   出力構造:
 --
--- * Card "Regrid summary"
---   - R1: パラメタテーブル (KeyValue)
---   - R4: id ごとの観測点数 / z レンジ / 外挿距離 / 残差表 (Table)
---   - R6: 外挿警告テーブル (該当 id のみ; 0 件なら省略)
---   - R7: id 間 z アラインメント dot plot (Vega)
---   - R2: 補間オーバーレイ small multiples (Vega)
---   - R3: adaptive 時のみ density(z) + grid spacing (Vega)
---   - R5: 補間残差サマリ (R4 と統合済)
---   - (オプション) R8: id ごとの観測点数 bar chart
---   - (オプション) R9: 単調性チェック (PCHIP 以外、簡易判定)
---   - (オプション) R10: y レンジ比較表
+--   * Card "Regrid summary"
+--     - R1: パラメタテーブル (KeyValue)
+--     - R4: id ごとの観測点数 / z レンジ / 外挿距離 / 残差表 (Table)
+--     - R6: 外挿警告テーブル (該当 id のみ; 0 件なら省略)
+--     - R7: id 間 z アラインメント dot plot (Vega)
+--     - R2: 補間オーバーレイ small multiples (Vega)
+--     - R3: adaptive 時のみ density(z) + grid spacing (Vega)
+--     - R5: 補間残差サマリ (R4 と統合済)
+--     - (オプション) R8: id ごとの観測点数 bar chart
+--     - (オプション) R9: 単調性チェック (PCHIP 以外、簡易判定)
+--     - (オプション) R10: y レンジ比較表
+--   [English]: Builds the interpolation/regrid report section.
+--
+--   Output structure:
+--
+--   * Card "Regrid summary"
+--     - R1: parameter table (KeyValue)
+--     - R4: per-id observation count / z range / extrapolation distance /
+--       residual table (Table)
+--     - R6: extrapolation warning table (only ids affected; omitted when
+--       there are none)
+--     - R7: cross-id z alignment dot plot (Vega)
+--     - R2: interpolation overlay small multiples (Vega)
+--     - R3: density(z) + grid spacing, adaptive mode only (Vega)
+--     - R5: interpolation residual summary (already merged into R4)
+--     - (optional) R8: per-id observation count bar chart
+--     - (optional) R9: monotonicity check (non-PCHIP, a simplified test)
+--     - (optional) R10: y-range comparison table
 secInterpolation :: InterpReport -> ReportSection
 secInterpolation ir =
   let -- R1 params
@@ -2464,8 +2683,11 @@ secInterpolation ir =
               ++ maybe [] (:[]) r10
   in secCard (irTitle ir) sections
 
--- | R2: 補間オーバーレイ — id ごとに facet 化 (small multiples)。
--- 元観測点を dot、補間曲線を line で重ね描き (kind 列で区別)。
+-- | [日本語]: R2: 補間オーバーレイ — id ごとに facet 化 (small multiples)。
+--   元観測点を dot、補間曲線を line で重ね描き (kind 列で区別)。
+--   [English]: R2: Interpolation overlay — faceted per id (small
+--   multiples). Overlays the original observed points as dots and the
+--   interpolation curve as a line (distinguished by the kind column).
 interpolationOverlaySpec :: InterpReport -> VegaLite
 interpolationOverlaySpec ir =
   let mkObsRows = concat
@@ -2499,7 +2721,9 @@ interpolationOverlaySpec ir =
        , VL.width 200, VL.height 150
        ]
 
--- | R3: adaptive density(z) を line で表示し、その下に grid 点を rule (vertical) で重ねる。
+-- | [日本語]: R3: adaptive density(z) を line で表示し、その下に grid 点を rule (vertical) で重ねる。
+--   [English]: R3: Displays the adaptive density(z) as a line, with the
+--   grid points overlaid below as vertical rules.
 densityProfileSpec :: InterpReport -> VegaLite
 densityProfileSpec ir =
   let densRows  = [ dataRow [("z", Number z), ("density", Number d)] []
@@ -2522,7 +2746,10 @@ densityProfileSpec ir =
        , VL.width 600, VL.height 200
        ]
 
--- | R7: id ごとの z 観測点を縦並びの dot plot で表示 (z レンジ揃え目視確認)。
+-- | [日本語]: R7: id ごとの z 観測点を縦並びの dot plot で表示 (z レンジ揃え目視確認)。
+--   [English]: R7: Displays each id's z observation points as a
+--   vertically-stacked dot plot (for visually checking z-range
+--   alignment).
 idAlignmentSpec :: InterpReport -> VegaLite
 idAlignmentSpec ir =
   let rows = concat

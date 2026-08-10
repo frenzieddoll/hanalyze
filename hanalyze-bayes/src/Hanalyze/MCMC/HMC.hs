@@ -7,7 +7,7 @@
 -- Hamiltonian Monte Carlo (HMC) sampler.
 --
 -- Computes exact gradients of polymorphic 'Hanalyze.Model.HBM' models ('ModelP') via
--- 'Numeric.AD.Mode.Reverse.Double' (Phase 53). Constrained parameters (@PositiveT@,
+-- 'Numeric.AD.Mode.Reverse.Double'. Constrained parameters (@PositiveT@,
 -- @UnitIntervalT@) are detected automatically from the prior distribution.
 --
 -- @
@@ -247,7 +247,7 @@ leapfrogWithMVS gradFn mInv eps steps theta0 r0 = go steps theta0 r0
 --
 -- Uses AD gradients ('Numeric.AD.Mode.Reverse.Double'), so it is more accurate
 -- and faster than numeric differentiation. Constraint transforms are
--- detected automatically from the priors via 'getTransforms'.
+-- detected automatically from the priors via @getTransforms@.
 hmc :: PrimMonad m => ModelP r -> HMCConfig -> Params -> Gen (PrimState m) -> m Chain
 hmc m cfg initC gen = do
   let names      = sampleNames m
@@ -321,12 +321,15 @@ hmcChains m cfg numChains initC baseGen = do
   gens <- replicateM numChains (spawnGen baseGen)
   mapConcurrently (\g -> hmc m cfg initC g) gens
 
--- | Phase 50: 純粋・決定的な HMC (seed → 確定 Chain)。
+-- | [日本語]: 純粋・決定的な HMC (seed → 確定 Chain)。
+--   [English]: A pure, deterministic HMC run (seed → a fixed Chain).
 hmcPure :: ModelP r -> HMCConfig -> Params -> Word32 -> Chain
 hmcPure m cfg initC seed =
   runST (initialize (V.singleton seed) >>= hmc m cfg initC)
 
--- | Phase 50: 純粋・決定的な multi-chain HMC。 子 seed を純粋導出し @parList rdeepseq@ で並列。
+-- | [日本語]: 純粋・決定的な multi-chain HMC。 子 seed を純粋導出し @parList rdeepseq@ で並列。
+--   [English]: A pure, deterministic multi-chain HMC run. Child seeds are
+--   derived purely, and chains run in parallel via @parList rdeepseq@.
 hmcChainsPure :: ModelP r -> HMCConfig -> Int -> Params -> Word32 -> [Chain]
 hmcChainsPure m cfg numChains initC seed =
   let childSeeds :: [Word32]

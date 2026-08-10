@@ -61,38 +61,48 @@ import           Numeric                     (showFFloat)
 -- Types
 -- ---------------------------------------------------------------------------
 
--- | Classification decision tree node.
--- | 決定木。 Phase 75.23 で各ノードに **サンプル数 n / gini 不純度 / クラス分布 /
--- 多数決クラス** を保持するよう拡張 (rpart.plot / sklearn plot_tree 水準の樹形図・
--- ルールテキスト出力のため)。 予測 (predict) の数値は不変。
+-- | [日本語]: 決定木。 各ノードに __サンプル数 n / gini 不純度 / クラス分布 / 多数決クラス__
+--   を保持する (rpart.plot / sklearn plot_tree 水準の樹形図・ルールテキスト出力のため)。
+--   予測 (predict) の数値は不変。
+--   [English]: A classification decision tree node. Each node holds the
+--   __sample count n / Gini impurity / class distribution / majority class__
+--   (for rpart.plot \/ sklearn plot_tree-level tree diagrams and rule-text
+--   output). The predicted values are unaffected.
 data DTree
   = DLeaf
-      { dlClassProbs :: !(Map.Map Int Double)  -- ^ クラス割合。
-      , dlMajority   :: !Int                   -- ^ 多数決クラス (予測)。
-      , dlN          :: !Int                   -- ^ このノードのサンプル数。
-      , dlImpurity   :: !Double                -- ^ gini 不純度。
+      { dlClassProbs :: !(Map.Map Int Double)  -- ^ [日本語]: クラス割合。 [English]: The class proportions.
+      , dlMajority   :: !Int                   -- ^ [日本語]: 多数決クラス (予測)。 [English]: The majority class (the prediction).
+      , dlN          :: !Int                   -- ^ [日本語]: このノードのサンプル数。 [English]: The sample count at this node.
+      , dlImpurity   :: !Double                -- ^ [日本語]: gini 不純度。 [English]: The Gini impurity.
       }
   | DNode
       { dnFeature :: !Int
       , dnThr     :: !Double
       , dnLeft    :: !DTree
       , dnRight   :: !DTree
-      , dnN        :: !Int                     -- ^ このノードのサンプル数。
-      , dnImpurity :: !Double                  -- ^ 分割前の gini 不純度。
-      , dnProbs    :: !(Map.Map Int Double)    -- ^ 分割前のクラス割合。
-      , dnMajority :: !Int                     -- ^ 分割前の多数決クラス。
+      , dnN        :: !Int                     -- ^ [日本語]: このノードのサンプル数。 [English]: The sample count at this node.
+      , dnImpurity :: !Double                  -- ^ [日本語]: 分割前の gini 不純度。 [English]: The Gini impurity before the split.
+      , dnProbs    :: !(Map.Map Int Double)    -- ^ [日本語]: 分割前のクラス割合。 [English]: The class proportions before the split.
+      , dnMajority :: !Int                     -- ^ [日本語]: 分割前の多数決クラス。 [English]: The majority class before the split.
       }
   deriving (Show)
 
--- | 学習済み決定木 + 表示メタ (特徴量名・クラス名)。 高レベル @df |-> decisionTree@
+-- | [日本語]: 学習済み決定木 + 表示メタ (特徴量名・クラス名)。 高レベル @df |-> decisionTree@
 --   ('Hanalyze.Fit') が fit 時に手元の実列名とクラス列の levels を載せて返す
---   ('RandomForestClassifier.RFClassifierFit' と同型のラッパ)。 これにより 'treePlot' /
---   'printRpart' は名前を手渡しせず @DTFit@ 一つで済む。 クラス番号 (0..K-1) は
+--   ('RandomForestClassifier.RFClassifierFit' と同型のラッパ)。 これにより @treePlot@ /
+--   @printRpart@ は名前を手渡しせず @DTFit@ 一つで済む。 クラス番号 (0..K-1) は
 --   @dtClassNames !! k@ で名前が引ける。
+--   [English]: A fitted decision tree + display metadata (feature names,
+--   class names). The high-level @df |-> decisionTree@ ('Hanalyze.Fit')
+--   returns the actual column names and the class column's levels at fit
+--   time (a wrapper isomorphic to 'RandomForestClassifier.RFClassifierFit').
+--   This lets @treePlot@ \/ @printRpart@ work with a single @DTFit@ instead
+--   of passing names separately. The name for class index (0..K-1) can be
+--   looked up via @dtClassNames !! k@.
 data DTFit = DTFit
-  { dtTree         :: !DTree    -- ^ 学習済み木。
-  , dtFeatureNames :: ![Text]   -- ^ 特徴量名 (fit に使った列順)。
-  , dtClassNames   :: ![Text]   -- ^ クラス名 (label 0..K-1 に対応する levels)。
+  { dtTree         :: !DTree    -- ^ [日本語]: 学習済み木。 [English]: The fitted tree.
+  , dtFeatureNames :: ![Text]   -- ^ [日本語]: 特徴量名 (fit に使った列順)。 [English]: The feature names (in the column order used for fitting).
+  , dtClassNames   :: ![Text]   -- ^ [日本語]: クラス名 (label 0..K-1 に対応する levels)。 [English]: The class names (the levels corresponding to labels 0..K-1).
   } deriving (Show)
 
 -- | Decision tree configuration.
@@ -221,14 +231,28 @@ giniImpurity ys  =
                       Map.empty ys
   in 1 - foldl' (\acc c -> acc + (c / n) ^ (2 :: Int)) 0 (Map.elems counts)
 
--- | 多数決 (予測) クラス = 確率最大のクラス。 同点は **最小クラス index** を選ぶ
---   (rpart / sklearn 慣例)。 'Map.toList' は昇順 key なので、 @foldl'@ で「厳密に
+-- | [日本語]: 多数決 (予測) クラス = 確率最大のクラス。 同点は __最小クラス index__ を選ぶ
+--   (rpart / sklearn 慣例)。 @Map.toList@ は昇順 key なので、 @foldl'@ で「厳密に
 --   大きい確率でだけ更新」すれば先勝ち = 最小 index の同点タイブレークになる。
 --
 --   ⚠ 旧 @sortByValDescV@ は名前に反して昇順を返し (@reverse . 降順ソート@)、
---   @head@ が **最小確率クラス (argmin)** を拾っていた。 深さ無制限で葉が純粋な間は
+--   @head@ が __最小確率クラス (argmin)__ を拾っていた。 深さ無制限で葉が純粋な間は
 --   露見しないが、 depth/min_samples で止まった混在葉で予測が少数派に化ける実バグ
---   だった (Phase 75.26 で樹形図を目視して発覚・修正)。
+--   だった (樹形図を目視して発覚・修正)。
+--
+--   [English]: The majority (predicted) class = the class with the highest
+--   probability. Ties are broken by choosing the __smallest class index__
+--   (rpart \/ sklearn convention). Since @Map.toList@ has ascending keys,
+--   @foldl'@ that "updates only on a strictly larger probability" gives a
+--   first-wins tiebreak = the smallest index among ties wins.
+--
+--   ⚠ The old @sortByValDescV@, despite its name, returned an ascending
+--   order (@reverse . descending sort@), so @head@ picked up the
+--   __smallest-probability class (argmin)__. This went unnoticed while
+--   depth was unlimited and leaves stayed pure, but was a real bug in which
+--   predictions for mixed leaves stopped by depth\/min_samples flipped to
+--   the minority class (discovered and fixed by visually inspecting a tree
+--   diagram).
 argMaxClass :: Map.Map Int Double -> Int
 argMaxClass m = case Map.toList m of
   []       -> 0
@@ -384,7 +408,7 @@ predictDTProbs DNode{dnFeature = i, dnThr = thr, dnLeft = l, dnRight = r} x
 -- Text export (R print.rpart 相当)
 -- ---------------------------------------------------------------------------
 
--- | 決定木のルールを R @print.rpart@ 形式のテキストで出力する。
+-- | [日本語]: 決定木のルールを R @print.rpart@ 形式のテキストで出力する。
 --
 -- R の rpart オブジェクトを @print@ したときと同じ体裁:
 --
@@ -410,14 +434,55 @@ predictDTProbs DNode{dnFeature = i, dnThr = thr, dnLeft = l, dnRight = r} x
 --
 -- 第 1 引数 = 特徴量名、 第 2 引数 = クラス名 (yval に使う factor 水準)。
 -- いずれも index に対し長さ不足・空文字なら @f{i}@ / 生の整数へフォールバックする
--- (行列 fit で名無しの木でも動く)。 75.23 で各ノードに載せた n / gini / クラス分布
+-- (行列 fit で名無しの木でも動く)。 各ノードに載せた n / gini / クラス分布
 -- から純粋計算し、 予測 (predict) の数値には非依存。
--- | 高レベル版 — 'DTFit' からノード規則テキストを出す ('df |-> decisionTree' の返り値
---   をそのまま渡せる)。 名前を手渡ししたい低レベルは 'printRpartRaw'。
+--
+-- 高レベル版 — 'DTFit' からノード規則テキストを出す ('df |-> decisionTree' の返り値
+-- をそのまま渡せる)。 名前を手渡ししたい低レベルは 'printRpartRaw'。
+--
+--   [English]: Outputs a decision tree's rules as text in R @print.rpart@
+--   format.
+--
+-- The same layout as when an R rpart object is @print@-ed:
+--
+-- @
+-- n= &lt;total&gt;
+--
+-- node), split, n, loss, yval, (yprob)
+--       * denotes terminal node
+--
+-- 1) root 12 8 setosa (0.3333 0.3333 0.3333)
+--   2) petal_width< 0.80 4 0 setosa (1.0000 0.0000 0.0000) *
+--   3) petal_width>=0.80 8 4 versicolor (0.0000 0.5000 0.5000)
+--     6) petal_width< 1.65 4 0 versicolor (0.0000 1.0000 0.0000) *
+--     7) petal_width>=1.65 4 0 virginica (0.0000 0.0000 1.0000) *
+-- @
+--
+-- Each line = @&lt;node#&gt;) &lt;split&gt; &lt;n&gt; &lt;loss&gt; &lt;yval&gt; (&lt;yprob…&gt;) [*]@.
+-- Node numbers follow R's convention: root=1, children @2k@\/@2k+1@. @loss@
+-- = the misclassification count (n − the majority class count), @yval@ =
+-- the predicted class, @yprob@ = the probabilities of all classes appearing
+-- in the tree (ascending class index), @*@ = terminal (leaf). Splits follow
+-- R's fixed-width notation faithfully: left = @name&lt; thr@ (≤, condition
+-- holds), right = @name&gt;=thr@ (the same left ≤ \/ right > convention as
+-- dtreeToDag).
+--
+-- The first argument = feature names, the second = class names (the factor
+-- levels used for yval). For both, an index with insufficient length or an
+-- empty string falls back to @f{i}@ \/ the raw integer (works even for a
+-- tree with no names from a matrix fit). Computed purely from the n \/ gini
+-- \/ class distribution carried at each node, independent of the predicted
+-- (predict) values.
+--
+-- The high-level version — outputs node rule text from a 'DTFit' (the
+-- return value of @df |-> decisionTree@ can be passed directly). The
+-- low-level version for passing names explicitly is 'printRpartRaw'.
 printRpart :: DTFit -> Text
 printRpart (DTFit tree feats classes) = printRpartRaw feats classes tree
 
--- | 行列 fit 用の低レベル版 — 特徴量名・クラス名を明示的に渡す。
+-- | [日本語]: 行列 fit 用の低レベル版 — 特徴量名・クラス名を明示的に渡す。
+--   [English]: The low-level version for matrix fits — passes feature names
+--   and class names explicitly.
 printRpartRaw :: [Text] -> [Text] -> DTree -> Text
 printRpartRaw featNames classNames tree =
   T.intercalate "\n" (header ++ go 1 0 "root" tree)
@@ -460,7 +525,9 @@ printRpartRaw featNames classNames tree =
     fmt2 x = T.pack (showFFloat (Just 2) x "")
     fmt4 x = T.pack (showFFloat (Just 4) x "")
 
--- | 木に現れる全クラス label を集めた集合 (値は () のダミー)。 'Map.keys' で昇順。
+-- | [日本語]: 木に現れる全クラス label を集めた集合 (値は () のダミー)。 'Map.keys' で昇順。
+--   [English]: The set of all class labels appearing in the tree (values are
+--   a dummy @()@). Ascending via 'Map.keys'.
 labelSet :: DTree -> Map.Map Int ()
 labelSet (DLeaf p m _ _)          = Map.insert m () (() <$ p)
 labelSet (DNode _ _ l r _ _ p m)  =

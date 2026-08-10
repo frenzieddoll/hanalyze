@@ -10,9 +10,9 @@
 --
 -- Implements:
 --
---   * 'kMeans' (Lloyd / Forgy / k-means++ initialisation, multi-restart)
---   * 'silhouette' (cluster quality metric)
---   * 'inertia' (within-cluster sum of squared distances)
+--   - 'kMeans' (Lloyd / Forgy / k-means++ initialisation, multi-restart)
+--   - 'silhouette' (cluster quality metric)
+--   - 'inertia' (within-cluster sum of squared distances)
 --
 -- Hierarchical and DBSCAN are deferred to a follow-up phase.
 module Hanalyze.Model.Cluster
@@ -85,22 +85,32 @@ data KMeansResult = KMeansResult
   , kmrConverged :: !Bool
   } deriving (Show)
 
--- | Fit K-means; runs 'kmRestarts' independent restarts and keeps
--- the lowest-inertia solution.
---
--- IO ラッパ。 ロジックは 'PrimMonad' 汎用の 'kMeansM' (mwc は 'PrimMonad'
--- 汎用ゆえ ST/IO で同コードを共有) をそのまま IO に特殊化したもの。
+-- | [日本語]: 'kmRestarts' 回の独立再実行を行い、 最も慣性の低い解を保持して
+--   K-means をフィットする。
+--   IO ラッパ。 ロジックは 'PrimMonad' 汎用の 'kMeansM' (mwc は 'PrimMonad'
+--   汎用ゆえ ST/IO で同コードを共有) をそのまま IO に特殊化したもの。
+--   [English]: Fit K-means; runs 'kmRestarts' independent restarts and
+--   keeps the lowest-inertia solution.
+--   IO wrapper. The logic is 'kMeansM', generic over 'PrimMonad' (mwc is
+--   generic over 'PrimMonad', so the same code is shared between ST\/IO),
+--   specialized directly to IO.
 kMeans :: KMeansConfig -> LA.Matrix Double -> MWC.GenIO -> IO KMeansResult
 kMeans = kMeansM
 
--- | 純粋・決定的な K-means。 同じ @seed@ なら必ず同じ 'KMeansResult' を返す
--- (同 seed → ビット同一・IO 不要)。 'kMeansM' を 'ST' で走らせ 'runST' で
--- 閉じる ([[phase-50-mcmc-purification-status]] の 'nutsPure' と同方針)。
+-- | [日本語]: 純粋・決定的な K-means。 同じ @seed@ なら必ず同じ 'KMeansResult' を
+--   返す (同 seed → ビット同一・IO 不要)。 'kMeansM' を @ST@ で走らせ 'runST' で
+--   閉じる ([[phase-50-mcmc-purification-status]] の @nutsPure@ と同方針)。
+--   [English]: Pure, deterministic K-means. The same @seed@ always returns
+--   the same 'KMeansResult' (same seed → bit-identical, no IO required).
+--   Runs 'kMeansM' in @ST@ and closes it with 'runST' (the same approach as
+--   @nutsPure@ in [[phase-50-mcmc-purification-status]]).
 kMeansPure :: KMeansConfig -> LA.Matrix Double -> Word32 -> KMeansResult
 kMeansPure cfg x seed =
   runST (MWC.initialize (V.singleton seed) >>= kMeansM cfg x)
 
--- | 'PrimMonad' 汎用の K-means 本体。 'kMeans' (IO) / 'kMeansPure' (ST) が共有。
+-- | [日本語]: 'PrimMonad' 汎用の K-means 本体。 'kMeans' (IO) / @kMeansPure@ (ST) が共有。
+--   [English]: The K-means core, generic over 'PrimMonad', shared by
+--   'kMeans' (IO) and @kMeansPure@ (ST).
 kMeansM :: PrimMonad m
         => KMeansConfig -> LA.Matrix Double -> MWC.Gen (PrimState m)
         -> m KMeansResult
@@ -151,8 +161,8 @@ forgyInitM k x gen = do
 -- centroids weighted by squared distance to nearest existing centroid.
 --
 -- /Implementation/. Maintain @bestDist[i] = min_c ‖x_i − c‖²@ across
--- the centroids picked so far. Adding a new centroid is __one BLAS
--- GEMV__ + element-wise min, not a per-row Vector subtract / dot.
+-- the centroids picked so far. Adding a new centroid is
+-- __one BLAS GEMV__ + element-wise min, not a per-row Vector subtract / dot.
 --
 -- The previous version paid @n@ separate @LA.Vector@ allocations and
 -- @n@ BLAS @ddot@ dispatches per centroid update (e.g. for
@@ -213,7 +223,7 @@ kmppInitM k x gen = do
 -- @‖x_a − x_i‖² = ‖x_a‖² + ‖x_i‖² − 2 x_aᵀ x_i@.
 --
 -- Cost: 1 GEMV (@O(np)@) plus one length-@n@ element-wise pass.
--- Used by 'kmppInit' to avoid per-row Vector subtract/dot.
+-- Used by @kmppInit@ to avoid per-row Vector subtract/dot.
 sqDistsToRow
   :: LA.Matrix Double      -- ^ Data matrix @X@ (@n × p@).
   -> LA.Vector Double      -- ^ Pre-computed row squared norms.

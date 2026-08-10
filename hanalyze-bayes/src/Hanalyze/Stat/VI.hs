@@ -88,19 +88,24 @@ defaultVIConfig = VIConfig
 -- 結果
 -- ---------------------------------------------------------------------------
 
--- | VI 近似法。 mean-field (`advi`) と full-rank (`fullRankAdvi`) を区別する。
+-- | [日本語]: VI 近似法。 mean-field (`advi`) と full-rank (`fullRankAdvi`) を区別する。
+--   [English]: The VI approximation method. Distinguishes mean-field
+--   (`advi`) from full-rank (`fullRankAdvi`).
 data VIMethod = MeanField | FullRank
   deriving (Show, Eq)
 
--- | ADVI result. mean-field と full-rank の両方が返す。 full-rank では
--- @viCovU@ に @n×n@ 下三角 Cholesky 因子 @L@ (unconstrained 空間) が入る。
+-- | [日本語]: ADVI result。 mean-field と full-rank の両方が返す。 full-rank では
+--   @viCovU@ に @n×n@ 下三角 Cholesky 因子 @L@ (unconstrained 空間) が入る。
+--   [English]: The ADVI result. Returned by both mean-field and full-rank.
+--   For full-rank, @viCovU@ holds the @n×n@ lower-triangular Cholesky
+--   factor @L@ (in the unconstrained space).
 data VIResult = VIResult
   { viPostMeans   :: Params           -- ^ Posterior means (constrained space, sample mean).
   , viPostSDs     :: Params           -- ^ Posterior SDs   (constrained space).
   , viMuU         :: [Double]         -- ^ Variational mean @μ@ (unconstrained).
-  , viSigmaU      :: [Double]         -- ^ Variational SD   @σ@ (unconstrained、 mean-field の場合は対角要素、 full-rank なら L_ii)。
-  , viCovU        :: Maybe [[Double]] -- ^ Full-rank ADVI: 下三角 Cholesky 因子 @L@ ([row][col])、 @LLᵀ = Σ@。 mean-field では @Nothing@。
-  , viMethod      :: VIMethod         -- ^ どちらの近似法か。
+  , viSigmaU      :: [Double]         -- ^ [日本語]: Variational SD @σ@ (unconstrained、 mean-field の場合は対角要素、 full-rank なら L_ii)。 [English]: The variational SD @σ@ (unconstrained; the diagonal elements for mean-field, or L_ii for full-rank).
+  , viCovU        :: Maybe [[Double]] -- ^ [日本語]: Full-rank ADVI: 下三角 Cholesky 因子 @L@ ([row][col])、 @LLᵀ = Σ@。 mean-field では @Nothing@。 [English]: Full-rank ADVI: the lower-triangular Cholesky factor @L@ ([row][col]), where @LLᵀ = Σ@. @Nothing@ for mean-field.
+  , viMethod      :: VIMethod         -- ^ [日本語]: どちらの近似法か。 [English]: Which approximation method was used.
   , viElboHistory :: [Double]         -- ^ ELBO trajectory (for convergence inspection).
   , viDraws       :: [Params]         -- ^ Posterior draws in the constrained space (length 'viNumDraws').
   } deriving (Show)
@@ -241,19 +246,36 @@ advi model cfg initP gen = do
 -- Full-rank ADVI (Phase 37-A5)
 -- ---------------------------------------------------------------------------
 
--- | Full-rank ADVI: 共分散を含めた変分近似 @q(u) = N(μ, LLᵀ)@ を最適化する。
+-- | [日本語]: Full-rank ADVI: 共分散を含めた変分近似 @q(u) = N(μ, LLᵀ)@ を最適化する。
 --
--- 平均場 'advi' との違い:
+--   平均場 'advi' との違い:
 --
--- * 変分パラメータは @μ@ (n-vector) と @L@ (下三角 n×n、 対角は log で
---   parameterize して正値保証)
--- * @u = μ + L·ε@ の reparameterization で勾配を取り、 ELBO の補正項は
---   @log|L| = Σ log L_ii = Σ ω_i@
--- * 推定共分散 @Σ = LLᵀ@ は @viCovU@ に入る (下三角 @L@ そのもの)
+--   - 変分パラメータは @μ@ (n-vector) と @L@ (下三角 n×n、 対角は log で
+--     parameterize して正値保証)
+--   - @u = μ + L·ε@ の reparameterization で勾配を取り、 ELBO の補正項は
+--     @log|L| = Σ log L_ii = Σ ω_i@
+--   - 推定共分散 @Σ = LLᵀ@ は @viCovU@ に入る (下三角 @L@ そのもの)
 --
--- 平均場と比べて posterior の相関を捉えられるが、 パラメタ数 @O(n²)@、
--- 計算量も @O(n² S)@ per iteration なので n が大きいモデルでは重い。
--- 平均場が「SD を過小評価」 する hierarchical model で特に有用。
+--   平均場と比べて posterior の相関を捉えられるが、 パラメタ数 @O(n²)@、
+--   計算量も @O(n² S)@ per iteration なので n が大きいモデルでは重い。
+--   平均場が「SD を過小評価」 する hierarchical model で特に有用。
+--   [English]: Full-rank ADVI: optimizes the variational approximation
+--   @q(u) = N(μ, LLᵀ)@, including the covariance.
+--
+--   Differences from mean-field 'advi':
+--
+--   - The variational parameters are @μ@ (n-vector) and @L@ (lower
+--     triangular n×n; the diagonal is parameterized via log to guarantee
+--     positivity)
+--   - Gradients are taken via the reparameterization @u = μ + L·ε@; the
+--     ELBO's correction term is @log|L| = Σ log L_ii = Σ ω_i@
+--   - The estimated covariance @Σ = LLᵀ@ is stored in @viCovU@ (the
+--     lower-triangular @L@ itself)
+--
+--   Compared to mean-field, this captures posterior correlations, but has
+--   @O(n²)@ parameters and @O(n² S)@ compute per iteration, so it becomes
+--   heavy for models with large n. Especially useful for hierarchical
+--   models where mean-field "underestimates the SD".
 fullRankAdvi :: ModelP r -> VIConfig -> Params -> GenIO -> IO VIResult
 fullRankAdvi model cfg initP gen = do
   let names      = sampleNames model
@@ -395,9 +417,13 @@ fullRankAdvi model cfg initP gen = do
     , viDraws       = draws
     }
 
--- | 下三角 L を構築。 @omega@ は対角 (L_ii = exp ω_i)、
--- @offdg@ は (i, j) for i > j を行優先 (i 昇順、 同 i 内で j 昇順) で
--- 並べたリスト。 結果は @n × n@ 行列、 上三角は 0。
+-- | [日本語]: 下三角 L を構築。 @omega@ は対角 (L_ii = exp ω_i)、
+--   @offdg@ は (i, j) for i > j を行優先 (i 昇順、 同 i 内で j 昇順) で
+--   並べたリスト。 結果は @n × n@ 行列、 上三角は 0。
+--   [English]: Builds the lower-triangular @L@. @omega@ is the diagonal
+--   (L_ii = exp ω_i); @offdg@ is the list of (i, j) for i > j in row-major
+--   order (ascending i, then ascending j within the same i). The result is
+--   an @n × n@ matrix with the upper triangle set to 0.
 buildL :: Int -> [Double] -> [Double] -> [[Double]]
 buildL n omega offdg =
   let -- offdg をインデックス map に変換
@@ -410,11 +436,13 @@ buildL n omega offdg =
                | j <- [0 .. n-1] ]
   in [ row i | i <- [0 .. n-1] ]
 
--- | 行列・ベクトル積 @y = M·x@。
+-- | [日本語]: 行列・ベクトル積 @y = M·x@。
+--   [English]: Matrix-vector product @y = M·x@.
 matVec :: [[Double]] -> [Double] -> [Double]
 matVec mat x = [ sum (zipWith (*) row x) | row <- mat ]
 
--- | ベクトル足し算。
+-- | [日本語]: ベクトル足し算。
+--   [English]: Vector addition.
 vecAdd :: [Double] -> [Double] -> [Double]
 vecAdd = zipWith (+)
 
@@ -425,6 +453,7 @@ vecAdd = zipWith (+)
 -- adamStep は Hanalyze.Optim.Adam に集約 (Phase R0)。
 -- 再 export することで既存の利用箇所はそのまま動く。
 
--- | リストの i 番目要素を x で置換する。
+-- | [日本語]: リストの i 番目要素を x で置換する。
+--   [English]: Replaces the i-th element of a list with x.
 replaceAt :: Int -> Double -> [Double] -> [Double]
 replaceAt i x xs = take i xs ++ [x] ++ drop (i + 1) xs

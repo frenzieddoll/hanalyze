@@ -6,17 +6,31 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- 空間充填計画 (Space-Filling Designs) — コンピュータ実験 / surrogate
+-- [日本語]: 空間充填計画 (Space-Filling Designs) — コンピュータ実験 / surrogate
 -- モデル用の DoE。
 --
 -- 提供する方式:
 --
---   * 'latinHypercube' — Latin Hypercube Sampling (stratified random)
---   * 'latinHypercubeMaximin' — Maximin LHS (点間最小距離を最大化する局所探索)
---   * 'haltonDesign' — Halton 低偏差列 (決定的、 再現性高)
+--   - 'latinHypercube' — Latin Hypercube Sampling (stratified random)
+--   - 'latinHypercubeMaximin' — Maximin LHS (点間最小距離を最大化する局所探索)
+--   - 'haltonDesign' — Halton 低偏差列 (決定的、 再現性高)
 --
 -- 出力は全て @[0, 1)^d@ 上の点。 ユーザは bounds スケーリングを後で行う
 -- (`Hanalyze.Stat.QuasiRandom.lhsSamplesIn` 等を参考に)。
+--
+-- [English]: Space-Filling Designs — DoE for computer experiments \/
+-- surrogate models.
+--
+-- Provided schemes:
+--
+--   - 'latinHypercube' — Latin Hypercube Sampling (stratified random)
+--   - 'latinHypercubeMaximin' — Maximin LHS (a local search that maximizes
+--     the minimum inter-point distance)
+--   - 'haltonDesign' — the Halton low-discrepancy sequence (deterministic,
+--     highly reproducible)
+--
+-- All outputs are points on @[0, 1)^d@. Users perform bounds scaling
+-- afterward (see e.g. `Hanalyze.Stat.QuasiRandom.lhsSamplesIn`).
 module Hanalyze.Design.SpaceFilling
   ( SpaceFillingDesign (..)
   , latinHypercube
@@ -38,23 +52,27 @@ import qualified Hanalyze.Stat.QuasiRandom as QR
 -- 型
 -- ===========================================================================
 
--- | 空間充填計画の結果。
+-- | [日本語]: 空間充填計画の結果。
+--   [English]: The result of a space-filling design.
 data SpaceFillingDesign = SpaceFillingDesign
-  { sfdMatrix  :: !(LA.Matrix Double)  -- ^ n × d、 @[0, 1)^d@ 上の点
-  , sfdNPoints :: !Int                 -- ^ 行数 n
-  , sfdNDims   :: !Int                 -- ^ 列数 d
-  , sfdMinDist :: !Double              -- ^ 点間最小ユークリッド距離 (大きい方が良い)
-  , sfdMethod  :: !Text                -- ^ "LHS" / "MaximinLHS" / "Halton"
+  { sfdMatrix  :: !(LA.Matrix Double)  -- ^ [日本語]: n × d、 @[0, 1)^d@ 上の点 [English]: n x d, points on @[0, 1)^d@
+  , sfdNPoints :: !Int                 -- ^ [日本語]: 行数 n [English]: The number of rows, n
+  , sfdNDims   :: !Int                 -- ^ [日本語]: 列数 d [English]: The number of columns, d
+  , sfdMinDist :: !Double              -- ^ [日本語]: 点間最小ユークリッド距離 (大きい方が良い) [English]: The minimum inter-point Euclidean distance (larger is better)
+  , sfdMethod  :: !Text                -- ^ [日本語]: "LHS" / "MaximinLHS" / "Halton" [English]: "LHS" \/ "MaximinLHS" \/ "Halton"
   } deriving (Show)
 
 -- ===========================================================================
 -- 公開関数
 -- ===========================================================================
 
--- | Latin Hypercube Sampling — 各次元のセル @[i/n, (i+1)/n)@ を 1 度ずつ
--- ランダム順序で埋める。 iid uniform より初期被覆良。
-latinHypercube :: Int            -- ^ 点数 n
-               -> Int            -- ^ 次元 d
+-- | [日本語]: Latin Hypercube Sampling — 各次元のセル @[i/n, (i+1)/n)@ を 1 度ずつ
+--   ランダム順序で埋める。 iid uniform より初期被覆良。
+--   [English]: Latin Hypercube Sampling — fills each dimension's cells
+--   @[i/n, (i+1)/n)@ exactly once, in random order. Better initial
+--   coverage than iid uniform.
+latinHypercube :: Int            -- ^ [日本語]: 点数 n [English]: The number of points, n
+               -> Int            -- ^ [日本語]: 次元 d [English]: The number of dimensions, d
                -> MWC.GenIO
                -> IO SpaceFillingDesign
 latinHypercube n d gen
@@ -76,14 +94,22 @@ latinHypercube n d gen
         , sfdMethod  = "LHS"
         }
 
--- | Maximin LHS — 初期 LHS から始めて、 ランダム (列, 行ペア) で値交換を試行、
--- 点間最小距離が改善するなら採用、 を @nTries@ 回 (= 全試行回数) 反復。
+-- | [日本語]: Maximin LHS — 初期 LHS から始めて、 ランダム (列, 行ペア) で値交換を試行、
+--   点間最小距離が改善するなら採用、 を @nTries@ 回 (= 全試行回数) 反復。
 --
--- 結果は **LHS の stratification 性質を保ったまま** 距離を最大化したもの。
--- @nTries = 1000@ 程度で実用的な改善が得られる (n, d による)。
-latinHypercubeMaximin :: Int            -- ^ 点数 n
-                     -> Int            -- ^ 次元 d
-                     -> Int            -- ^ 試行回数 (= swap 候補数の上限)
+--   結果は __LHS の stratification 性質を保ったまま__ 距離を最大化したもの。
+--   @nTries = 1000@ 程度で実用的な改善が得られる (n, d による)。
+--   [English]: Maximin LHS — starting from an initial LHS, tries a value
+--   swap at a random (column, row-pair), keeps it if the minimum
+--   inter-point distance improves, and repeats this @nTries@ times (= the
+--   total number of trials).
+--
+--   The result maximizes distance
+--   __while preserving the LHS's stratification property__. @nTries = 1000@ or so yields a practical
+--   improvement (depending on n, d).
+latinHypercubeMaximin :: Int            -- ^ [日本語]: 点数 n [English]: The number of points, n
+                     -> Int            -- ^ [日本語]: 次元 d [English]: The number of dimensions, d
+                     -> Int            -- ^ [日本語]: 試行回数 (= swap 候補数の上限) [English]: The number of trials (= the upper bound on swap candidates)
                      -> MWC.GenIO
                      -> IO SpaceFillingDesign
 latinHypercubeMaximin n d nTries gen
@@ -120,10 +146,13 @@ latinHypercubeMaximin n d nTries gen
         , sfdMethod  = "MaximinLHS"
         }
 
--- | Halton 低偏差列ベースの決定的 design。 同じ @(n, d)@ で必ず同じ点集合を
--- 返す (再現性目的)。
-haltonDesign :: Int          -- ^ 点数 n
-             -> Int          -- ^ 次元 d
+-- | [日本語]: Halton 低偏差列ベースの決定的 design。 同じ @(n, d)@ で必ず同じ点集合を
+--   返す (再現性目的)。
+--   [English]: A deterministic design based on the Halton low-discrepancy
+--   sequence. Always returns the same point set for the same @(n, d)@
+--   (for reproducibility).
+haltonDesign :: Int          -- ^ [日本語]: 点数 n [English]: The number of points, n
+             -> Int          -- ^ [日本語]: 次元 d [English]: The number of dimensions, d
              -> SpaceFillingDesign
 haltonDesign n d
   | n < 1 || d < 1 = SpaceFillingDesign
@@ -147,7 +176,9 @@ haltonDesign n d
 -- 品質指標
 -- ===========================================================================
 
--- | 点間ユークリッド距離の最小値。 空 design (行数 < 2) では 0。
+-- | [日本語]: 点間ユークリッド距離の最小値。 空 design (行数 < 2) では 0。
+--   [English]: The minimum inter-point Euclidean distance. 0 for an empty
+--   design (row count < 2).
 designMinDistance :: LA.Matrix Double -> Double
 designMinDistance mat
   | LA.rows mat < 2 = 0
@@ -166,7 +197,8 @@ designMinDistance mat
 -- 内部 helper
 -- ===========================================================================
 
--- | Matrix の (i, k) 要素と (j, k) 要素を入れ替えた新しい Matrix。
+-- | [日本語]: Matrix の (i, k) 要素と (j, k) 要素を入れ替えた新しい Matrix。
+--   [English]: A new Matrix with the (i, k) and (j, k) elements swapped.
 swapEntries :: LA.Matrix Double -> Int -> Int -> Int -> LA.Matrix Double
 swapEntries mat i j k =
   let nR = LA.rows mat

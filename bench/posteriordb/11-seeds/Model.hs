@@ -20,7 +20,7 @@
 -- `p = invlogit(eta)` へ手動展開する (05-mh の ZeroInflatedBinomial と
 -- 同じ流儀)。`tau ~ Gamma(1e-3,1e-3)` は hanalyze の `Gamma` が `PositiveT`
 -- 変換 (exp系) を持つため 10-rats で踏んだ「Uniform を SD に使う罠」は
--- 発生しない (既知の一様事前 sd パラメータ発散パターン)。
+-- 発生しない (`hanalyze-uniform-sd-parameter-trap` memory 参照)。
 --
 -- reference_posterior_name = null (posteriordb に公式 reference 無し・2者比較のみ)。
 --

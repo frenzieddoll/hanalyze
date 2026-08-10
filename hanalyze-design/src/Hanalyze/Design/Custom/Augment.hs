@@ -6,27 +6,56 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Custom Design の Augment 5 メニュー (Phase 25-6/7/8)。
+-- [日本語]: Custom Design の Augment 5 メニュー。
 --
 -- spec: doe-custom-design-spec v0.1.1 §2.6 / §3。
 -- 参考: JMP "Augment Design" platform。
 --
 -- ## 5 メニュー
 --
---   * 'Replicate n'   : 既存 design を n 回複製
---   * 'AddCenter  n'  : 中心点 (全連続因子 = 0、 categorical は ref level) を n 行追加
---   * 'AddAxial   α'  : 1 因子だけを ±α、 他を 0 にした axial 点を全連続因子で追加
+--   - 'Replicate n'   : 既存 design を n 回複製
+--   - 'AddCenter  n'  : 中心点 (全連続因子 = 0、 categorical は ref level) を n 行追加
+--   - 'AddAxial   α'  : 1 因子だけを ±α、 他を 0 にした axial 点を全連続因子で追加
 --                       (= 2 * #continuous-factors 行)
---   * 'AddRuns    n'  : 既存 augmentDesign (古典 Fedorov 交換) で N 行追加
---   * 'Foldover   k'  : 既存 design の sign-flipped 行を全部追加 (Full)、
+--   - 'AddRuns    n'  : 既存 augmentDesign (古典 Fedorov 交換) で N 行追加
+--   - 'Foldover   k'  : 既存 design の sign-flipped 行を全部追加 (Full)、
 --                       または指定因子のみ flip (Partial)
 --
--- ## 制限 (Phase 25-8 暫定)
+-- ## 制限 (現状の暫定仕様)
 --
---   * 'cdsInitial' が 'Nothing' の場合は 'Left' (既存 design 必須)
---   * AddCenter / AddAxial は連続因子のみ。 categorical 列は ref index 0 を使う
---   * Foldover は 2 水準連続因子のみ正しく動作。 categorical はそのまま (flip しない)
---   * AddAxial は coded space ([-1, 1]) 想定、 raw range を考慮しない
+--   - 'cdsInitial' が 'Nothing' の場合は 'Left' (既存 design 必須)
+--   - AddCenter / AddAxial は連続因子のみ。 categorical 列は ref index 0 を使う
+--   - Foldover は 2 水準連続因子のみ正しく動作。 categorical はそのまま (flip しない)
+--   - AddAxial は coded space ([-1, 1]) 想定、 raw range を考慮しない
+--
+-- [English]: Custom Design's 5 Augment menus.
+--
+-- spec: doe-custom-design-spec v0.1.1 §2.6 / §3.
+-- Reference: JMP's "Augment Design" platform.
+--
+-- ## The 5 menus
+--
+--   - 'Replicate n'   : replicate the existing design n times
+--   - 'AddCenter  n'  : add n center-point rows (all continuous factors =
+--                       0, categorical uses the ref level)
+--   - 'AddAxial   α'  : add axial points across all continuous factors,
+--                       each with one factor set to ±α and the rest at 0
+--                       (= 2 * #continuous-factors rows)
+--   - 'AddRuns    n'  : add N rows via the existing augmentDesign
+--                       (classic Fedorov exchange)
+--   - 'Foldover   k'  : add all sign-flipped rows of the existing design
+--                       (Full), or flip only specified factors (Partial)
+--
+-- ## Limitations (current provisional state)
+--
+--   - If 'cdsInitial' is 'Nothing', returns 'Left' (an existing design is
+--     required)
+--   - AddCenter \/ AddAxial only apply to continuous factors; categorical
+--     columns use ref index 0
+--   - Foldover only works correctly for 2-level continuous factors;
+--     categorical columns are left as-is (not flipped)
+--   - AddAxial assumes coded space ([-1, 1]); the raw range is not
+--     considered
 module Hanalyze.Design.Custom.Augment
   ( AugmentMenu (..)
   , FoldoverKind (..)
@@ -51,32 +80,45 @@ data AugmentMenu
   = Replicate !Int
   | AddCenter !Int
   | AddAxial  !Double !Bool
-    -- ^ axial 点。 第 2 引数 @rawUnits@ が False のとき (= 既定) は coded
-    -- @[-1, 1]@ 空間で center 0 + ±α (NCoded モデル想定)。 True のとき raw
-    -- 単位で center (lo+hi)/2 ± α·(hi-lo)/2 (Phase 28-10 で追加)。 raw 形式の
-    -- 既存設計に直接 ±α coded 相当の axial 点を入れたいケースに使う
+    -- ^ [日本語]: axial 点。 第 2 引数 @rawUnits@ が False のとき (= 既定) は coded
+    --   @[-1, 1]@ 空間で center 0 + ±α (NCoded モデル想定)。 True のとき raw
+    --   単位で center (lo+hi)/2 ± α·(hi-lo)/2 とする。 raw 形式の
+    --   既存設計に直接 ±α coded 相当の axial 点を入れたいケースに使う
+    --   [English]: Axial points. When the second argument @rawUnits@ is
+    --   False (default), generated in coded @[-1, 1]@ space as center 0 +
+    --   ±α (assumes an NCoded model). When True, generated in raw units
+    --   as center (lo+hi)/2 ± α·(hi-lo)/2. Used when you want to insert
+    --   ±α coded-equivalent axial points directly into an existing
+    --   raw-format design.
   | AddRuns   !Int
   | Foldover  !FoldoverKind
   deriving (Show, Eq)
 
 data FoldoverKind
   = FullFoldover
-  | PartialFoldover ![Text]  -- ^ flip する因子名のリスト
+  | PartialFoldover ![Text]  -- ^ [日本語]: flip する因子名のリスト [English]: List of factor names to flip
   | CategoricalSwap ![(Text, [(Text, Text)])]
-    -- ^ Phase 28-7: categorical 因子の level swap mapping。 各エントリ
-    -- @(factor_name, [(old_level, new_level), ...])@ に対し、 既存設計の
-    -- 該当列の level を mapping で置換した行を追加。 連続因子の符号 flip は
-    -- 行わない (CategoricalSwap は categorical 専用)。 mapping に現れない
-    -- level はそのまま (自分自身に map)
+    -- ^ [日本語]: categorical 因子の level swap mapping。 各エントリ
+    --   @(factor_name, [(old_level, new_level), ...])@ に対し、 既存設計の
+    --   該当列の level を mapping で置換した行を追加。 連続因子の符号 flip は
+    --   行わない (CategoricalSwap は categorical 専用)。 mapping に現れない
+    --   level はそのまま (自分自身に map)
+    --   [English]: A level swap mapping for a categorical factor. For
+    --   each entry @(factor_name, [(old_level, new_level), ...])@, adds a
+    --   row with the corresponding column's level replaced according to
+    --   the mapping. Does not flip the sign of continuous factors
+    --   (CategoricalSwap is categorical-only). Levels not appearing in
+    --   the mapping are left as-is (mapped to themselves).
   deriving (Show, Eq)
 
 data AugmentMenuResult = AugmentMenuResult
   { amrMatrix :: !(LA.Matrix Double)
-    -- ^ 増補後の design (existing + added)
+    -- ^ [日本語]: 増補後の design (existing + added)
+    --   [English]: The augmented design (existing + added)
   , amrAdded  :: !Int
-    -- ^ 追加された行数
+    -- ^ [日本語]: 追加された行数 [English]: Number of rows added
   , amrMethod :: !Text
-    -- ^ "Replicate" / "AddCenter" / etc.
+    -- ^ [日本語]: "Replicate" / "AddCenter" 等。 [English]: "Replicate" \/ "AddCenter" \/ etc.
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
@@ -118,7 +160,9 @@ augmentReplicate existing k
 -- AddCenter
 -- ---------------------------------------------------------------------------
 
--- | 中心点: 連続因子は 0、 categorical は level index 0 (= reference)。
+-- | [日本語]: 中心点: 連続因子は 0、 categorical は level index 0 (= reference)。
+--   [English]: Center points: 0 for continuous factors, level index 0
+--   (= the reference) for categorical.
 augmentAddCenter
   :: [Factor]
   -> LA.Matrix Double
@@ -153,14 +197,24 @@ factorCenter f = case fKind f of
 -- AddAxial
 -- ---------------------------------------------------------------------------
 
--- | axial / star 点: 各連続因子について、 その因子だけを +α / -α、
--- 他を 0 (中心) にした 2 点ずつを追加。
+-- | [日本語]: axial / star 点: 各連続因子について、 その因子だけを +α / -α、
+--   他を 0 (中心) にした 2 点ずつを追加。
 --
--- @rawUnits@ False: coded 空間 (center 0 + ±α) で生成。 NCoded モデルで
---   raw 行列が既に coded されている前提。
--- @rawUnits@ True: 因子の (lo, hi) を使って center (lo+hi)/2 + ±α·(hi-lo)/2
---   で生成 (raw 単位、 coded ±α 相当の位置)。 Continuous / DiscreteNum /
---   Mixture でそれぞれの range を解釈する。
+--   @rawUnits@ False: coded 空間 (center 0 + ±α) で生成。 NCoded モデルで
+--     raw 行列が既に coded されている前提。
+--   @rawUnits@ True: 因子の (lo, hi) を使って center (lo+hi)/2 + ±α·(hi-lo)/2
+--     で生成 (raw 単位、 coded ±α 相当の位置)。 Continuous / DiscreteNum /
+--     Mixture でそれぞれの range を解釈する。
+--
+--   [English]: Axial \/ star points: for each continuous factor, adds two
+--   points with that factor set to +α \/ -α and the rest at 0 (center).
+--
+--   @rawUnits@ False: generated in coded space (center 0 + ±α). Assumes
+--     the raw matrix is already coded, as in an NCoded model.
+--   @rawUnits@ True: generated using the factor's (lo, hi) as center
+--     (lo+hi)/2 + ±α·(hi-lo)/2 (raw units, at the position equivalent to
+--     coded ±α). The range is interpreted per factor for Continuous \/
+--     DiscreteNum \/ Mixture.
 augmentAddAxial
   :: [Factor]
   -> LA.Matrix Double
@@ -199,9 +253,13 @@ augmentAddAxial factors existing alpha rawUnits
                   , amrMethod = T.pack "AddAxial"
                   }
 
--- | 因子の半幅 = (hi - lo) / 2 (Continuous / DiscreteNum / Mixture)。
--- raw 単位 axial の scale factor として使う。 Categorical / Ordinal は意味を
--- 持たないため 0 を返す (caller 側 contIxs で除外済の想定)。
+-- | [日本語]: 因子の半幅 = (hi - lo) / 2 (Continuous / DiscreteNum / Mixture)。
+--   raw 単位 axial の scale factor として使う。 Categorical / Ordinal は意味を
+--   持たないため 0 を返す (caller 側 contIxs で除外済の想定)。
+--   [English]: A factor's half-range = (hi - lo) / 2 (Continuous \/
+--   DiscreteNum \/ Mixture). Used as the scale factor for raw-unit axial
+--   points. Categorical \/ Ordinal have no meaningful value here, so
+--   returns 0 (assumed already excluded by the caller's contIxs).
 factorHalfRange :: Factor -> Double
 factorHalfRange f = case fKind f of
   Continuous  lo hi -> (hi - lo) / 2
@@ -211,8 +269,12 @@ factorHalfRange f = case fKind f of
   Mixture     lo hi -> (hi - lo) / 2
   _                 -> 0
 
--- | 因子の raw 単位での中心 = (lo + hi) / 2 (Phase 28-10 AddAxial rawUnits=True 用)。
--- 'factorCenter' は coded 空間想定 (Continuous → 0)、 これは raw 空間。
+-- | [日本語]: 因子の raw 単位での中心 = (lo + hi) / 2 (AddAxial の
+--   rawUnits=True 用)。 'factorCenter' は coded 空間想定 (Continuous → 0)、
+--   これは raw 空間。
+--   [English]: A factor's center in raw units = (lo + hi) / 2 (used for
+--   AddAxial's rawUnits=True). 'factorCenter' assumes coded space
+--   (Continuous → 0); this is the raw-space counterpart.
 factorCenterRaw :: Factor -> Double
 factorCenterRaw f = case fKind f of
   Continuous  lo hi -> (lo + hi) / 2
@@ -226,10 +288,15 @@ factorCenterRaw f = case fKind f of
 -- AddRuns (既存 augmentDesign を wrap)
 -- ---------------------------------------------------------------------------
 
--- | AddRuns: 既存 'Hanalyze.Design.Optimal.augmentDesign' を使い、
--- 候補集合は連続因子は ±1 grid、 categorical は全 level の cartesian product。
--- 候補集合サイズが大きくなりすぎる場合 (例 2^20 等) は呼び出し側で nRuns を
--- 抑制すること。
+-- | [日本語]: AddRuns: 既存 'Hanalyze.Design.Optimal.augmentDesign' を使い、
+--   候補集合は連続因子は ±1 grid、 categorical は全 level の cartesian product。
+--   候補集合サイズが大きくなりすぎる場合 (例 2^20 等) は呼び出し側で nRuns を
+--   抑制すること。
+--   [English]: AddRuns: uses the existing
+--   'Hanalyze.Design.Optimal.augmentDesign', with a candidate set
+--   of the ±1 grid for continuous factors and the cartesian product of
+--   all levels for categorical. If the candidate set size grows too
+--   large (e.g. 2^20), the caller should limit nRuns.
 augmentAddRuns
   :: CustomDesignSpec
   -> LA.Matrix Double
@@ -255,8 +322,13 @@ augmentAddRuns spec existing k
                   , amrMethod = T.pack "AddRuns"
                   }
 
--- | 候補集合: 連続因子は ±1、 categorical / ordinal は全 level、 DiscreteNum は xs、
--- Mixture は [lo, hi] の 2 点 とする (簡略化、 Phase 25-7 で grid 拡張可)。
+-- | [日本語]: 候補集合: 連続因子は ±1、 categorical / ordinal は全 level、
+--   DiscreteNum は xs、 Mixture は [lo, hi] の 2 点 とする
+--   (簡略化、 将来 grid を拡張可能)。
+--   [English]: Candidate set: ±1 for continuous factors, all levels for
+--   categorical \/ ordinal, xs for DiscreteNum, and the 2 points [lo, hi]
+--   for Mixture (a simplification; the grid can be extended in the
+--   future).
 candidateRows :: [Factor] -> [[Double]]
 candidateRows = cart . map factorCandidates
   where
@@ -275,10 +347,14 @@ candidateRows = cart . map factorCandidates
 -- Foldover
 -- ---------------------------------------------------------------------------
 
--- | Foldover: 既存 design の符号反転行を追加。
--- Full: 全因子の符号を flip。
--- Partial [names]: 指定因子のみ flip。
--- categorical 列は flip しない (符号の概念が無い)。
+-- | [日本語]: Foldover: 既存 design の符号反転行を追加。
+--   Full: 全因子の符号を flip。
+--   Partial [names]: 指定因子のみ flip。
+--   categorical 列は flip しない (符号の概念が無い)。
+--   [English]: Foldover: adds sign-flipped rows of the existing design.
+--   Full: flips the sign of all factors.
+--   Partial [names]: flips only the specified factors.
+--   Categorical columns are not flipped (there is no notion of sign).
 augmentFoldover
   :: [Factor]
   -> LA.Matrix Double
@@ -320,9 +396,13 @@ augmentFoldover factors existing kind
                         CategoricalSwap _ -> T.pack "Foldover/CatSwap"  -- 到達不可
                     }
 
--- | Phase 28-7: categorical level swap foldover。 各エントリ
--- @(factor_name, [(old, new), ...])@ について、 該当列の level index 値を
--- old → new mapping で置換する (raw 値は level index Double として保持)。
+-- | [日本語]: categorical level swap foldover。 各エントリ
+--   @(factor_name, [(old, new), ...])@ について、 該当列の level index 値を
+--   old → new mapping で置換する (raw 値は level index Double として保持)。
+--   [English]: Categorical level-swap foldover. For each entry
+--   @(factor_name, [(old, new), ...])@, replaces the corresponding
+--   column's level-index value using the old → new mapping (the raw
+--   value is kept as a level-index Double).
 applyCatSwap
   :: [Factor]
   -> LA.Matrix Double
@@ -349,7 +429,9 @@ applyCatSwap factors existing entries
         , amrMethod = T.pack "Foldover/CatSwap"
         }
 
--- | factor 名 + level 名 mapping を、 列 index + level index mapping に解決。
+-- | [日本語]: factor 名 + level 名 mapping を、 列 index + level index mapping に解決。
+--   [English]: Resolves a factor-name + level-name mapping into a
+--   column-index + level-index mapping.
 resolveSwap
   :: [Factor]
   -> (Text, [(Text, Text)])

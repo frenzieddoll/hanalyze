@@ -5,13 +5,27 @@
 -- License     : BSD-3-Clause
 --
 {-# LANGUAGE OverloadedStrings #-}
--- | Pareto-front visualizations (130 規約: PlotData ベース).
+-- | [日本語]: パレートフロントの可視化 (130 規約: PlotData ベース)。
 --
 -- 2026-05-14 (130 リクエスト) — 旧版は @[Solution]@ を直接受けていたが、
 -- HPotfire の Vega-Lite 移行で全 Viz モジュールを @PlotConfig -> ... ->
 -- PlotData -> VegaLite@ で揃える方針になり、Pareto も他と同じ規約に
 -- 統一した。@[Solution]@ → 'PlotData' の変換は 'solutionsToPlotData'
 -- を経由する。
+--
+--   * 'paretoScatter'       — 2 目的の散布図。 ハイライト用の任意列。
+--   * 'paretoPair'          — 3 目的以上のペア散布行列。
+--   * 'parallelCoordinates' — 多目的並行座標プロット。
+--   * 'hypervolumeHistory'  — hypervolume 収束推移 (世代 vs hv)。
+--   * 'paretoCompare'       — 2 つの front を重畳 (例: 推定 vs 真)。
+--
+-- [English]: Pareto-front visualizations (130 規約: PlotData-based).
+--
+-- 2026-05-14 (130 request) — the previous version took @[Solution]@
+-- directly, but with HPotfire's move to Vega-Lite, all Viz modules were
+-- unified around the @PlotConfig -> ... -> PlotData -> VegaLite@
+-- convention, and Pareto follows the same convention as the others. The
+-- @[Solution]@ → 'PlotData' conversion goes through 'solutionsToPlotData'.
 --
 --   * 'paretoScatter'       — two-objective scatter, optional highlight column.
 --   * 'paretoPair'          — pairs scatter matrix for ≥ 3 objectives.
@@ -50,13 +64,20 @@ import           Hanalyze.Viz.PlotData
 -- 変換ヘルパ
 -- ---------------------------------------------------------------------------
 
--- | Convert a list of NSGA-II 'Solution' values to a 'PlotData' with one
--- numeric column per objective. @objLabels@ provides the column names
--- (length must match each solution's @solObjectives@); shorter
--- 'solObjectives' lists are padded with @0@.
+-- | [日本語]: NSGA-II の 'Solution' のリストを、 目的ごとに 1 数値列を持つ
+--   'PlotData' へ変換する。 @objLabels@ が列名を与える (長さは各 solution の
+--   @solObjectives@ と一致する必要がある)。 短い 'solObjectives' リストは
+--   @0@ で埋める。
 --
--- This is the canonical bridge from optimisation results to Pareto
--- visualisations under the new 130 規約.
+--   最適化結果からパレート可視化への標準的なブリッジ (= 新 130 規約下)。
+--
+--   [English]: Convert a list of NSGA-II 'Solution' values to a 'PlotData'
+--   with one numeric column per objective. @objLabels@ provides the
+--   column names (length must match each solution's @solObjectives@);
+--   shorter 'solObjectives' lists are padded with @0@.
+--
+--   This is the canonical bridge from optimisation results to Pareto
+--   visualisations under the new 130 convention.
 solutionsToPlotData :: [Text] -> [Solution] -> PlotData
 solutionsToPlotData objLabels sols =
   let m       = length objLabels

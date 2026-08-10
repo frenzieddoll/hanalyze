@@ -5,7 +5,7 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Naive Bayes 分類 (Gaussian + Multinomial).
+-- [日本語]: Naive Bayes 分類 (Gaussian + Multinomial).
 --
 -- @
 -- import qualified Hanalyze.Model.NaiveBayes as NB
@@ -13,6 +13,16 @@
 --     yhat = NB.predictNB nb x
 --
 -- let mnb = NB.fitMNB 1.0 xCounts yCount    -- カウント特徴: Multinomial (Laplace α)
+-- @
+--
+-- [English]: Naive Bayes classification (Gaussian + Multinomial).
+--
+-- @
+-- import qualified Hanalyze.Model.NaiveBayes as NB
+-- let nb = NB.fitGNB x y                    -- continuous features: Gaussian
+--     yhat = NB.predictNB nb x
+--
+-- let mnb = NB.fitMNB 1.0 xCounts yCount    -- count features: Multinomial (Laplace α)
 -- @
 module Hanalyze.Model.NaiveBayes
   ( -- * Gaussian NB
@@ -36,16 +46,20 @@ import           Data.List             (nub, sort, foldl')
 -- Gaussian NB
 -- ---------------------------------------------------------------------------
 
--- | クラスごとに各特徴を独立 Gaussian と仮定。
+-- | [日本語]: クラスごとに各特徴を独立 Gaussian と仮定。
+--   [English]: Assumes each feature is an independent Gaussian within each
+--   class.
 data GaussianNB = GaussianNB
   { gnbClasses    :: ![Int]
-  , gnbLogPrior   :: ![Double]           -- ^ log π_c (classes 順)
-  , gnbMeans      :: ![LA.Vector Double] -- ^ 各クラスの μ (length d)
-  , gnbVars       :: ![LA.Vector Double] -- ^ 各クラスの σ² (length d)、 var smoothing 済
-  , gnbClassNames :: ![Text]             -- ^ クラス名 (df|-> が levels 注入・空=数値表示)。
+  , gnbLogPrior   :: ![Double]           -- ^ [日本語]: log π_c (classes 順) [English]: log π_c (in class order).
+  , gnbMeans      :: ![LA.Vector Double] -- ^ [日本語]: 各クラスの μ (length d) [English]: The μ of each class (length d).
+  , gnbVars       :: ![LA.Vector Double] -- ^ [日本語]: 各クラスの σ² (length d)、 var smoothing 済 [English]: The σ² of each class (length d), var-smoothed.
+  , gnbClassNames :: ![Text]             -- ^ [日本語]: クラス名 (df|-> が levels 注入・空=数値表示)。 [English]: Class names (df|-> injects the levels; empty means numeric display).
   } deriving (Show)
 
--- | sklearn 互換の var smoothing (最大 var の 1e-9 倍を全 var に加算)。
+-- | [日本語]: sklearn 互換の var smoothing (最大 var の 1e-9 倍を全 var に加算)。
+--   [English]: sklearn-compatible var smoothing (adds 1e-9 times the maximum
+--   variance to every variance).
 varSmoothing :: Double
 varSmoothing = 1e-9
 
@@ -89,16 +103,18 @@ gnbLogLik nb xv =
 -- Multinomial NB
 -- ---------------------------------------------------------------------------
 
--- | テキスト分類等のカウント特徴用。 ラプラス平滑化 α (典型 1.0)。
+-- | [日本語]: テキスト分類等のカウント特徴用。 ラプラス平滑化 α (典型 1.0)。
+--   [English]: For count features such as in text classification. Laplace
+--   smoothing α (typically 1.0).
 data MultinomialNB = MultinomialNB
   { mnbClasses    :: ![Int]
   , mnbLogPrior   :: ![Double]
   , mnbLogFeat    :: ![LA.Vector Double]   -- ^ log p(feature_j | c)
-  , mnbClassNames :: ![Text]               -- ^ クラス名 (df|-> が levels 注入・空=数値表示)。
+  , mnbClassNames :: ![Text]               -- ^ [日本語]: クラス名 (df|-> が levels 注入・空=数値表示)。 [English]: Class names (df|-> injects the levels; empty means numeric display).
   } deriving (Show)
 
 fitMNB :: Double             -- ^ Laplace α
-       -> LA.Matrix Double  -- ^ 非負カウント (n × d)
+       -> LA.Matrix Double  -- ^ [日本語]: 非負カウント (n × d) [English]: Non-negative counts (n × d).
        -> VU.Vector Int     -- ^ y
        -> MultinomialNB
 fitMNB alpha x y =

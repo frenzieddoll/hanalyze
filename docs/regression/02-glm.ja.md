@@ -168,13 +168,13 @@ fitGLMWithSmooth :: Family -> LinkFn -> [(Text, Int)] -> Band -> Int
 ### 5.2 最小例: ロジスティック回帰
 
 **高レベル (`df |-> glm`)** — データ源から学習し、当てはめ曲線 + 帯を散布図に
-重畳する (万能動詞・[../io/04-fit-api.md](../io/04-fit-api.ja.md) 参照):
+重畳する (万能動詞・[../io/04-fit-api.md](../io/04-fit-api.md) 参照):
 
 ```haskell
 import Hanalyze.Plot     (glm, (|->), toPlot)
-import Hgg.Plot.Spec        (layer, scatter)
-import Hgg.Plot.Frame       ((|>>))
-import Hgg.Plot.Backend.SVG (saveSVGBound)
+import Graphics.Hgg.Spec        (layer, scatter)
+import Graphics.Hgg.Frame       ((|>>))
+import Graphics.Hgg.Backend.SVG (saveSVGBound)
 import Hanalyze.Model.GLM (Family (..), LinkFn (..))
 
 let fit = df |-> glm Binomial Logit "x" "y"   -- GLMModel (canonical link = Logit)

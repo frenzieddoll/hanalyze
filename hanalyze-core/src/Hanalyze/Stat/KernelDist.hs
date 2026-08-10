@@ -78,7 +78,7 @@ rowSqNorms x =
 -- @D[i, j] = ‖X[i,:] − X[j,:]‖²@ for @X@ of shape @n × p@; result is
 -- @n × n@ with zeros on the diagonal (exactly).
 --
--- Phase 11a (2026-05-06): rewritten with @runST@ + @MVector@. Profile
+-- Rewritten (2026-05-06) with @runST@ + @MVector@. Profile
 -- showed the previous massiv-fused version spent 75% of its time in
 -- @trivialScheduler_@ overhead. A pure @LA.outer@-based replacement
 -- was 6× /slower/ because the two @n × n@ broadcast intermediates
@@ -119,7 +119,7 @@ pairwiseSqDist x =
 -- @D[i, j] = ‖X[i,:] − Y[j,:]‖²@ for @X@ of shape @m × p@ and @Y@ of
 -- shape @n × p@; result is @m × n@.
 --
--- Phase 11a: same @runST + MVector@ rewrite as 'pairwiseSqDist'. No
+-- Same @runST + MVector@ rewrite as 'pairwiseSqDist'. No
 -- diagonal special-case (matrices are different sources).
 pairwiseSqDistXY :: LA.Matrix Double -> LA.Matrix Double -> LA.Matrix Double
 pairwiseSqDistXY x y =

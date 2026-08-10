@@ -7,15 +7,15 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- DataFrame 直結の解析動詞 (Phase 67)。
+-- [日本語]: DataFrame 直結の解析動詞。
 --
 -- hgg の @df |>> layer (scatter "x" "y")@ と対称に、 DataFrame を直接
 -- データ源として dplyr の @summarise@ / @mutate@ / @group_by@ 相当を
 -- 「列名参照 + パイプライン + DataFrame in/out」 で書ける薄層。
 --
--- 数値ロジックは 'Hanalyze.Stat.Descriptive' (Phase 65) と
--- 'Hanalyze.Data.Transform' (Phase 66) に委譲し、 本モジュールは
--- **列名解決 + 群化 + DataFrame 組み立て + NA 処理**のみを担う。
+-- 数値ロジックは 'Hanalyze.Stat.Descriptive' と
+-- 'Hanalyze.Data.Transform' に委譲し、 本モジュールは
+-- __列名解決 + 群化 + DataFrame 組み立て + NA 処理__のみを担う。
 --
 -- @
 -- import DataFrame.Operators ((|>))
@@ -24,11 +24,37 @@
 -- df |> groupBy ["year","month","day"] |> summarise [ "mean" =: meanOf "dep_delay" ]
 -- @
 --
--- 集約子は既定で **NA 除去 (na.rm=TRUE 相当)**。 数値列のみ対象 (factor は群キー
+-- 集約子は既定で __NA 除去 (na.rm=TRUE 相当)__。 数値列のみ対象 (factor は群キー
 -- としてのみ扱う)。 群の並びは dplyr 同様キー昇順。
 --
--- v1 の制限 (判断申し送り): 入力は Hackage @DataFrame@ 限定 ('ColumnSource' 全多相化は
+-- v1 の制限 (判断申し送り): 入力は Hackage @DataFrame@ 限定 (@ColumnSource@ 全多相化は
 -- 後続)。 grouped @mutate@ は未対応 (ungrouped のみ)。
+--
+-- [English]: Analysis verbs directly on top of DataFrame.
+--
+-- Symmetric to hgg's @df |>> layer (scatter "x" "y")@, this is
+-- a thin layer that lets you write dplyr's @summarise@ / @mutate@ /
+-- @group_by@ equivalents directly against a DataFrame as the data
+-- source, using "column-name references + pipeline + DataFrame in/out".
+--
+-- Numeric logic is delegated to 'Hanalyze.Stat.Descriptive' and
+-- 'Hanalyze.Data.Transform'; this module is responsible only for
+-- __column-name resolution + grouping + DataFrame assembly + NA handling__.
+--
+-- @
+-- import DataFrame.Operators ((|>))
+-- df |> summarise [ "mean" =: meanOf "dep_delay", "q95" =: quantileOf 0.95 "dep_delay", "n" =: nOf ]
+-- df |> mutate    [ "z" =: zscoreOf "x", "rank" =: minRankOf "dep_delay" ]
+-- df |> groupBy ["year","month","day"] |> summarise [ "mean" =: meanOf "dep_delay" ]
+-- @
+--
+-- Aggregators default to __NA removal (equivalent to na.rm=TRUE)__.
+-- Only numeric columns are targeted (factors are used only as group
+-- keys). Group ordering is ascending by key, same as dplyr.
+--
+-- v1 limitations (handed-off decisions): input is limited to Hackage's
+-- @DataFrame@ (full polymorphism over @ColumnSource@ is a follow-up).
+-- Grouped @mutate@ is unsupported (ungrouped only).
 module Hanalyze.Data.Wrangle
   ( -- * 動詞
     summarise, Summarisable
@@ -64,25 +90,33 @@ import qualified Hanalyze.Data.Transform    as T
 -- 内部表現
 -- ===========================================================================
 
--- | 1 群分のデータ (行数 + 数値列の name→値・NA 保持・行整列)。
+-- | [日本語]: 1 群分のデータ (行数 + 数値列の name→値・NA 保持・行整列)。
+--   [English]: Data for a single group (row count + numeric columns'
+--   name→value map; NA-preserving, row-aligned).
 data Group = Group
   { gSize :: !Int
   , gNum  :: !(M.Map Text [Maybe Double])
   }
 
--- | 集約結果のセル (数値列 or 整数列)。
+-- | [日本語]: 集約結果のセル (数値列 or 整数列)。
+--   [English]: An aggregation-result cell (numeric or integer column).
 data Cell = CD !Double | CI !Int
 
--- | 群キーの 1 要素 (数値 or 文字列)。Ord は KNum<KTxt・KNum は数値順。
+-- | [日本語]: 群キーの 1 要素 (数値 or 文字列)。Ord は KNum<KTxt・KNum は数値順。
+--   [English]: One element of a group key (numeric or string). Ord
+--   orders KNum < KTxt, with KNum compared numerically.
 data KeyVal = KNum !Double | KTxt !Text deriving (Eq, Ord)
 
--- | 集約子: 群 → セル。
+-- | [日本語]: 集約子: 群 → セル。
+--   [English]: An aggregator: group → cell.
 newtype Agg = Agg (Group -> Cell)
 
--- | 列式: 群 → 新しい列 (NA 保持)。
+-- | [日本語]: 列式: 群 → 新しい列 (NA 保持)。
+--   [English]: A column expression: group → new column (NA-preserving).
 newtype ColExpr = ColExpr (Group -> [Maybe Double])
 
--- | 結果列名 + 操作 を結ぶ。
+-- | [日本語]: 結果列名 + 操作 を結ぶ。
+--   [English]: Pairs a result column name with an operation.
 (=:) :: Text -> a -> (Text, a)
 (=:) = (,)
 infixr 0 =:
@@ -107,11 +141,13 @@ maxOf    c = col1 c maximum
 quantileOf :: Double -> Text -> Agg
 quantileOf p c = col1 c (D.quantileL p)
 
--- | 行数 (= R @n()@)。
+-- | [日本語]: 行数 (= R @n()@)。
+--   [English]: Row count (= R's @n()@).
 nOf :: Agg
 nOf = Agg (CI . gSize)
 
--- | 相異なる非 NA 値の個数 (= R @n_distinct()@)。
+-- | [日本語]: 相異なる非 NA 値の個数 (= R @n_distinct()@)。
+--   [English]: The count of distinct non-NA values (= R's @n_distinct()@).
 nDistinctOf :: Text -> Agg
 nDistinctOf c = Agg (\g -> CI (length (nub (catMaybes (M.findWithDefault [] c (gNum g))))))
 
@@ -122,29 +158,35 @@ nDistinctOf c = Agg (\g -> CI (length (nub (catMaybes (M.findWithDefault [] c (g
 colE :: Text -> ([Maybe Double] -> [Maybe Double]) -> ColExpr
 colE c f = ColExpr (\g -> f (M.findWithDefault [] c (gNum g)))
 
--- | Z スコア (x - mean) / sd。 NA は NA のまま。
+-- | [日本語]: Z スコア (x - mean) / sd。 NA は NA のまま。
+--   [English]: Z-score (x - mean) / sd. NA stays NA.
 zscoreOf :: Text -> ColExpr
 zscoreOf c = colE c $ \xs ->
   let ys = catMaybes xs; m = D.meanL ys; s = D.sdL ys
   in map (fmap (\x -> (x - m) / s)) xs
 
--- | 最小順位 (dplyr min_rank・NA 保持)。
+-- | [日本語]: 最小順位 (dplyr min_rank・NA 保持)。
+--   [English]: Minimum rank (dplyr's min_rank; NA-preserving).
 minRankOf :: Text -> ColExpr
 minRankOf c = colE c (map (fmap fromIntegral) . T.minRankNA)
 
--- | 密順位 (dplyr dense_rank・NA 保持)。
+-- | [日本語]: 密順位 (dplyr dense_rank・NA 保持)。
+--   [English]: Dense rank (dplyr's dense_rank; NA-preserving).
 denseRankOf :: Text -> ColExpr
 denseRankOf c = colE c (map (fmap fromIntegral) . T.denseRankNA)
 
--- | n 個ラグ (先頭を NA 埋め)。
+-- | [日本語]: n 個ラグ (先頭を NA 埋め)。
+--   [English]: Lag by n (fills the front with NA).
 lagOf :: Int -> Text -> ColExpr
 lagOf n c = colE c (T.lag n Nothing)
 
--- | n 個リード (末尾を NA 埋め)。
+-- | [日本語]: n 個リード (末尾を NA 埋め)。
+--   [English]: Lead by n (fills the tail with NA).
 leadOf :: Int -> Text -> ColExpr
 leadOf n c = colE c (T.lead n Nothing)
 
--- | 累積和 (NA は以降へ伝播 = R cumsum)。
+-- | [日本語]: 累積和 (NA は以降へ伝播 = R cumsum)。
+--   [English]: Cumulative sum (NA propagates onward, matching R's cumsum).
 cumsumOf :: Text -> ColExpr
 cumsumOf c = colE c scan
   where scan []       = []
@@ -157,12 +199,15 @@ cumsumOf c = colE c scan
 nrows :: DF.DataFrame -> Int
 nrows = fst . DF.dimensions
 
--- | 数値列をすべて NA 保持・行整列で取り出す。
+-- | [日本語]: 数値列をすべて NA 保持・行整列で取り出す。
+--   [English]: Extracts every numeric column, NA-preserving and row-aligned.
 numColumns :: DF.DataFrame -> [(Text, V.Vector (Maybe Double))]
 numColumns df =
   [ (n, V.fromList ms) | n <- DF.columnNames df, Just ms <- [readMaybeDoubleColumn n df] ]
 
--- | 群キー列を 'KeyVal' 列として取り出す (数値優先・無理なら Text)。
+-- | [日本語]: 群キー列を 'KeyVal' 列として取り出す (数値優先・無理なら Text)。
+--   [English]: Extracts a group-key column as a 'KeyVal' column
+--   (numeric preferred; falls back to Text if that fails).
 keyColumn :: Text -> DF.DataFrame -> [KeyVal]
 keyColumn name df =
   -- 数値読みが「全 NA」 なら実体は Text 列ゆえ Text 抽出に倒す
@@ -173,11 +218,13 @@ keyColumn name df =
       Just v  -> map (maybe (KTxt "NA") KTxt) (V.toList v)
       Nothing -> replicate (nrows df) (KTxt "NA")
 
--- | 各行の群キー tuple。
+-- | [日本語]: 各行の群キー tuple。
+--   [English]: The group-key tuple for each row.
 rowKeys :: [Text] -> DF.DataFrame -> [[KeyVal]]
 rowKeys keys df = transpose (map (`keyColumn` df) keys)
 
--- | キー昇順の群 (キー tuple, 行 index 群)。
+-- | [日本語]: キー昇順の群 (キー tuple, 行 index 群)。
+--   [English]: Groups in key-ascending order (key tuple, row indices).
 groupRows :: [Text] -> DF.DataFrame -> [([KeyVal], [Int])]
 groupRows keys df =
   M.toAscList (M.fromListWith (flip (++)) (zip (rowKeys keys df) (map (: []) [0 ..])))
@@ -217,14 +264,17 @@ buildKeyCol ks
 -- 動詞
 -- ===========================================================================
 
--- | 群化された DataFrame (キー列名を保持)。
+-- | [日本語]: 群化された DataFrame (キー列名を保持)。
+--   [English]: A grouped DataFrame (retains the key column names).
 data Grouped = Grouped ![Text] !DF.DataFrame
 
 -- | dplyr @group_by@。
 groupBy :: [Text] -> DF.DataFrame -> Grouped
 groupBy = Grouped
 
--- | @summarise@ は DataFrame (= 1 群) でも 'Grouped' でも使える。
+-- | [日本語]: @summarise@ は DataFrame (= 1 群) でも 'Grouped' でも使える。
+--   [English]: @summarise@ works on a DataFrame (= a single group) as
+--   well as a 'Grouped'.
 class Summarisable g where
   summarise :: [(Text, Agg)] -> g -> DF.DataFrame
 
@@ -247,7 +297,9 @@ instance Summarisable Grouped where
 runA :: Agg -> Group -> Cell
 runA (Agg f) = f
 
--- | dplyr @mutate@ (ungrouped・元列を温存して新列を右端に足す)。
+-- | [日本語]: dplyr @mutate@ (ungrouped・元列を温存して新列を右端に足す)。
+--   [English]: dplyr's @mutate@ (ungrouped; keeps the original columns
+--   and appends new columns on the right).
 mutate :: [(Text, ColExpr)] -> DF.DataFrame -> DF.DataFrame
 mutate exprs df =
   let g = Group { gSize = nrows df

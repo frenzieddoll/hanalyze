@@ -98,7 +98,7 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
 
 ### 新規 Phase 1-7 機能をベンチに追加する手順
 
-1. `bench/haskell/BenchPhase17.hs` に `benchXxx :: ... -> IO BenchRow` を追加
+1. `hanalyze-demos/bench/haskell/BenchPhase17.hs` に `benchXxx :: ... -> IO BenchRow` を追加
 2. `main` 関数内で呼び出し、 `bench/data/xxx_n*.csv` に共通入力を書き出す
 3. `bench/python/bench_phase17.py` に対応する Python 関数 + `main()` で append
 4. `cabal run bench-phase17 && python3 bench/python/bench_phase17.py` で両側計測

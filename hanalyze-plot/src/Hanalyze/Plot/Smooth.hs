@@ -4,15 +4,28 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- hgg 連携層 — **平滑化・カーネル法族** の図化 instance (Phase 71.5)。
+-- [日本語]: hgg 連携層 — __平滑化・カーネル法族__ の図化 instance。
 --
--- ⚠ 親 'Hanalyze.Plot' と同じ cabal flag @plot-integration@ (既定 off) を
--- on にしたときのみ build される。 共通基盤 (class / ModelSpec / grid 評価核) は
+-- ⚠ 親 'Hanalyze.Plot' と同じく別パッケージ @hanalyze-plot@ に属し、
+-- @cabal build --project-file=cabal.project.plot@ で build される。 共通基盤 (class / ModelSpec / grid 評価核) は
 -- 'Hanalyze.Plot.Core' を import して取り込む (orphan instance を許容)。
 --
 -- 担当する型 (= spline / GAM / GP / kernel 法):
 --   SplineModel / GAMModel / GAMModelN / GPResult / GPRegModel / GPRegModelN /
 --   MultiGPResult。
+--
+-- [English]: hgg integration layer — plotting instances for the
+-- __smoothing/kernel-method family__.
+--
+-- ⚠ Lives in the same separate package @hanalyze-plot@ as the parent
+-- 'Hanalyze.Plot', built via @cabal build --project-file=cabal.project.plot@.
+-- The shared foundation
+-- (class \/ ModelSpec \/ grid evaluation core) is pulled in by importing
+-- 'Hanalyze.Plot.Core' (allowing orphan instances).
+--
+-- Types covered (= spline \/ GAM \/ GP \/ kernel methods):
+--   SplineModel, GAMModel, GAMModelN, GPResult, GPRegModel, GPRegModelN,
+--   MultiGPResult.
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -75,12 +88,14 @@ instance Plottable GPResult where
 --
 -- 'SplineFit' (Hanalyze.Model.Spline) は基底係数 'sfBeta' と、 基底行列で fit した
 -- 線形モデル核 'sfResult' (= 'FitResult') を保持する。 ゆえに **基底行列を設計行列と
--- みなせば** LMModel と同じ 'confidenceBand' (= X (XᵀX)⁻¹ Xᵀ の対角) がそのまま使える。
+-- みなせば** LMModel と同じ @confidenceBand@ (= X (XᵀX)⁻¹ Xᵀ の対角) がそのまま使える。
 -- 違いは「曲線」 である点だけ: 単回帰の直線でなく、 訓練点を x 昇順に結ぶと基底展開に
 -- よる平滑曲線になる。 帯は LM と同じ **線形モデルの対称 Wald CI** (基底空間での予測分散)。
 -- ===========================================================================
 
--- | 'SplineFit' を訓練 x で評価したときの基底行列 (= confidenceBand の設計行列)。
+-- | [日本語]: 'SplineFit' を訓練 x で評価したときの基底行列 (= confidenceBand の設計行列)。
+--   [English]: The basis matrix obtained by evaluating a 'SplineFit' at the
+--   training x values (= the design matrix for confidenceBand).
 splineBasisAt :: SplineFit -> LA.Vector Double -> LA.Matrix Double
 splineBasisAt fit xs =
   let xsV = V.fromList (LA.toList xs)
@@ -89,7 +104,7 @@ splineBasisAt fit xs =
        NaturalCubic -> naturalSplineBasis (sfKnots fit) xsV
 
 instance Plottable SplineModel where
-  -- 平滑曲線 + CI band。 基底行列を設計行列とみなして 'confidenceBand' を訓練点で
+  -- 平滑曲線 + CI band。 基底行列を設計行列とみなして @confidenceBand@ を訓練点で
   -- 評価し (LMModel と同じ Wald CI)、 x 昇順にソートして折れ線で結ぶ (= 平滑曲線)。
   -- ± 半幅 errorY = se (帯は基底空間の予測分散 = 対称)。
   toPlot m =
@@ -116,8 +131,12 @@ instance Plottable SplineModel where
        , layer (scatter (inline yhat) (inline resd))
        ]
 
--- | grid 評価 (Phase 16 C1)。 grid x で基底行列を再構築し、 それを設計行列とみなして
--- 'confidenceBandAt' を評価する (基底空間の対称 Wald CI = 訓練 'confidenceBand' と同核)。
+-- | [日本語]: grid 評価。 grid x で基底行列を再構築し、 それを設計行列とみなして
+--   @confidenceBandAt@ を評価する (基底空間の対称 Wald CI = 訓練 @confidenceBand@ と同核)。
+--   [English]: Grid evaluation. Rebuilds the basis matrix at the grid x
+--   values, treats it as a design matrix, and evaluates @confidenceBandAt@
+--   (the symmetric Wald CI in basis space — the same core as the training
+--   @confidenceBand@).
 instance SingleVarModel SplineModel where
   svRange m = let xs = LA.toList (splXraw m) in (minimum xs, maximum xs)
   svGrid m level gxs =
@@ -167,8 +186,11 @@ instance Plottable GAMModel where
        , layer (scatter (inline yhat) (inline resd))
        ]
 
--- | GAM の grid 評価 (中心 μ̂ + **mgcv 流 Bayesian 信頼帯**)。 'predictGAMSE' の
+-- | [日本語]: GAM の grid 評価 (中心 μ̂ + __mgcv 流 Bayesian 信頼帯__)。 'predictGAMSE' の
 --   pointwise se に t_{n−edf} 臨界値を掛けて帯にする (Vβ='gamCov')。
+--   [English]: GAM grid evaluation (center μ̂ + an __mgcv-style Bayesian confidence band__).
+--   Multiplies the pointwise se from 'predictGAMSE' by the t_{n−edf}
+--   critical value to form the band (Vβ='gamCov').
 gamGridCI :: GAMFit -> Double -> [V.Vector Double] -> ([Double], Maybe ([Double], [Double]))
 gamGridCI fit level cols =
   let (muV, seV) = predictGAMSE fit cols
@@ -180,14 +202,20 @@ gamGridCI fit level cols =
       hi   = zipWith (\u s -> u + tVal * s) mu se
   in (mu, Just (lo, hi))
 
--- | grid 評価 (Phase 16 C1)。 grid x を 'predictGAMSE' に通し平滑曲線 + CI 帯を評価
--- (Phase 70.6 G: mgcv 流 Bayesian CI を実装)。
+-- | [日本語]: grid 評価。 grid x を 'predictGAMSE' に通し平滑曲線 + CI 帯を評価する
+--   (mgcv 流 Bayesian CI を実装)。
+--   [English]: Grid evaluation. Runs the grid x through 'predictGAMSE' to
+--   evaluate the smooth curve and CI band (implements an mgcv-style
+--   Bayesian CI).
 instance SingleVarModel GAMModel where
   svRange m = let xs = LA.toList (gamXraw m) in (minimum xs, maximum xs)
   svGrid m level gxs = gamGridCI (gamFit m) level [V.fromList gxs]
 
 
--- | 第1予測子を描画軸に、 他予測子は訓練平均に固定して偏依存曲線を評価する。
+-- | [日本語]: 第1予測子を描画軸に、 他予測子は訓練平均に固定して偏依存曲線を評価する。
+--   [English]: Evaluates a partial-dependence curve using the first
+--   predictor as the plotting axis, with the other predictors held fixed
+--   at their training means.
 instance SingleVarModel GAMModelN where
   svRange m = case gamNXraws m of
     (x:_) -> let xs = LA.toList x in (minimum xs, maximum xs)
@@ -209,10 +237,19 @@ instance Plottable GAMModelN where
 -- カーネル回帰 (GP / KRR / RFF) の描画可能ラッパ
 -- ===========================================================================
 
--- | grid 評価 (E2)。 予測子 'gprPredict' を grid x に当て、 分布あり象限 (Gp/GpRff) は
--- 事後分散→正規 credible 帯 (μ̂ ± z·σ)、 点象限 (Ridge/RidgeRff) は帯なし ('Nothing')。
--- 信頼水準 @level@ → @z = Φ⁻¹(1 − (1−level)/2)@ ('quantileNormal')。 'WeightedLMModel'
--- と同じく 'toPlot' を grid 経路 ('statModel') に固定する (元データ散布図と整合)。
+-- | [日本語]: grid 評価 (E2)。 予測子 'gprPredict' を grid x に当て、 分布あり象限
+--   (Gp/GpRff) は事後分散→正規 credible 帯 (μ̂ ± z·σ)、 点象限 (Ridge/RidgeRff) は
+--   帯なし ('Nothing')。 信頼水準 @level@ → @z = Φ⁻¹(1 − (1−level)/2)@
+--   ('quantileNormal')。 'WeightedLMModel' と同じく @toPlot@ を grid 経路
+--   ('statModel') に固定する (元データ散布図と整合)。
+--   [English]: Grid evaluation (E2). Applies the predictor 'gprPredict' to
+--   the grid x. For distribution-bearing quadrants (Gp\/GpRff), converts
+--   the posterior variance into a normal credible band (μ̂ ± z·σ); for
+--   point quadrants (Ridge\/RidgeRff), there is no band ('Nothing'). The
+--   confidence level @level@ maps to @z = Φ⁻¹(1 − (1−level)/2)@
+--   ('quantileNormal'). Like 'WeightedLMModel', @toPlot@ is fixed to the
+--   grid path ('statModel') to stay consistent with the raw-data scatter
+--   plot.
 instance SingleVarModel GPRegModel where
   svRange m = let xs = LA.toList (gprXraw m) in (minimum xs, maximum xs)
   svGrid m level gxs =
@@ -237,13 +274,22 @@ instance SingleVarModel GPRegModel where
   -- カーネル回帰は β₀+β₁x の線形「式」を持たないため式/R² 注釈は出さない。
   svCoefR2 _ = Nothing
 
--- | ★訓練点経路ではなく grid 経路 ('statModel') に固定 (元データ散布図と整合)。
--- 分布あり象限は曲線 + credible 帯、 点象限は曲線のみ。
+-- | [日本語]: ★訓練点経路ではなく grid 経路 ('statModel') に固定 (元データ散布図と整合)。
+--   分布あり象限は曲線 + credible 帯、 点象限は曲線のみ。
+--   [English]: ★Fixed to the grid path ('statModel') rather than the
+--   training-point path (to stay consistent with the raw-data scatter
+--   plot). Distribution-bearing quadrants get a curve + credible band;
+--   point quadrants get only a curve.
 instance Plottable GPRegModel where
   toPlot = toPlot . statModel
 
 
--- | 第1予測子を描画軸に、 他予測子を訓練平均に固定した偏依存曲線 (band は分布あり象限のみ)。
+-- | [日本語]: 第1予測子を描画軸に、 他予測子を訓練平均に固定した偏依存曲線 (band は
+--   分布あり象限のみ)。
+--   [English]: A partial-dependence curve using the first predictor as
+--   the plotting axis, with the other predictors held fixed at their
+--   training means (the band appears only for distribution-bearing
+--   quadrants).
 instance SingleVarModel GPRegModelN where
   svRange m = case gprnXraws m of
     (x:_) -> let xs = LA.toList x in (minimum xs, maximum xs)
@@ -282,7 +328,9 @@ instance Plottable GPRegModelN where
 -- 多出力 GP (描画可能)
 -- ===========================================================================
 
--- | 多出力 GP の予測曲線 + 95% band (出力ごとに色分け・x = 予測点 index)。
+-- | [日本語]: 多出力 GP の予測曲線 + 95% band (出力ごとに色分け・x = 予測点 index)。
+--   [English]: Multi-output GP prediction curves + 95% band (colored per
+--   output; x = prediction-point index).
 multiGpCurves :: MultiGPResult -> VisualSpec
 multiGpCurves res =
   let outs = zip3 (mgpMean res) (mgpLower res) (mgpUpper res)

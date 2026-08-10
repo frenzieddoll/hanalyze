@@ -33,7 +33,7 @@ class ColumnSource d where
 | `[(Text, [Double])]` | core (portable) |
 | `Map Text [Double]` | core (portable) |
 | `DataFrame` (Hackage `dataframe`) | core (portable) |
-| `[(Text, ColData)]` (hgg) | flag `plot-integration` |
+| `[(Text, ColData)]` (hgg) | 別パッケージ `hanalyze-plot` (`cabal build --project-file=cabal.project.plot`) |
 
 `DataFrame` 源は `toFrame = id` ゆえ factor 列・欠損が **Phase 47** 経路
 (`MissingPolicy` / contrast / 応答列判定) をそのまま通る。 assoc / `Map` 源は

@@ -92,4 +92,4 @@ randomSlope groupData = do
 
 **推奨**: まず GLMM で fit → モデル構造が固まったら HBM で完全ベイズ推定。
 シンプソンのパラドックス例での 3 手法 (LM / GLMM / HBM) 比較は
-[`simpson-paradox`](../../demo/bayesian/SimpsonParadoxDemo.hs) を参照。
+[`simpson-paradox`](../../hanalyze-demos/demo/bayesian/SimpsonParadoxDemo.hs) を参照。

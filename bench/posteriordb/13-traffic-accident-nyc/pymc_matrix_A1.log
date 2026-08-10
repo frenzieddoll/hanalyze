@@ -28,7 +28,7 @@ nutpie+jax     wall=   26273.0ms
 NUTS[blackjax]: [beta0, sigma, rho, theta, phi]
 blackjax       FAILED: ValueError: cannot select an axis to squeeze out which has size not equal to one, got shape=(4, 2) and dimensions=(0,)
 Traceback (most recent call last):
-  File "<repo>/bench/posteriordb/13-traffic-accident-nyc/run_pymc_matrix.py", line 47, in main
+  File "bench/posteriordb/13-traffic-accident-nyc/run_pymc_matrix.py", line 47, in main
     idata = pm.sample(draws=1000, tune=1000, chains=4, cores=1,
             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/home/toshiaki/.virtualenvs/pymc312/lib/python3.12/site-packages/pymc/sampling/mcmc.py", line 995, in sample

@@ -4,11 +4,11 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Correlation Network via Graphical Lasso (Phase 32-A1)。
+-- [日本語]: Correlation Network via Graphical Lasso。
 --
 -- 高次元データの相関構造を sparse precision matrix @Θ = Σ^{-1}@ で
 -- 表現する。 「ゼロ要素 ↔ 条件付き独立」 の対応で変数間ネットワークを
--- 推定する。 scikit-learn `GraphicalLasso`、 R `glasso` 相当。
+-- 推定する。 scikit-learn @GraphicalLasso@、 R @glasso@ 相当。
 --
 -- ## 最適化
 --
@@ -33,13 +33,45 @@
 -- Reference:
 --   Friedman, Hastie, Tibshirani (2008) "Sparse inverse covariance
 --   estimation with the graphical lasso". Biostatistics 9(3):432-441.
+--
+-- [English]: Correlation Network via Graphical Lasso.
+--
+-- Represents the correlation structure of high-dimensional data as a
+-- sparse precision matrix @Θ = Σ^{-1}@. Estimates the inter-variable
+-- network using the correspondence "zero element ↔ conditional
+-- independence". Equivalent to scikit-learn's @GraphicalLasso@ and R's
+-- @glasso@.
+--
+-- ## Optimization
+--
+-- @
+--   max_{Θ ≻ 0}  log det Θ - tr(SΘ) - λ ‖Θ‖_{1,off}
+-- @
+--
+-- Here @S@ is the empirical covariance matrix and @λ@ is the L1 penalty.
+-- The diagonal is not penalized (FHT 2008 convention).
+--
+-- ## Algorithm (Friedman-Hastie-Tibshirani 2008, block CD)
+--
+-- 1. Initialize @Σ ← S + λI@ (λ shrinkage on the diagonal)
+-- 2. For each column @j@, solve the sub-problem:
+--    - @W_{11}@ = the part of @Σ@ with row j \/ col j removed (p-1 × p-1)
+--    - @s_{12}@ = column j of @S@ (with row j removed)
+--    - Inner Lasso: @argmin_β (1/2) β^T W_{11} β - s_{12}^T β + λ |β|_1@
+--    - Update the column @Σ_{:j} = W_{11} β@ (diagonal is @S_{jj} + λ@)
+-- 3. Repeat the full-column sweep until @Σ@ converges
+-- 4. Compute @Θ = Σ^{-1}@
+--
+-- Reference:
+--   Friedman, Hastie, Tibshirani (2008) "Sparse inverse covariance
+--   estimation with the graphical lasso". Biostatistics 9(3):432-441.
 module Hanalyze.Stat.CorrelationNetwork
   ( GLassoFit (..)
   , graphicalLasso
   , graphicalLassoFromCov
   , empiricalCov
   , nonZeroPrecision
-    -- * Pearson 相関ネットワーク (Phase 77・df|-> correlationOf 用)
+    -- * [日本語]: Pearson 相関ネットワーク (df|-> correlationOf 用) [English]: Pearson correlation network (for df|-> correlationOf)
   , correlationMatrix
   , CorrelationGraph (..)
   ) where
@@ -52,18 +84,19 @@ import qualified Numeric.LinearAlgebra as LA
 -- ---------------------------------------------------------------------------
 
 data GLassoFit = GLassoFit
-  { glPrecision  :: !(LA.Matrix Double)   -- ^ 推定された Θ (precision)
-  , glCovariance :: !(LA.Matrix Double)   -- ^ 推定された Σ = Θ⁻¹
-  , glIterations :: !Int                   -- ^ 外側 sweep の反復数
-  , glConverged  :: !Bool                  -- ^ tol 内収束したか
-  , glLambda     :: !Double                -- ^ 使用した λ
+  { glPrecision  :: !(LA.Matrix Double)   -- ^ [日本語]: 推定された Θ (precision) [English]: The estimated Θ (precision)
+  , glCovariance :: !(LA.Matrix Double)   -- ^ [日本語]: 推定された Σ = Θ⁻¹ [English]: The estimated Σ = Θ⁻¹
+  , glIterations :: !Int                   -- ^ [日本語]: 外側 sweep の反復数 [English]: Number of outer sweep iterations
+  , glConverged  :: !Bool                  -- ^ [日本語]: tol 内収束したか [English]: Whether it converged within tol
+  , glLambda     :: !Double                -- ^ [日本語]: 使用した λ [English]: The λ used
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
 -- API
 -- ---------------------------------------------------------------------------
 
--- | 経験共分散行列 (= 中央化 + scale 1/(n-1))。
+-- | [日本語]: 経験共分散行列 (= 中央化 + scale 1/(n-1))。
+--   [English]: Empirical covariance matrix (= centering + scale 1/(n-1)).
 empiricalCov :: LA.Matrix Double -> LA.Matrix Double
 empiricalCov x =
   let n    = LA.rows x
@@ -73,8 +106,12 @@ empiricalCov x =
       m    = max 1 (n - 1)
   in LA.scale (1 / fromIntegral m) (LA.tr xc LA.<> xc)
 
--- | Pearson 相関行列 (@X@ n×p → p×p)。 'empiricalCov' を対角の標準偏差で正規化する
+-- | [日本語]: Pearson 相関行列 (@X@ n×p → p×p)。 'empiricalCov' を対角の標準偏差で正規化する
 --   (@r_ij = Σ_ij / (σ_i σ_j)@)。 分散 0 の列は 0 除算回避で 0 相関扱い。
+--   [English]: Pearson correlation matrix (@X@ n×p → p×p). Normalizes
+--   'empiricalCov' by the diagonal standard deviations (@r_ij = Σ_ij /
+--   (σ_i σ_j)@). Columns with zero variance are treated as zero
+--   correlation to avoid division by zero.
 correlationMatrix :: LA.Matrix Double -> LA.Matrix Double
 correlationMatrix x =
   let cov  = empiricalCov x
@@ -83,27 +120,38 @@ correlationMatrix x =
       dInv = LA.diag (LA.fromList [ if s > 1e-12 then 1 / s else 0 | s <- sds ])
   in dInv LA.<> cov LA.<> dInv
 
--- | 相関ネットワーク (Pearson 相関 + 閾値) の結果 (Phase 77・@df |-> correlationOf thr cols@)。
---   'Plottable' (@Hanalyze.Plot.ML@) が @|r| > cgThreshold@ の対を辺にしたグラフを描く
+-- | [日本語]: 相関ネットワーク (Pearson 相関 + 閾値) の結果 (@df |-> correlationOf thr cols@)。
+--   @Plottable@ (@Hanalyze.Plot.ML@) が @|r| > cgThreshold@ の対を辺にしたグラフを描く
 --   (無向・向きは便宜上の配置。 因果でない)。 LiNGAM DAG と対比すると間接相関の過剰さが分かる。
+--   [English]: Result of a correlation network (Pearson correlation +
+--   threshold) (@df |-> correlationOf thr cols@). @Plottable@
+--   (@Hanalyze.Plot.ML@) draws a graph with edges for pairs where
+--   @|r| > cgThreshold@ (undirected; the direction is just for layout
+--   convenience, not causal). Contrasting with a LiNGAM DAG reveals the
+--   excess of indirect correlations.
 data CorrelationGraph = CorrelationGraph
-  { cgCorr      :: !(LA.Matrix Double)   -- ^ p × p Pearson 相関行列
-  , cgNames     :: ![Text]               -- ^ 変数名 (列順)
-  , cgThreshold :: !Double               -- ^ |r| > この値で辺を張る
+  { cgCorr      :: !(LA.Matrix Double)   -- ^ [日本語]: p × p Pearson 相関行列 [English]: p × p Pearson correlation matrix
+  , cgNames     :: ![Text]               -- ^ [日本語]: 変数名 (列順) [English]: Variable names (column order)
+  , cgThreshold :: !Double               -- ^ [日本語]: |r| > この値で辺を張る [English]: An edge is drawn when |r| exceeds this value
   } deriving (Show)
 
--- | データ行列 @X@ (n × p) から graphical Lasso 推定。 内部で
+-- | [日本語]: データ行列 @X@ (n × p) から graphical Lasso 推定。 内部で
 -- 'empiricalCov' を計算してから 'graphicalLassoFromCov' を呼ぶ。
+-- [English]: Estimate graphical Lasso from a data matrix @X@ (n × p).
+-- Internally computes 'empiricalCov' and then calls
+-- 'graphicalLassoFromCov'.
 graphicalLasso
   :: LA.Matrix Double      -- ^ X (n × p)
   -> Double                -- ^ λ
-  -> Int                   -- ^ max outer sweeps (推奨 100)
-  -> Double                -- ^ tolerance (推奨 1e-4)
+  -> Int                   -- ^ [日本語]: max outer sweeps (推奨 100) [English]: max outer sweeps (recommended 100)
+  -> Double                -- ^ [日本語]: tolerance (推奨 1e-4) [English]: tolerance (recommended 1e-4)
   -> GLassoFit
 graphicalLasso x lambda maxOuter tol =
   graphicalLassoFromCov (empiricalCov x) lambda maxOuter tol
 
--- | 経験共分散行列から直接推定 (= 既に共分散を持っているとき向け)。
+-- | [日本語]: 経験共分散行列から直接推定 (= 既に共分散を持っているとき向け)。
+--   [English]: Estimate directly from the empirical covariance matrix
+--   (for when you already have the covariance).
 graphicalLassoFromCov
   :: LA.Matrix Double      -- ^ S (p × p)
   -> Double                -- ^ λ
@@ -139,7 +187,9 @@ graphicalLassoFromCov s lambda maxOuter tol =
        , glLambda     = lambda
        }
 
--- | 1 列の更新: 内部 Lasso を解いて @Σ@ の j 列 / j 行を上書き。
+-- | [日本語]: 1 列の更新: 内部 Lasso を解いて @Σ@ の j 列 / j 行を上書き。
+--   [English]: Update a single column: solve the inner Lasso and overwrite
+--   column j \/ row j of @Σ@.
 updateColumn :: LA.Matrix Double -> LA.Matrix Double -> Double -> Int
              -> LA.Matrix Double
 updateColumn sigma s lambda j =
@@ -152,9 +202,12 @@ updateColumn sigma s lambda j =
       sigma' = updateOffDiagColumn sigma j ids (LA.toList newCol)
   in sigma'
 
--- | 内部 Lasso (quadratic form):
+-- | [日本語]: 内部 Lasso (quadratic form):
 -- @argmin_β (1/2) β^T W β - s^T β + λ |β|_1@
 -- coord update: @β_k ← S(s_k - Σ_{l≠k} W_{kl} β_l, λ) / W_{kk}@。
+-- [English]: Inner Lasso (quadratic form):
+-- @argmin_β (1/2) β^T W β - s^T β + λ |β|_1@
+-- coord update: @β_k ← S(s_k - Σ_{l≠k} W_{kl} β_l, λ) / W_{kk}@.
 innerLassoQuad
   :: LA.Matrix Double -> LA.Vector Double -> Double -> Int -> Double
   -> LA.Vector Double
@@ -210,8 +263,12 @@ updateAt v i nv =
   LA.fromList [ if k == i then nv else LA.atIndex v k
               | k <- [0 .. LA.size v - 1] ]
 
--- | Σ の列 j / 行 j を新値で上書き (対角は触らない、 残り対角は別 step で
+-- | [日本語]: Σ の列 j / 行 j を新値で上書き (対角は触らない、 残り対角は別 step で
 -- 設定)。 @ids@ は j を除いた行 index、 @vals@ は @ids@ 順の長さ p-1。
+-- [English]: Overwrite column j \/ row j of Σ with new values (the
+-- diagonal is untouched; the rest of the diagonal is set in a separate
+-- step). @ids@ is the row indices excluding j, @vals@ has length p-1 in
+-- @ids@ order.
 updateOffDiagColumn
   :: LA.Matrix Double -> Int -> [Int] -> [Double] -> LA.Matrix Double
 updateOffDiagColumn sigma j ids vals =
@@ -229,8 +286,11 @@ updateOffDiagColumn sigma j ids vals =
                       | k <- [0 .. p - 1] ]
   in LA.fromLists [newRow i | i <- [0 .. p - 1]]
 
--- | precision matrix の非零要素数 (対角を除く上三角)。 @threshold@ で
+-- | [日本語]: precision matrix の非零要素数 (対角を除く上三角)。 @threshold@ で
 -- 「ゼロ」 とみなす絶対値の閾値を指定。
+-- [English]: Number of non-zero elements of the precision matrix (upper
+-- triangle, excluding the diagonal). @threshold@ specifies the absolute
+-- value below which an element is considered "zero".
 nonZeroPrecision :: Double -> LA.Matrix Double -> Int
 nonZeroPrecision threshold theta =
   let p = LA.rows theta

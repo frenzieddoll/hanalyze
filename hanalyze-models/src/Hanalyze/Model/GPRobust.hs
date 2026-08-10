@@ -5,7 +5,29 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Robust GP (heavy-tailed observation likelihoods).
+-- [日本語]: ロバスト GP (重尾観測尤度)。
+--
+-- 閉形式の Gaussian 尤度 GP は外れ値に敏感である。 本モジュールは観測尤度を
+-- Student-t または Cauchy に置き換え、 IRLS 形式のスキーム (variational EM /
+-- Laplace の安定な変種) を反復して MAP 推定を得る。
+--
+-- アルゴリズム:
+--
+--   1. @f ← 0@ (GP 事前平均)。
+--   2. 収束するまで反復:
+--      a. 残差 @r = y − f@。
+--      b. 観測ごとの重みを計算:
+--         - Student-t @(ν, σ)@:  @w_i = (ν + 1) / (ν + (r_i/σ)²)@。
+--         - Cauchy @(γ)@:       @w_i = 2 / (1 + (r_i/γ)²)@。
+--    c. 各点の有効ノイズ分散 σ²/w_i (heteroscedastic)
+--    d. f ← K (K + σ² W⁻¹)⁻¹ y
+-- 3. 予測点 x* で:
+--    mean = k_*ᵀ (K + σ² W⁻¹)⁻¹ y
+--    var  = k(x*,x*) − k_*ᵀ (K + σ² W⁻¹)⁻¹ k_*
+--
+-- カーネル関連 ('Kernel', 'GPParams', 'kernelFn') は 'Hanalyze.Model.GP' を再利用。
+--
+-- [English]: Robust GP (heavy-tailed observation likelihoods).
 --
 -- A closed-form Gaussian-likelihood GP is sensitive to outliers. This
 -- module replaces the observation likelihood with Student-t or Cauchy and
@@ -18,15 +40,16 @@
 --   2. Iterate until convergence:
 --      a. Residual @r = y − f@.
 --      b. Compute the per-observation weight:
---         * Student-t @(ν, σ)@:  @w_i = (ν + 1) / (ν + (r_i/σ)²)@.
---         * Cauchy @(γ)@:       @w_i = 2 / (1 + (r_i/γ)²)@.
---    c. 各点の有効ノイズ分散 σ²/w_i (heteroscedastic)
---    d. f ← K (K + σ² W⁻¹)⁻¹ y
--- 3. 予測点 x* で:
---    mean = k_*ᵀ (K + σ² W⁻¹)⁻¹ y
---    var  = k(x*,x*) − k_*ᵀ (K + σ² W⁻¹)⁻¹ k_*
+--         - Student-t @(ν, σ)@:  @w_i = (ν + 1) / (ν + (r_i/σ)²)@.
+--         - Cauchy @(γ)@:       @w_i = 2 / (1 + (r_i/γ)²)@.
+--      c. Each point's effective noise variance σ²/w_i (heteroscedastic).
+--      d. f ← K (K + σ² W⁻¹)⁻¹ y.
+--   3. At a test point x*:
+--      mean = k_*ᵀ (K + σ² W⁻¹)⁻¹ y
+--      var  = k(x*,x*) − k_*ᵀ (K + σ² W⁻¹)⁻¹ k_*
 --
--- カーネル関連 ('Kernel', 'GPParams', 'kernelFn') は 'Hanalyze.Model.GP' を再利用。
+-- Kernel-related items ('Kernel', 'GPParams', 'kernelFn') are reused from
+-- 'Hanalyze.Model.GP'.
 module Hanalyze.Model.GPRobust
   ( -- * 観測尤度
     RobustLikelihood (..)
@@ -200,23 +223,28 @@ predictGPRobust fit testX =
 -- 多出力 (列ごと IRLS、カーネル行列を共有)
 -- ---------------------------------------------------------------------------
 
--- | 多出力ロバスト GP の結果。q 出力ぶんの 'RobustGPFit' を保持し、
+-- | [日本語]: 多出力ロバスト GP の結果。q 出力ぶんの 'RobustGPFit' を保持し、
 -- カーネル / ハイパラ / 尤度は共通。
+--   [English]: The result of a multi-output robust GP. Holds a
+--   'RobustGPFit' per output (q of them); the kernel \/ hyperparameters \/
+--   likelihood are shared.
 data RobustGPFitMulti = RobustGPFitMulti
   { rgmKernel :: Kernel
   , rgmParams :: GPParams
   , rgmLik    :: RobustLikelihood
   , rgmTrainX :: [Double]
-  , rgmFits   :: [RobustGPFit]   -- ^ 列ごとの単出力 fit
+  , rgmFits   :: [RobustGPFit]   -- ^ [日本語]: 列ごとの単出力 fit [English]: Per-column single-output fit
   } deriving (Show)
 
--- | 多出力ロバスト GP fit。Y は n × q、各列ごとに IRLS (重みは出力依存)。
+-- | [日本語]: 多出力ロバスト GP fit。Y は n × q、各列ごとに IRLS (重みは出力依存)。
+--   [English]: Multi-output robust GP fit. Y has shape n × q; IRLS runs
+--   per column (weights depend on the output).
 fitGPRobustMulti
   :: Kernel
   -> GPParams
   -> RobustLikelihood
-  -> [Double]            -- ^ 訓練 X
-  -> LA.Matrix Double    -- ^ Y (n × q)
+  -> [Double]            -- ^ [日本語]: 訓練 X [English]: Training X
+  -> LA.Matrix Double    -- ^ [日本語]: Y (n × q) [English]: Y (n × q)
   -> RobustGPFitMulti
 fitGPRobustMulti ker params lik trainX yMat =
   let q     = LA.cols yMat
@@ -224,7 +252,9 @@ fitGPRobustMulti ker params lik trainX yMat =
       fits  = [ fitGPRobust ker params lik trainX y | y <- yCols ]
   in RobustGPFitMulti ker params lik trainX fits
 
--- | 多出力ロバスト GP 予測。戻り値: (mean 行列 m × q, 列ごとの分散リスト)。
+-- | [日本語]: 多出力ロバスト GP 予測。戻り値: (mean 行列 m × q, 列ごとの分散リスト)。
+--   [English]: Multi-output robust GP prediction. Returns (mean matrix
+--   m × q, per-column variance lists).
 predictGPRobustMulti :: RobustGPFitMulti -> [Double]
                      -> (LA.Matrix Double, [[Double]])
 predictGPRobustMulti mf testX =

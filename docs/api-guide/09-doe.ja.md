@@ -874,8 +874,8 @@ noDf |>> contourOf (modelFor "strength" model) "temp" "time"   -- strength の�
 `VisualSpec3D` を返し、 3D レンダラで書き出す。 `modelFor` で応答を選ぶのは `contourOf` と同じ。
 
 ```haskell
-import Hgg.Plot.ThreeD.Easy    (saveSVG3D)      -- 静的 (SVG / PDF / PNG)
-import Hgg.Plot.ThreeD.Browser (saveHTML3D, showBrowser)  -- WebGL (対話 3D)
+import Graphics.Hgg.ThreeD.Easy    (saveSVG3D)      -- 静的 (SVG / PDF / PNG)
+import Graphics.Hgg.ThreeD.Browser (saveHTML3D, showBrowser)  -- WebGL (対話 3D)
 
 let surf = surfaceOf (modelFor "strength" model) "temp" "time"
 
@@ -886,9 +886,9 @@ showBrowser surf                     -- WebGL 版をその場でブラウザ表�
 
 ![DOE 3D 応答曲面 (二次回帰 + CCD 点)](../images/rsm-surface-3d.svg)
 
-- **静的**: `saveSVG3D` (ベクタ・doc 埋込)・`savePDF3D`・`savePNG3D` (`Hgg.Plot.ThreeD.Easy`)。
+- **静的**: `saveSVG3D` (ベクタ・doc 埋込)・`savePDF3D`・`savePNG3D` (`Graphics.Hgg.ThreeD.Easy`)。
 - **WebGL**: `saveHTML3D` (自己完結 HTML に書き出し)・`showBrowser` (その場で開く) は
-  `Hgg.Plot.ThreeD.Browser`。 orbit カメラで回転・拡大できる対話 3D。
+  `Graphics.Hgg.ThreeD.Browser`。 orbit カメラで回転・拡大できる対話 3D。
 
 ## 低レベル API (素の設計生成関数)
 
@@ -897,6 +897,6 @@ showBrowser surf                     -- WebGL 版をその場でブラウザ表�
 `Design.Power` / `Design.Quality` / `Design.Custom.*`) がある。 既に候補集合や水準行列を手元に
 持つ・非標準の設計を自前で組む、 等でのみ使う (通常は上記の高レベル API が既定)。
 
-→ **低レベル DOE API リファレンス** (内部文書・非公開) に全体を集約
+→ **[低レベル DOE API リファレンス (internal)](../internal/09-doe-lowlevel.md)** に全体を集約
 (要因計画 / RSM / 最適計画 / 直交表・タグチ / ANOVA・検出力 / 制約付き最適計画 / 工程能力 /
 Custom Design〔coordinate exchange・split-plot・Bayesian D〕)。

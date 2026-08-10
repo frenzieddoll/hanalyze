@@ -4,11 +4,10 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- hgg 連携層 — **汎用ラッパ (どの族にも属さない) の Plottable / SingleVarModel**
--- 連携 instance + 専用 helper (Phase 71.7)。
+-- [日本語]: hgg 連携層 — __汎用ラッパ (どの族にも属さない) の Plottable / SingleVarModel__ 連携 instance + 専用 helper。
 --
--- ⚠ 親 'Hanalyze.Plot' と同じ cabal flag @plot-integration@ (既定 off) を
--- on にしたときのみ build される。 共通基盤 (class / ModelSpec / grid 評価核) は
+-- ⚠ 親 'Hanalyze.Plot' と同じく別パッケージ @hanalyze-plot@ に属し、
+-- @cabal build --project-file=cabal.project.plot@ で build される。 共通基盤 (class / ModelSpec / grid 評価核) は
 -- 'Hanalyze.Plot.Core' を import して取り込む (orphan instance を許容:
 -- クラス=Core・instance=ここ・型=Wrappers/各 Model module)。
 --
@@ -17,16 +16,35 @@
 --   ('KNNRegressor')・透過標準化ラッパ 'StandardizedModel'・罰則回帰結果
 --   'RegModel' の係数 bar・群別フィット 'GroupedFit' の N 曲線重畳・plot ColData
 --   源の 'ColumnSource'・LM 係数診断アクセサ ('lmDiag' / 'groupedLmDiag')。
+--
+-- [English]: hgg integration layer — __Plottable\/SingleVarModel instances for generic wrappers (those not belonging to any specific family)__, plus dedicated helpers.
+--
+-- ⚠ Lives in the same separate package @hanalyze-plot@ as the parent
+-- 'Hanalyze.Plot', built via @cabal build --project-file=cabal.project.plot@.
+-- The shared foundation
+-- (class \/ ModelSpec \/ grid-evaluation core) is pulled in by importing
+-- 'Hanalyze.Plot.Core' (orphan instances are allowed by design:
+-- class = Core, instance = here, type = Wrappers\/each model module).
+--
+-- Types and helpers covered here (= generic wrappers not belonging to any
+-- specific ML\/Bayesian family):
+--   the residual-correlation heatmap for multi-output linear regression
+--   'MultiFit'; univariate plotting for k-NN regression ('KNNRegressor');
+--   the transparent standardization wrapper 'StandardizedModel'; the
+--   coefficient bar chart for penalized regression results 'RegModel'; the
+--   N-curve overlay for grouped fits 'GroupedFit'; the 'ColumnSource'
+--   instance for plot ColData sources; and the LM coefficient diagnostic
+--   accessors ('lmDiag' \/ 'groupedLmDiag').
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Hanalyze.Plot.Wrappers
-  ( -- ** 係数診断の薄アクセサ — Phase 52.A9
+  ( -- ** 係数診断の薄アクセサ — A9
     lmDiag
   , groupedLmDiag
-    -- ** 群別フィットの fullrange レンダラ — Phase 52.A4 / A7
+    -- ** 群別フィットの fullrange レンダラ — A4 / A7
   , groupedFullrange
   ) where
 
@@ -66,7 +84,7 @@ import           Hanalyze.Model.KNN (KNNRegressor (..), predictKNNR)
 -- 'MultiFit' (Hanalyze.Model.MultiLM) は q 個の応答を共通の予測子で同時回帰し、
 -- 固有の成果物として **出力間の残差相関 'mfResidCor' (q×q)** を保持する。 q 本の回帰
 -- 関係を単一図に素直に載せる方法は一意でない (出力ごとスケールが異なり得る) ため、
--- 代表図 ('toPlot') は **残差相関 heatmap** とする (= 多出力回帰固有の図。 user 決定
+-- 代表図 (@toPlot@) は **残差相関 heatmap** とする (= 多出力回帰固有の図。 user 決定
 -- 2026-06-04)。 'MultiFit' は heatmap に必要な相関行列を自己完結で持つので、 'GPResult'
 -- 同様 X を別途束ねず結果型をそのまま 'Plottable' にできる。 個別の出力 j の回帰線は
 -- 'predictMultiLM' で別途描ける (本 instance の対象外)。
@@ -94,11 +112,15 @@ instance Plottable MultiFit where
 -- C2: 元スケール逆変換 instance (Phase 70.3 項目 C) -------------------------
 --
 -- 内側モデルは標準化空間で学習されている。 ここで予測子 x を入力時に標準化し、
--- ('standardizedY' なら) 応答 y を出力時に逆変換することで、 図・予測を**元スケール**で
+-- (@standardizedY@ なら) 応答 y を出力時に逆変換することで、 図・予測を**元スケール**で
 -- 返す。 単変量 (1 特徴) 描画が対象 (smXStd の 0 次元を使う)。
 
--- | k-NN 回帰の単変量描画 (透過標準化の内側として要る)。 1 特徴 ('knnRX' が 1 列) を
---   仮定し grid 点を予測曲線にする。 局所平均ゆえ band は持たない (Nothing)。
+-- | [日本語]: k-NN 回帰の単変量描画 (透過標準化の内側として要る)。 1 特徴 ('knnRX' が
+--   1 列) を仮定し grid 点を予測曲線にする。 局所平均ゆえ band は持たない (Nothing)。
+--   [English]: Univariate plotting for k-NN regression (needed as the inner
+--   model of transparent standardization). Assumes a single feature
+--   ('knnRX' has 1 column) and turns grid points into the predicted curve.
+--   Since it's a local average, there's no band (Nothing).
 instance SingleVarModel KNNRegressor where
   svRange m =
     let c0 = LA.toList (head (LA.toColumns (knnRX m)))
@@ -107,19 +129,28 @@ instance SingleVarModel KNNRegressor where
     let xEval = LA.fromColumns [LA.fromList gxs]    -- n × 1 (単一特徴)
     in (VU.toList (predictKNNR m xEval), Nothing)   -- 帯なし
 
--- | 0 次元 (単変量描画の予測子) の (μ, σ)。
+-- | [日本語]: 0 次元 (単変量描画の予測子) の (μ, σ)。
+--   [English]: The (μ, σ) of dimension 0 (the univariate-plotting predictor).
 stMu1, stSd1 :: Standardizer -> Double
 stMu1 = head . stMu
 stSd1 = head . stSd
 
--- | 応答 y の逆変換 (@smYStd = Just@ のみ実施。 @Nothing@ は元 y スケールのまま)。
+-- | [日本語]: 応答 y の逆変換 (@smYStd = Just@ のみ実施。 @Nothing@ は元 y スケールのまま)。
+--   [English]: Inverse-transforms the response y (only performed when
+--   @smYStd = Just@; @Nothing@ leaves it in the original y scale).
 unstdY :: Maybe (Double, Double) -> Double -> Double
 unstdY (Just (muY, sdY)) v = v * sdY + muY
 unstdY Nothing           v = v
 
--- | 透過標準化ラッパの単変量描画 (元スケール)。 入力 x を標準化 → 内側を評価 →
---   ('standardizedY' なら) 出力 y を逆変換する。 内側 'svRange' (標準化空間) は
+-- | [日本語]: 透過標準化ラッパの単変量描画 (元スケール)。 入力 x を標準化 → 内側を評価 →
+--   (@standardizedY@ なら) 出力 y を逆変換する。 内側 'svRange' (標準化空間) は
 --   smXStd の 0 次元で元スケールへ戻す。 band/PI も同様に y を逆変換。
+--   [English]: Univariate plotting for the transparent standardization
+--   wrapper (in the original scale). Standardizes input x → evaluates the
+--   inner model → (if @standardizedY@) inverse-transforms output y. The
+--   inner 'svRange' (in standardized space) is converted back to the
+--   original scale via dimension 0 of smXStd. The band\/PI likewise have y
+--   inverse-transformed.
 instance SingleVarModel m => SingleVarModel (StandardizedModel m) where
   svRange (StandardizedModel inner sx _ _) =
     let (zlo, zhi) = svRange inner
@@ -147,15 +178,24 @@ instance SingleVarModel m => SingleVarModel (StandardizedModel m) where
         in Just ([a0, a1], r2)
       _ -> Nothing   -- 非線形 (kNN 等) は式注釈なし
 
--- | 透過標準化ラッパの代表図 = 元スケールの予測曲線 (+ 単変量散布 'smTrain')。
---   内側 'toPlot' (標準化軸) には依存せず、 ラッパ自身の 'SingleVarModel' を
+-- | [日本語]: 透過標準化ラッパの代表図 = 元スケールの予測曲線 (+ 単変量散布 'smTrain')。
+--   内側 @toPlot@ (標準化軸) には依存せず、 ラッパ自身の 'SingleVarModel' を
 --   'statModel' grid 機構へ流す。
+--   [English]: The transparent standardization wrapper's representative
+--   plot = the predicted curve in the original scale (+ the univariate
+--   scatter 'smTrain'). Doesn't depend on the inner @toPlot@ (standardized
+--   axes); instead feeds the wrapper's own 'SingleVarModel' into the
+--   'statModel' grid mechanism.
 instance SingleVarModel m => Plottable (StandardizedModel m) where
   toPlot sm = case smTrain sm of
     Just (xs, ys) -> layer (scatter (inline xs) (inline ys)) <> toPlot (statModel sm)
     Nothing       -> toPlot (statModel sm)
 
--- | 係数 bar (特徴名ラベル・元スケール) を代表図に。 CV パスがあれば診断束に λ-MSE 図。
+-- | [日本語]: 係数 bar (特徴名ラベル・元スケール) を代表図に。 CV パスがあれば診断束に
+--   λ-MSE 図。
+--   [English]: Uses the coefficient bar chart (feature-name labels, original
+--   scale) as the representative plot. If a CV path exists, adds a λ-MSE
+--   plot to the diagnostic bundle.
 instance Plottable RegModel where
   toPlot m =
     layer (bar (inlineCat (rmgNames m)) (inline (rmgCoefs m)))
@@ -166,7 +206,8 @@ instance Plottable RegModel where
       [ layer (line (inline lams) (inline scores)) <> title "CV/LOOCV score path" ]
     Nothing -> []
 
--- | RegMethod の表示名 (図タイトル用)。
+-- | [日本語]: RegMethod の表示名 (図タイトル用)。
+--   [English]: The display name of a RegMethod (for figure titles).
 regMethodName :: RegMethod -> Text
 regMethodName Ridge            = "Ridge"
 regMethodName Lasso            = "Lasso"
@@ -176,44 +217,78 @@ regMethodName (SCAD _)         = "SCAD"
 regMethodName (AdaptiveLasso _) = "Adaptive Lasso"
 regMethodName (GroupLasso _)   = "Group Lasso"
 
--- | 小数 n 桁丸め (タイトル表示用)。
+-- | [日本語]: 小数 n 桁丸め (タイトル表示用)。
+--   [English]: Rounds to n decimal places (for title display).
 roundTo :: Int -> Double -> Double
 roundTo n v = let f = 10 ^^ n in fromIntegral (round (v * f) :: Integer) / f
 
--- | A9: 'LMModel' の係数診断 (SE / t値 / p値) を一発取得する薄アクセサ。
+-- | [日本語]: A9: 'LMModel' の係数診断 (SE / t値 / p値) を一発取得する薄アクセサ。
 --   数値核は 'Hanalyze.Model.LM.Diagnostics.lmCoefStats'。 描画用に X を束ねた
 --   'LMModel' から設計行列 ('lmDesign') と fit 結果 ('lmResult') を渡すだけ。
 --   返りは係数順 (@[(Intercept), x]@) の 'CoefStats' リスト。
+--   [English]: A9: A thin accessor to get 'LMModel' coefficient diagnostics
+--   (SE \/ t-value \/ p-value) in one call. The numeric core is
+--   'Hanalyze.Model.LM.Diagnostics.lmCoefStats'; it just passes the
+--   design matrix ('lmDesign') and fit result ('lmResult') from the
+--   plotting-bundled 'LMModel'. Returns a 'CoefStats' list in coefficient
+--   order (@[(Intercept), x]@).
 lmDiag :: LMModel -> [CoefStats]
 lmDiag m = lmCoefStats (lmDesign m) (lmResult m)
 
--- | A9: 群別 LM フィット ('grouped "g" (lm …)' の結果) の各群係数診断を取り出す。
+-- | [日本語]: A9: 群別 LM フィット ('grouped "g" (lm …)' の結果) の各群係数診断を取り出す。
 --   @[(群ラベル, [係数の CoefStats])]@。 群間で傾き SE/有意性を比較する用途。
 --   ★@Fitted spec ~ LMModel@ に特殊化 (LM 群フィット専用)。
+--   [English]: A9: Extracts the per-group coefficient diagnostics from a
+--   grouped LM fit (the result of @grouped "g" (lm …)@). Returns
+--   @[(group label, [coefficient CoefStats])]@, for comparing slope SE\/
+--   significance across groups.
+--   ★Specialized to @Fitted spec ~ LMModel@ (LM grouped-fit only).
 groupedLmDiag :: (Fitted spec ~ LMModel) => GroupedFit spec -> [(Text, [CoefStats])]
 groupedLmDiag = map (fmap lmDiag) . groupModels
 
--- | 群別フィットを N 曲線で重畳する ('toPlot' = 各群 'svGrid' の μ̂ 曲線・群色 + 凡例)。
---   ★A3 の凡例機構を N 群へ一般化: 各曲線を 'ColorByCol' (群ラベル) に載せ
+-- | [日本語]: 群別フィットを N 曲線で重畳する (@toPlot@ = 各群 'svGrid' の μ̂ 曲線・群色 + 凡例)。
+--   ★A3 の凡例機構を N 群へ一般化: 各曲線を @ColorByCol@ (群ラベル) に載せ
 --   'scaleColorManual' で群色を固定し 'legend' を出す (固定色だと凡例が出ない罠を回避)。
 --   grid 点数 100・帯なし (A1 既定 OFF) 固定。 群色は 'effectPalette' の循環。
+--   [English]: Overlays a grouped fit as N curves (@toPlot@ = the μ̂ curve of
+--   each group's 'svGrid', with per-group color + legend).
+--   ★Generalizes the A3 legend mechanism to N groups: each curve is placed
+--   on @ColorByCol@ (the group label), fixed with 'scaleColorManual' to a
+--   per-group color, and 'legend' is shown (avoiding the trap where a fixed
+--   color makes no legend appear). Fixed at 100 grid points, no band
+--   (A1 default OFF). Group colors cycle through 'effectPalette'.
 instance SingleVarModel (Fitted spec) => Plottable (GroupedFit spec) where
   toPlot = renderGrouped
 
--- | 群別フィットを **各群の x 範囲のみ**で描く (既定。 'toPlot' = これ)。
+-- | [日本語]: 群別フィットを __各群の x 範囲のみ__で描く (既定。 @toPlot@ = これ)。
+--   [English]: Plots a grouped fit using __only each group's own x range__
+--   (the default; @toPlot@ = this).
 renderGrouped :: SingleVarModel (Fitted spec) => GroupedFit spec -> VisualSpec
 renderGrouped = renderGroupedWith False
 
--- | 群別フィットを **データ全幅** (全群 x の union 範囲) へ延ばして描く (A7 fullrange)。
+-- | [日本語]: 群別フィットを __データ全幅__ (全群 x の union 範囲) へ延ばして描く (A7 fullrange)。
 --   ggplot @geom_smooth(fullrange = TRUE)@ 相当: 各群の回帰線を、 その群の x 範囲だけでなく
---   **全群を合わせた x の min/max** まで延長して評価する (群間の傾き差を全域で比較しやすい)。
+--   __全群を合わせた x の min/max__ まで延長して評価する (群間の傾き差を全域で比較しやすい)。
 --   ★単一モデルでは「データ全幅 = 訓練 x」 ゆえ意味を持たない (range 拡張は grouped 固有)。
---   'toPlot' とは別経路 (結果型 'GroupedFit' に描画 flag を持たせない・別レンダラとして提供)。
+--   @toPlot@ とは別経路 (結果型 'GroupedFit' に描画 flag を持たせない・別レンダラとして提供)。
+--   [English]: Plots a grouped fit extended to __the full data width__ (the
+--   union range of all groups' x) — the A7 fullrange variant.
+--   Equivalent to ggplot's @geom_smooth(fullrange = TRUE)@: each group's
+--   regression line is evaluated not just over its own x range but extended
+--   to __the min\/max of x across all groups combined__ (making it easier to
+--   compare slope differences across the whole domain).
+--   ★Meaningless for a single model, since "full data width = training x"
+--   there (range extension is specific to grouped fits).
+--   Reached via a separate path from @toPlot@ (the result type 'GroupedFit'
+--   carries no plotting flag; this is offered as a separate renderer).
 groupedFullrange :: SingleVarModel (Fitted spec) => GroupedFit spec -> VisualSpec
 groupedFullrange = renderGroupedWith True
 
--- | 群別フィットの共通レンダラ。 @full@ で評価 x 範囲を切替える
+-- | [日本語]: 群別フィットの共通レンダラ。 @full@ で評価 x 範囲を切替える
 --   (@False@ = 各群自範囲、 @True@ = 全群 union 範囲 = A7 fullrange)。
+--   [English]: The shared renderer for grouped fits. @full@ switches the
+--   evaluated x range (@False@ = each group's own range, @True@ = the union
+--   range of all groups = A7 fullrange).
 renderGroupedWith :: SingleVarModel (Fitted spec) => Bool -> GroupedFit spec -> VisualSpec
 renderGroupedWith full gf =
   let pairs   = zip [0 :: Int ..] (gfGroups gf)
@@ -239,7 +314,7 @@ renderGroupedWith full gf =
 --
 -- hgg の @[(Text, ColData)]@ (= df 中立表現)。 'NumData' は数値列、
 -- 'TxtData' は factor 列。 'lookupCol' は数値列のみ返し、 'toFrame' は
--- 数値・文字列の両方を 'DX.DataFrame' に詰めて formula 経路で factor を温存する。
+-- 数値・文字列の両方を @DX.DataFrame@ に詰めて formula 経路で factor を温存する。
 instance ColumnSource [(Text, ColData)] where
   lookupCol n cs = case lookup n cs of
     Just (NumData v) -> Just (V.toList v)

@@ -58,6 +58,6 @@ Specialized builders for models where plain `toPlot` is insufficient.
 
 ## Architecture
 
-`toPlot` and `Plottable` live under cabal flag `plot-integration` (default off = standalone, upstream portable / on = `Hanalyze.Plot` depends on `hgg-core` etc). Dependency is **one-directional `analyze → plot-core`**. Details: [visualization/03-plot-integration](../visualization/03-plot-integration.md).
+`toPlot` and `Plottable` are split into a separate package `hanalyze-plot` (built with `cabal build --project-file=cabal.project.plot`; the main packages stay standalone / upstream portable = only the split package has `Hanalyze.Plot` depending on `hgg-core` etc). Dependency is **one-directional `analyze → plot-core`**. Details: [visualization/03-plot-integration](../visualization/03-plot-integration.md).
 
 → Full drawing grammar: [hgg API reference](../../../hgg/docs/api-guide/README.md)

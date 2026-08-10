@@ -8,18 +8,36 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Phase 58.6c: モデル評価層を 'Hanalyze.Model.HBM' から分離。
+-- [日本語]: モデル評価層を 'Hanalyze.Model.HBM' から分離したもの。
 --
--- PPL の **評価層** (記述層 'Hanalyze.Model.HBM.Model' の上):
+--   PPL の __評価層__ (記述層 'Hanalyze.Model.HBM.Model' の上):
 --
---   * 構造化線形予測子 observe ('ObserveLM') の評価 (lmObsLogSum 等)
---   * log-joint / log-prior / log-likelihood の多相インタープリタ
---   * Gibbs 共役検出向けの runObserveDists / priorList
---   * 派生量評価 (runDeterministics / augmentChainWithDeterministic) と
+--   - 構造化線形予測子 observe ('ObserveLM') の評価 (lmObsLogSum 等)
+--   - log-joint / log-prior / log-likelihood の多相インタープリタ
+--   - Gibbs 共役検出向けの runObserveDists / priorList
+--   - 派生量評価 (runDeterministics / augmentChainWithDeterministic) と
 --     DAG 構築 (buildModelGraph / collapseIndexedPlateNodes)
 --
--- 依存は下層 Model / Distribution (密度) / Track (extractDeps) / Util / MCMC.Core
--- のみ。 AD 勾配・IR は **上層** に置かれ本モジュールへ依存する (一方向)。
+--   依存は下層 Model / Distribution (密度) / Track (extractDeps) / Util /
+--   MCMC.Core のみ。 AD 勾配・IR は __上層__ に置かれ本モジュールへ依存する
+--   (一方向)。
+-- [English]: The model evaluation layer, split out from
+--   'Hanalyze.Model.HBM'.
+--
+--   The PPL's __evaluation layer__ (built on top of the description layer
+--   'Hanalyze.Model.HBM.Model'):
+--
+--   - Evaluation of the structured linear-predictor observe ('ObserveLM')
+--     (lmObsLogSum, etc.)
+--   - Polymorphic interpreters for log-joint / log-prior / log-likelihood
+--   - runObserveDists / priorList for Gibbs conjugacy detection
+--   - Derived-quantity evaluation (runDeterministics /
+--     augmentChainWithDeterministic) and DAG construction
+--     (buildModelGraph / collapseIndexedPlateNodes)
+--
+--   Depends only on the lower layers Model / Distribution (densities) /
+--   Track (extractDeps) / Util / MCMC.Core. The AD gradient / IR live in
+--   the __upper__ layer and depend on this module (one direction only).
 module Hanalyze.Model.HBM.Eval
   ( -- * ObserveLM 評価
     lmObsLogSum
@@ -62,16 +80,25 @@ import Hanalyze.Model.HBM.Track (Track, extractDeps)
 -- ObserveLM (構造化線形予測子 observe) の評価 (Phase 54.1)
 -- ---------------------------------------------------------------------------
 
--- | 線形予測子 η_i = Σ_j β_j·X_ij。
--- Phase 58.6c: synthGaussLMBlocks (本体) / IR が AD で微分しながら呼ぶホット経路。
--- monolith では同一モジュール inline されていた。 境界跨ぎで失われると M1/M2 が
--- 約 +25% 劣化する (58.6 bench で実測) ため INLINABLE で cross-module inline を維持。
+-- | [日本語]: 線形予測子 η_i = Σ_j β_j·X_ij。
+--   synthGaussLMBlocks (本体) / IR が AD で微分しながら呼ぶホット経路。
+--   monolith では同一モジュール inline されていた。 境界跨ぎで失われると M1/M2 が
+--   約 +25% 劣化する (bench で実測) ため INLINABLE で cross-module inline を維持。
+--   [English]: The linear predictor η_i = Σ_j β_j·X_ij.
+--
+--   A hot path called by synthGaussLMBlocks (the main body) / IR while
+--   differentiating via AD. It used to be inlined in the same module in
+--   the monolith. Losing it across a module boundary degrades M1/M2 by
+--   about +25% (measured by bench), so INLINABLE keeps the cross-module
+--   inline.
 {-# INLINABLE lmEta #-}
 lmEta :: Fractional a => [a] -> [Double] -> a
 lmEta betas xrow = sum (zipWith (\b x -> b * realToFrac x) betas xrow)
 
--- | ランダム効果項の per-obs 寄与 @Σ_re w_i·u^{re}[gid_i]@ (長さ n)。
--- 重み @Nothing@ = 全 1 (Phase 54.10)。
+-- | [日本語]: ランダム効果項の per-obs 寄与 @Σ_re w_i·u^{re}[gid_i]@ (長さ n)。
+--   重み @Nothing@ = 全 1。
+--   [English]: The per-observation contribution of the random-effect term
+--   @Σ_re w_i·u^{re}[gid_i]@ (length n). Weight @Nothing@ = all 1s.
 {-# INLINABLE lmReffEta #-}
 lmReffEta :: forall a. Fractional a => [REff] -> Int -> Map Text a -> [a]
 lmReffEta reffs n params =
@@ -83,9 +110,13 @@ lmReffEta reffs n params =
            Just ws -> zipWith (\v w -> v * realToFrac w) base ws
     | REff uNames gids _ mw _ <- reffs ]
 
--- | 'ObserveLM' ブロックの各観測の log-density (per-obs)。 param Map から
--- β / u / (Gaussian の) σ を名前で引く。 η_i = Σ_j β_j X_ij + Σ_re u^{re}[gid_i]
--- を scalar 経路と同じ式で評価する。
+-- | [日本語]: 'ObserveLM' ブロックの各観測の log-density (per-obs)。 param Map から
+--   β / u / (Gaussian の) σ を名前で引く。 η_i = Σ_j β_j X_ij + Σ_re u^{re}[gid_i]
+--   を scalar 経路と同じ式で評価する。
+--   [English]: The per-observation log-density of an 'ObserveLM' block.
+--   Looks up β / u / (Gaussian's) σ by name from the param Map, and
+--   evaluates η_i = Σ_j β_j X_ij + Σ_re u^{re}[gid_i] with the same
+--   formula as the scalar path.
 {-# INLINABLE lmObsLogLiks #-}
 lmObsLogLiks :: forall a. (Floating a, Ord a)
              => [Text] -> [[Double]] -> [REff] -> LMFamily -> [Double] -> Map Text a -> [a]
@@ -104,7 +135,8 @@ lmObsLogLiks betaNames designX reffs fam ys params =
          [ logDensityObs (Bernoulli (1 / (1 + exp (negate eta)))) y
          | (eta, y) <- rows ]
 
--- | 'ObserveLM' ブロックの log-likelihood 和。
+-- | [日本語]: 'ObserveLM' ブロックの log-likelihood 和。
+--   [English]: The sum of the log-likelihood of an 'ObserveLM' block.
 {-# INLINABLE lmObsLogSum #-}
 lmObsLogSum :: (Floating a, Ord a)
             => [Text] -> [[Double]] -> [REff] -> LMFamily -> [Double] -> Map Text a -> a
@@ -115,9 +147,11 @@ lmObsLogSum betaNames designX reffs fam ys params =
 -- 評価インタープリタ
 -- ---------------------------------------------------------------------------
 
--- | Polymorphic interpreter that computes the log-joint
--- @log p(θ, y)@.
--- 引数 @a@ を @Double@ にすると数値評価、@Reverse s Double@ にすると AD 評価が可能。
+-- | [日本語]: log-joint @log p(θ, y)@ を計算する多相インタープリタ。
+--   引数 @a@ を @Double@ にすると数値評価、@Reverse s Double@ にすると AD 評価が可能。
+--   [English]: Polymorphic interpreter that computes the log-joint
+--   @log p(θ, y)@. Instantiating the argument @a@ with @Double@ gives
+--   numeric evaluation; with @Reverse s Double@, AD evaluation.
 logJoint :: (Floating a, Ord a) => Model a r -> Map Text a -> a
 logJoint model params = go model 0
   where
@@ -141,13 +175,19 @@ logJoint model params = go model 0
     go (Free (PlateBegin _ _ next)) acc = go next acc
     go (Free (PlateEnd next))       acc = go next acc
 
--- | log p(θ) のみ (prior 部分)。
+-- | [日本語]: log p(θ) のみ (prior 部分)。
+--   [English]: Just log p(θ) (the prior part).
 logPrior :: (Floating a, Ord a) => Model a r -> Map Text a -> a
 logPrior = logPriorWith logDensity
 
--- | 'logPrior' の密度関数注入版 (Phase 92 B3)。 AD 経路が定数 hyperparameter の
--- lgamma 正規化項を Double へ畳み込む 'logDensityRD' を差し込むために使う
--- ('Gradient' の fRest 参照)。 @logPriorWith logDensity@ = 従来の 'logPrior'。
+-- | [日本語]: 'logPrior' の密度関数注入版。 AD 経路が定数 hyperparameter の
+--   lgamma 正規化項を Double へ畳み込む 'logDensityRD' を差し込むために使う
+--   (@Gradient@ の fRest 参照)。 @logPriorWith logDensity@ = 従来の 'logPrior'。
+--   [English]: A density-function-injectable version of 'logPrior'. Used
+--   to plug in 'logDensityRD', which folds the lgamma normalization term
+--   of constant hyperparameters into a @Double@ on the AD path
+--   (referenced by @Gradient@'s fRest). @logPriorWith logDensity@ is
+--   equivalent to the plain 'logPrior'.
 logPriorWith :: (Floating a, Ord a)
              => (Distribution a -> a -> a) -> Model a r -> Map Text a -> a
 logPriorWith density model params = go model 0
@@ -166,7 +206,8 @@ logPriorWith density model params = go model 0
     go (Free (PlateBegin _ _ next)) acc = go next acc
     go (Free (PlateEnd next))       acc = go next acc
 
--- | log p(y | θ) のみ (likelihood 部分)。
+-- | [日本語]: log p(y | θ) のみ (likelihood 部分)。
+--   [English]: Just log p(y | θ) (the likelihood part).
 logLikelihood :: (Floating a, Ord a) => Model a r -> Map Text a -> a
 logLikelihood model params = go model 0
   where
@@ -187,13 +228,21 @@ logLikelihood model params = go model 0
     go (Free (PlateBegin _ _ next)) acc = go next acc
     go (Free (PlateEnd next))       acc = go next acc
 
--- | For each observe node, return its distribution evaluated at the
--- current parameter values together with the observed data.
--- Gibbs サンプラーが共役構造を検出する際に、潜在変数の現在値に対する
--- 観測分布のパラメータを得るために使う (Double 特殊化版)。
+-- | [日本語]: 各 observe ノードについて、 現在のパラメータ値で評価した分布を
+--   観測データと共に返す。 Gibbs サンプラーが共役構造を検出する際に、
+--   潜在変数の現在値に対する観測分布のパラメータを得るために使う
+--   (Double 特殊化版)。
 --
--- 例: @y ~ Normal(mu, sigma)@ で @ps = {mu=2, sigma=0.5}@ を渡すと
--- @[(\"y\", Normal 2 0.5, [...])]@ を返す。
+--   例: @y ~ Normal(mu, sigma)@ で @ps = {mu=2, sigma=0.5}@ を渡すと
+--   @[(\"y\", Normal 2 0.5, [...])]@ を返す。
+--   [English]: For each observe node, return its distribution evaluated at
+--   the current parameter values together with the observed data. Used
+--   by the Gibbs sampler when detecting conjugate structure, to obtain the
+--   observation distribution's parameters at the latent variables' current
+--   values (the @Double@-specialized form).
+--
+--   Example: given @y ~ Normal(mu, sigma)@ and @ps = {mu=2, sigma=0.5}@,
+--   returns @[(\"y\", Normal 2 0.5, [...])]@.
 runObserveDists :: Model Double r
                 -> Map Text Double
                 -> [(Text, Distribution Double, [Double])]
@@ -217,20 +266,44 @@ runObserveDists (Free (DataIx _ is k)) ps =
 runObserveDists (Free (PlateBegin _ _ next)) ps = runObserveDists next ps
 runObserveDists (Free (PlateEnd next))       ps = runObserveDists next ps
 
--- | Phase 95 A6: 解析随伴 (detach) パスの適格判定 + 抽出。
--- モデルの尤度項が **ちょうど 1 個の 'MvNormal' observe** のみ (他 'Observe' /
--- 'ObserveLM' 無し) のとき、その @(μ, Σ, ys)@ を **現在の param 値で評価** して
--- 返す。 それ以外は 'Nothing' (= 呼び出し側は従来の walk+ad / vecIR 経路へ)。
+-- | [日本語]: 解析随伴 (detach) パスの適格判定 + 抽出。
+--   モデルの尤度項が __ちょうど 1 個の 'MvNormal' observe__ のみ (他 'Observe' /
+--   'ObserveLM' 無し) のとき、その @(μ, Σ, ys)@ を __現在の param 値で評価__ して
+--   返す。 それ以外は 'Nothing' (= 呼び出し側は従来の walk+ad / vecIR 経路へ)。
 --
--- 多相 (@Floating a@) ゆえ Double でも AD 型でも走らせられる: Double 版で
--- LAPACK 用の Σ⁻¹/logdet を作り (G,h 定数化)、 AD 版で surrogate @<G,Σ(θ)>@ を
--- 微分する ('Gradient.compileGradUV' の解析枝)。 walk は 'logJoint' 等と同一
--- (Sample 継続に @params Map.! name@ を流す)。 μ/Σ は Observe ノードの
--- 'Distribution' に格納された式ゆえ、 現在の param 値で lazy に具体化される。
+--   多相 (@Floating a@) ゆえ Double でも AD 型でも走らせられる: Double 版で
+--   LAPACK 用の Σ⁻¹/logdet を作り (G,h 定数化)、 AD 版で surrogate @<G,Σ(θ)>@ を
+--   微分する (@Gradient.compileGradUV@ の解析枝)。 walk は 'logJoint' 等と同一
+--   (Sample 継続に @params Map.! name@ を流す)。 μ/Σ は Observe ノードの
+--   'Distribution' に格納された式ゆえ、 現在の param 値で lazy に具体化される。
 --
--- 適格条件を **1 個の MvNormal に限定**するのは正しさのため: 尤度が MvNormal
--- 単独なら @grad(logPrior+logJac) + detach(observe)@ で厳密に総勾配を再構成できる
--- (@logJoint = logPrior + logLikelihood@・@logLikelihood = obsLogSum(MvNormal)@)。
+--   適格条件を __1 個の MvNormal に限定__するのは正しさのため: 尤度が MvNormal
+--   単独なら @grad(logPrior+logJac) + detach(observe)@ で厳密に総勾配を再構成できる
+--   (@logJoint = logPrior + logLikelihood@・@logLikelihood = obsLogSum(MvNormal)@)。
+--   [English]: Eligibility check + extraction for the analytic adjoint
+--   (detach) path.
+--
+--   When the model's likelihood term consists of
+--   __exactly one 'MvNormal' observe__ (no other 'Observe' / 'ObserveLM'),
+--   returns its @(μ, Σ, ys)@ __evaluated at the current param values__.
+--   Otherwise 'Nothing' (the caller then falls back to the usual
+--   walk+ad / vecIR path).
+--
+--   Being polymorphic (@Floating a@) lets it run with either Double or an
+--   AD type: the Double version builds Σ⁻¹/logdet for LAPACK (fixing G, h
+--   as constants), and the AD version differentiates the surrogate
+--   @<G,Σ(θ)>@ (the analytic branch of @Gradient.compileGradUV@). The walk
+--   is the same as 'logJoint' etc. (feeding @params Map.! name@ into the
+--   Sample continuation). μ/Σ come from the expression stored in the
+--   Observe node's 'Distribution', so they are lazily materialized at the
+--   current param values.
+--
+--   The eligibility condition is __restricted to exactly 1 MvNormal__ for
+--   correctness: only when the likelihood is a single MvNormal can the
+--   total gradient be exactly reconstructed as
+--   @grad(logPrior+logJac) + detach(observe)@ (since
+--   @logJoint = logPrior + logLikelihood@ and
+--   @logLikelihood = obsLogSum(MvNormal)@).
 mvNormalObserveOf :: (Floating a, Ord a)
                   => Model a r -> Map Text a -> Maybe ([a], [[a]], [Double])
 mvNormalObserveOf model params =
@@ -253,10 +326,14 @@ mvNormalObserveOf model params =
     go (Free (PlateBegin _ _ next)) = go next
     go (Free (PlateEnd next))       = go next
 
--- | For each sample node, return @(name, prior distribution)@ in the
--- @Double@-specialized form.
--- Gibbs サンプラーの共役検出で「この潜在変数の事前は Gamma か Beta か」を
--- 判定するために使う。継続値はプレースホルダ 0 を流す。
+-- | [日本語]: 各 sample ノードについて @(name, prior distribution)@ を
+--   @Double@ 特殊化形式で返す。
+--   Gibbs サンプラーの共役検出で「この潜在変数の事前は Gamma か Beta か」を
+--   判定するために使う。継続値はプレースホルダ 0 を流す。
+--   [English]: For each sample node, return @(name, prior distribution)@ in
+--   the @Double@-specialized form. Used by the Gibbs sampler's conjugacy
+--   detection to determine "is this latent variable's prior a Gamma or a
+--   Beta?". Feeds the placeholder 0 into the continuation.
 priorList :: Model Double r -> [(Text, Distribution Double)]
 priorList (Pure _) = []
 priorList (Free (Sample n d k)) = (n, d) : priorList (k 0)
@@ -273,11 +350,15 @@ priorList (Free (PlateEnd next))       = priorList next
 -- 互換 API
 -- ---------------------------------------------------------------------------
 
--- | パラメータ名 → 値 のマップ (constrained 空間)。
+-- | [日本語]: パラメータ名 → 値 のマップ (constrained 空間)。
+--   [English]: A map from parameter name to value (in the constrained space).
 type Params = Map Text Double
 
--- | Per-observation log-likelihood (used by WAIC / LOO-CV).
--- 各 Observe ノードのすべての観測値の logDensity を平坦リストで返す。
+-- | [日本語]: Per-observation log-likelihood (WAIC / LOO-CV で使用)。
+--   各 Observe ノードのすべての観測値の logDensity を平坦リストで返す。
+--   [English]: Per-observation log-likelihood (used by WAIC / LOO-CV).
+--   Returns the logDensity of every observation of every Observe node as
+--   a flat list.
 perObsLogLiks :: forall r. ModelP r -> Params -> [Double]
 perObsLogLiks m params = go m []
   where
@@ -306,11 +387,16 @@ perObsLogLiks m params = go m []
     go (Free (PlateBegin _ _ next)) acc = go next acc
     go (Free (PlateEnd next))       acc = go next acc
 
--- | Evaluate every 'Deterministic' node and return the resulting
--- derived-quantity @Map@.
+-- | [日本語]: 全ての 'Deterministic' ノードを評価し、 導出量の @Map@ を返す。
 --
--- @params@ は latent 変数 (sample) の値を表す Map。Deterministic は
--- それらから導出される量で、ここでは Double 特殊化で評価する。
+--   @params@ は latent 変数 (sample) の値を表す Map。Deterministic は
+--   それらから導出される量で、ここでは Double 特殊化で評価する。
+--   [English]: Evaluate every 'Deterministic' node and return the
+--   resulting derived-quantity @Map@.
+--
+--   @params@ is a Map representing the values of the latent variables
+--   (sample). Deterministic quantities are derived from them, evaluated
+--   here in the @Double@-specialized form.
 runDeterministics :: forall r. ModelP r -> Params -> Map Text Double
 runDeterministics m params = go m Map.empty
   where
@@ -328,10 +414,16 @@ runDeterministics m params = go m Map.empty
     go (Free (PlateBegin _ _ next)) acc = go next acc
     go (Free (PlateEnd next))       acc = go next acc
 
--- | モデル中の 'Deterministic' 宣言名を宣言順で列挙する (Phase 103)。
--- 同名の重複宣言 (plate 内反復等) は初出のみ残す。'collectNodes' は
--- Deterministic を素通しして 'Node' 化しないため専用 walker で拾う。
--- 'runDeterministics' の返す Map の key 集合と一致する (順序のみ異なる)。
+-- | [日本語]: モデル中の 'Deterministic' 宣言名を宣言順で列挙する。
+--   同名の重複宣言 (plate 内反復等) は初出のみ残す。'collectNodes' は
+--   Deterministic を素通しして 'Node' 化しないため専用 walker で拾う。
+--   'runDeterministics' の返す Map の key 集合と一致する (順序のみ異なる)。
+--   [English]: Enumerates the model's 'Deterministic' declaration names in
+--   declaration order. Duplicate declarations of the same name (e.g. plate
+--   iteration) keep only the first occurrence. Since 'collectNodes' passes
+--   Deterministic through without turning it into a 'Node', a dedicated
+--   walker collects it here. Matches the key set of the Map returned by
+--   'runDeterministics' (only the order differs).
 deterministicNames :: forall r. ModelP r -> [Text]
 deterministicNames m = nub (go m [])
   where
@@ -347,10 +439,14 @@ deterministicNames m = nub (go m [])
     go (Free (PlateBegin _ _ next)) acc = go next acc
     go (Free (PlateEnd next))       acc = go next acc
 
--- | Evaluate 'runDeterministics' on every posterior sample and
--- 結果を 'chainSamples' の Map にマージした新しい Chain を返す。
--- これにより @chainVals@ / @posteriorSummary@ などのヘルパで派生量を
--- そのまま参照できる。
+-- | [日本語]: 全 posterior サンプルに対して 'runDeterministics' を評価し、
+--   結果を 'chainSamples' の Map にマージした新しい Chain を返す。
+--   これにより @chainVals@ / @posteriorSummary@ などのヘルパで派生量を
+--   そのまま参照できる。
+--   [English]: Evaluate 'runDeterministics' on every posterior sample and
+--   return a new Chain with the results merged into 'chainSamples's Map.
+--   This lets helpers such as @chainVals@ / @posteriorSummary@ reference
+--   derived quantities directly.
 augmentChainWithDeterministic :: ModelP r -> Chain -> Chain
 augmentChainWithDeterministic m ch =
   let aug ps = Map.union (runDeterministics m ps) ps
@@ -377,31 +473,60 @@ data ModelGraph = ModelGraph
   , mgPlates :: Map Text Int     -- Phase 40: plate 名 → サイズ N
   } deriving (Show)
 
--- | Plate 内の indexed RV (`eta_0, eta_1, …, eta_{n-1}`) を **代表 1 ノードに集約**
--- して、 PyMC `pm.model_to_graphviz` 流の true plate 描画用に変換する
--- (Phase 40-A8、 2026-05-30 追加)。
+-- | [日本語]: Plate 内の indexed RV (`eta_0, eta_1, …, eta_{n-1}`) を
+--   __代表 1 ノードに集約__して、 PyMC `pm.model_to_graphviz` 流の true plate
+--   描画用に変換する。
 --
--- 集約条件 (heuristic):
+--   集約条件 (heuristic):
 --
--- - 同じ `nodePlates` (= plate スタック) に属する
--- - 名前が @\<prefix\>_\<digit+\>$@ パターン (末尾が _ + 数字)
--- - 同じ @prefix@ を持つノード群が 2 個以上
--- - 同じ `nodeDist` (= 分布名が一致)
+--   - 同じ `nodePlates` (= plate スタック) に属する
+--   - 名前が @\<prefix\>_\<digit+\>$@ パターン (末尾が _ + 数字)
+--   - 同じ @prefix@ を持つノード群が 2 個以上
+--   - 同じ `nodeDist` (= 分布名が一致)
 --
--- 集約結果:
+--   集約結果:
 --
--- - 代表ノード名は @prefix@ (例: @eta_0..eta_7@ → @eta@)
--- - `nodeKind`: 元の集合内で最初の出現を維持 (LatentN / ObservedN)。
---   ObservedN の場合は観測数を全集約 (Σ)
--- - `nodeDeps`: 全集合の親集合の和 (ただし、 同じ集合内のメンバ間 deps は
---   削除 — 自己集約のため)
--- - edges: 集約後の名前で dedupe
+--   - 代表ノード名は @prefix@ (例: @eta_0..eta_7@ → @eta@)
+--   - `nodeKind`: 元の集合内で最初の出現を維持 (LatentN / ObservedN)。
+--     ObservedN の場合は観測数を全集約 (Σ)
+--   - `nodeDeps`: 全集合の親集合の和 (ただし、 同じ集合内のメンバ間 deps は
+--     削除 — 自己集約のため)
+--   - edges: 集約後の名前で dedupe
 --
--- plate 文脈外で起きる「同じ命名規則の名前衝突」 (e.g. @beta_0@ 固定効果 vs
--- @u_0@ 群効果) はこの heuristic で誤って集約されない (plate 制約)。
+--   plate 文脈外で起きる「同じ命名規則の名前衝突」 (e.g. @beta_0@ 固定効果 vs
+--   @u_0@ 群効果) はこの heuristic で誤って集約されない (plate 制約)。
 --
--- 元 graph をそのまま渡せば不変 (idempotent)。 plate に属さない / 単独
--- のノードは触らない。
+--   元 graph をそのまま渡せば不変 (idempotent)。 plate に属さない / 単独
+--   のノードは触らない。
+--   [English]: Converts the indexed RVs within a plate (`eta_0, eta_1, …,
+--   eta_{n-1}`) by __collapsing them into a single representative node__,
+--   for PyMC `pm.model_to_graphviz`-style true plate rendering.
+--
+--   Collapse conditions (heuristic):
+--
+--   - Belong to the same `nodePlates` (= plate stack)
+--   - Name matches the @\<prefix\>_\<digit+\>$@ pattern (ends in _ + digits)
+--   - 2 or more nodes share the same @prefix@
+--   - Share the same `nodeDist` (= same distribution name)
+--
+--   Collapse result:
+--
+--   - The representative node's name is @prefix@ (e.g. @eta_0..eta_7@ →
+--     @eta@)
+--   - `nodeKind`: keeps the first occurrence within the original set
+--     (LatentN / ObservedN). For ObservedN, the observation counts are
+--     summed (Σ)
+--   - `nodeDeps`: the union of the parent sets of the whole set (deps
+--     between members of the same set are removed, since that would be
+--     self-collapse)
+--   - edges: deduped under the collapsed names
+--
+--   A "name collision under the same naming convention" occurring outside
+--   a plate context (e.g. @beta_0@ a fixed effect vs @u_0@ a group effect)
+--   is not mistakenly collapsed by this heuristic (the plate constraint).
+--
+--   Passing the original graph through unchanged is a no-op (idempotent).
+--   Nodes that don't belong to a plate, or stand alone, are untouched.
 collapseIndexedPlateNodes :: ModelGraph -> ModelGraph
 collapseIndexedPlateNodes mg0 =
   -- 不動点: 1 回の集約で取りこぼした多段 plate (e.g. y_0_0..y_2_1 → y_0..y_2 →
@@ -411,7 +536,9 @@ collapseIndexedPlateNodes mg0 =
                                     then g else iter g'
   in iter mg0
 
--- | `collapseIndexedPlateNodes` の 1 段集約 (内部、 不動点を作る材料)。
+-- | [日本語]: `collapseIndexedPlateNodes` の 1 段集約 (内部、 不動点を作る材料)。
+--   [English]: One step of `collapseIndexedPlateNodes`'s collapsing
+--   (internal; the building block used to reach the fixed point).
 collapseIndexedPlateNodesOnce :: ModelGraph -> ModelGraph
 collapseIndexedPlateNodesOnce mg =
   let ns        = mgNodes mg
@@ -489,11 +616,18 @@ collapseIndexedPlateNodesOnce mg =
         ]
   in mg { mgNodes = newNodes, mgEdges = newEdges }
 
--- | 多相モデルから DAG を自動構築する (Track 型による依存追跡)。
+-- | [日本語]: 多相モデルから DAG を自動構築する (Track 型による依存追跡)。
 --
--- 同じ名前で複数登場する Observe ノード (例: 回帰モデルで観測点ごとに
--- @observe \"y\"@ を発行する場合) は 1 つに統合される。観測数の合計と
--- 親変数集合の和をマージし、エッジも重複排除する。
+--   同じ名前で複数登場する Observe ノード (例: 回帰モデルで観測点ごとに
+--   @observe \"y\"@ を発行する場合) は 1 つに統合される。観測数の合計と
+--   親変数集合の和をマージし、エッジも重複排除する。
+--   [English]: Automatically builds a DAG from a polymorphic model
+--   (dependency tracking via the Track type).
+--
+--   Observe nodes that appear repeatedly under the same name (e.g. issuing
+--   @observe \"y\"@ per observation in a regression model) are merged into
+--   one. The observation counts are summed and the parent-variable sets
+--   are unioned; edges are deduped as well.
 buildModelGraph :: ModelP r -> ModelGraph
 buildModelGraph m =
   let (rawNodes, plates) = extractDeps m
@@ -556,6 +690,8 @@ buildModelGraph m =
 -- Track 評価 (logJoint の Track 特殊化)
 -- ---------------------------------------------------------------------------
 
--- | Track でモデルを評価する (log joint も依存集合付きで計算)。
+-- | [日本語]: Track でモデルを評価する (log joint も依存集合付きで計算)。
+--   [English]: Evaluates the model with Track (computes the log joint
+--   along with its dependency set as well).
 runTrack :: forall r. ModelP r -> Map Text Track -> Track
 runTrack m params = logJoint (m :: Model Track r) params

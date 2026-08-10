@@ -52,7 +52,7 @@ import qualified Hanalyze.Design.Optimal             as OPT
 data GoldenRow = GoldenRow
   { grExample   :: String
   , grMetric    :: String
-  , grhanalyze   :: Double
+  , grHanalyze   :: Double
   , grReference :: Double
   , grTolerance :: Double
   } deriving Show
@@ -60,7 +60,7 @@ data GoldenRow = GoldenRow
 grRatio :: GoldenRow -> Double
 grRatio r
   | grReference r == 0 = 0 / 0
-  | otherwise          = grhanalyze r / grReference r
+  | otherwise          = grHanalyze r / grReference r
 
 grPass :: GoldenRow -> Bool
 grPass r =
@@ -74,7 +74,7 @@ writeGoldenRows path rows = withFile path WriteMode $ \h -> do
   mapM_ (\r -> hPutStrLn h
           (printf "%s,%s,%.10g,%.10g,%.10g,%.6g,%s"
             (grExample r) (grMetric r)
-            (grhanalyze r) (grReference r)
+            (grHanalyze r) (grReference r)
             (grRatio r) (grTolerance r)
             (if grPass r then "true" else "false" :: String))) rows
 
@@ -228,14 +228,14 @@ benchJonesGoosTable2 = do
                 [ GoldenRow
                     { grExample   = example
                     , grMetric    = "D-criterion-ratio-raw"
-                    , grhanalyze   = oursDet
+                    , grHanalyze   = oursDet
                     , grReference = refDet
                     , grTolerance = 0.02
                     }
                 , GoldenRow
                     { grExample   = example
                     , grMetric    = "D-efficiency-pth-root"
-                    , grhanalyze   = dEffPth
+                    , grHanalyze   = dEffPth
                     , grReference = 1.0
                     , grTolerance = 0.02
                     }
@@ -348,14 +348,14 @@ benchDuMouchelJonesEx3Both = do
                   -- ことを確認 (tolerance 0.02)
                   { grExample   = example
                   , grMetric    = "BayesianD-criterion-ratio-raw-DJ"
-                  , grhanalyze   = oursDet
+                  , grHanalyze   = oursDet
                   , grReference = refDet
                   , grTolerance = 0.02
                   }
               , GoldenRow
                   { grExample   = example
                   , grMetric    = "BayesianD-efficiency-pth-root-DJ"
-                  , grhanalyze   = dEffPth
+                  , grHanalyze   = dEffPth
                   , grReference = 1.0
                   , grTolerance = 0.02
                   }
@@ -535,7 +535,7 @@ benchJmpRsmConstraints = do
                   [ GoldenRow
                       { grExample   = example
                       , grMetric    = "IOptRegion-criterion-ratio"
-                      , grhanalyze   = oursI
+                      , grHanalyze   = oursI
                       , grReference = refI
                         -- hanalyze が JMP より大きく劣らない (≤ 5% 増) を pass 基準。
                         -- 制約条件が analytic M_R で無視されるため、 厳密同等は

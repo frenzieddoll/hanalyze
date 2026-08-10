@@ -164,9 +164,9 @@ curve + band on a scatter (the universal verb, see [../io/04-fit-api.md](../io/0
 
 ```haskell
 import Hanalyze.Plot     (glm, (|->), toPlot)
-import Hgg.Plot.Spec        (layer, scatter)
-import Hgg.Plot.Frame       ((|>>))
-import Hgg.Plot.Backend.SVG (saveSVGBound)
+import Graphics.Hgg.Spec        (layer, scatter)
+import Graphics.Hgg.Frame       ((|>>))
+import Graphics.Hgg.Backend.SVG (saveSVGBound)
 import Hanalyze.Model.GLM (Family (..), LinkFn (..))
 
 let fit = df |-> glm Binomial Logit "x" "y"   -- GLMModel (canonical link = Logit)

@@ -2,7 +2,7 @@
 
 ## Steps
 
-1. Bump `version:` in `hanalyze.cabal` and move the `[Unreleased]` notes in
+1. Bump `version:` in `hanalyze/hanalyze.cabal` (and sibling packages) and move the `[Unreleased]` notes in
    `CHANGELOG.md` under the new version.
 2. **Bump the pinned URLs in `README.md`** (see below).
 3. Commit → push `master` → tag `vX.Y.Z.W` and push the tag
@@ -34,11 +34,16 @@ grep -o 'https://[^")<> ]*' README.md | sed 's/#.*$//;s/[.,]$//' | sort -u | \
 
 ## Caveats
 
-- The `plot-integration` flag (Hanalyze.Plot) depends on the sibling hgg
-  packages (`hgg-core`/`hgg-svg`/`hgg-3d`/`hgg-custom ^>= 0.1`); it is
-  manual + default-off so the standalone build stays plot-free. Build it
-  locally before releasing to catch hgg API drift
-  (`cabal build hanalyze -f plot-integration`).
+- The repo is now multi-package (hanalyze + hanalyze-{core,frame,bayes,
+  models,design,viz,plot,cli,demos}); bump `version:` in each package to be
+  uploaded (which packages go to Hackage is decided per release).
+- `Hanalyze.Plot` lives in the separate `hanalyze-plot` package (the old
+  `plot-integration` flag was removed with the multi-package split). It
+  depends on the sibling hgg packages (`hgg-core`/`hgg-frame`/`hgg-svg`/
+  `hgg-pdf`/`hgg-rasterific`/`hgg-3d`/`hgg-custom`); until hgg is on
+  Hackage, point a checkout via `cabal.project.plot.local` and build with
+  `cabal build --project-file=cabal.project.plot hanalyze-plot` before
+  releasing to catch hgg API drift.
 - Note: the hanalyze-0.2.0.0 tarball as published still contains the
   pre-rename `Hgg.Plot.*` imports in the flag-gated Hanalyze.Plot modules,
   so `+plot-integration` does not compile against hgg 0.1.0.0 from Hackage

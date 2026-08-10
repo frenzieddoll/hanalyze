@@ -4,7 +4,7 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Doubly Robust / Augmented IPW (AIPW) 推定量 (Phase 30-A3)。
+-- [日本語]: Doubly Robust / Augmented IPW (AIPW) 推定量。
 --
 -- 結果モデル @μ̂_1(X)@ / @μ̂_0(X)@ と傾向スコア @p̂(X)@ の両方を使い、
 -- どちらか一方が正しく指定されていれば一致性を持つ推定量:
@@ -16,11 +16,31 @@
 -- @
 --
 -- 結果モデルは 'Hanalyze.Model.LM.fitLM' を流用 (= OLS、 線形)。 非線形が
--- 必要な場合は呼び出し側で X を拡張するか CATE module (30-A4) を使う。
+-- 必要な場合は呼び出し側で X を拡張するか CATE module を使う。
 --
 -- Reference:
 --   Robins, Rotnitzky, Zhao (1994) "Estimation of Regression Coefficients
 --   When Some Regressors Are Not Always Observed". JASA 89:846-866.
+--
+-- [English]: The Doubly Robust \/ Augmented IPW (AIPW) estimator.
+--
+-- Uses both the outcome models @μ̂_1(X)@ \/ @μ̂_0(X)@ and the propensity
+-- score @p̂(X)@; consistent if either one is correctly specified:
+--
+-- @
+--   ATE_AIPW = (1/n) Σ [ μ̂_1(X_i) - μ̂_0(X_i)
+--                       + T_i (Y_i - μ̂_1(X_i)) / p̂_i
+--                       - (1-T_i) (Y_i - μ̂_0(X_i)) / (1 - p̂_i) ]
+-- @
+--
+-- The outcome model reuses 'Hanalyze.Model.LM.fitLM' (= OLS,
+-- linear). If nonlinearity is needed, the caller should expand X or
+-- use the CATE module.
+--
+-- Reference:
+--   Robins, Rotnitzky, Zhao (1994) "Estimation of Regression
+--   Coefficients When Some Regressors Are Not Always Observed".
+--   JASA 89:846-866.
 module Hanalyze.Stat.Causal.DoublyRobust
   ( DoublyRobustResult (..)
   , doublyRobust
@@ -49,9 +69,14 @@ data DoublyRobustResult = DoublyRobustResult
 -- AIPW
 -- ---------------------------------------------------------------------------
 
--- | 共変量 @X@ (intercept 列を含む)、 二値処置 @T@、 結果 @Y@ から AIPW ATE
+-- | [日本語]: 共変量 @X@ (intercept 列を含む)、 二値処置 @T@、 結果 @Y@ から AIPW ATE
 -- を推定。 内部で 'propensityScore' + 'defaultPSTrim' を適用、 outcome
 -- model は OLS で群別 fit。
+--
+-- [English]: Estimates the AIPW ATE from covariates @X@ (including an
+-- intercept column), binary treatment @T@, and outcome @Y@. Internally
+-- applies 'propensityScore' + 'defaultPSTrim'; the outcome model is
+-- fit via OLS per group.
 doublyRobust :: LA.Matrix Double -> LA.Vector Double -> LA.Vector Double
              -> DoublyRobustResult
 doublyRobust x t y =
@@ -59,8 +84,11 @@ doublyRobust x t y =
       ps       = trimPropensity lo hi (propensityScore x t)
   in doublyRobustWith ps x t y
 
--- | 既存 PS を再利用する版。 PS と outcome model の組み合わせを変えて
--- 二重ロバスト性を検証したい場合に有用。
+-- | [日本語]: 既存 PS を再利用する版。 PS と outcome model の組み合わせを変えて
+--   二重ロバスト性を検証したい場合に有用。
+--   [English]: A variant that reuses an existing propensity score. Useful when
+--   verifying double robustness by varying the combination of the propensity
+--   score and the outcome model.
 doublyRobustWith :: PropensityScore -> LA.Matrix Double -> LA.Vector Double
                  -> LA.Vector Double -> DoublyRobustResult
 doublyRobustWith ps x t y =

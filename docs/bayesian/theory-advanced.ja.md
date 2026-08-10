@@ -509,7 +509,7 @@ y  = max(0, y*)  (観測値、検出下限 0 で打ち切り)
 
 入門者として次のステップ:
 
-1. **demo を読んで動かす** ([demo](../../demo/) の以下を順に):
+1. **demo を読んで動かす** ([demo](../../hanalyze-demos/demo/) の以下を順に):
    - `clinical-trial`, `simpson-paradox` (基本)
    - `mixture-demo` (Mixture)
    - `lkj-demo`, `lkj3d-demo` (LKJ)

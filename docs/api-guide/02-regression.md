@@ -329,7 +329,7 @@ rlm :: RobustEstimator -> Text -> Text -> RobustSpec
 
 `RobustModel` also **has CI bands** (Phase 70.C). M-estimator β̂'s asymptotic covariance (sandwich / matches
 statsmodels `RLM` cov="H1") yields Wald confidence intervals. Bands appear by default. Below, outlier effect is shown vs OLS
-(color/fill via `statColor`/`statFill` / legend via `statLabel`. Colors use named colors from `Hgg.Plot.Color.Named`
+(color/fill via `statColor`/`statFill` / legend via `statLabel`. Colors use named colors from `Graphics.Hgg.Color.Named`
 like `red` / `blue`):
 
 ```haskell

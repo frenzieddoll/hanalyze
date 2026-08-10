@@ -171,7 +171,7 @@ logistic (96〜200 obs)。 3 系すべて base grid [50…1600] で実走。
 
 ### 速度 (代表・ess/sec) — hanalyze 全 M 系で圧勝
 
-| model (iter=400) | hanalyze_ms | pymc_ms | numpyro_ms | 対PyMC | ess/s hana | ess/s pymc | ess/s npy |
+| model (iter=400) | hanalyze_ms | pymc_ms | numpyro_ms | 対PyMC | ess/s ael | ess/s pymc | ess/s npy |
 |---|---|---|---|---|---|---|---|
 | M1 pooled       | 18.5  | 1211 | 3328 | **65.6×** | 21666 | 279 | 79  |
 | M2 ranint       | 116.0 | 2370 | 3001 | **20.4×** | 2895  | 121 | 63  |

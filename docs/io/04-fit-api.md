@@ -33,7 +33,7 @@ class ColumnSource d where
 | `[(Text, [Double])]` | core (portable) |
 | `Map Text [Double]` | core (portable) |
 | `DataFrame` (Hackage `dataframe`) | core (portable) |
-| `[(Text, ColData)]` (hgg) | flag `plot-integration` |
+| `[(Text, ColData)]` (hgg) | package `hanalyze-plot` (`cabal build --project-file=cabal.project.plot`) |
 
 The `DataFrame` source keeps `toFrame = id`, so factor columns and missing values flow
 through the **Phase 47** path (`MissingPolicy` / contrast / response detection) unchanged.

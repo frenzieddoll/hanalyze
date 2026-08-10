@@ -257,7 +257,7 @@ import Hanalyze.Plot (hbm, defaultHBM, (|->), toPlot,
                              dagOf, tracesOf, forestOf, marginalsOf, ppcOf,
                              rankOf, autocorrOf, energyOf, pairOf, epred,
                              dashboardOf, dashboardFullOf)
-import Hgg.Plot.Spec    (layer, scatter, vconcat)
+import Graphics.Hgg.Spec    (layer, scatter, vconcat)
 
 let m    = df |-> hbm defaultHBM model
     noDf = [] :: [(Text, ColData)]

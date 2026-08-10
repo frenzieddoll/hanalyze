@@ -103,14 +103,24 @@ barChartH cfg yLabel xLabel cats vals =
 -- 積み上げ棒グラフ
 -- ---------------------------------------------------------------------------
 
--- | Stacked bar chart: each category shows its breakdown by group.
+-- | [日本語]: 積み上げ棒グラフ: 各カテゴリを group ごとの内訳で表示する。
 --
--- @
--- stackedBar cfg "Quarter" "Revenue" "Product"
---   ["Q1","Q1","Q1","Q2","Q2","Q2"]  -- x 軸カテゴリ (繰り返しOK)
---   [100, 80, 60, 120, 90, 70]       -- 値
---   ["A",  "B", "C", "A", "B", "C"] -- 色分けグループ
--- @
+--   @
+--   stackedBar cfg "Quarter" "Revenue" "Product"
+--     ["Q1","Q1","Q1","Q2","Q2","Q2"]  -- x 軸カテゴリ (繰り返しOK)
+--     [100, 80, 60, 120, 90, 70]       -- 値
+--     ["A",  "B", "C", "A", "B", "C"] -- 色分けグループ
+--   @
+--
+--   [English]: Stacked bar chart: each category shows its breakdown by
+--   group.
+--
+--   @
+--   stackedBar cfg "Quarter" "Revenue" "Product"
+--     ["Q1","Q1","Q1","Q2","Q2","Q2"]  -- x-axis categories (repeats OK)
+--     [100, 80, 60, 120, 90, 70]       -- values
+--     ["A",  "B", "C", "A", "B", "C"] -- color-coded group
+--   @
 stackedBar :: PlotConfig -> Text -> Text -> Text
            -> [Text] -> [Double] -> [Text]
            -> VegaLite
@@ -141,14 +151,23 @@ stackedBar cfg xLabel yLabel colorLabel xCats vals colorCats =
 -- グループ別棒グラフ
 -- ---------------------------------------------------------------------------
 
--- | Grouped bar chart (side-by-side comparison).
+-- | [日本語]: グループ別棒グラフ (横並び比較)。
 --
--- @
--- groupedBar cfg "Method" "ESS" "Case"
---   ["MH","HMC","NUTS","MH","HMC","NUTS"]  -- x 軸
---   [120, 900, 1800, 80, 1200, 1900]       -- 値
---   ["Easy","Easy","Easy","Hard","Hard","Hard"]  -- グループ
--- @
+--   @
+--   groupedBar cfg "Method" "ESS" "Case"
+--     ["MH","HMC","NUTS","MH","HMC","NUTS"]  -- x 軸
+--     [120, 900, 1800, 80, 1200, 1900]       -- 値
+--     ["Easy","Easy","Easy","Hard","Hard","Hard"]  -- グループ
+--   @
+--
+--   [English]: Grouped bar chart (side-by-side comparison).
+--
+--   @
+--   groupedBar cfg "Method" "ESS" "Case"
+--     ["MH","HMC","NUTS","MH","HMC","NUTS"]  -- x-axis
+--     [120, 900, 1800, 80, 1200, 1900]       -- values
+--     ["Easy","Easy","Easy","Hard","Hard","Hard"]  -- group
+--   @
 groupedBar :: PlotConfig -> Text -> Text -> Text
            -> [Text] -> [Double] -> [Text]
            -> VegaLite

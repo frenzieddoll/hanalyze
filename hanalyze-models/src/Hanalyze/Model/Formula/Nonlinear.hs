@@ -6,18 +6,37 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Formula DSL — 非線形最小二乗 (NLS、 A4)。
---   現状 @a*exp(-b*x)@ のように **パラメータがデータ式の内側に現れる式** ('designMatrixF'
+-- [日本語]: Formula DSL — 非線形最小二乗 (NLS)。
+--   現状 @a*exp(-b*x)@ のように __パラメータがデータ式の内側に現れる式__ (@designMatrixF@
 --   は線形でないとして 'Left') を、 parse 済 AST を評価関数化して既存の最適化器
 --   ('Hanalyze.Optim.NelderMead') で SSR を最小化し fit する。
 --
 --   ★考え方: 線形 OLS と違い param 名が ŷ に効く。 @evalNL@ が「params 表 + ModelFrame」 から
---   右辺式を **行ごとの ŷ ベクトル** に評価する (param は定数、 連続データ変数は列ベクトル)。
+--   右辺式を __行ごとの ŷ ベクトル__ に評価する (param は定数、 連続データ変数は列ベクトル)。
 --   目的関数 @SSR(θ) = Σ(y − ŷ(θ))²@ を Nelder-Mead で最小化。
 --   ★初期値はユーザ必須 (NLS は初期値依存)。 factor 添字は非対応 (線形側で扱う)。
 --   ★最適化器は IO を返すが決定論的ゆえ 'unsafePerformIO' で pure 化 (Convert.hs 同方針)。
 --
 --   plot 非依存・portable。
+--
+-- [English]: Formula DSL — nonlinear least squares (NLS).
+--   Fits expressions like @a*exp(-b*x)@, where
+--   __parameters appear inside the data expression itself__ (so
+--   @designMatrixF@ considers them non-linear and returns 'Left'), by
+--   turning the parsed AST into an evaluation function and minimizing
+--   SSR with the existing optimizer ('Hanalyze.Optim.NelderMead').
+--
+--   ★ Concept: unlike linear OLS, parameter names affect ŷ. @evalNL@
+--   evaluates the right-hand-side expression into a __per-row ŷ vector__
+--   from "the params table + ModelFrame" (params are constants,
+--   continuous data variables are column vectors). The objective
+--   @SSR(θ) = Σ(y − ŷ(θ))²@ is minimized with Nelder-Mead.
+--   ★ Initial values are required from the user (NLS depends on them).
+--   Factor indexing is not supported (handled on the linear side).
+--   ★ The optimizer returns IO but is deterministic, so it is purified
+--   with 'unsafePerformIO' (same policy as Convert.hs).
+--
+--   Independent of plot; portable.
 module Hanalyze.Model.Formula.Nonlinear
   ( NLSResult (..)
   , fitNLS
@@ -35,18 +54,24 @@ import           Hanalyze.Optim.Common    (OptimResult (..))
 import           Hanalyze.Optim.NelderMead (runNelderMead)
 import qualified DataFrame.Internal.DataFrame  as DX
 
--- | 非線形 fit の結果。
+-- | [日本語]: 非線形 fit の結果。
+--   [English]: The result of a nonlinear fit.
 data NLSResult = NLSResult
-  { nlsParams    :: [(Text, Double)]   -- ^ 推定パラメータ (名前つき)
-  , nlsFitted    :: V.Vector Double    -- ^ ŷ
-  , nlsResidual  :: V.Vector Double    -- ^ y − ŷ
-  , nlsSSR       :: Double             -- ^ 残差平方和
-  , nlsConverged :: Bool               -- ^ 最適化器が許容誤差で停止したか
+  { nlsParams    :: [(Text, Double)]   -- ^ [日本語]: 推定パラメータ (名前つき) [English]: Estimated parameters (named)
+  , nlsFitted    :: V.Vector Double    -- ^ [日本語]: ŷ [English]: ŷ
+  , nlsResidual  :: V.Vector Double    -- ^ [日本語]: y − ŷ [English]: y − ŷ
+  , nlsSSR       :: Double             -- ^ [日本語]: 残差平方和 [English]: Residual sum of squares
+  , nlsConverged :: Bool               -- ^ [日本語]: 最適化器が許容誤差で停止したか [English]: Whether the optimizer stopped within tolerance
   }
   deriving (Eq, Show)
 
--- | 右辺式を **行ごとの値ベクトル** に評価する。 params は表から定数、 連続データ変数は
---   ModelFrame の列、 factor / 応答は 'Left'。 (線形の 'evalData' と違い param を許す。)
+-- | [日本語]: 右辺式を __行ごとの値ベクトル__ に評価する。 params は表から定数、 連続データ変数は
+--   ModelFrame の列、 factor / 応答は 'Left'。 (線形の @evalData@ と違い param を許す。)
+--   [English]: Evaluates the right-hand-side expression into a
+--   __per-row value vector__. Params are constants from the table,
+--   continuous data variables are ModelFrame columns, and factor \/
+--   response give 'Left'.
+--   (Unlike the linear @evalData@, this allows params.)
 evalNL :: [(Text, Double)] -> ModelFrame -> Term -> Either String (V.Vector Double)
 evalNL pm mf = go
   where
@@ -80,8 +105,12 @@ binFn Mul = (*)
 binFn Div = (/)
 binFn Pow = (**)
 
--- | 非線形最小二乗。 @inits@ = 各パラメータの初期値 (mfParams を網羅する必要がある)。
+-- | [日本語]: 非線形最小二乗。 @inits@ = 各パラメータの初期値 (mfParams を網羅する必要がある)。
 --   SSR を Nelder-Mead で最小化する。 不正値 (NaN) を出すパラメータ域は +∞ で罰する。
+--   [English]: Nonlinear least squares. @inits@ is the initial value for
+--   each parameter (must cover all of mfParams). Minimizes SSR with
+--   Nelder-Mead. Parameter regions producing invalid values (NaN) are
+--   penalized with +∞.
 fitNLS :: Formula -> DX.DataFrame -> [(Text, Double)] -> Either String NLSResult
 fitNLS f@(Formula _ _ rhs) df inits = do
   mf <- modelFrame f df

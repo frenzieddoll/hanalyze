@@ -14,8 +14,14 @@
 -- When to use which:
 --
 --   * 'Hanalyze.Optim.Adam.runAdam' — momentum-based, robust, recommended default.
+-- [日本語]:
 -- - 'Hanalyze.Optim.GradAscent.gradientAscent' — シンプル、軽量、デバッグ容易
 -- - 'Hanalyze.Optim.GradAscent.gradientDescent' — 上の符号反転版
+-- [English]:
+-- - 'Hanalyze.Optim.GradAscent.gradientAscent' — simple, lightweight,
+--   easy to debug
+-- - 'Hanalyze.Optim.GradAscent.gradientDescent' — the sign-flipped
+--   version of the above
 {-# LANGUAGE OverloadedStrings #-}
 module Hanalyze.Optim.GradAscent
   ( GradConfig (..)

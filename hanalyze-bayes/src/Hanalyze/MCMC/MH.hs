@@ -111,13 +111,19 @@ metropolisChains model cfg numChains initP baseGen = do
   gens <- replicateM numChains (spawnGen baseGen)
   mapConcurrently (\g -> metropolis model cfg initP g) gens
 
--- | Phase 50: 純粋・決定的な Metropolis (seed → 確定 Chain・IO 不要)。
+-- | [日本語]: 純粋・決定的な Metropolis (seed → 確定 Chain・IO 不要)。
+--   [English]: A pure, deterministic Metropolis run (seed → a fixed Chain,
+--   no IO needed).
 metropolisPure :: ModelP r -> MCMCConfig -> Params -> Word32 -> Chain
 metropolisPure model cfg initP seed =
   runST (initialize (V.singleton seed) >>= metropolis model cfg initP)
 
--- | Phase 50: 純粋・決定的な multi-chain Metropolis。 親 seed から子 seed を純粋導出し
--- 各 chain 別 'runST' → @parList rdeepseq@ で chain 横断を並列評価 (決定性は seed 由来)。
+-- | [日本語]: 純粋・決定的な multi-chain Metropolis。 親 seed から子 seed を純粋導出し
+--   各 chain 別 'runST' → @parList rdeepseq@ で chain 横断を並列評価 (決定性は seed 由来)。
+--   [English]: A pure, deterministic multi-chain Metropolis run. Child
+--   seeds are derived purely from the parent seed; each chain gets its own
+--   'runST', and chains are evaluated in parallel across chains via
+--   @parList rdeepseq@ (determinism comes from the seed).
 metropolisChainsPure :: ModelP r -> MCMCConfig -> Int -> Params -> Word32 -> [Chain]
 metropolisChainsPure model cfg numChains initP seed =
   let childSeeds :: [Word32]

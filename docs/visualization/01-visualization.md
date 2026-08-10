@@ -3,11 +3,11 @@
 > 🌐 **English** | [日本語](01-visualization.ja.md)
 
 > Related demos:
-> - [`hbm-example`](../../demo/bayesian/HBMExample.hs) — `Hanalyze.Viz.Report` (KDE / trace / DAG / pair scatter)
-> - [`hbm-regression`](../../demo/bayesian/HBMRegressionDemo.hs) — HBM regression HTML report (DAG + MCMC + credible-interval predictions; report builder is migrating from deprecated `Hanalyze.Viz.AnalysisReport` to standard `Hanalyze.Viz.ReportBuilder`)
-> - [`simpson-paradox`](../../demo/bayesian/SimpsonParadoxDemo.hs) — multi-model side-by-side via `writeComparisonReport`
-> - [`bar-demo`](../../demo/visualization/BarDemo.hs) — `Hanalyze.Viz.Bar` + PNG/SVG export
-> - [`gp-demo`](../../demo/regression/GPDemo.hs) — GP-specific report
+> - [`hbm-example`](../../hanalyze-demos/demo/bayesian/HBMExample.hs) — `Hanalyze.Viz.Report` (KDE / trace / DAG / pair scatter)
+> - [`hbm-regression`](../../hanalyze-demos/demo/bayesian/HBMRegressionDemo.hs) — HBM regression HTML report (DAG + MCMC + credible-interval predictions; report builder is migrating from deprecated `Hanalyze.Viz.AnalysisReport` to standard `Hanalyze.Viz.ReportBuilder`)
+> - [`simpson-paradox`](../../hanalyze-demos/demo/bayesian/SimpsonParadoxDemo.hs) — multi-model side-by-side via `writeComparisonReport`
+> - [`bar-demo`](../../hanalyze-demos/demo/visualization/BarDemo.hs) — `Hanalyze.Viz.Bar` + PNG/SVG export
+> - [`gp-demo`](../../hanalyze-demos/demo/regression/GPDemo.hs) — GP-specific report
 >
 > CLI: `--report` builds an HTML report (`regress` uses legacy `Hanalyze.Viz.AnalysisReport`; other subcommands use the standard `Hanalyze.Viz.ReportBuilder`); `--format png|svg` renders individual plots as images.
 

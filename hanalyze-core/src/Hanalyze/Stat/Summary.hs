@@ -31,15 +31,17 @@ data SummaryRow = SummaryRow
   , srSD    :: Double   -- ^ Posterior standard deviation.
   , srHdiLo :: Double   -- ^ Lower bound of the 94% HDI.
   , srHdiHi :: Double   -- ^ Upper bound of the 94% HDI.
-  , srEssV  :: Double   -- ^ Effective sample size (rank-normalized bulk ESS, ArviZ @ess_bulk@ 互換).
+  , srEssV  :: Double   -- ^ [日本語]: 実効サンプルサイズ (rank-normalized bulk ESS、 ArviZ @ess_bulk@ 互換)。 [English]: Effective sample size (rank-normalized bulk ESS, compatible with ArviZ's @ess_bulk@).
   , srRhat  :: Maybe Double  -- ^ Split-R-hat (only for multi-chain runs).
   } deriving (Show)
 
--- | Compute posterior summaries for the named parameters across one or
+-- | [日本語]: Compute posterior summaries for the named parameters across one or
 -- more chains. With a single chain @R-hat@ is 'Nothing'; with multiple
 -- chains, mean / SD / HDI are computed on the pooled samples, while ESS
--- (bulk ESS, ArviZ @ess_bulk@ 互換 = Phase 100 で旧 pooled 'ess' から切替) and
+-- (bulk ESS, ArviZ @ess_bulk@ 互換・旧 pooled @ess@ から切替) and
 -- split-R-hat are computed across chains.
+--   [English]: ESS here is bulk ESS, compatible with ArviZ's @ess_bulk@
+--   (switched over from the old pooled @ess@).
 posteriorSummary :: [Text] -> [Chain] -> [SummaryRow]
 posteriorSummary params chains =
   let multi = length chains > 1

@@ -4,15 +4,28 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- hgg 連携層 — **線形モデル族** の図化 instance (Phase 71.5)。
+-- [日本語]: hgg 連携層 — __線形モデル族__ の図化 instance。
 --
--- ⚠ 親 'Hanalyze.Plot' と同じ cabal flag @plot-integration@ (既定 off) を
--- on にしたときのみ build される。 共通基盤 (class / ModelSpec / grid 評価核) は
+-- ⚠ 親 'Hanalyze.Plot' と同じく別パッケージ @hanalyze-plot@ に属し、
+-- @cabal build --project-file=cabal.project.plot@ で build される。 共通基盤 (class / ModelSpec / grid 評価核) は
 -- 'Hanalyze.Plot.Core' を import して取り込む (orphan instance を許容:
 -- クラス=Core・instance=ここ・型=Wrappers)。
 --
 -- 担当する型 (= LM 系・GLM 系・WLS):
 --   LMModel / MultiLMModel / WeightedLMModel / GLMModel / MultiGLMModel。
+--
+-- [English]: hgg integration layer — plotting instances for the
+-- __linear-model family__.
+--
+-- ⚠ Lives in the same separate package @hanalyze-plot@ as its parent
+-- 'Hanalyze.Plot', built via @cabal build --project-file=cabal.project.plot@.
+-- The shared foundation
+-- (class \/ ModelSpec \/ grid evaluation core) is pulled in via
+-- 'Hanalyze.Plot.Core' (orphan instances allowed: class in Core,
+-- instances here, types in Wrappers).
+--
+-- Types covered (= LM family, GLM family, WLS):
+--   LMModel \/ MultiLMModel \/ WeightedLMModel \/ GLMModel \/ MultiGLMModel.
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -42,7 +55,7 @@ import           Hanalyze.Model.Formula.Design  (designMatrixF)
 -- 多変量モデル型 (effect plot 用、 新規 fit)
 --
 -- 既存の単変数 'LMModel' / 'GLMModel' (設計行列が @[1, x]@ 固定) とは別型。
--- formula 文字列 + 'DataFrame' で多変量 fit し、 formula を保持して評価点設計行列を
+-- formula 文字列 + @DataFrame@ で多変量 fit し、 formula を保持して評価点設計行列を
 -- 組む (HoldAgg 固定 + along grid)。 ★GLM は formula 経路が未整備なので
 -- 'designMatrixF' で設計行列を作り 'fitGLMFull' を直接呼ぶ。
 -- ===========================================================================
@@ -81,16 +94,16 @@ instance MultiVarModel MultiGLMModel where
 -- 線形モデル (描画可能)
 --
 -- 'FitResult' (数値核) は設計行列 X を保持しないが、 回帰線・CI band を描くには
--- X が要る ('confidenceBand' は X 引数)。 そこで X と生 predictor を束ねた
+-- X が要る (@confidenceBand@ は X 引数)。 そこで X と生 predictor を束ねた
 -- 「描画可能なモデル」 を別型にする (= plot Phase 15 §2.1 の開放論点を (i) で確定)。
 -- ===========================================================================
 
 
 instance Plottable LMModel where
-  -- 散布図に重ねる回帰線 + CI band。 'confidenceBand' は **訓練点**で評価し
+  -- 散布図に重ねる回帰線 + CI band。 @confidenceBand@ は **訓練点**で評価し
   -- @yHats ± se@ を返す (= grid を渡すと fitted と不整合)。 ゆえに合成 grid を
   -- 使わず、 訓練 x を昇順ソートして直線を結ぶ (= 単回帰なら直線で grid と同形、
-  -- かつ 'confidenceBand' を無改修で再利用できる)。 ± 半幅 errorY = se。
+  -- かつ @confidenceBand@ を無改修で再利用できる)。 ± 半幅 errorY = se。
   toPlot m =
     let res    = lmResult m
         xs     = LA.toList (lmXraw m)
@@ -113,8 +126,11 @@ instance Plottable LMModel where
        , layer (scatter (inline yhat) (inline resd))
        ]
 
--- | grid 評価 (Phase 16 C1)。 grid x で設計行列 @[1, x]@ を再構築し、
--- 訓練の分散核を流用する 'confidenceBandAt' で滑らかな曲線 + 対称 CI 帯を出す。
+-- | [日本語]: grid 評価。 grid x で設計行列 @[1, x]@ を再構築し、
+--   訓練の分散核を流用する @confidenceBandAt@ で滑らかな曲線 + 対称 CI 帯を出す。
+--   [English]: Grid evaluation. Rebuilds the design matrix @[1, x]@ at the
+--   grid x, reusing the training variance kernel via @confidenceBandAt@ to
+--   produce a smooth curve + symmetric CI band.
 instance SingleVarModel LMModel where
   svRange m = let xs = LA.toList (lmXraw m) in (minimum xs, maximum xs)
   svGrid m level gxs =
@@ -177,8 +193,11 @@ instance Plottable GLMModel where
        , layer (scatter (inline yhat) (inline resd))
        ]
 
--- | grid 評価 (Phase 16 C1)。 grid x の行 @[1, x]@ を 'predictGlmMuWithCI' に渡し、
--- μ スケールの非対称 Wald CI 帯を滑らかに評価する (band lo/hi は別々に保持)。
+-- | [日本語]: grid 評価。 grid x の行 @[1, x]@ を 'predictGlmMuWithCI' に渡し、
+--   μ スケールの非対称 Wald CI 帯を滑らかに評価する (band lo/hi は別々に保持)。
+--   [English]: Grid evaluation. Passes each grid-x row @[1, x]@ to
+--   'predictGlmMuWithCI', smoothly evaluating the asymmetric Wald CI band
+--   on the μ scale (band lo\/hi are kept separately).
 instance SingleVarModel GLMModel where
   svRange m = let xs = LA.toList (glmXraw m) in (minimum xs, maximum xs)
   svGrid m level gxs =
@@ -208,9 +227,14 @@ instance SingleVarModel GLMModel where
 -- 重み付き最小二乗 (WLS)
 -- ===========================================================================
 
--- | grid 経路に委譲 (内側 LM の svGrid/PI は非スケール xEval × スケール設計で正しい
---   WLS CI を出す)。 'svRange' は元 x ('lmXraw') から。 'svCoefR2' のみ override し、
+-- | [日本語]: grid 経路に委譲 (内側 LM の svGrid/PI は非スケール xEval × スケール設計で正しい
+--   WLS CI を出す)。 'svRange' は元 x ('lmXraw') から。 @svCoefR2@ のみ override し、
 --   R² は statsmodels WLS と一致する weighted R² を返す (β̂ は内側のスケール OLS が WLS)。
+--   [English]: Delegates to the grid path (the inner LM's svGrid\/PI produces
+--   the correct WLS CI from the unscaled xEval × scaled design). 'svRange'
+--   comes from the raw x ('lmXraw'). Only @svCoefR2@ is overridden, returning
+--   a weighted R² matching statsmodels WLS (β̂ itself is the inner scaled
+--   OLS, which is the WLS estimate).
 instance SingleVarModel WeightedLMModel where
   svRange  (WeightedLMModel m _ _)  = svRange m
   svGrid   (WeightedLMModel m _ _)  = svGrid m
@@ -223,8 +247,12 @@ instance SingleVarModel WeightedLMModel where
           _             -> ys
     in Just (coefs, weightedR2 ws ys yhats)
 
--- | ★訓練点経路 ('LMModel' の素の 'toPlot') を**使わず** grid 経路 ('statModel') に
+-- | [日本語]: ★訓練点経路 ('LMModel' の素の @toPlot@) を__使わず__ grid 経路 ('statModel') に
 --   固定する。 これで WLS 線+CI が元 x スケールで出て、 元データ散布図と整合する。
+--   [English]: ★Deliberately does __not__ use the training-point path
+--   (plain 'LMModel' @toPlot@), fixing instead on the grid path
+--   ('statModel'). This makes the WLS line+CI come out on the original x
+--   scale, matching the original data scatter.
 instance Plottable WeightedLMModel where
   toPlot = toPlot . statModel
 
@@ -232,8 +260,12 @@ instance Plottable WeightedLMModel where
 -- GLM family → 観測分布 (ブートストラップ PI 用)
 -- ===========================================================================
 
--- | GLM family → 新規観測の分布関数 (μ ↦ 分布。 ブートストラップ PI の parametric ドロー用)。
+-- | [日本語]: GLM family → 新規観測の分布関数 (μ ↦ 分布。 ブートストラップ PI の parametric ドロー用)。
 --   Gaussian は加法残差で扱うため 'Nothing' (σ̂ を別途要さない)。 'svBootKit' が使う。
+--   [English]: GLM family → distribution function for new observations
+--   (μ ↦ distribution; used for parametric draws in bootstrap PI). Gaussian
+--   is handled via additive residuals, so it returns 'Nothing' (no separate
+--   σ̂ needed). Used by 'svBootKit'.
 familyObsDist :: Family -> Maybe (Double -> BD.Distribution Double)
 familyObsDist Poisson  = Just (\mu -> BD.Poisson  (max 1e-9 mu))
 familyObsDist Binomial = Just (\mu -> BD.Bernoulli (min (1 - 1e-12) (max 1e-12 mu)))
@@ -246,7 +278,9 @@ familyObsDist Gaussian = Nothing
 -- なので予測を 1/√w で元スケールへ戻し、 実測は保持した元 y ('wlmY') を使う。
 -- ===========================================================================
 
--- | FitResult から (実測, 予測) を復元する共通ヘルパ。
+-- | [日本語]: FitResult から (実測, 予測) を復元する共通ヘルパ。
+--   [English]: A shared helper that recovers (observed, predicted) from a
+--   FitResult.
 obsPredFromFit :: FitResult -> ([Double], [Double])
 obsPredFromFit r =
   let f = LA.toList (fittedV r)

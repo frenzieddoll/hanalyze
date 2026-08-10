@@ -115,10 +115,8 @@ AD tape ゼロ)。
 `potential`のみで尤度を構成 (observed nodeが無い) ため、両側ともPPC
 パネルは空。
 
-`figures/hs_dashboard_full.png` /
-`figures/py_dashboard_full.svg`
-
-(図はベンチ実行後に `figures/` へ生成される。リポジトリには含めていない)
+[hs_dashboard_full.png](./figures/hs_dashboard_full.png) /
+[py_dashboard_full.svg](./figures/py_dashboard_full.svg)
 
 ## 既知の課題
 

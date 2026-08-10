@@ -289,16 +289,28 @@ nsga2WithConstraints cfg f cFn bounds gen = do
     (front : _) -> return front
     []          -> return []
 
--- | NSGA-II all-fronts variant: 最終世代の population を非優越ソートして
--- **全 front を rank 別に**返す。 @front i@ が @rank i@ (0-origin) に対応:
--- rank 0 = Pareto 近似、 rank 1 = それに dominate される第 2 集団、 …
+-- | [日本語]: NSGA-II all-fronts variant: 最終世代の population を非優越ソートして
+--   __全 front を rank 別に__返す。 @front i@ が @rank i@ (0-origin) に対応:
+--   rank 0 = Pareto 近似、 rank 1 = それに dominate される第 2 集団、 …
 --
--- フロントエンド app frontend で「最適解 (rank 0) の周辺の代替案 (rank 1, 2)」 を
--- 一覧する UI を実装するために用意。
+--   CanvasApp frontend で「最適解 (rank 0) の周辺の代替案 (rank 1, 2)」 を
+--   一覧する UI を実装するために用意。
 --
--- 既存 'nsga2' との関係: @nsga2 ≈ head <$> nsga2AllFronts@ (空 population なら
--- empty list)。 内部 helper 'runNSGAFinalPopulation' を共有しているため、
--- 既存 API の挙動は不変。
+--   既存 'nsga2' との関係: @nsga2 ≈ head <$> nsga2AllFronts@ (空 population なら
+--   empty list)。 内部 helper 'runNSGAFinalPopulation' を共有しているため、
+--   既存 API の挙動は不変。
+--   [English]: NSGA-II all-fronts variant: non-dominated-sorts the final
+--   generation's population and returns __all fronts separated by rank__.
+--   @front i@ corresponds to @rank i@ (0-origin): rank 0 = the Pareto
+--   approximation, rank 1 = the second tier dominated by it, …
+--
+--   Provided so the CanvasApp frontend can implement a UI that lists
+--   "alternatives (rank 1, 2) around the optimum (rank 0)".
+--
+--   Relationship to existing 'nsga2': @nsga2 ≈ head <$> nsga2AllFronts@ (an
+--   empty population yields an empty list). Since the internal helper
+--   'runNSGAFinalPopulation' is shared, the existing API's behaviour is
+--   unchanged.
 nsga2AllFronts
   :: NSGAConfig
   -> ([Double] -> [Double])
@@ -308,7 +320,8 @@ nsga2AllFronts
 nsga2AllFronts cfg f bounds gen =
   nsga2AllFrontsWithConstraints cfg f (const 0) bounds gen
 
--- | Constrained 版 'nsga2AllFronts'。
+-- | [日本語]: Constrained 版 'nsga2AllFronts'。
+--   [English]: Constrained variant of 'nsga2AllFronts'.
 nsga2AllFrontsWithConstraints
   :: NSGAConfig
   -> ([Double] -> [Double])
@@ -320,8 +333,11 @@ nsga2AllFrontsWithConstraints cfg f cFn bounds gen = do
   finalPop <- runNSGAFinalPopulation cfg f cFn bounds gen
   return (nonDominatedSort finalPop)
 
--- | 内部 helper: 最終世代の population (未ソート) を返す。 'nsga2WithConstraints'
--- と 'nsga2AllFrontsWithConstraints' で共有する。 callback 無し版。
+-- | [日本語]: 内部 helper: 最終世代の population (未ソート) を返す。 'nsga2WithConstraints'
+--   と 'nsga2AllFrontsWithConstraints' で共有する。 callback 無し版。
+--   [English]: Internal helper: returns the final generation's population
+--   (unsorted). Shared by 'nsga2WithConstraints' and
+--   'nsga2AllFrontsWithConstraints'. The no-callback variant.
 runNSGAFinalPopulation
   :: NSGAConfig
   -> ([Double] -> [Double])
@@ -332,7 +348,9 @@ runNSGAFinalPopulation
 runNSGAFinalPopulation cfg f cFn bounds gen =
   runNSGAFinalPopulationCb cfg f cFn bounds (\_ -> pure ()) gen
 
--- | 内部 helper: 'runNSGAFinalPopulation' の callback 付き版。
+-- | [日本語]: 内部 helper: 'runNSGAFinalPopulation' の callback 付き版。
+--   [English]: Internal helper: the callback-carrying variant of
+--   'runNSGAFinalPopulation'.
 runNSGAFinalPopulationCb
   :: NSGAConfig
   -> ([Double] -> [Double])
@@ -360,20 +378,24 @@ runNSGAFinalPopulationCb cfg f cFn bounds onProg gen = do
   -- 世代ループ (callback 付き)
   generationLoopCb tot tot initPop pC etaC etaM pM bounds f cFn onProg gen
 
--- | NSGA-II 1 世代ステップの進捗。 'nsga2WithProgress' / 'nsga2WithProgressAndConstraints'
--- の callback 引数で渡される。
+-- | [日本語]: NSGA-II 1 世代ステップの進捗。 'nsga2WithProgress' / 'nsga2WithProgressAndConstraints'
+--   の callback 引数で渡される。
+--   [English]: Progress of one NSGA-II generation step. Passed to the
+--   callback argument of 'nsga2WithProgress' \/ 'nsga2WithProgressAndConstraints'.
 data NSGAProgress = NSGAProgress
-  { ngpGeneration :: !Int       -- ^ 0-origin の現世代番号 (@[0 .. ngpTotal - 1]@ の範囲)
-  , ngpTotal      :: !Int       -- ^ 総世代数 ('NSGAConfig.nsgaGenerations')
-  , ngpParetoSize :: !Int       -- ^ 現 rank-0 (Pareto 近似) のサイズ
-  , ngpBestObjs   :: ![Double]  -- ^ 現 rank-0 中で各目的の最小値
+  { ngpGeneration :: !Int       -- ^[日本語]:  [日本語]: 0-origin の現世代番号 (@[0 .. ngpTotal - 1]@ の範囲)。 [English]: 0-origin current generation number (range @[0 .. ngpTotal - 1]@).
+  , ngpTotal      :: !Int       -- ^[日本語]:  [日本語]: 総世代数 ('NSGAConfig.nsgaGenerations')。 [English]: Total number of generations ('NSGAConfig.nsgaGenerations').
+  , ngpParetoSize :: !Int       -- ^[日本語]:  [日本語]: 現 rank-0 (Pareto 近似) のサイズ。 [English]: Size of the current rank-0 (Pareto approximation).
+  , ngpBestObjs   :: ![Double]  -- ^[日本語]:  [日本語]: 現 rank-0 中で各目的の最小値。 [English]: Minimum value of each objective within the current rank-0.
   } deriving (Show, Eq)
 
--- | 'generationLoop' の callback 付き版。
---   各世代の **終端** で 'NSGAProgress' を構築して @onProg@ を呼ぶ。
+-- | [日本語]: @generationLoop@ の callback 付き版。
+--   各世代の __終端__ で 'NSGAProgress' を構築して @onProg@ を呼ぶ。
+--   [English]: The callback-carrying variant of @generationLoop@. Builds an
+--   'NSGAProgress' at the __end__ of each generation and calls @onProg@.
 generationLoopCb
-  :: Int                              -- ^ 残り iteration t (countdown)
-  -> Int                              -- ^ 総 iteration T (callback の ngpTotal 用)
+  :: Int                              -- ^[日本語]:  [日本語]: 残り iteration t (countdown)。 [English]: Remaining iteration count t (countdown).
+  -> Int                              -- ^[日本語]:  [日本語]: 総 iteration T (callback の ngpTotal 用)。 [English]: Total iteration count T (used for the callback's ngpTotal).
   -> [Solution]
   -> Double -> Double -> Double -> Double
   -> Bounds
@@ -415,13 +437,20 @@ generationLoopCb t tot pop pC etaC etaM pM bounds f cFn onProg gen = do
   onProg progress
   generationLoopCb (t - 1) tot newPop pC etaC etaM pM bounds f cFn onProg gen
 
--- | NSGA-II with per-generation progress callback (unconstrained)。
--- 各世代の終端で 'NSGAProgress' が @onProg@ に渡される。
--- 戻り値は 'nsga2' と同じく rank-0 (Pareto 近似) のみ。
--- 全 rank が欲しい場合は 'nsga2AllFronts' を別途呼ぶ。
+-- | [日本語]: NSGA-II with per-generation progress callback (unconstrained)。
+--   各世代の終端で 'NSGAProgress' が @onProg@ に渡される。
+--   戻り値は 'nsga2' と同じく rank-0 (Pareto 近似) のみ。
+--   全 rank が欲しい場合は 'nsga2AllFronts' を別途呼ぶ。
 --
--- 想定用途: フロントエンド app backend が WebSocket / SSE で生存中世代の
--- progress を frontend に流す。
+--   想定用途: CanvasApp backend が WebSocket / SSE で生存中世代の
+--   progress を frontend に流す。
+--   [English]: NSGA-II with per-generation progress callback (unconstrained).
+--   An 'NSGAProgress' is passed to @onProg@ at the end of each generation.
+--   The return value is rank-0 (Pareto approximation) only, same as 'nsga2'.
+--   If all ranks are needed, call 'nsga2AllFronts' separately.
+--
+--   Intended use: the CanvasApp backend streams live-generation progress
+--   to the frontend over WebSocket \/ SSE.
 nsga2WithProgress
   :: NSGAConfig
   -> ([Double] -> [Double])
@@ -467,16 +496,25 @@ dupEpsilon = 1e-12
 dupMaxRetries :: Int
 dupMaxRetries = 10
 
--- | @pop@ との重複を除去しつつ @needed@ 個の child を集めるまで SBX
--- ペア生成を繰り返す。pymoo の InfillCriterion.do と同等の役割。
+-- | [日本語]: @pop@ との重複を除去しつつ @needed@ 個の child を集めるまで SBX
+--   ペア生成を繰り返す。pymoo の InfillCriterion.do と同等の役割。
 --
--- 親選びは **random-permutation tournament** (NF3): 各反復で 2 回の
--- pop 順列を取り、各個体が tournament に正確に 2 回出るようにペアを
--- 組む。これで selection pressure の variance が下がり、ZDT のような
--- iid-uniform tournament で convergence がブレる問題を抑える。
+--   親選びは __random-permutation tournament__ (NF3): 各反復で 2 回の
+--   pop 順列を取り、各個体が tournament に正確に 2 回出るようにペアを
+--   組む。これで selection pressure の variance が下がり、ZDT のような
+--   iid-uniform tournament で convergence がブレる問題を抑える。
+--   [English]: Repeats SBX pair generation until @needed@ children have been
+--   collected, removing duplicates against @pop@. Plays the same role as
+--   pymoo's InfillCriterion.do.
+--
+--   Parent selection is a __random-permutation tournament__ (NF3): each
+--   iteration takes two permutations of the pop and pairs them so that every
+--   individual appears in exactly two tournaments. This lowers the variance
+--   of selection pressure and suppresses the convergence jitter seen with an
+--   iid-uniform tournament on problems like ZDT.
 fillOffspring
-  :: Int                         -- ^ 必要な child 数 @n@
-  -> [Solution]                  -- ^ 現世代 pop (重複比較用)
+  :: Int                         -- ^[日本語]:  [日本語]: 必要な child 数 @n@。 [English]: Number of children needed @n@.
+  -> [Solution]                  -- ^[日本語]:  [日本語]: 現世代 pop (重複比較用)。 [English]: Current-generation pop (for duplicate comparison).
   -> Double -> Double -> Double -> Double  -- ^ pC, etaC, etaM, pM
   -> Bounds
   -> ([Double] -> [Double])
@@ -579,11 +617,17 @@ fillOffspring needed pop pC etaC etaM pM bounds f cFn ranked gen =
     cAll0 c1raw c2raw =
       LA.fromBlocks [ [ c1raw ], [ c2raw ] ]
 
--- | Random-permutation tournament: pop 全体の順列を 2 回作って先頭から
--- ペア取り、binaryTournament で勝者を出す。各個体が正確に 2 回出走。
+-- | [日本語]: Random-permutation tournament: pop 全体の順列を 2 回作って先頭から
+--   ペア取り、binaryTournament で勝者を出す。各個体が正確に 2 回出走。
+--   [English]: Random-permutation tournament: builds two permutations of the
+--   whole pop, pairs them from the front, and produces winners via
+--   binaryTournament. Every individual competes exactly twice.
 pickParentsByPermutation
-  :: Int                          -- ^ 必要な親の数 (≤ 2 × pop size、
-                                  --   超える場合は permutation を repeat)
+  :: Int                          -- ^ [日本語]: 必要な親の数 (≤ 2 × pop size、
+                                  --   超える場合は permutation を repeat)。
+                                  --   [English]: Number of parents needed
+                                  --   (≤ 2 × pop size; if exceeded, the
+                                  --   permutation is repeated).
   -> [(Int, Double, Solution)]    -- ^ ranked pop
   -> GenIO
   -> IO [Solution]
@@ -625,9 +669,12 @@ shuffle xs gen = do
   let pairs = zip keys xs
   return (map snd (sortBy (comparing fst) pairs))
 
--- | 1 ペアの子 (c1, c2) を、すでに選ばれた 2 親から作る。
--- 'makeChildPair' (random-tournament 内蔵版) との重複コードを避ける
--- ため SBX/mutation の本体だけ抽出。
+-- | [日本語]: 1 ペアの子 (c1, c2) を、すでに選ばれた 2 親から作る。
+--   'makeChildPair' (random-tournament 内蔵版) との重複コードを避ける
+--   ため SBX/mutation の本体だけ抽出。
+--   [English]: Makes one pair of children (c1, c2) from two already-chosen
+--   parents. Extracts only the SBX \/ mutation body to avoid duplicating
+--   code with 'makeChildPair' (the variant with built-in random-tournament).
 makeChildPairFromParents
   :: Double -> Double -> Double -> Double
   -> Bounds
@@ -685,7 +732,9 @@ dedupBy :: (a -> a -> Bool) -> [a] -> [a]
 dedupBy _   []     = []
 dedupBy eq (x:xs)  = x : dedupBy eq (filter (not . eq x) xs)
 
--- | 1 ペアの子 (c1, c2) を生成。tournament 選択 → SBX → mutation。
+-- | [日本語]: 1 ペアの子 (c1, c2) を生成。tournament 選択 → SBX → mutation。
+--   [English]: Generates one pair of children (c1, c2): tournament
+--   selection → SBX → mutation.
 makeChildPair
   :: Double -> Double -> Double -> Double  -- pC, etaC, etaM, pM
   -> Bounds
@@ -714,19 +763,35 @@ makeChildPair pC etaC etaM pM bounds f cFn ranked gen = do
   return ( evaluateSolution f cFn c1Mut
          , evaluateSolution f cFn c2Mut )
 
--- | front の各個体の crowding distance (元の順序で) を返す。
+-- | [日本語]: front の各個体の crowding distance (元の順序で) を返す。
 --
--- N3d 改修: 旧版は (1) per-objective sort 後の vals/sorted を !! で
--- index して @O(l)@ ずつ拾う、 (2) totalDist で contrib リストを線形
--- 検索していたため全体 @O(m·l²)@ 以上。新版は
+--   N3d 改修: 旧版は (1) per-objective sort 後の vals/sorted を !! で
+--   index して @O(l)@ ずつ拾う、 (2) totalDist で contrib リストを線形
+--   検索していたため全体 @O(m·l²)@ 以上。新版は
 --
---   * 全 front 個体の objective を 'V.Vector' に置く (V.! は @O(1)@)
---   * 各 obj について index 列を sortBy で 1 度だけソート
---   * 隣接 diff を 1 pass で計算、対応 index に直接書き戻す
---     (累積は @LA.accum@ で fused)
+--     * 全 front 個体の objective を 'V.Vector' に置く (V.! は @O(1)@)
+--     * 各 obj について index 列を sortBy で 1 度だけソート
+--     * 隣接 diff を 1 pass で計算、対応 index に直接書き戻す
+--       (累積は @LA.accum@ で fused)
 --
--- 全体 @O(m·l·log l)@ + @O(m·l)@、ほぼ pymoo (numpy ソート + diff +
--- fancy-indexing) と同 order に。
+--   全体 @O(m·l·log l)@ + @O(m·l)@、ほぼ pymoo (numpy ソート + diff +
+--   fancy-indexing) と同 order に。
+--   [English]: Returns each individual's crowding distance within a front
+--   (in original order).
+--
+--   N3d revision: the previous version was worse than @O(m·l²)@ overall,
+--   because (1) it indexed into vals\/sorted after a per-objective sort via
+--   @!!@, picking up @O(l)@ each time, and (2) totalDist linearly searched
+--   the contrib list. The new version:
+--
+--     * places every front individual's objectives in a 'V.Vector' (@V.!@
+--       is @O(1)@)
+--     * for each objective, sorts the index column exactly once via sortBy
+--     * computes adjacent diffs in a single pass and writes them straight
+--       back to the corresponding index (accumulation fused via @LA.accum@)
+--
+--   Overall @O(m·l·log l)@ + @O(m·l)@ — roughly the same order as pymoo's
+--   (numpy sort + diff + fancy-indexing) approach.
 frontDistances :: [Solution] -> [Double]
 frontDistances front
   | l <= 2    = replicate l inf
@@ -780,9 +845,12 @@ frontDistances front
                    ]
              in LA.accum acc (+) (endpts ++ mids)
 
--- | ソート済 fronts (上から良い順) から n 個を選別。
--- - 入る front は丸ごと採用
--- - 最後の front は crowding distance 順で半分採用
+-- | [日本語]: ソート済 fronts (上から良い順) から n 個を選別。
+--   - 入る front は丸ごと採用
+--   - 最後の front は crowding distance 順で半分採用
+--   [English]: Selects n individuals from sorted fronts (best first).
+--   - A front that fully fits is taken in its entirety.
+--   - The last (partial) front is taken by crowding-distance order.
 selectTopN :: Int -> [[Solution]] -> [Solution]
 selectTopN _ [] = []
 selectTopN n (fr : rest)
@@ -795,11 +863,16 @@ selectTopN n (fr : rest)
 -- | Does individual @a@ /dominate/ @b@ under constrained Pareto
 -- dominance?
 --
--- 制約 (Deb 2000 "constrained-domination"):
+-- [日本語]: 制約 (Deb 2000 "constrained-domination"):
 --   1. a が実行可能 (violation = 0) かつ b が不実行可能 → a が支配
 --   2. 両方不実行可能 → violation の小さい方が支配
 --   3. 両方実行可能 → 通常の Pareto dominance
 --      (∀ i: a_i ≤ b_i) かつ (∃ j: a_j < b_j)
+-- [English]: Constraints (Deb 2000 "constrained-domination"):
+--   1. a is feasible (violation = 0) and b is infeasible → a dominates
+--   2. both infeasible → the one with smaller violation dominates
+--   3. both feasible → ordinary Pareto dominance
+--      (∀ i: a_i ≤ b_i) and (∃ j: a_j < b_j)
 dominates :: Solution -> Solution -> Bool
 dominates a b
   | va == 0 && vb >  0 = True
@@ -831,18 +904,26 @@ paretoDominates = go False
 
 -- | Fast non-dominated sort (Deb 2002): partitions the population into
 -- ranked Pareto fronts.
--- 母集団を Pareto front に分割: F_1 (最も非優越), F_2, ...
+-- [日本語]: 母集団を Pareto front に分割: F_1 (最も非優越), F_2, ...
 --
 -- アルゴリズム (O(MN²)):
 --
 --   for each p in P:
---     n_p = |{q : q dominates p}|        -- p を支配する数
---     S_p = {q : p dominates q}          -- p が支配する集合
+--     n_p = |{q : q dominates p}|        -- p を支配する数 (number dominating p)
+--     S_p = {q : p dominates q}          -- p が支配する集合 (set dominated by p)
 --     if n_p = 0: p ∈ F_1
 --   for i = 1, 2, ...:
 --     for each p in F_i, each q in S_p:
 --       n_q -= 1
 --       if n_q = 0: q ∈ F_{i+1}
+-- [English]: Splits the population into Pareto fronts: F_1 (the most
+-- non-dominated), F_2, ...
+--
+-- Algorithm (O(MN²)) — as above, restated: for each p in P compute n_p
+-- (number of individuals dominating p) and S_p (set of individuals p
+-- dominates); if n_p = 0 then p is in F_1. Then repeatedly, for each p in
+-- F_i and each q in S_p, decrement n_q, and if it reaches 0 place q in
+-- F_{i+1}.
 nonDominatedSort :: [Solution] -> [[Solution]]
 nonDominatedSort [] = []
 nonDominatedSort pop =
@@ -949,7 +1030,7 @@ nonDominatedSortIdx pm
 -- | Compute the crowding distance (Deb 2002) inside a front and sort it
 -- by descending distance.
 --
--- アルゴリズム (O(MN log N)):
+-- [日本語]: アルゴリズム (O(MN log N)):
 --
 --   for each m in objectives:
 --     sort I by f_m
@@ -958,6 +1039,12 @@ nonDominatedSortIdx pm
 --       I[i].dist += (f_m(i+1) - f_m(i-1)) / (f_max_m - f_min_m)
 --
 -- 戻り値: 距離の降順 (= 多様性が高い個体が先頭)。NSGA-II の選別で使う。
+-- [English]: Algorithm (O(MN log N)) — as above: for each objective m, sort
+-- the front by f_m, set the two endpoints' distance to infinity, and for
+-- each interior point add the normalized gap between its neighbours.
+--
+-- Return value: descending distance order (= the most diverse individuals
+-- first). Used by NSGA-II selection.
 crowdingDistance :: [Solution] -> [Solution]
 crowdingDistance front
   | length front <= 2 = front
@@ -977,7 +1064,7 @@ crowdingDistance front
 -- | Simulated Binary Crossover (SBX, Deb 1995). A real-coded analogue of
 -- single-point crossover for binary GAs.
 --
--- 2 親 (p1, p2) から 2 子 (c1, c2) を生成。各次元独立に:
+-- [日本語]: 2 親 (p1, p2) から 2 子 (c1, c2) を生成。各次元独立に:
 --
 --   1. 確率 0.5 で交叉実施 (それ以外は親をそのままコピー)
 --   2. \|p1 - p2\| < eps なら交叉せず親を返す (退化対策)
@@ -989,6 +1076,22 @@ crowdingDistance front
 --   5. 範囲外なら境界に clip
 --
 -- 大きい η_c は親付近に集中、小さい η_c はより広く探索。
+-- [English]: Produces two children (c1, c2) from two parents (p1, p2).
+-- Independently per dimension:
+--
+--   1. crossover happens with probability 0.5 (otherwise the parents are
+--      copied through unchanged)
+--   2. if \|p1 - p2\| < eps, no crossover occurs and the parents are
+--      returned (degeneracy guard)
+--   3. β ~ SBX distribution (shape controlled by η_c):
+--        u ∈ [0, 0.5)  →  β = (2u)^(1/(η+1))
+--        u ∈ [0.5, 1)  →  β = (1/(2(1-u)))^(1/(η+1))
+--   4. c1 = 0.5 * ((1+β) p1 + (1-β) p2)
+--      c2 = 0.5 * ((1-β) p1 + (1+β) p2)
+--   5. clip to bounds if out of range
+--
+-- A larger η_c concentrates near the parents; a smaller η_c explores more
+-- widely.
 sbxCrossover :: Double      -- η_c (分布指数、典型 15-20)
              -> Bounds      -- 各次元の範囲
              -> [Double]    -- 親 1
@@ -1004,12 +1107,12 @@ sbxCrossover etaC bounds p1 p2 gen = do
   -- swap が逆効果になることが計測で確認できたため採用しない (NF5 試行
   -- → revert)。
 
--- | One-dimensional SBX update — **boundary-aware** form (Deb 1995
+-- | One-dimensional SBX update — __boundary-aware__ form (Deb 1995
 -- Algorithm 1, matching pymoo / DEAP / jMetal).
 --
 -- The key difference vs the simplified variant we used previously is
--- that the spread parameter @β@ depends on **how close the parent is
--- to its bound**: a parent right at the lower bound @xl@ is paired with
+-- that the spread parameter @β@ depends on the __boundary distance__ of
+-- the parent: a parent right at the lower bound @xl@ is paired with
 -- @β ≈ 1@ (= no spread), so the produced child stays near @xl@. The
 -- old @β = (2u)^{1/(η+1)}@ was completely bound-agnostic, which means
 -- a parent at @x = 0@ paired with one at @x = 0.5@ would produce a
@@ -1066,13 +1169,21 @@ sbxOneVar etaC gen (lo, hi) (a, b) = do
 
 -- | Polynomial mutation (Deb & Goyal 1996).
 --
--- 各次元独立に確率 @pMut@ で:
+-- [日本語]: 各次元独立に確率 @pMut@ で:
 --
 --   δq = (2u)^(1/(η+1)) − 1               (u < 0.5)
 --      = 1 − (2(1-u))^(1/(η+1))           (u ≥ 0.5)
 --   y' = y + δq * (yU − yL)
 --
 -- 大きい η_m は元値付近、小さい η_m は大きい変異。
+-- [English]: Independently per dimension, with probability @pMut@:
+--
+--   δq = (2u)^(1/(η+1)) − 1               (u < 0.5)
+--      = 1 − (2(1-u))^(1/(η+1))           (u ≥ 0.5)
+--   y' = y + δq * (yU − yL)
+--
+-- A larger η_m stays near the original value; a smaller η_m produces larger
+-- mutations.
 polynomialMutation :: Double    -- η_m (分布指数、典型 20)
                    -> Double    -- 突然変異確率 (典型 1/d)
                    -> Bounds
@@ -1311,11 +1422,17 @@ clipMatToBounds bounds m =
         ]
   in LA.reshape (LA.cols m) cFlat
 
--- | NSGA-II's crowded-comparison operator:
+-- | [日本語]: NSGA-II's crowded-comparison operator:
 --   1. rank が低い (front 番号小) 方が良い
 --   2. rank 同じなら crowding distance 大が良い
 --
--- LT = 第 1 引数が良い、GT = 第 2 引数が良い、EQ = 同等。
+--   LT = 第 1 引数が良い、GT = 第 2 引数が良い、EQ = 同等。
+--   [English]: NSGA-II's crowded-comparison operator:
+--   1. lower rank (smaller front number) is better
+--   2. if ranks are equal, larger crowding distance is better
+--
+--   LT = the first argument is better, GT = the second argument is better,
+--   EQ = equal.
 crowdedCompare :: (Int, Double) -> (Int, Double) -> Ordering
 crowdedCompare (r1, d1) (r2, d2)
   | r1 < r2          = LT
@@ -1324,12 +1441,19 @@ crowdedCompare (r1, d1) (r2, d2)
   | d1 < d2          = GT
   | otherwise        = EQ
 
--- | 二項トーナメント選択。
+-- | [日本語]: 二項トーナメント選択。
 -- pop からランダムに 2 個体取り、cmp に従って勝者を返す。
 -- cmp x y == LT のとき x が勝者。
--- EQ (両者同等) の場合は **ランダムに勝敗を決める** (pymoo / DEAP と同方式)。
+-- EQ (両者同等) の場合は __ランダムに勝敗を決める__ (pymoo / DEAP と同方式)。
 -- 以前は常に xi を返していたため early-population indices が選択圧で
 -- 有利になり ZDT 系で per-generation 収束が遅れていた。
+-- [English]: Binary tournament selection.
+-- Picks 2 random individuals from pop and returns the winner per cmp.
+-- @cmp x y == LT@ means x wins.
+-- On EQ (a tie), the winner is __decided randomly__ (same scheme as
+-- pymoo \/ DEAP). Previously xi was always returned on a tie, which gave
+-- early-population indices an unfair selection advantage and slowed
+-- per-generation convergence on ZDT-family problems.
 binaryTournament :: [a] -> (a -> a -> Ordering) -> GenIO -> IO a
 binaryTournament pop cmp gen = do
   let n = length pop

@@ -48,9 +48,9 @@ layer for a multivariate model comes from `statModelMulti m (along "x")` (a
 {-# LANGUAGE OverloadedStrings #-}
 import Hanalyze.Plot     (lmF, glmF, glmmF, (|->), toPlot, statModelMulti, along, holdAt, HoldAgg (..))
 import Hanalyze.Model.GLM (Family (..), LinkFn (..))
-import Hgg.Plot.Spec        (ColData (..), layer, scatter)
-import Hgg.Plot.Frame       ((|>>))
-import Hgg.Plot.Backend.SVG (saveSVGBound)
+import Graphics.Hgg.Spec        (ColData (..), layer, scatter)
+import Graphics.Hgg.Frame       ((|>>))
+import Graphics.Hgg.Backend.SVG (saveSVGBound)
 import qualified Data.Vector as V
 
 main :: IO ()
@@ -261,4 +261,4 @@ y ~ x + (0+x|g)      # random slope only (intercept suppressed)
 - random effects with **multiple grouping factors** (`(…|g1) + (…|g2)`): single group only.
 - confidence band for `smooth` (B-spline) — point estimate only for now.
 
-> For design rationale see the internal design document spec: analysis-language §2.1/§2.2/§2.4/§3.6 (not published).
+> For design rationale see the analysis-language design spec §2.1/§2.2/§2.4/§3.6 (internal, not shipped in this repo).

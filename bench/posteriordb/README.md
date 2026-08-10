@@ -50,6 +50,20 @@ posterior とも突合する。回せない/遅い経路にフォールバック
 | 20 | [`20-bones/`](./20-bones/) | `bones_data-bones_model` | 順序ロジット (graded response IRT) | ✅ 完了 (Phase 101 改善対象) | 2992.7ms (2026-07-17 Phase 101 A3 `GradedResponseIrt` 解析勾配・改善前 18332.4 = fresh/起票時記録 31272.9 は stale) | 10774.3ms (nutpie+jax・compile 込み・2026-07-17 fresh。**hanalyze が 3.6× 勝ち**・ESS/sec 1771 vs 571) |
 | 21 | [`21-radon/`](./21-radon/) | `radon_mn-radon_hierarchical_intercept_noncentered` | 多水準回帰 (varying intercept, non-centered) | ✅ 完了 | 4905.5ms | 5395.5ms (nutpie+numba) |
 | 22 | [`22-arma/`](./22-arma/) | `arma-arma11` | ARMA(1,1) 時系列 | ✅ 完了 (Phase 101 改善対象) | 376.4ms (2026-07-17 Phase 101 A2 `ArmaNormal` 閉形式随伴・改善前 8097.2 = fresh/起票時記録 13097.1 は stale) | 1539.1ms (nutpie+jax・compile 込み・2026-07-17 fresh。**hanalyze が 4.1× 勝ち**・ESS/sec 17233 vs 3301) |
+| 23 | [`23-rate1/`](./23-rate1/) | `Rate_1_data-Rate_1_model` | 単一比率 (共役Beta-Binomial) | 🔲 コード/データ準備済み・未実行 | — | — |
+| 24 | [`24-mcycle-splines/`](./24-mcycle-splines/) | `mcycle_splines-accel_splines` | スプライン基底回帰 (不均一分散) | 🔲 コード/データ準備済み・未実行 | — | — |
+| 25 | [`25-election88/`](./25-election88/) | `election88-election88_full` | 多水準ロジスティック回帰 (5独立階層・N=11566) | 🔲 コード/データ準備済み・未実行 | — | — |
+| 26 | [`26-wells/`](./26-wells/) | `wells_data-wells_interaction_model` | 交互作用ロジスティック回帰 | 🔲 コードのみ準備・データ未取得 | — | — |
+| 27 | [`27-lsat/`](./27-lsat/) | `lsat_data-lsat_model` | 1PL/Rasch型 二値IRT | 🔲 コードのみ準備・データ未取得 | — | — |
+| 28 | [`28-kilpisjarvi/`](./28-kilpisjarvi/) | `kilpisjarvi_mod-kilpisjarvi` | 単純回帰 (データ駆動prior) | 🔲 コードのみ準備・データ未取得 | — | — |
+| 29 | [`29-m0/`](./29-m0/) | `M0_data-M0_model` | capture-recapture (最単純変種) | 🔲 コードのみ準備・データ未取得 | — | — |
+| 30 | [`30-earn-height/`](./30-earn-height/) | `earnings-earn_height` | 単純線形回帰 (earn~height) | 🔲 コードのみ準備・コンパイル確認済 (データ未取得) | — | — |
+| 31 | [`31-log10earn-height/`](./31-log10earn-height/) | `earnings-log10earn_height` | 単純線形回帰 (log10(earn)~height) | 🔲 コードのみ準備・コンパイル確認済 (データ未取得) | — | — |
+| 32 | [`32-logearn-height/`](./32-logearn-height/) | `earnings-logearn_height` | 単純線形回帰 (log(earn)~height) | 🔲 コードのみ準備・コンパイル確認済 (データ未取得) | — | — |
+| 33 | [`33-logearn-height-male/`](./33-logearn-height-male/) | `earnings-logearn_height_male` | 線形回帰 (log(earn)~height+male) | 🔲 コードのみ準備・コンパイル確認済 (データ未取得) | — | — |
+| 34 | [`34-logearn-interaction/`](./34-logearn-interaction/) | `earnings-logearn_interaction` | 交互作用回帰 (log(earn)~height*male) | 🔲 コードのみ準備・コンパイル確認済 (データ未取得) | — | — |
+| 35 | [`35-logearn-interaction-z/`](./35-logearn-interaction-z/) | `earnings-logearn_interaction_z` | 交互作用回帰 (z標準化height版) | 🔲 コードのみ準備・コンパイル確認済 (データ未取得) | — | — |
+| 36 | [`36-logearn-logheight-male/`](./36-logearn-logheight-male/) | `earnings-logearn_logheight_male` | 線形回帰 (log(earn)~log(height)+male) | 🔲 コードのみ準備・コンパイル確認済 (データ未取得) | — | — |
 
 各モデルディレクトリの構成:
 
@@ -65,8 +79,9 @@ NN-<slug>/
 └── README.md            # モデル概要・prior・精度表・既知の課題・出典
 ```
 
-ビルド: `cabal build --project-file=cabal.project.plot posteriordb-<slug>`
-(hgg 連携につき plot-integration flag 必須)。
+ビルド: `cabal build --project-file=cabal.project.demos posteriordb-<slug>`
+(Phase 109 で exe は demos package = hanalyze-demos へ移行。
+旧 plot-integration flag は撤去済で、 opt-in は cabal.project.demos のみ)。
 
 **★実行上の注意 (2026-07-11 確定・OOM事故を踏まえて)**: PyMC (`model.py`/
 `run_pymc_matrix.py`) と hanalyze (`posteriordb-<slug>`) は**必ず片方の
@@ -188,3 +203,39 @@ A6/A7 で覆った。**A6 = GP 専用 `MvNormalGpRBF` distribution + 閉形式�
 定数倍**: hanalyze/PyMC はともに **O(N³)** (区間指数差 Δ が 0.84→0.46 と縮小・hanalyze 指数は
 3 に下から接近)、hanalyze が O(N³) 支配域に早く入るため遷移域で比が開く (漸近比 ~5-6× で
 頭打ち見込み)。残る定数倍 (kernel+cov+chol+随伴の 1 パス C 化) は **Phase 97 (FFI 融合)** へ分離。
+
+2026-07-12: 23番から3件を追加選定・**コード/データ準備 (ビルド確認まで)
+のみ実施し実行・比較は未実施** (ユーザ指示)。23-rate1は単一比率の
+共役Beta-Binomial (★新ファミリ・これまでで最も単純なモデル)。
+24-mcycle-splinesはスプライン基底回帰 (★新ファミリ・N=133・不均一分散
+モデル・half-StudentT priorをhanalyze側で代理distribution+potential補正
+の厳密等価変換で実装)。25-election88は5本の独立階層を持つ多水準
+ロジスティック回帰 (★新ファミリ・N=11566・これまでで最大規模)。
+いずれもビルド確認 (警告のみ・エラーなし) 済み。実行・精度/速度比較は
+次回着手時に行う。
+
+2026-07-12 (続): 26番から4件を追加選定・**Stan原典の構造のみからコード
+を作成しビルド確認まで実施 (データダウンロードは実施せず・ユーザ指示)**。
+26-wellsはバングラデシュ井戸水調査の交互作用ロジスティック回帰
+(切片1+係数3の最も単純な交互作用回帰)。27-lsatはLSAT試験の1PL/Rasch型
+二値IRT (★新ファミリ・06-irt-2plの2PLや20-bonesのgraded responseとは
+異なるIRT種別・パターン圧縮データ形式の展開ロジックも実装)。
+28-kilpisjarviは単純回帰だが★新ファミリ (priorのハイパーパラメータ
+自体がJSONデータとして与えられる) かつ公式referenceあり
+(3者比較可能)。29-m0はcapture-recaptureの最単純変種 (05-mhの
+ZeroInflatedBinomial導出を再利用・同一ファミリの構造比較用)。
+いずれもビルド確認 (警告のみ・エラーなし) 済み。データ取得・実行・
+精度/速度比較は次回着手時に行う。
+
+2026-07-13: arXiv 2603.18845 (Preconditioning HMC by minimizing Fisher
+Divergence) Appendix E の「収束成功」分類 (posteriordb 全120モデル中114件)
+を基準に、既実装 (01-29) を除いた70件を新たな対象として選定 (ユーザ指示
+「今ベンチ用リポジトリの120のモデル全てだよ」「arXiv 2603の収束成功
+すべて」)。**この段階の完了条件は hanalyze/PyMC 双方の
+コードがコンパイルを通ることまで**(HBM推定・実行比較は次段階、ユーザ
+指示「まだHBMの推定はしなくて良い」)。逐次実行 (Workflow等の並列委譲は
+使わない)。30番から earnings 回帰ファミリ7件 (ARM本 Ch.4 由来・
+earn_height/log10earn_height/logearn_height/logearn_height_male/
+logearn_interaction/logearn_interaction_z/logearn_logheight_male) を
+実装・hanalyze 7executable全て`cabal build`成功・PyMC 7ファイル全て
+`py_compile`成功。データダウンロードなし (コード準備のみ)。

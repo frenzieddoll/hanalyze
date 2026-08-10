@@ -7,12 +7,12 @@
 --
 -- Block designs: Latin squares and randomized complete block designs.
 --
---   * 'latinSquare'        — @n × n@ Latin square (efficient arrangement
+--   - 'latinSquare'        — @n × n@ Latin square (efficient arrangement
 --     of @n@ treatments).
---   * 'graecoLatinSquare'  — pair of orthogonal Latin squares.
---   * 'randomizedBlock'    — randomized block design (@b@ blocks × @t@
+--   - 'graecoLatinSquare'  — pair of orthogonal Latin squares.
+--   - 'randomizedBlock'    — randomized block design (@b@ blocks × @t@
 --     treatments).
---   * 'shuffleSeq'         — pseudo-random sequence shuffler (seed-driven
+--   - 'shuffleSeq'         — pseudo-random sequence shuffler (seed-driven
 --     for reproducibility).
 module Hanalyze.Design.Block
   ( latinSquare
@@ -23,10 +23,12 @@ module Hanalyze.Design.Block
 
 import Data.List (foldl')
 
--- | Build an @n × n@ Latin square. Cell values are @1..n@.
+-- | [日本語]: @n × n@ のラテン方格を作る。 セルの値は @1..n@。
 --
--- 標準形 (cyclic shift):
---   row i, col j → ((i + j) mod n) + 1
+--   標準形 (cyclic shift): row i, col j → ((i + j) mod n) + 1
+--   [English]: Build an @n × n@ Latin square. Cell values are @1..n@.
+--
+--   Standard form (cyclic shift): row i, col j → ((i + j) mod n) + 1
 latinSquare :: Int -> [[Int]]
 latinSquare n
   | n < 1     = []
@@ -34,11 +36,16 @@ latinSquare n
       [ [((i + j) `mod` n) + 1 | j <- [0 .. n - 1]]
       | i <- [0 .. n - 1] ]
 
--- | Graeco-Latin square (a pair of orthogonal Latin squares).
--- n が素数のとき構成可能 (n=6 は不可能)。
--- 戻り値は (n × n) のセルごとに (a, b) のペア (両方とも 1..n)。
+-- | [日本語]: グレコラテン方格 (直交する 2 つのラテン方格の組)。
+--   n が素数のとき構成可能 (n=6 は不可能)。 戻り値は (n × n) のセルごとに
+--   (a, b) のペア (両方とも 1..n)。
 --
--- 構成: (i + j) mod n と (i + 2j) mod n
+--   構成: (i + j) mod n と (i + 2j) mod n
+--   [English]: Graeco-Latin square (a pair of orthogonal Latin squares).
+--   Constructible when n is prime (n=6 is not possible). The result is an
+--   (n × n) grid of (a, b) pairs per cell (both in 1..n).
+--
+--   Construction: (i + j) mod n and (i + 2j) mod n
 graecoLatinSquare :: Int -> Maybe [[(Int, Int)]]
 graecoLatinSquare n
   | n < 3 || n == 6 = Nothing

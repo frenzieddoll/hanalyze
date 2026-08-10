@@ -6,10 +6,16 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Random Forest **分類版**。
+-- [日本語]: Random Forest __分類版__。
 --
 -- bootstrap aggregation of 'Hanalyze.Model.DecisionTree' (CART 分類)。
 -- OOB (Out-of-Bag) error と permutation importance を併せて返す。
+--
+-- [English]: Random Forest, __classification version__.
+--
+-- Bootstrap aggregation of 'Hanalyze.Model.DecisionTree' (CART
+-- classification). Also returns OOB (Out-of-Bag) error and permutation
+-- importance.
 module Hanalyze.Model.RandomForestClassifier
   ( RFCConfig (..)
   , defaultRFCConfig
@@ -57,9 +63,9 @@ data RFClassifierFit = RFClassifierFit
   , rfcOOBSamples     :: ![[Int]]
   , rfcClasses        :: ![Int]
   , rfcOOBError       :: !Double
-  , rfcImportance     :: !(LA.Vector Double)  -- ^ permutation importance (OOB accuracy 低下)。
-  , rfcGiniImportance :: !(LA.Vector Double)  -- ^ MDI (mean decrease in gini・木構造から純粋計算・sklearn feature_importances_ 同方式)。
-  , rfcFeatureNames   :: ![Text]              -- ^ 特徴列名。 行列 fit は 'defaultFeatureNames' ("f1"..)。 実列名は df|-> 化 (後続) で。
+  , rfcImportance     :: !(LA.Vector Double)  -- ^ [日本語]: permutation importance (OOB accuracy 低下)。 [English]: Permutation importance (drop in OOB accuracy).
+  , rfcGiniImportance :: !(LA.Vector Double)  -- ^ [日本語]: MDI (mean decrease in gini・木構造から純粋計算・sklearn feature_importances_ 同方式)。 [English]: MDI (mean decrease in Gini; computed purely from the tree structure; same approach as sklearn's feature_importances_).
+  , rfcFeatureNames   :: ![Text]              -- ^ [日本語]: 特徴列名。 行列 fit は 'defaultFeatureNames' ("f1"..)。 実列名は df|-> 化 (後続) で。 [English]: Feature column names. Matrix fits use 'defaultFeatureNames' ("f1"..); real column names come via df|-> integration (subsequent work).
   , rfcConfig         :: !RFCConfig
   } deriving (Show)
 
@@ -67,7 +73,8 @@ data RFClassifierFit = RFClassifierFit
 -- fit
 -- ===========================================================================
 
--- | IO ラッパ。 ロジックは 'PrimMonad' 汎用の 'fitRFClassifierM' を共有。
+-- | [日本語]: IO ラッパ。 ロジックは 'PrimMonad' 汎用の 'fitRFClassifierM' を共有。
+--   [English]: An IO wrapper. Shares its logic with the 'PrimMonad'-generic 'fitRFClassifierM'.
 fitRFClassifier
   :: RFCConfig
   -> LA.Matrix Double
@@ -76,15 +83,22 @@ fitRFClassifier
   -> IO RFClassifierFit
 fitRFClassifier = fitRFClassifierM
 
--- | 純粋・決定的な forest 分類器 (同 @seed@ → ビット同一)。 回帰の 'fitRFVPure' と同方針
+-- | [日本語]: 純粋・決定的な forest 分類器 (同 @seed@ → ビット同一)。 回帰の @fitRFVPure@ と同方針
 -- ([[phase-50-mcmc-purification-status]])。 df|-> ('Fit RFCSpec') 経路が使う。
+--   [English]: A pure, deterministic forest classifier (same @seed@ →
+--   bit-identical). Follows the same policy as the regression
+--   @fitRFVPure@ ([[phase-50-mcmc-purification-status]]). Used by the
+--   df|-> ('Fit RFCSpec') path.
 fitRFClassifierPure
   :: RFCConfig -> LA.Matrix Double -> VU.Vector Int -> Word32 -> RFClassifierFit
 fitRFClassifierPure cfg x y seed =
   runST (MWC.initialize (V.singleton seed) >>= fitRFClassifierM cfg x y)
 
--- | 'PrimMonad' 汎用の forest 分類器本体。 gen は bootstrap index と permutation の
+-- | [日本語]: 'PrimMonad' 汎用の forest 分類器本体。 gen は bootstrap index と permutation の
 -- 列シャッフルにのみ使う (木構築・OOB・gini は純粋ゆえ ST/IO でビット同一)。
+--   [English]: The 'PrimMonad'-generic forest classifier body. @gen@ is
+--   used only for bootstrap indices and permutation column shuffling
+--   (tree construction, OOB, and Gini are pure, so ST\/IO give bit-identical results).
 fitRFClassifierM
   :: PrimMonad m
   => RFCConfig
@@ -123,7 +137,8 @@ fitRFClassifierM cfg x y gen = do
     , rfcConfig         = cfg
     }
 
--- | 各サンプルを多数決で予測。
+-- | [日本語]: 各サンプルを多数決で予測。
+--   [English]: Predict each sample by majority vote.
 predictRFClassifier :: RFClassifierFit -> LA.Matrix Double -> V.Vector Int
 predictRFClassifier fit xNew =
   V.generate (LA.rows xNew) $ \i ->
@@ -157,10 +172,17 @@ majority xs =
        ((c, _) : _) -> c
        []           -> 0
 
--- | Mean Decrease in Impurity (gini) per feature, summed over all trees
+-- | [日本語]: Mean Decrease in Impurity (gini) per feature, summed over all trees
 -- (sklearn @feature_importances_@ 同方式・木構造から純粋計算)。 各内部ノードの
 -- 重み付き gini 減少 @n·(imp − (nL/n)·impL − (nR/n)·impR)@ を分割特徴に加算し、
--- 全木ぶん合計 → 合計 1 に正規化。 'DT.DTree' の 75.23 拡張 (dnN/dnImpurity) を使う。
+-- 全木ぶん合計 → 合計 1 に正規化。 'DT.DTree' の拡張フィールド (dnN/dnImpurity) を使う。
+--   [English]: Mean Decrease in Impurity (Gini) per feature, summed over
+--   all trees (the same approach as sklearn's @feature_importances_@;
+--   computed purely from the tree structure). Adds the weighted Gini
+--   decrease at each internal node,
+--   @n·(imp − (nL/n)·impL − (nR/n)·impR)@, to its split feature, sums
+--   over all trees, then normalizes to sum to 1. Uses 'DT.DTree''s
+--   extension fields (dnN\/dnImpurity).
 giniImportance :: Int -> [DT.DTree] -> LA.Vector Double
 giniImportance p trees =
   let m0 = Map.fromList [ (j, 0 :: Double) | j <- [0 .. p - 1] ]
@@ -179,7 +201,8 @@ giniImportance p trees =
       tot  = sum raw
   in LA.fromList (if tot <= 0 then raw else map (/ tot) raw)
 
--- | ノードのサンプル数 / gini 不純度 (葉・内部で共通アクセス)。
+-- | [日本語]: ノードのサンプル数 / gini 不純度 (葉・内部で共通アクセス)。
+--   [English]: A node's sample count \/ Gini impurity (uniform access for leaf and internal nodes).
 nodeN :: DT.DTree -> Int
 nodeN (DT.DLeaf{ DT.dlN = n }) = n
 nodeN (DT.DNode{ DT.dnN = n }) = n

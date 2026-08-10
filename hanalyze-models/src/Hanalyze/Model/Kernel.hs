@@ -7,29 +7,58 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- 共有カーネル語彙 (GP / SVM / カーネル法で共通) — Phase 75.18 で 'Model.GP'
--- から分離。
+-- [日本語]: 共有カーネル語彙 (GP / SVM / カーネル法で共通)。 'Model.GP' から分離した。
 --
 -- GP 族の定常/内積カーネル ('RBF' / 'Matern52' / 'Periodic' / 'Linear' / 'Poly') と
 -- そのハイパーパラメータ 'KernelParams' (ℓ / σ_f² / period / ARD per-dim ℓ) を集約する。
--- 'GPParams' (= 'KernelParams' + 観測ノイズ σ_n²) に依存しないので、 SVM 等
+-- @GPParams@ (= 'KernelParams' + 観測ノイズ σ_n²) に依存しないので、 SVM 等
 -- ノイズを持たないカーネル法はこのモジュールだけを import すればよい
 -- ('Model.GP' を import しない)。
 --
 -- 評価関数:
 --
---   * 'kernelFn'            — 1D 入力の @k(x, x')@。
---   * 'buildKernelMatrix'   — 1D の Gram 行列 @K(xs, xs')@。
---   * 'applyKernel'         — 二乗距離行列 → カーネル行列 (距離カーネル専用)。
---   * 'kernelOfParams'      — 固定パラメータの @s ↦ k(s)@ (距離カーネル専用・INLINE)。
---   * 'ardScaleXY'          — ARD 列スケーリング。
---   * 'buildKernelMatrixMV' — 多入力 Gram 行列 (全カーネル)。
---   * 'kEvalMV'             — 多入力の点対点評価 @k(a, b)@ (全カーネル・SVM 等の汎用経路)。
+--   - 'kernelFn'            — 1D 入力の @k(x, x')@。
+--   - 'buildKernelMatrix'   — 1D の Gram 行列 @K(xs, xs')@。
+--   - 'applyKernel'         — 二乗距離行列 → カーネル行列 (距離カーネル専用)。
+--   - 'kernelOfParams'      — 固定パラメータの @s ↦ k(s)@ (距離カーネル専用・INLINE)。
+--   - 'ardScaleXY'          — ARD 列スケーリング。
+--   - 'buildKernelMatrixMV' — 多入力 Gram 行列 (全カーネル)。
+--   - 'kEvalMV'             — 多入力の点対点評価 @k(a, b)@ (全カーネル・SVM 等の汎用経路)。
 --
 -- 距離カーネル (RBF/Matern52/Periodic) は二乗距離から、 内積カーネル
 -- (Linear/Poly) は内積から評価する。 'applyKernel' / 'kernelOfParams' は距離専用で、
 -- 内積カーネルを渡すと error (multi-input gram は 'buildKernelMatrixMV' が内積経路へ
 -- 分岐するためそこには到達しない)。
+--
+-- [English]: Shared kernel vocabulary (common to GP \/ SVM \/ kernel
+-- methods). Split out from 'Model.GP'.
+--
+-- Gathers the GP family's stationary\/dot-product kernels ('RBF' \/
+-- 'Matern52' \/ 'Periodic' \/ 'Linear' \/ 'Poly') and their hyperparameters
+-- 'KernelParams' (ℓ \/ σ_f² \/ period \/ per-dim ARD ℓ). This module does
+-- not depend on @GPParams@ (= 'KernelParams' + observation noise σ_n²), so
+-- noise-free kernel methods such as SVM only need to import this module
+-- (and not 'Model.GP').
+--
+-- Evaluation functions:
+--
+--   - 'kernelFn'            — @k(x, x')@ for 1D inputs.
+--   - 'buildKernelMatrix'   — the 1D Gram matrix @K(xs, xs')@.
+--   - 'applyKernel'         — squared-distance matrix → kernel matrix
+--     (distance kernels only).
+--   - 'kernelOfParams'      — @s ↦ k(s)@ for fixed parameters (distance
+--     kernels only, INLINE).
+--   - 'ardScaleXY'          — ARD column scaling.
+--   - 'buildKernelMatrixMV' — multi-input Gram matrix (all kernels).
+--   - 'kEvalMV'             — point-to-point multi-input evaluation
+--     @k(a, b)@ (all kernels; the generic path used by SVM etc.).
+--
+-- Distance kernels (RBF\/Matern52\/Periodic) are evaluated from squared
+-- distance; dot-product kernels (Linear\/Poly) are evaluated from the dot
+-- product. 'applyKernel' \/ 'kernelOfParams' are distance-only and error
+-- if given a dot-product kernel (the multi-input gram path never reaches
+-- them, since 'buildKernelMatrixMV' branches to the dot-product path
+-- first).
 module Hanalyze.Model.Kernel
   ( -- * カーネル型
     Kernel (..)
@@ -59,7 +88,8 @@ import           Control.Monad.ST             (runST)
 -- 型
 -- ---------------------------------------------------------------------------
 
--- | GP / SVM 族のカーネル種別。
+-- | [日本語]: GP / SVM 族のカーネル種別。
+--   [English]: Kernel variants for the GP\/SVM family.
 data Kernel
   = RBF
     -- ^ Squared exponential: @k(x,x') = σ_f² exp(−r²/(2ℓ²))@.
@@ -72,11 +102,11 @@ data Kernel
     --   For periodic patterns; set 'kpPeriod' appropriately.
   | Linear
     -- ^ Linear (dot-product): @k(x,x') = σ_f² (x·x')@. A non-stationary
-    --   kernel; with SVM gives a linear decision boundary. (Phase 75.14)
+    --   kernel; with SVM gives a linear decision boundary.
   | Poly !Int
     -- ^ Polynomial of degree @d@: @k(x,x') = (γ (x·x') + 1)^d@ with
     --   @γ = 1/(2ℓ²)@ (shared with the SVM γ convention). A
-    --   non-stationary kernel. (Phase 75.14)
+    --   non-stationary kernel.
   deriving (Show, Eq)
 
 -- | Display name of a kernel.
@@ -87,7 +117,9 @@ kernelName Periodic  = "Periodic"
 kernelName Linear    = "Linear"
 kernelName (Poly d)  = "Poly(" <> T.pack (show d) <> ")"
 
--- | カーネルハイパーパラメータ (観測ノイズ σ_n² は含まない)。
+-- | [日本語]: カーネルハイパーパラメータ (観測ノイズ σ_n² は含まない)。
+--   [English]: Kernel hyperparameters (does not include the observation
+--   noise σ_n²).
 data KernelParams = KernelParams
   { kpLengthScale  :: Double
     -- ^ Isotropic length scale @ℓ@; larger means smoother. Used unless
@@ -140,10 +172,10 @@ kernelFn (Poly d) p x x' =
 
 -- | Build the kernel matrix @K(xs, xs')@ of shape @|xs| × |xs'|@.
 --
--- Phase 11b (2026-05-14): fill a flat 'Storable.Vector' via @runST +
--- MVector@ instead of materialising the @|xs|·|xs'|@ lazy @[Double]@
--- list (one allocation per kernel call). 'kernelFn' itself is unchanged
--- so 'Periodic' (signed-difference dependent) keeps working.
+-- Fills a flat 'Storable.Vector' via @runST + MVector@ instead of
+-- materialising the @|xs|·|xs'|@ lazy @[Double]@ list (one allocation per
+-- kernel call). 'kernelFn' itself is unchanged so 'Periodic'
+-- (signed-difference dependent) keeps working.
 buildKernelMatrix :: Kernel -> KernelParams -> [Double] -> [Double] -> LA.Matrix Double
 buildKernelMatrix ker p xs xs' =
   let xv = VS.fromList xs
@@ -168,10 +200,16 @@ buildKernelMatrix ker p xs xs' =
 -- 多入力 (multivariate) 評価
 -- ---------------------------------------------------------------------------
 
--- | Apply the kernel function to an @m × n@ matrix of squared distances.
--- 距離カーネル (RBF/Matern52/Periodic) 専用。 内積カーネル (Linear/Poly) は
--- 二乗距離から復元できないため error (multi-input gram は 'buildKernelMatrixMV'
--- が内積経路へ分岐するためここには到達しない)。
+-- | [日本語]: 二乗距離行列 (@m × n@) にカーネル関数を適用する。
+--   距離カーネル (RBF/Matern52/Periodic) 専用。 内積カーネル (Linear/Poly) は
+--   二乗距離から復元できないため error (multi-input gram は 'buildKernelMatrixMV'
+--   が内積経路へ分岐するためここには到達しない)。
+--   [English]: Apply the kernel function to an @m × n@ matrix of squared
+--   distances. Distance kernels (RBF\/Matern52\/Periodic) only.
+--   Dot-product kernels (Linear\/Poly) cannot be recovered from the
+--   squared distance and error out (the multi-input gram path never
+--   reaches here, since 'buildKernelMatrixMV' branches to the
+--   dot-product path first).
 applyKernel :: Kernel -> KernelParams -> LA.Matrix Double -> LA.Matrix Double
 applyKernel RBF p d2 =
   let l2 = kpLengthScale p ** 2
@@ -236,9 +274,13 @@ buildKernelMatrixMV ker p x x' =
   let (xs, ys, p') = ardScaleXY ker p x x'
   in applyKernel ker p' (KD.pairwiseSqDistXY xs ys)
 
--- | 多入力カーネル評価 @k(a, b)@ (全カーネル対応・SVM 等の汎用経路)。
--- 距離カーネル (RBF/Matern52/Periodic) は二乗距離、 内積カーネル (Linear/Poly)
--- は内積から評価する。 (Phase 75.14)
+-- | [日本語]: 多入力カーネル評価 @k(a, b)@ (全カーネル対応・SVM 等の汎用経路)。
+--   距離カーネル (RBF/Matern52/Periodic) は二乗距離、 内積カーネル (Linear/Poly)
+--   は内積から評価する。
+--   [English]: Multi-input kernel evaluation @k(a, b)@ (supports all
+--   kernels; the generic path used by SVM etc.). Distance kernels
+--   (RBF\/Matern52\/Periodic) are evaluated from squared distance,
+--   dot-product kernels (Linear\/Poly) from the dot product.
 kEvalMV :: Kernel -> KernelParams -> LA.Vector Double -> LA.Vector Double -> Double
 kEvalMV Linear   p a b = kpSignalVar p * (a LA.<.> b)
 kEvalMV (Poly d) p a b =
@@ -249,9 +291,13 @@ kEvalMV ker      p a b =
   let d = a - b
   in kernelOfParams ker p (d LA.<.> d)   -- 距離カーネル: s = ‖a−b‖²
 
--- | Specialized kernel function for a fixed parameter set, returning a
--- monomorphic @Double -> Double@ that GHC can inline tightly into the
--- @mkNoiseKernelFromD2@ inner loop (in 'Model.GP'). 距離カーネル専用。
+-- | [日本語]: 固定パラメータ集合に対する特殊化カーネル関数。 GHC が
+--   'Model.GP' の @mkNoiseKernelFromD2@ 内側ループに密にインライン化できる
+--   単相 @Double -> Double@ を返す。 距離カーネル専用。
+--   [English]: Specialized kernel function for a fixed parameter set,
+--   returning a monomorphic @Double -> Double@ that GHC can inline tightly
+--   into the @mkNoiseKernelFromD2@ inner loop (in 'Model.GP'). Distance
+--   kernels only.
 {-# INLINE kernelOfParams #-}
 kernelOfParams :: Kernel -> KernelParams -> (Double -> Double)
 kernelOfParams RBF p =

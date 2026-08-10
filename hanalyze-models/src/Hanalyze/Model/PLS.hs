@@ -6,20 +6,39 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Partial Least Squares (PLS) — chemometrics 標準の応答連動低ランク回帰。
+-- [日本語]: Partial Least Squares (PLS) — chemometrics 標準の応答連動低ランク回帰。
 --
--- PCA (`Hanalyze.Model.PCA`) は応答無視の分散最大化、 PLS は **応答 Y と
--- X の共分散を最大化**する低ランク射影。 多変量分光分析 / 材料設計の予測 +
--- 変数選択を 1 モデルで実現する。
+-- PCA (`Hanalyze.Model.PCA`) は応答無視の分散最大化、 PLS は
+-- __応答 Y と X の共分散を最大化する__低ランク射影。 多変量分光分析 / 材料設計の
+-- 予測 + 変数選択を 1 モデルで実現する。
 --
 -- アルゴリズム:
 --
---   * 'NIPALS' (default): 反復的 power iteration、 sklearn `PLSRegression` と
+--   - 'NIPALS' (default): 反復的 power iteration、 sklearn @PLSRegression@ と
 --     数値一致しやすい
---   * 'SIMPLS' (Phase 9.5 で追加予定): de Jong 1993、 SVD ベース、 multi-Y で
+--   - 'SIMPLS' (追加予定): de Jong 1993、 SVD ベース、 multi-Y で
 --     直接的
 --
 -- 内部実装は hmatrix Matrix / Vector 演算で完結 (list 化しない)。
+--
+-- [English]: Partial Least Squares (PLS) — the chemometrics-standard
+-- response-linked low-rank regression.
+--
+-- Whereas PCA (`Hanalyze.Model.PCA`) is response-agnostic variance
+-- maximization, PLS is a low-rank projection that
+-- __maximizes the covariance between the response Y and X__. It delivers
+-- prediction + variable selection for multivariate spectroscopy \/
+-- materials design in a single model.
+--
+-- Algorithms:
+--
+--   - 'NIPALS' (default): iterative power iteration, which tends to match
+--     sklearn's @PLSRegression@ numerically.
+--   - 'SIMPLS' (planned addition): de Jong 1993, SVD-based, direct for
+--     multi-Y.
+--
+-- The internal implementation is self-contained in hmatrix
+-- Matrix \/ Vector operations (never converts to lists).
 module Hanalyze.Model.PLS
   ( -- * Config
     PLSAlgorithm (..)
@@ -50,16 +69,16 @@ import qualified Hanalyze.Stat.CV      as HCV
 -- ===========================================================================
 
 data PLSAlgorithm
-  = NIPALS   -- ^ 反復的 power iteration (default)
-  | SIMPLS   -- ^ de Jong 1993 (Phase 9.5 で追加)
+  = NIPALS   -- ^ [日本語]: 反復的 power iteration (default)。 [English]: Iterative power iteration (default).
+  | SIMPLS   -- ^ [日本語]: de Jong 1993 (追加予定)。 [English]: de Jong 1993 (a planned addition).
   deriving (Show, Eq)
 
 data PLSConfig = PLSConfig
   { plsN_Components :: !Int
   , plsAlgorithm    :: !PLSAlgorithm
-  , plsScale        :: !Bool           -- ^ True で X, Y を column-wise に標準化
-  , plsTol          :: !Double         -- ^ NIPALS 収束許容誤差
-  , plsMaxIter      :: !Int            -- ^ NIPALS 最大反復
+  , plsScale        :: !Bool           -- ^ [日本語]: True で X, Y を column-wise に標準化。 [English]: When True, standardizes X and Y column-wise.
+  , plsTol          :: !Double         -- ^ [日本語]: NIPALS 収束許容誤差。 [English]: The NIPALS convergence tolerance.
+  , plsMaxIter      :: !Int            -- ^ [日本語]: NIPALS 最大反復。 [English]: The NIPALS maximum iteration count.
   } deriving (Show)
 
 defaultPLS :: PLSConfig
@@ -76,19 +95,21 @@ defaultPLS = PLSConfig
 -- ===========================================================================
 
 data PLSFit = PLSFit
-  { plsScoresT    :: !(LA.Matrix Double)  -- ^ T (n × K) X scores
-  , plsLoadingsP  :: !(LA.Matrix Double)  -- ^ P (p × K) X loadings
-  , plsLoadingsQ  :: !(LA.Matrix Double)  -- ^ Q (q × K) Y loadings
-  , plsWeightsW   :: !(LA.Matrix Double)  -- ^ W (p × K) X weights
+  { plsScoresT    :: !(LA.Matrix Double)  -- ^ [日本語]: T (n × K) X scores。 [English]: T (n × K), the X scores.
+  , plsLoadingsP  :: !(LA.Matrix Double)  -- ^ [日本語]: P (p × K) X loadings。 [English]: P (p × K), the X loadings.
+  , plsLoadingsQ  :: !(LA.Matrix Double)  -- ^ [日本語]: Q (q × K) Y loadings。 [English]: Q (q × K), the Y loadings.
+  , plsWeightsW   :: !(LA.Matrix Double)  -- ^ [日本語]: W (p × K) X weights。 [English]: W (p × K), the X weights.
   , plsCoef       :: !(LA.Matrix Double)
-    -- ^ β (p × q) 回帰係数 (元スケール)。 @Ŷ = (X - X̄) · β + Ȳ@
-  , plsXMean      :: !(LA.Vector Double)  -- ^ X 列平均
-  , plsXStd       :: !(LA.Vector Double)  -- ^ X 列標準偏差 (plsScale=True なら、 そうでなければ 1)
-  , plsYMean      :: !(LA.Vector Double)
-  , plsYStd       :: !(LA.Vector Double)
-  , plsR2X        :: !(LA.Vector Double)  -- ^ 各 component の X 説明分散率
-  , plsR2Y        :: !(LA.Vector Double)  -- ^ 各 component の Y 説明分散率
-  , plsVIP        :: !(LA.Vector Double)  -- ^ 変数重要度 (Variable Importance in Projection)
+    -- ^ [日本語]: β (p × q) 回帰係数 (元スケール)。 @Ŷ = (X - X̄) · β + Ȳ@。
+    --   [English]: β (p × q), the regression coefficients (original scale).
+    --   @Ŷ = (X - X̄) · β + Ȳ@.
+  , plsXMean      :: !(LA.Vector Double)  -- ^ [日本語]: X 列平均。 [English]: The X column means.
+  , plsXStd       :: !(LA.Vector Double)  -- ^ [日本語]: X 列標準偏差 (plsScale=True なら、 そうでなければ 1)。 [English]: The X column standard deviations (when plsScale=True; otherwise 1).
+  , plsYMean      :: !(LA.Vector Double)  -- ^ [日本語]: Y 列平均。 [English]: The Y column means.
+  , plsYStd       :: !(LA.Vector Double)  -- ^ [日本語]: Y 列標準偏差 (plsScale=True なら、 そうでなければ 1)。 [English]: The Y column standard deviations (when plsScale=True; otherwise 1).
+  , plsR2X        :: !(LA.Vector Double)  -- ^ [日本語]: 各 component の X 説明分散率。 [English]: The fraction of X variance explained by each component.
+  , plsR2Y        :: !(LA.Vector Double)  -- ^ [日本語]: 各 component の Y 説明分散率。 [English]: The fraction of Y variance explained by each component.
+  , plsVIP        :: !(LA.Vector Double)  -- ^ [日本語]: 変数重要度 (Variable Importance in Projection)。 [English]: Variable importance (Variable Importance in Projection).
   , plsConfig     :: !PLSConfig
   } deriving (Show)
 
@@ -96,10 +117,11 @@ data PLSFit = PLSFit
 -- 公開関数
 -- ===========================================================================
 
--- | PLS fit (multi-output Y、 q ≥ 1)。
+-- | [日本語]: PLS fit (multi-output Y、 q ≥ 1)。
+--   [English]: PLS fit (multi-output Y, q ≥ 1).
 fitPLS :: PLSConfig
-       -> LA.Matrix Double      -- ^ X (n × p)
-       -> LA.Matrix Double      -- ^ Y (n × q)
+       -> LA.Matrix Double      -- ^ [日本語]: X (n × p)。 [English]: X (n × p).
+       -> LA.Matrix Double      -- ^ [日本語]: Y (n × q)。 [English]: Y (n × q).
        -> Either Text PLSFit
 fitPLS cfg x y
   | LA.rows x /= LA.rows y =
@@ -116,12 +138,16 @@ fitPLS cfg x y
         NIPALS -> Right (nipalsFit cfg x y)
         SIMPLS -> Left "fitPLS: SIMPLS not yet implemented (Phase 9.5)"
 
--- | 単出力 Y ショートカット (q = 1)。
+-- | [日本語]: 単出力 Y ショートカット (q = 1)。
+--   [English]: A single-output Y shortcut (q = 1).
 fitPLS1 :: PLSConfig -> LA.Matrix Double -> LA.Vector Double -> Either Text PLSFit
 fitPLS1 cfg x y = fitPLS cfg x (LA.asColumn y)
 
--- | 予測 (multi-output)。 `plsCoef` は元スケールの回帰係数なので、
+-- | [日本語]: 予測 (multi-output)。 `plsCoef` は元スケールの回帰係数なので、
 --   X を中央化するだけで予測可能 (= scaling は不要、 coef が吸収済)。
+--   [English]: Predicts (multi-output). Since `plsCoef` is the regression
+--   coefficient on the original scale, prediction only requires
+--   centering X (no scaling needed — it is already absorbed into coef).
 predictPLS :: PLSFit -> LA.Matrix Double -> LA.Matrix Double
 predictPLS fit xNew =
   let nRow = LA.rows xNew
@@ -136,7 +162,9 @@ predictPLS1 fit xNew = LA.flatten (predictPLS fit xNew)
 -- NIPALS 実装
 -- ===========================================================================
 
--- | NIPALS 内部実装。 中央化 + (option で) 標準化 → component loop → 後処理。
+-- | [日本語]: NIPALS 内部実装。 中央化 + (option で) 標準化 → component loop → 後処理。
+--   [English]: The internal NIPALS implementation: centering + (optionally)
+--   standardization → the component loop → post-processing.
 nipalsFit :: PLSConfig -> LA.Matrix Double -> LA.Matrix Double -> PLSFit
 nipalsFit cfg xRaw yRaw =
   let !n = LA.rows xRaw
@@ -248,7 +276,9 @@ nipalsFit cfg xRaw yRaw =
        , plsConfig     = cfg
        }
 
--- | NIPALS 反復ループ: scaled X, Y から K components を抽出。
+-- | [日本語]: NIPALS 反復ループ: scaled X, Y から K components を抽出。
+--   [English]: The NIPALS iteration loop: extracts K components from
+--   scaled X, Y.
 nipalsLoop
   :: PLSConfig
   -> Int                        -- K
@@ -275,7 +305,9 @@ nipalsLoop cfg k x0 y0 = go 0 x0 y0 [] [] [] []
               y' = y - LA.asColumn t LA.<> LA.asRow qloading
           in go (i + 1) x' y' (w : wAcc) (t : tAcc) (ploading : pAcc) (qloading : qAcc)
 
--- | NIPALS の 1 component 抽出。 power iteration で w, t, p, q を得る。
+-- | [日本語]: NIPALS の 1 component 抽出。 power iteration で w, t, p, q を得る。
+--   [English]: Extracts a single NIPALS component. Obtains w, t, p, q via
+--   power iteration.
 nipalsOneComponent
   :: PLSConfig
   -> LA.Matrix Double
@@ -302,7 +334,9 @@ nipalsOneComponent cfg x y =
                             else LA.tr x LA.#> t
   in (w, t, pload, qy)
 
--- | NIPALS の収束反復。 u を更新し続け、 |u_new - u| < tol で終了。
+-- | [日本語]: NIPALS の収束反復。 u を更新し続け、 |u_new - u| < tol で終了。
+--   [English]: The NIPALS convergence iteration. Keeps updating u, and
+--   terminates when |u_new - u| < tol.
 iterate'
   :: PLSConfig
   -> LA.Matrix Double
@@ -340,12 +374,13 @@ data PLSLambdaSelection = PLSLambdaSelection
   , plsOneSeK  :: !Int
   } deriving (Show)
 
--- | k-fold CV で component 数を 1..maxK の中から選ぶ。
+-- | [日本語]: k-fold CV で component 数を 1..maxK の中から選ぶ。
+--   [English]: Selects the number of components from 1..maxK via k-fold CV.
 selectPLSComponentsCV
-  :: Int                       -- ^ k-fold の k
-  -> Int                       -- ^ maxK (component 数上限)
-  -> LA.Matrix Double          -- ^ X
-  -> LA.Matrix Double          -- ^ Y
+  :: Int                       -- ^ [日本語]: k-fold の k。 [English]: The k in k-fold.
+  -> Int                       -- ^ [日本語]: maxK (component 数上限)。 [English]: maxK (the upper bound on the number of components).
+  -> LA.Matrix Double          -- ^ [日本語]: X。 [English]: X.
+  -> LA.Matrix Double          -- ^ [日本語]: Y。 [English]: Y.
   -> MWC.GenIO
   -> IO PLSLambdaSelection
 selectPLSComponentsCV kFold maxK xMat yMat gen = do

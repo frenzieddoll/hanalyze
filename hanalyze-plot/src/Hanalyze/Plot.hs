@@ -6,24 +6,43 @@
 {-# LANGUAGE UndecidableInstances #-}
 -- |
 -- Module      : Hanalyze.Plot
--- Description : 解析モデルを hgg の VisualSpec へ変換する連携層 (flag plot-integration)
+-- Description : 解析モデルを hgg の VisualSpec へ変換する連携層 (別パッケージ hanalyze-plot)
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- hgg 連携層 (= 解析モデル → 図 'VisualSpec')。
+-- [日本語]: hgg 連携層 (= 解析モデル → 図 @VisualSpec@)。
 --
--- ⚠ 本モジュールは cabal flag @plot-integration@ (既定 off) を on にしたときのみ
--- build される。 @hgg-core@ に依存するため **upstream hanalyze には
--- cherry-pick しない** (= 依存方向 analyze→plot-core を flag で隔離。 plot Phase 15
--- / analyze Phase 46 の設計)。 中立 protocol ('Hanalyze.Model.Core' の
--- 'ResidualModel' / 'PredictiveModel') は portable、 こちらは非 portable。
+-- ⚠ 本モジュールは別パッケージ @hanalyze-plot@ に属し、
+-- @cabal build --project-file=cabal.project.plot@ で build される。
+-- @hgg-core@ に依存するため
+-- __upstream hanalyze には cherry-pick しない__
+-- (= 依存方向 analyze→plot-core を別パッケージへ切り出すことで隔離した設計)。
+-- 中立 protocol ('Hanalyze.Model.Core' の
+-- @ResidualModel@ / @PredictiveModel@) は portable、 こちらは非 portable。
 --
--- 系統 A (モデル・アウト型): フィット済みモデルを 'toPlot' で 'VisualSpec' 化し、
+-- 系統 A (モデル・アウト型): フィット済みモデルを @toPlot@ で @VisualSpec@ 化し、
 -- hgg の layer 文法に @df |>> (layer scatter <> toPlot fit)@ で重畳する
--- ('VisualSpec' は Monoid なので新コンビネータ不要)。
+-- (@VisualSpec@ は Monoid なので新コンビネータ不要)。
+--
+-- [English]: The hgg integration layer (= analysis models ->
+-- figures via @VisualSpec@).
+--
+-- ⚠ This module lives in the separate package @hanalyze-plot@,
+-- built via @cabal build --project-file=cabal.project.plot@. Because it
+-- depends on @hgg-core@,
+-- it is __not cherry-picked into the upstream hanalyze__ (= the
+-- analyze->plot-core dependency direction is isolated by splitting it
+-- into a separate package, by design). The neutral protocol
+-- ('Hanalyze.Model.Core''s
+-- @ResidualModel@ \/ @PredictiveModel@) is portable; this module is not.
+--
+-- Lineage A (model-out type): a fitted model is turned into a
+-- @VisualSpec@ via @toPlot@, then layered onto hgg's layer
+-- grammar with @df |>> (layer scatter <> toPlot fit)@ (no new combinator
+-- is needed since @VisualSpec@ is a Monoid).
 module Hanalyze.Plot
   ( Plottable (..)
-    -- * ルート1 grid 評価 (滑らかな回帰曲線・CI 帯) — Phase 16 §3 C1
+    -- * ルート1 grid 評価 (滑らかな回帰曲線・CI 帯)
   , ModelSpec
   , SingleVarModel (..)
   , GridOpts (..)
@@ -46,7 +65,7 @@ module Hanalyze.Plot
   , statR2
   , statLevel
   , predAt
-    -- * 多変量 effect plot — Phase 16 §3 C3
+    -- * 多変量 effect plot
   , MultiVarModel (..)
   , AlongSpec
   , along
@@ -68,7 +87,7 @@ module Hanalyze.Plot
   , PLSModel (..)
   , plsModel
   , selectOutput
-    -- * 応答曲面 3D 直結 — plot Phase 24 A3
+    -- * 応答曲面 3D 直結
   , SurfaceOpts (..)
   , defaultSurfaceOpts
   , surfaceGrid
@@ -80,21 +99,21 @@ module Hanalyze.Plot
     -- * モデル API 層 (描画と独立: predict / describe / coefficients)
   , ModelAPI (..)
   , Coef (..)
-    -- * 統一係数サマリ (t/z・p 値・95% CI — Phase 70.D)
+    -- * 統一係数サマリ (t/z・p 値・95% CI)
   , CoefRow (..)
   , HasCoefSummary (..)
   , HasCoefBoot (..)
   , coefSummaryBoot
-    -- * 平滑項単位の近似有意性 (mgcv 流 edf + 近似 F — Phase 72.2)
+    -- * 平滑項単位の近似有意性 (mgcv 流 edf + 近似 F)
   , TermRow (..)
   , HasTermSummary (..)
   , termSummary
-    -- * 統一玄関 (.summary() 風 — Phase 72.3)
+    -- * 統一玄関 (.summary() 風)
   , ModelReport (..)
   , HasReport (..)
   , modelReport
   , showReport
-    -- * 回帰診断の可視化 (係数 forest / 実測vs予測 — Phase 72.4/72.5)
+    -- * 回帰診断の可視化 (係数 forest / 実測vs予測)
   , HasObsPred (..)
   , obsVsPred
   , obsPredSpec
@@ -107,7 +126,7 @@ module Hanalyze.Plot
   , glmModel
     -- * ガウス過程 (描画可能 = 予測 grid 同梱の 'GPResult' をそのまま)
   , GPResult (..)
-    -- * カーネル法ファミリ統合 (GP / KRR / RFF・df |-> gp) — Phase 70.5 項目 E
+    -- * カーネル法ファミリ統合 (GP / KRR / RFF・df |-> gp)
   , Kernel (..)
   , GPParams (..)
   , defaultGPParams
@@ -121,7 +140,7 @@ module Hanalyze.Plot
   , GPMultiSpec
   , gpMulti
   , GPRegModelN (..)
-    -- * 罰則付き回帰 統合 (Ridge/Lasso/EN/MCP/SCAD/Adaptive/Group・df |-> regularized) — Phase 70.7 項目 G
+    -- * 罰則付き回帰 統合 (Ridge/Lasso/EN/MCP/SCAD/Adaptive/Group・df |-> regularized)
   , RegMethod (..)
   , LambdaStrat (..)
   , RegConfig (..)
@@ -144,7 +163,7 @@ module Hanalyze.Plot
     -- * 一般化加法モデル (描画可能 = X 同梱、 平滑曲線のみ・band 非提供)
   , GAMModel (..)
   , gamModel
-    -- ** GAM 基底一般化 + GCV (Phase 70.6 F3・df|-> 高レベル)
+    -- ** GAM 基底一般化 + GCV (df|-> 高レベル)
   , GAMBasis (..)
   , GAMLambda (..)
   , GAMConfig (..)
@@ -174,7 +193,7 @@ module Hanalyze.Plot
     -- * 多変量・木 (描画可能 = 自己完結、 PCA scree / RF 重要度)
   , PCAResult (..)
   , RandomForest (..)
-    -- * 木/アンサンブル — Phase 68 A2 (重要度 bar / 決定木 樹形図)
+    -- * 木/アンサンブル (重要度 bar / 決定木 樹形図)
     --   GradientBoosting / RandomForestClassifier = 特徴重要度 bar、
     --   DecisionTree = MDAG 再利用の樹形図 (新規 mark 不要)
   , GBRegressor (..)
@@ -185,7 +204,7 @@ module Hanalyze.Plot
   , treeImportances
   , treePlot
   , treePlotRaw
-    -- * 分類 — Phase 68 A3 (決定境界 + confusion + 代表散布)
+    -- * 分類 (決定境界 + confusion + 代表散布)
     --   Discriminant / NaiveBayes / KNN。 決定境界・confusion はヘルパ (要範囲/データ)、
     --   toPlot は KNN=訓練点散布 / Discriminant・NB=クラス平均散布
   , ClassPredict (..)
@@ -289,9 +308,9 @@ module Hanalyze.Plot
   , NBModel (..)
   , GaussianNB (..)
   , KNNClassifier (..)
-    -- * 次元圧縮 — Phase 68 A4 (PLS score/loading/VIP, MultiGP 多出力 curve)
+    -- * 次元圧縮 (PLS score/loading/VIP, MultiGP 多出力 curve)
   , PLSFit (..)
-    -- ** PLS 診断ビュー (中間 Plottable Spec・HBM 式統一 — Phase 70.B)
+    -- ** PLS 診断ビュー (中間 Plottable Spec・HBM 式統一)
   , PLSView (..)
   , PLSViewKind (..)
   , scoreView
@@ -299,7 +318,7 @@ module Hanalyze.Plot
   , vipView
   , MultiGPResult (..)
   , multiGpCurves
-    -- * 時系列・生存・FDA — Phase 68 A5
+    -- * 時系列・生存・FDA
     --   GARCH=volatility 帯付き線 / AFT=生存曲線 / FDA=平均+固有関数 / β(t)
   , GARCHFit (..)
   , garchVolatility
@@ -307,18 +326,18 @@ module Hanalyze.Plot
   , aftSurvivalAt
   , FunctionalPCA (..)
   , FLMResult (..)
-    -- * 罰則回帰・因果探索 — Phase 68 A6
+    -- * 罰則回帰・因果探索
     --   Regularized=係数 bar/係数パス / LiNGAM=因果 DAG (MDAG 再利用)
   , RegFit (..)
   , regPathPlot
   , DirectLiNGAMFit (..)
   , lingamDag
-    -- * 記述統計・検定 — Phase 68 A7 (describe 分布図 / 検定 effect-CI forest)
+    -- * 記述統計・検定 (describe 分布図 / 検定 effect-CI forest)
   , TestResult (..)
   , testForest
   , testForestLabeled
   , describeBox
-    -- * クラスタリング (Phase 68 A1) — KMeans の図
+    -- * クラスタリング — KMeans の図
     --   'Plottable' 'KMeansResult' (toPlot = centroid 散布) + データ点ヘルパ
   , clusterScatterOf
   , centroidsOf
@@ -328,14 +347,14 @@ module Hanalyze.Plot
   , defaultDendroOpts
   , dendrogramOf
   , dendrogramOf'
-    -- * HBM (ベイズ確率プログラム) の学習 — Phase 49 A1
+    -- * HBM (ベイズ確率プログラム) の学習
   , HBMConfig (..)
   , defaultHBM
   , HBMModel (..)
   , hbmModel
   , hbmModelPure
   , hbmModelIO
-    -- * HBM の出力抽出子 — Phase 49 A2 / Phase 74 (trace / forest)
+    -- * HBM の出力抽出子 (trace / forest)
   , hbmParamNames
   , TraceOpts (..)
   , defaultTraceOpts
@@ -343,7 +362,7 @@ module Hanalyze.Plot
   , tracesOfWith
   , marginalsOf
   , marginalsByChainOf
-    -- * HBM のサンプリング診断 — Phase 59 (divergence 可視化)
+    -- * HBM のサンプリング診断 (divergence 可視化)
   , divergencesOf
   , pairOf
   , energyOf
@@ -356,10 +375,10 @@ module Hanalyze.Plot
   , ForestSpec (..)
   , forestOf
   , forestOfLevel
-    -- * HBM の出力抽出子 — Phase 49 A3 (epred = 事後予測平均 + HDI band)
+    -- * HBM の出力抽出子 (epred = 事後予測平均 + HDI band)
   , epred
   , epredAt
-    -- * HBM の出力抽出子 — Phase 49 A4 (ppc = 事後予測チェック)
+    -- * HBM の出力抽出子 (ppc = 事後予測チェック)
   , PPCConfig (..)
   , defaultPPC
   , PPCSpec (..)
@@ -367,21 +386,21 @@ module Hanalyze.Plot
   , ppcOfWith
   , ppcOfIO
   , ppcOfWithIO
-    -- * HBM の出力抽出子 — Phase 49 A5 (dag = モデル構造の DAG)
+    -- * HBM の出力抽出子 (dag = モデル構造の DAG)
   , DagSpec (..)
   , dagOf
   , dagOfRaw
   , dagOfModel
   , dagOfModelWith
-    -- * HBM 診断ダッシュボード — Phase 74.8 (抽出子束ね)
+    -- * HBM 診断ダッシュボード (抽出子束ね)
   , dashboardOf
   , dashboardFullOf
   , traceDensityOf
-    -- * df |-> spec 統一 fit API — Phase 51 (ColumnSource から学習)
+    -- * df |-> spec 統一 fit API (ColumnSource から学習)
   , Fit (..)
   , (|->)
   , (|->!)
-    -- ** 二変量近道 spec (列名2つ) — Phase 51.2
+    -- ** 二変量近道 spec (列名2つ)
   , LMSpec (..)
   , lm
   , GLMSpec (..)
@@ -392,7 +411,7 @@ module Hanalyze.Plot
   , rlm
   , QuantileSpec (..)
   , rq
-    -- ** 行列入力モデルの高レベル spec (列名リスト) — Phase 70.A
+    -- ** 行列入力モデルの高レベル spec (列名リスト)
   , PCASpec (..)
   , pca
     -- MDS (Phase 75.21)
@@ -412,7 +431,7 @@ module Hanalyze.Plot
   , CCASpec (..)
   , ccaOf
   , CCAFit (..)
-    -- ** 教師あり ML 分類器/回帰器 spec (特徴列 + ラベル列) — Phase 70.A
+    -- ** 教師あり ML 分類器/回帰器 spec (特徴列 + ラベル列)
   , GBRSpec (..)
   , gbmReg
   , GBCSpec (..)
@@ -429,7 +448,7 @@ module Hanalyze.Plot
   , knnReg
   , NBSpec (..)
   , naiveBayes
-    -- ** seed 純粋化した RNG モデル spec (KMeans / RandomForest) — Phase 70.A
+    -- ** seed 純粋化した RNG モデル spec (KMeans / RandomForest)
   , KMeansSpec (..)
   , kmeans
   , KMeansConfig (..)
@@ -464,7 +483,7 @@ module Hanalyze.Plot
   , defaultRFCConfig
   , RFConfig (..)
   , defaultRandomForest
-    -- ** SVM / 古典 MLP 高レベル spec (純粋・df |->) — Phase 75.9
+    -- ** SVM / 古典 MLP 高レベル spec (純粋・df |->)
   , MLPClsSpec (..)
   , mlpCls
   , MLPRegSpec (..)
@@ -479,34 +498,34 @@ module Hanalyze.Plot
   , SVM (..)
   , SVMMulti (..)
   , numSupportVectors
-    -- ** 重み付き最小二乗 (WLS) spec — Phase 52.A6
+    -- ** 重み付き最小二乗 (WLS) spec
   , WeightedLMSpec (..)
   , weighted
   , WeightedLMModel (..)
-    -- ** 透過標準化ラッパ (自動逆変換) — Phase 70.3 項目 C
+    -- ** 透過標準化ラッパ (自動逆変換)
   , StandardizedSpec (..)
   , standardized
   , standardizedY
   , StandardizedModel (..)
-    -- ** 群別フィット spec — Phase 52.A4
+    -- ** 群別フィット spec
   , GroupedSpec (..)
   , grouped
   , GroupedFit (..)
   , groupModels
   , groupLabels
   , groupedFullrange
-    -- ** 係数診断の薄アクセサ — Phase 52.A9
+    -- ** 係数診断の薄アクセサ
   , CoefStats (..)
   , lmDiag
   , groupedLmDiag
-    -- ** formula 多変量 spec (R 流) — Phase 51.3
+    -- ** formula 多変量 spec (R 流)
   , LMFormulaSpec (..)
   , lmF
   , GLMFormulaSpec (..)
   , glmF
   , GLMMFormulaSpec (..)
   , glmmF
-    -- ** 重回帰 spec (列名リスト・formula 不要) — Phase 70.D
+    -- ** 重回帰 spec (列名リスト・formula 不要)
   , LMMultiSpec (..)
   , lmMulti
   , GLMMultiSpec (..)
@@ -516,7 +535,7 @@ module Hanalyze.Plot
   , QuantileMultiSpec (..)
   , rqMulti
   , MultiQuantileModel (..)
-    -- ** HBM spec + データ散布図 — Phase 51.4
+    -- ** HBM spec + データ散布図
   , HBMSpec
   , hbm
   , dataScatterOf
@@ -648,7 +667,7 @@ import           Hanalyze.Stat.Test (TestResult (..))
 -- > df |>> (layer (scatter "x" "y") <> toPlot (statModel m <> grid 200))
 --
 -- 'ModelSpec' は Monoid。 学習済モデル @m@ はクロージャに閉じ込め、 予測は
--- 'toPlot' (描画時) に grid 評価する (ユーザ直感「m は学習・layer で予測」)。
+-- @toPlot@ (描画時) に grid 評価する (ユーザ直感「m は学習・layer で予測」)。
 -- ===========================================================================
 
 
@@ -657,12 +676,12 @@ import           Hanalyze.Stat.Test (TestResult (..))
 --
 -- 単変数 grid 評価 (C1) を多変量モデルへ一般化する。 along 変数を grid で動かし、
 -- 他の説明変数を 'HoldAgg' で固定した「評価点 ModelFrame」 を合成して、 訓練 formula の
--- 'designMatrixF' で評価点設計行列を組み CI を評価する。
+-- @designMatrixF@ で評価点設計行列を組み CI を評価する。
 --
 -- ★評価点 ModelFrame の合成は **DataFrame を経由せず VarRole を直接差し替える**
--- ('designMatrixF' は 'mfRoles' のみ参照し応答列は使わない = Design.hs:331)。 列構造・
--- 順序が訓練と完全一致するので 'confidenceBandAt' / 'predictGlmMuWithCI' がそのまま使える。
--- 型で単/多変量を分離し ('SingleVarModel' / 'MultiVarModel')、 along 忘れをコンパイル時に弾く。
+-- (@designMatrixF@ は 'mfRoles' のみ参照し応答列は使わない = Design.hs:331)。 列構造・
+-- 順序が訓練と完全一致するので @confidenceBandAt@ / 'predictGlmMuWithCI' がそのまま使える。
+-- 型で単/多変量を分離し ('SingleVarModel' / @MultiVarModel@)、 along 忘れをコンパイル時に弾く。
 -- ===========================================================================
 
 
@@ -671,9 +690,9 @@ import           Hanalyze.Stat.Test (TestResult (..))
 -- 多変量モデル型 (effect plot 用、 新規 fit)
 --
 -- 既存の単変数 'LMModel' / 'GLMModel' (設計行列が @[1, x]@ 固定) とは別型。
--- formula 文字列 + 'DataFrame' で多変量 fit し、 formula を保持して評価点設計行列を
+-- formula 文字列 + @DataFrame@ で多変量 fit し、 formula を保持して評価点設計行列を
 -- 組む (HoldAgg 固定 + along grid)。 ★GLM は formula 経路が未整備なので
--- 'designMatrixF' で設計行列を作り 'fitGLMFull' を直接呼ぶ。
+-- @designMatrixF@ で設計行列を作り 'fitGLMFull' を直接呼ぶ。
 -- ===========================================================================
 
 -- (instance MultiVarModel MultiLMModel は Hanalyze.Plot.Linear へ移動 — Phase 71.5)
@@ -683,7 +702,7 @@ import           Hanalyze.Stat.Test (TestResult (..))
 --
 -- 重回帰 (multiple regression) は formula DSL とは別概念: 説明変数の列名リストから
 -- 設計行列 @[1, x1, …, xp]@ を作るだけ。 これを文字列を介さず 'Formula' AST に直接
--- 組み立て、 既存の 'multiLMModelF' / 'designMatrixF' / effect plot 機構をそのまま使う
+-- 組み立て、 既存の 'multiLMModelF' / @designMatrixF@ / effect plot 機構をそのまま使う
 -- (= @parseModel "y ~ x1 + … + xp"@ と同一 AST。 パラメータ名 @_p0.._pp@ も同じ規約)。
 -- ===========================================================================
 
@@ -692,7 +711,7 @@ import           Hanalyze.Stat.Test (TestResult (..))
 --
 -- ロバスト回帰は formula 経路を持たない (単回帰 'RobustModel' のみだった) ので、
 -- 'MultiLMModel' と同型の frame-carrying ラッパを新設する。 設計行列は
--- 'additiveFormula' 由来 ('designMatrixF' で @[1, x1,…,xp]@)、 fit は 'fitRobustLM'、
+-- 'additiveFormula' 由来 (@designMatrixF@ で @[1, x1,…,xp]@)、 fit は 'fitRobustLM'、
 -- CI 帯は M 推定量サンドイッチ共分散 ('robustCovBeta'・statsmodels RLM 一致)。
 -- ===========================================================================
 
@@ -706,7 +725,7 @@ import           Hanalyze.Stat.Test (TestResult (..))
 -- 線形モデル (描画可能)
 --
 -- 'FitResult' (数値核) は設計行列 X を保持しないが、 回帰線・CI band を描くには
--- X が要る ('confidenceBand' は X 引数)。 そこで X と生 predictor を束ねた
+-- X が要る (@confidenceBand@ は X 引数)。 そこで X と生 predictor を束ねた
 -- 「描画可能なモデル」 を別型にする (= plot Phase 15 §2.1 の開放論点を (i) で確定)。
 -- ===========================================================================
 
@@ -745,7 +764,7 @@ import           Hanalyze.Stat.Test (TestResult (..))
 --
 -- 'SplineFit' (Hanalyze.Model.Spline) は基底係数 'sfBeta' と、 基底行列で fit した
 -- 線形モデル核 'sfResult' (= 'FitResult') を保持する。 ゆえに **基底行列を設計行列と
--- みなせば** LMModel と同じ 'confidenceBand' (= X (XᵀX)⁻¹ Xᵀ の対角) がそのまま使える。
+-- みなせば** LMModel と同じ @confidenceBand@ (= X (XᵀX)⁻¹ Xᵀ の対角) がそのまま使える。
 -- 違いは「曲線」 である点だけ: 単回帰の直線でなく、 訓練点を x 昇順に結ぶと基底展開に
 -- よる平滑曲線になる ('renderRegression' は encX/encY を線形再フィットせず折れ線で
 -- 結ぶため、 ソート済みの点列を渡せば曲線がそのまま描ける = GP と同じ性質)。 帯は
@@ -762,7 +781,7 @@ import           Hanalyze.Stat.Test (TestResult (..))
 -- 'RobustFit' (Hanalyze.Model.Robust) は M-estimator IRLS の係数 'rfCoef' / fitted
 -- 'rfFitted' / 最終重み 'rfWeights' (≤ 1、 外れ値ほど小) を持つが、 **CI / 予測帯を
 -- 返す helper を持たない** (sandwich 分散等を別途計算すれば帯は出せるが本 Phase 対象外)。
--- ゆえに代表図 ('toPlot') は **ロバスト直線のみ** (band 無し)。 ロバスト回帰の価値=
+-- ゆえに代表図 (@toPlot@) は **ロバスト直線のみ** (band 無し)。 ロバスト回帰の価値=
 -- 「どの点がダウンウェイトされたか」 は 'diagnosticPlots' 側で **点サイズ = IRLS 重み**
 -- の散布図に encode して見せる (主図に点を描くと合成 @df |>> layer scatter <> toPlot@
 -- で点が二重になるため、 主図は直線だけにして重み表示は診断束へ回す = user 決定 2026-06-04)。
@@ -777,7 +796,7 @@ import           Hanalyze.Stat.Test (TestResult (..))
 -- 'MultiFit' (Hanalyze.Model.MultiLM) は q 個の応答を共通の予測子で同時回帰し、
 -- 固有の成果物として **出力間の残差相関 'mfResidCor' (q×q)** を保持する。 q 本の回帰
 -- 関係を単一図に素直に載せる方法は一意でない (出力ごとスケールが異なり得る) ため、
--- 代表図 ('toPlot') は **残差相関 heatmap** とする (= 多出力回帰固有の図。 user 決定
+-- 代表図 (@toPlot@) は **残差相関 heatmap** とする (= 多出力回帰固有の図。 user 決定
 -- 2026-06-04)。 'MultiFit' は heatmap に必要な相関行列を自己完結で持つので、 'GPResult'
 -- 同様 X を別途束ねず結果型をそのまま 'Plottable' にできる。 個別の出力 j の回帰線は
 -- 'predictMultiLM' で別途描ける (本 instance の対象外)。
@@ -797,7 +816,7 @@ import           Hanalyze.Stat.Test (TestResult (..))
 -- 持つ。 OLS が条件付き平均を引くのに対し分位回帰は条件付き τ-分位を引くので、 複数の
 -- τ (例 0.1/0.5/0.9) の fit を重ねると **予測区間そのものを線群で** 表現できる
 -- (= heteroscedastic データで帯より直接的)。 ゆえに 'QuantileModel' は複数の τ-fit を
--- 束ね、 'toPlot' で **分位ごとに 1 本の line layer を色分けして重畳** する (band は使わ
+-- 束ね、 @toPlot@ で **分位ごとに 1 本の line layer を色分けして重畳** する (band は使わ
 -- ない。 分位線自体が区間の縁を成すため)。 各線は 'color' ('fromHex') で固定色を割り当てる。
 -- ===========================================================================
 
@@ -813,7 +832,7 @@ import           Hanalyze.Stat.Test (TestResult (..))
 -- 持たない**。 そこで 'surfaceOf' <> 'dataScatter3DOf' と同じ **model 層 / data
 -- 層の二層イディオム**に分ける:
 --
---   * 'Plottable' 'KMeansResult' の 'toPlot' = centroid 散布のみ (データ不要・
+--   * 'Plottable' 'KMeansResult' の @toPlot@ = centroid 散布のみ (データ不要・
 --     クラス契約 @m -> VisualSpec@ を満たす)。 既定は centroid 行列の第 0/1 次元。
 --   * 'clusterScatterOf' = データ点をラベル色で散布 (要データ源・列名指定)。
 --   * 'centroidsOf' = centroid を任意 2 次元で重畳 (✚ マーカー・次元 index 明示)。
@@ -836,12 +855,12 @@ import           Hanalyze.Stat.Test (TestResult (..))
 -- (既存 'nutsChains' が 'mapConcurrently' で multi-chain 並列) という点のみ。
 --
 -- データは df 由来の列 (名前付き) を 'withData' でモデル中の placeholder
--- ('dataNamed' / observe の参照名) に **自動 bind** する。 これは PyMC の
+-- (@dataNamed@ / observe の参照名) に **自動 bind** する。 これは PyMC の
 -- @pm.Data@ + @set_data@ と同型 (= 同じモデルを別データで再評価できる設計)。
 --
 -- ★ 'HBMModel' は **直接 'Plottable' にしない** (確率プログラムは「単一の図」 に
--- 一意に落ちない)。 描画は抽出子 ('epred' / 'tracesOf' / 'ppcOf' / 'forestOf' /
--- 'dagOf'、 後続 sub で追加) を明示する設計 (Phase 49 計画 Q1)。
+-- 一意に落ちない)。 描画は抽出子 (@epred@ / @tracesOf@ / 'ppcOf' / 'forestOf' /
+-- @dagOf@、 後続 sub で追加) を明示する設計 (Phase 49 計画 Q1)。
 -- ===========================================================================
 
 
@@ -867,7 +886,7 @@ import           Hanalyze.Stat.Test (TestResult (..))
 -- 予測分散** から得る: AR の MA(∞) 表現の ψ-weights (ψ₀=1, ψⱼ=Σφᵢψⱼ₋ᵢ) を用いて
 -- @Var(ŷ_{n+k}) = σ² Σ_{j=0}^{k-1} ψⱼ²@ (σ² = 革新分散 'arResidVar')。 これは Gaussian
 -- 革新の下での正統な予測区間 (地平 k とともに単調に広がる)。 対称ゆえ band は
--- @中心 ± z·se@。 'toPlot' は履歴折れ線 + 予測折れ線 + 予測区間 band を 1 枚に重ねる。
+-- @中心 ± z·se@。 @toPlot@ は履歴折れ線 + 予測折れ線 + 予測区間 band を 1 枚に重ねる。
 -- ===========================================================================
 
 -- (arPsiWeights / arForecastSE / instance Plottable ForecastModel は
@@ -913,12 +932,12 @@ import           Hanalyze.Stat.Test (TestResult (..))
 -- 走らせる」 図ゆえ、 KMeans (A1) と同じく **データ/範囲を取るヘルパ**で提供する
 -- (新規 plot mark 不要):
 --
---   * 'decisionBoundaryOf' = 2D grid を予測しクラス色で塗る (= 連続軸の散布を
+--   * @decisionBoundaryOf@ = 2D grid を予測しクラス色で塗る (= 連続軸の散布を
 --     四角マーカー・低 alpha で「領域」表現。 ★renderHeatmap はカテゴリ軸なので
 --     連続 grid には不適 → 'MScatter' + 'colorBy' (離散色) を採用)。 2 特徴前提。
---   * 'confusionOf' = テストデータの真値×予測の件数を 'MHeatmap' で (カテゴリ軸が適合)。
+--   * 'confusionOf' = テストデータの真値×予測の件数を @MHeatmap@ で (カテゴリ軸が適合)。
 --
--- 'Plottable' の 'toPlot' (データ非保持で描ける代表 1 枚):
+-- 'Plottable' の @toPlot@ (データ非保持で描ける代表 1 枚):
 --   * KNN は訓練データ ('knnCX'/'knnCY') を保持 → **ラベル色の訓練点散布**。
 --   * Discriminant / NaiveBayes(Gaussian) は **クラス平均散布** (✚)、
 --     NaiveBayes(Multinomial) は **クラス事前確率 bar**。
@@ -958,7 +977,7 @@ import           Hanalyze.Stat.Test (TestResult (..))
 --
 --   * 'GARCHFit'      = 系列 (μ + ε_t) + 条件付き volatility 帯 (μ ± 2σ_t) の帯付き線。
 --   * 'AFTFit'        = パラメトリック生存曲線 S(t|x)。 fit は観測時刻を持たないので
---                       代表図 ('toPlot') は **基準共変量** (intercept のみ) の曲線、
+--                       代表図 (@toPlot@) は **基準共変量** (intercept のみ) の曲線、
 --                       任意共変量は 'aftSurvivalAt' ヘルパ。 t 範囲は予測平均寿命から導出。
 --   * 'FunctionalPCA' = 平均関数 + 上位固有関数を grid 上に重畳 (x = grid index)。
 --   * 'FLMResult'     = 関数回帰係数 β(t) の曲線。
@@ -976,7 +995,7 @@ import           Hanalyze.Stat.Test (TestResult (..))
 --   * 'RegFit'          = 単一 λ の係数 ('rfBeta') を bar (代表図)。
 --   * 'regPathPlot'     = 正則化パス @[(λ, [β_j])]@ ('regularizationPath' 出力) を、
 --                         係数ごとに 1 本の line で λ-横軸に重畳 (= LASSO 係数パス図)。
---   * 'DirectLiNGAMFit' = 推定した因果構造を **MDAG** で描く (B 行列 → node/edge、
+--   * @DirectLiNGAMFit@ = 推定した因果構造を **MDAG** で描く (B 行列 → node/edge、
 --                         決定木と同じ MDAG 再利用)。 edge j→i は @|adjacency[i,j]|>0@。
 -- ===========================================================================
 
@@ -989,7 +1008,7 @@ import           Hanalyze.Stat.Test (TestResult (..))
 -- 新規 plot mark は不要:
 --
 --   * 'TestResult'  = 効果量 + 95% CI の **forest** (検定パラメータの区間 + 0 基準線)。
---                     代表図 ('toPlot') は 1 行 forest、 複数検定は 'testForest'。
+--                     代表図 (@toPlot@) は 1 行 forest、 複数検定は 'testForest'。
 --   * 'describeBox' = 生データ列の **box plot** (= describe の分布図・5 数要約を可視化)。
 -- ===========================================================================
 
@@ -1005,7 +1024,7 @@ import           Hanalyze.Stat.Test (TestResult (..))
 -- C2: 元スケール逆変換 instance (Phase 70.3 項目 C) -------------------------
 --
 -- 内側モデルは標準化空間で学習されている。 ここで予測子 x を入力時に標準化し、
--- ('standardizedY' なら) 応答 y を出力時に逆変換することで、 図・予測を**元スケール**で
+-- (@standardizedY@ なら) 応答 y を出力時に逆変換することで、 図・予測を**元スケール**で
 -- 返す。 単変量 (1 特徴) 描画が対象 (smXStd の 0 次元を使う)。
 
 -- (instance SingleVarModel KNNRegressor / stMu1 / stSd1 / unstdY /
@@ -1025,7 +1044,7 @@ import           Hanalyze.Stat.Test (TestResult (..))
 -- 流用不可)、 BLUP の標準誤差を単体から計算できない。 将来 conditional variance を
 -- 持たせれば forest の誤差半幅を埋めて帯化できる (forest mark は対称 CI 対応済)。
 --
--- 'toPlot'          = random-effect 第 1 列 (通常 intercept) の caterpillar 1 枚。
+-- @toPlot@          = random-effect 第 1 列 (通常 intercept) の caterpillar 1 枚。
 -- 'diagnosticPlots' = 全 r 列 (intercept + 各 slope) の caterpillar list。
 -- ===========================================================================
 

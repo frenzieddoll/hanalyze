@@ -6,23 +6,47 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Directed Acyclic Graph (DAG) の共通表現。
+-- [日本語]: Directed Acyclic Graph (DAG) の共通表現。
 --
 -- 因果探索 (LiNGAM 系) / 将来の SEM / Bayesian Network の出力型を統一する。
--- 内部表現は **重み付き隣接行列** で、 hmatrix の線形代数操作との親和性を保つ。
+-- 内部表現は __重み付き隣接行列__ で、 hmatrix の線形代数操作との親和性を保つ。
 --
 -- ## 規約
 --
--- 重み行列 W (p × p) の要素 W[i, j] は **エッジ j → i の重み** を表す。
+-- 重み行列 W (p × p) の要素 W[i, j] は __エッジ j → i の重み__ を表す。
 -- これは構造方程式 X_i = Σ_j W[i, j] · X_j + e_i に対応する自然な向きで、
 -- LiNGAM の B 行列と完全一致する。 W[i, i] = 0 (self-loop 禁止)。
 --
 -- ## DAG 判定
 --
 -- 'isAcyclic' は W の非零パターンから到達可能性を見て循環を検出する。
--- 浮動小数閾値の影響を避けるため、 判定は 'dagW' の **絶対値 > 0** マスク
+-- 浮動小数閾値の影響を避けるため、 判定は 'dagW' の __絶対値 > 0__ マスク
 -- に対して実施。 ノイズで小さな非零が出る場合は事前に 'pruneByThreshold'
 -- でクリーンナップする。
+--
+-- [English]: A common representation for Directed Acyclic Graphs
+-- (DAGs).
+--
+-- Unifies the output type for causal discovery (LiNGAM family) \/
+-- future SEM \/ Bayesian Network. The internal representation is a
+-- __weighted adjacency matrix__, which stays compatible with hmatrix's
+-- linear-algebra operations.
+--
+-- ## Convention
+--
+-- Element W[i, j] of the weight matrix W (p × p) represents
+-- __the weight of the edge j → i__. This is the natural direction
+-- corresponding to the structural equation
+-- X_i = Σ_j W[i, j] · X_j + e_i, and matches LiNGAM's B matrix exactly.
+-- W[i, i] = 0 (self-loops are forbidden).
+--
+-- ## DAG check
+--
+-- 'isAcyclic' detects cycles by looking at reachability over W's
+-- nonzero pattern. To avoid the influence of floating-point noise, the
+-- check is performed against a mask of 'dagW''s __absolute value > 0__.
+-- If noise produces small nonzero values, clean them up beforehand with
+-- 'pruneByThreshold'.
 module Hanalyze.Model.DAG
   ( DAG (..)
   , Edge (..)
@@ -58,11 +82,15 @@ import           Data.List             (foldl')
 
 data DAG = DAG
   { dagN     :: !Int
-    -- ^ ノード数
+    -- ^ [日本語]: ノード数。 [English]: The number of nodes.
   , dagNames :: !(Maybe (V.Vector Text))
-    -- ^ ノード名 (任意)。 'Nothing' なら "x0".."x(n-1)" を使う
+    -- ^ [日本語]: ノード名 (任意)。 'Nothing' なら "x0".."x(n-1)" を使う。
+    --   [English]: Node names (optional). If 'Nothing', uses
+    --   "x0".."x(n-1)".
   , dagW     :: !(LA.Matrix Double)
-    -- ^ 重み付き隣接行列 (p × p)。 W[i, j] = エッジ j → i の重み
+    -- ^ [日本語]: 重み付き隣接行列 (p × p)。 W[i, j] = エッジ j → i の重み。
+    --   [English]: The weighted adjacency matrix (p × p).
+    --   W[i, j] = the weight of the edge j → i.
   } deriving (Show)
 
 data Edge = Edge
@@ -75,8 +103,11 @@ data Edge = Edge
 -- 構築
 -- ===========================================================================
 
--- | 重み付き隣接行列から DAG を作る。 ノード数は W の行数。 W が
+-- | [日本語]: 重み付き隣接行列から DAG を作る。 ノード数は W の行数。 W が
 --   p × p でない場合は呼出側のバグ (here で error)。
+--   [English]: Builds a DAG from a weighted adjacency matrix. The node
+--   count is W's row count. If W is not p × p, that is a caller bug
+--   (raises an error here).
 mkDAG :: LA.Matrix Double -> DAG
 mkDAG w
   | LA.rows w /= LA.cols w =
@@ -87,12 +118,16 @@ mkDAG w
       , dagW     = w
       }
 
--- | 0/1 隣接行列から DAG。 重みはエッジ存在を 1 として保持。
+-- | [日本語]: 0/1 隣接行列から DAG。 重みはエッジ存在を 1 として保持。
+--   [English]: Builds a DAG from a 0/1 adjacency matrix. The weight
+--   holds 1 for edge presence.
 fromAdjacency :: LA.Matrix Double -> DAG
 fromAdjacency = mkDAG
 
--- | LiNGAM B 行列 + threshold から DAG を構築。 |B[i, j]| ≤ thr の
+-- | [日本語]: LiNGAM B 行列 + threshold から DAG を構築。 |B[i, j]| ≤ thr の
 --   エッジは刈り取る。 対角要素は常に 0。
+--   [English]: Builds a DAG from a LiNGAM B matrix + threshold. Edges
+--   with |B[i, j]| ≤ thr are pruned. Diagonal elements are always 0.
 fromBMatrix :: Double -> LA.Matrix Double -> DAG
 fromBMatrix thr b = mkDAG (pruned b)
   where
@@ -104,7 +139,8 @@ fromBMatrix thr b = mkDAG (pruned b)
             | otherwise                       = LA.atIndex m (i, j)
       in LA.build (p, p) (\i j -> f (round i) (round j) :: Double)
 
--- | ノード名を付与する (length 不一致は呼出側のバグ)。
+-- | [日本語]: ノード名を付与する (length 不一致は呼出側のバグ)。
+--   [English]: Attaches node names (a length mismatch is a caller bug).
 withNames :: V.Vector Text -> DAG -> DAG
 withNames ns g
   | V.length ns /= dagN g =
@@ -115,7 +151,9 @@ withNames ns g
 -- 操作
 -- ===========================================================================
 
--- | |W[i, j]| ≤ thr のエッジを 0 に。 自己ループは常に 0。
+-- | [日本語]: |W[i, j]| ≤ thr のエッジを 0 に。 自己ループは常に 0。
+--   [English]: Zeroes out edges with |W[i, j]| ≤ thr. Self-loops are
+--   always 0.
 pruneByThreshold :: Double -> DAG -> DAG
 pruneByThreshold thr g = g { dagW = pruned }
   where
@@ -130,7 +168,9 @@ pruneByThreshold thr g = g { dagW = pruned }
 -- 問合せ
 -- ===========================================================================
 
--- | 全エッジを (from, to, weight) のリストで返す (非零重みのみ)。
+-- | [日本語]: 全エッジを (from, to, weight) のリストで返す (非零重みのみ)。
+--   [English]: Returns all edges as a list of (from, to, weight)
+--   (nonzero weights only).
 dagEdges :: DAG -> [Edge]
 dagEdges g =
   let p = dagN g
@@ -142,27 +182,34 @@ dagEdges g =
      , LA.atIndex w (i, j) /= 0
      ]
 
--- | ノード i に直接影響を与えるノード集合 (W[i, j] ≠ 0 となる j のリスト)。
+-- | [日本語]: ノード i に直接影響を与えるノード集合 (W[i, j] ≠ 0 となる j のリスト)。
+--   [English]: The set of nodes that directly influence node i (the
+--   list of j with W[i, j] ≠ 0).
 dagParents :: DAG -> Int -> [Int]
 dagParents g i =
   [ j | j <- [0 .. dagN g - 1]
       , j /= i
       , LA.atIndex (dagW g) (i, j) /= 0 ]
 
--- | ノード i から直接影響を受けるノード集合 (W[k, i] ≠ 0 となる k のリスト)。
+-- | [日本語]: ノード i から直接影響を受けるノード集合 (W[k, i] ≠ 0 となる k のリスト)。
+--   [English]: The set of nodes directly influenced by node i (the
+--   list of k with W[k, i] ≠ 0).
 dagChildren :: DAG -> Int -> [Int]
 dagChildren g i =
   [ k | k <- [0 .. dagN g - 1]
       , k /= i
       , LA.atIndex (dagW g) (k, i) /= 0 ]
 
--- | ノード名取得 ('dagNames' が Nothing なら "x{idx}")。
+-- | [日本語]: ノード名取得 ('dagNames' が Nothing なら "x{idx}")。
+--   [English]: Gets a node name (if 'dagNames' is Nothing, "x{idx}").
 dagNodeName :: DAG -> Int -> Text
 dagNodeName g i = case dagNames g of
   Just ns | i >= 0 && i < V.length ns -> ns V.! i
   _                                   -> T.pack ("x" <> show i)
 
--- | 到達可能性: from から to へ DAG エッジを辿って到達可能か。
+-- | [日本語]: 到達可能性: from から to へ DAG エッジを辿って到達可能か。
+--   [English]: Reachability: whether to is reachable from from by
+--   following DAG edges.
 dagReachable :: DAG -> Int -> Int -> Bool
 dagReachable g from to = go S.empty [from]
   where
@@ -175,8 +222,11 @@ dagReachable g from to = go S.empty [from]
               kids   = dagChildren g x
           in go seen' (kids ++ xs)
 
--- | 循環を含まないか。 全ノード対 (i, j) について 「j から i へ到達可能か
+-- | [日本語]: 循環を含まないか。 全ノード対 (i, j) について 「j から i へ到達可能か
 --   つ i → j のエッジが存在する」 ならば循環。
+--   [English]: Whether the graph contains no cycle. For every node
+--   pair (i, j), if "i is reachable from j, and an edge i → j exists"
+--   then it is a cycle.
 isAcyclic :: DAG -> Bool
 isAcyclic g =
   let !p = dagN g
@@ -186,8 +236,11 @@ isAcyclic g =
         &&  dagReachable g j i
   in not $ or [ cyclePair i j | i <- [0 .. p - 1], j <- [0 .. p - 1] ]
 
--- | topological sort: 根 (parents なし) から葉までの並び。
+-- | [日本語]: topological sort: 根 (parents なし) から葉までの並び。
 --   循環を検出した場合は 'Nothing'。 Kahn のアルゴリズム (Pure 版)。
+--   [English]: Topological sort: an ordering from the roots (no
+--   parents) to the leaves. Returns 'Nothing' if a cycle is detected.
+--   Kahn's algorithm (a pure version).
 topoSort :: DAG -> Maybe [Int]
 topoSort g =
   let !p     = dagN g
@@ -214,8 +267,11 @@ topoSort g =
 -- 出力
 -- ===========================================================================
 
--- | Graphviz DOT 形式で出力。 シェル経由で
+-- | [日本語]: Graphviz DOT 形式で出力。 シェル経由で
 --   @echo "..." | dot -Tpng -o dag.png@ で可視化可能。
+--   [English]: Outputs the graph in Graphviz DOT format. Can be
+--   visualized via the shell with
+--   @echo "..." | dot -Tpng -o dag.png@.
 toDOT :: DAG -> Text
 toDOT g =
   let header = T.pack "digraph G {\n  rankdir=LR;\n"

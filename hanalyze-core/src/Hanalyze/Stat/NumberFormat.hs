@@ -59,8 +59,11 @@ fmtNumWith lo hi x
   where
     a = abs x
 
--- | "M.MME+NN" / "M.MME-NN" 形式の指数表記。
--- printf "%.2E" は実装依存で "+" の有無が変わるため、自前で組む。
+-- | [日本語]: "M.MME+NN" / "M.MME-NN" 形式の指数表記。
+--   printf "%.2E" は実装依存で "+" の有無が変わるため、自前で組む。
+--   [English]: Exponential notation in "M.MME+NN" \/ "M.MME-NN" form.
+--   @printf "%.2E"@'s handling of the "+" sign is implementation-
+--   dependent, so this builds it manually.
 formatSci :: Double -> String
 formatSci x =
   let s = if x < 0 then "-" else "" :: String

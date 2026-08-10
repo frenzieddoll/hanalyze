@@ -18,7 +18,9 @@ TODO: モデルの概要 (何を推定するか・出典・データの形)。�
 - `hanalyze.cabal` に `posteriordb-<slug>` executable スタンザを追加
   (`hs-source-dirs: bench/posteriordb/NN-<slug>, bench/posteriordb`)
 
-手順の詳細は実例 `bench/posteriordb/01-glm-poisson/` を参照。
+手順の詳細は `posteriordb-bench` skill
+(`.claude/skills/posteriordb-bench/SKILL.md`)
+および実例 `bench/posteriordb/01-glm-poisson/` を参照。
 
 ## ファイル
 

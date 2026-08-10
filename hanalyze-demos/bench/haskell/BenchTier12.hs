@@ -97,7 +97,7 @@ writePLSCSV path x y =
 
 {-# NOINLINE plsPhantom #-}
 plsPhantom :: Int -> LA.Matrix Double -> LA.Vector Double -> Either String PLS.PLSFit
-plsPhantom _ x y = case PLS.fitPLS1 (PLS.defaultPLSConfig { PLS.plsN_Components = 3 }) x y of
+plsPhantom _ x y = case PLS.fitPLS1 (PLS.defaultPLS { PLS.plsN_Components = 3 }) x y of
   Left e  -> Left (show e)
   Right f -> Right f
 

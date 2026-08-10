@@ -6,18 +6,40 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- 統計的工程管理 (Statistical Process Control) — 管理図 + 判定ルール。
+-- [日本語]: 統計的工程管理 (Statistical Process Control) — 管理図 + 判定ルール。
 --
 -- 変数管理図 (X̄-R / I-MR) と属性管理図 (p / np / c / u) を共通 API で扱う。
 -- 判定ルール (Western Electric / Nelson) は fit と分離した pure 関数。
 --
 -- ===  公開 API
 --
--- * 'SPCChart' / 'SPCInput' / 'SPCChartResult'
--- * 'fitSPC'
--- * 'westernElectricRules' / 'nelsonRules' / 'checkRules'
+-- - 'SPCChart' / 'SPCInput' / 'SPCChartResult'
+-- - 'fitSPC'
+-- - 'westernElectricRules' / 'nelsonRules' / 'checkRules'
 --
 -- ===  典型的な使い方
+--
+-- > case fitSPC XR (VarSubgroups subs) of
+-- >   Left err -> ...
+-- >   Right [xbar, rChart] -> do
+-- >     let viols = checkRules westernElectricRules xbar
+-- >     ...
+--
+-- [English]: Statistical Process Control (SPC) — control charts + detection
+-- rules.
+--
+-- Handles variable control charts (X̄-R \/ I-MR) and attribute control
+-- charts (p \/ np \/ c \/ u) through a common API. Detection rules
+-- (Western Electric \/ Nelson) are pure functions kept separate from
+-- fitting.
+--
+-- ===  Public API
+--
+-- - 'SPCChart' \/ 'SPCInput' \/ 'SPCChartResult'
+-- - 'fitSPC'
+-- - 'westernElectricRules' \/ 'nelsonRules' \/ 'checkRules'
+--
+-- ===  Typical usage
 --
 -- > case fitSPC XR (VarSubgroups subs) of
 -- >   Left err -> ...
@@ -48,70 +70,107 @@ import           Data.Vector   (Vector)
 -- 型定義
 -- ===========================================================================
 
--- | 管理図の種別。
+-- | [日本語]: 管理図の種別。 [English]: Control chart kind.
 data SPCChart
-  = XR    -- ^ X̄-R chart (subgroup 平均 + range)
+  = XR    -- ^ [日本語]: X̄-R chart (subgroup 平均 + range) [English]: X̄-R chart (subgroup mean + range)
   | IMR   -- ^ I-MR chart (individual + moving range)
-  | P     -- ^ p chart (不良率、 subgroup size 可変)
-  | NP    -- ^ np chart (不良数、 subgroup size 一定)
-  | C     -- ^ c chart (単位あたり欠陥数、 unit size 一定)
-  | U     -- ^ u chart (単位あたり欠陥率、 unit size 可変)
-  | EWMAChart    -- ^ EWMA (Exponentially Weighted Moving Average) chart (Phase 11)
-  | CUSUMChart   -- ^ CUSUM (Cumulative Sum) chart 両側 (Phase 11)
+  | P     -- ^ [日本語]: p chart (不良率、 subgroup size 可変) [English]: p chart (fraction defective, variable subgroup size)
+  | NP    -- ^ [日本語]: np chart (不良数、 subgroup size 一定) [English]: np chart (count defective, constant subgroup size)
+  | C     -- ^ [日本語]: c chart (単位あたり欠陥数、 unit size 一定) [English]: c chart (defects per unit, constant unit size)
+  | U     -- ^ [日本語]: u chart (単位あたり欠陥率、 unit size 可変) [English]: u chart (defect rate per unit, variable unit size)
+  | EWMAChart    -- ^ EWMA (Exponentially Weighted Moving Average) chart
+  | CUSUMChart   -- ^ [日本語]: CUSUM (Cumulative Sum) chart 両側 [English]: CUSUM (Cumulative Sum) chart, two-sided
   deriving (Show, Eq)
 
--- | 管理図入力。 chart 種別に対応した構成のみ受け付ける。
+-- | [日本語]: 管理図入力。 chart 種別に対応した構成のみ受け付ける。
+--   [English]: Control chart input. Only accepts the construction matching
+--   the chart kind.
 data SPCInput
-  = -- | 変数管理図 (X̄-R) 用。 各 subgroup の観測値ベクトル。
+  = -- | [日本語]: 変数管理図 (X̄-R) 用。 各 subgroup の観測値ベクトル。
     --   subgroup サイズ (内側 Vector の長さ) は全 subgroup で同一であること。
+    --   [English]: For the variable control chart (X̄-R). Vector of
+    --   observations per subgroup. The subgroup size (length of the inner
+    --   Vector) must be identical across all subgroups.
     VarSubgroups   !(Vector (Vector Double))
-  | -- | I-MR 用。 個別観測値の系列。
+  | -- | [日本語]: I-MR 用。 個別観測値の系列。
+    --   [English]: For I-MR. Series of individual observations.
     VarIndividual  !(Vector Double)
-  | -- | p chart 用。 (不良数, sample size) の系列。
+  | -- | [日本語]: p chart 用。 (不良数, sample size) の系列。
+    --   [English]: For the p chart. Series of (defectives, sample size).
     AttrProportion !(Vector Int) !(Vector Int)
-  | -- | np chart 用。 (不良数の系列, 一定 sample size)。
+  | -- | [日本語]: np chart 用。 (不良数の系列, 一定 sample size)。
+    --   [English]: For the np chart. (series of defectives, constant
+    --   sample size).
     AttrCount      !(Vector Int) !Int
-  | -- | c chart 用。 欠陥数の系列 (unit size は一定と仮定)。
+  | -- | [日本語]: c chart 用。 欠陥数の系列 (unit size は一定と仮定)。
+    --   [English]: For the c chart. Series of defect counts (unit size is
+    --   assumed constant).
     AttrDefects    !(Vector Int)
-  | -- | u chart 用。 (欠陥数, unit size) の系列。
+  | -- | [日本語]: u chart 用。 (欠陥数, unit size) の系列。
+    --   [English]: For the u chart. Series of (defects, unit size).
     AttrDefectRate !(Vector Int) !(Vector Int)
-  | -- | EWMA 用。 (個別観測値 xs, λ ∈ (0,1], L (sigma 倍数), μ₀ target, σ₀ baseline σ)。
+  | -- | [日本語]: EWMA 用。 (個別観測値 xs, λ ∈ (0,1], L (sigma 倍数), μ₀ target, σ₀ baseline σ)。
     --   σ₀ ≤ 0 を渡すと xs の標本標準偏差で代用。
+    --   [English]: For EWMA. (individual observations xs, λ ∈ (0,1], L
+    --   (sigma multiplier), μ₀ target, σ₀ baseline σ). Passing σ₀ ≤ 0
+    --   substitutes the sample standard deviation of xs.
     EWMAInput      !(Vector Double) !Double !Double !Double !Double
-  | -- | CUSUM 用。 (個別観測値 xs, μ₀ target, σ₀ baseline σ, k (allowance, σ単位), h (decision interval, σ単位))。
+  | -- | [日本語]: CUSUM 用。 (個別観測値 xs, μ₀ target, σ₀ baseline σ, k (allowance, σ単位), h (decision interval, σ単位))。
     --   σ₀ ≤ 0 を渡すと xs の標本標準偏差で代用。 両側 CUSUM (C+, C-) を返す。
+    --   [English]: For CUSUM. (individual observations xs, μ₀ target, σ₀
+    --   baseline σ, k (allowance, in σ units), h (decision interval, in σ
+    --   units)). Passing σ₀ ≤ 0 substitutes the sample standard deviation
+    --   of xs. Returns two-sided CUSUM (C+, C-).
     CUSUMInput     !(Vector Double) !Double !Double !Double !Double
   deriving (Show, Eq)
 
--- | 1 つの管理図の fit 結果。 X̄-R / I-MR では 2 つ並んで返る。
+-- | [日本語]: 1 つの管理図の fit 結果。 X̄-R / I-MR では 2 つ並んで返る。
 --
 -- 不変条件:
 --
 --   * @V.length spcPoints == V.length spcUCL == V.length spcLCL@
 --   * 固定 limit chart (X̄-R / I-MR / np / c) では UCL/LCL は全要素同値
 --   * 変動 limit chart (p / u) では UCL/LCL が点ごとに異なる
+--
+--   [English]: Fit result for a single control chart. X̄-R \/ I-MR return
+--   two of these side by side.
+--
+--   Invariants:
+--
+--   * @V.length spcPoints == V.length spcUCL == V.length spcLCL@
+--   * For fixed-limit charts (X̄-R \/ I-MR \/ np \/ c) UCL\/LCL are the same
+--     value across all elements
+--   * For variable-limit charts (p \/ u) UCL\/LCL differ per point
 data SPCChartResult = SPCChartResult
   { spcPoints    :: !(Vector Double)
-    -- ^ 点ごとにプロットする統計量 (X̄、 R、 個別値、 MR、 p̂、 np、 c、 u 等)
+    -- ^ [日本語]: 点ごとにプロットする統計量 (X̄、 R、 個別値、 MR、 p̂、 np、 c、 u 等)
+    --   [English]: The statistic plotted at each point (X̄, R, individual
+    --   value, MR, p̂, np, c, u, etc.)
   , spcCenter    :: !Double
-    -- ^ 中心線 (CL)
+    -- ^[日本語]:  [日本語]: 中心線 (CL) [English]: Center line (CL)
   , spcUCL       :: !(Vector Double)
-    -- ^ 上方管理限界 (点ごと)
+    -- ^[日本語]:  [日本語]: 上方管理限界 (点ごと) [English]: Upper control limit (per point)
   , spcLCL       :: !(Vector Double)
-    -- ^ 下方管理限界 (点ごと)
+    -- ^[日本語]:  [日本語]: 下方管理限界 (点ごと) [English]: Lower control limit (per point)
   , spcSigma     :: !Double
-    -- ^ 推定 σ (rule 判定用、 zone A/B/C の境界を計算するのに使う)
+    -- ^ [日本語]: 推定 σ (rule 判定用、 zone A/B/C の境界を計算するのに使う)
+    --   [English]: Estimated σ (used for rule checking, to compute the
+    --   zone A\/B\/C boundaries)
   , spcChartName :: !Text
-    -- ^ "X-bar" / "R" / "I" / "MR" / "p" / "np" / "c" / "u"
+    -- ^ [日本語]: "X-bar" / "R" / "I" / "MR" / "p" / "np" / "c" / "u"
+    --   [English]: "X-bar" \/ "R" \/ "I" \/ "MR" \/ "p" \/ "np" \/ "c" \/ "u"
   } deriving (Show)
 
 -- ===========================================================================
 -- Montgomery 定数 (n = 2..15)
 -- ===========================================================================
 
--- | 出典: Montgomery, "Introduction to Statistical Quality Control" 9th ed.
+-- | [日本語]: 出典: Montgomery, "Introduction to Statistical Quality Control" 9th ed.
 --   Appendix VI。 @(A2, D3, D4, d2)@。
 --   subgroup size 範囲外の @n@ では 'Nothing'。
+--   [English]: Source: Montgomery, "Introduction to Statistical Quality
+--   Control" 9th ed., Appendix VI. @(A2, D3, D4, d2)@. Returns 'Nothing'
+--   for @n@ outside the supported subgroup-size range.
 subgroupConst :: Int -> Maybe (Double, Double, Double, Double)
 subgroupConst n = case n of
   2  -> Just (1.880, 0.000, 3.267, 1.128)
@@ -144,7 +203,8 @@ vrange v
   | V.null v  = 0
   | otherwise = V.maximum v - V.minimum v
 
--- | 単一値で埋めた長さ @n@ の Vector。
+-- | [日本語]: 単一値で埋めた長さ @n@ の Vector。
+--   [English]: A Vector of length @n@ filled with a single value.
 vconst :: Int -> Double -> Vector Double
 vconst n x = V.replicate n x
 
@@ -175,9 +235,13 @@ inputTag CUSUMInput{}     = "CUSUMInput"
 -- 公開関数
 -- ===========================================================================
 
--- | 管理図を fit する。 X̄-R / I-MR は 2 chart を返す
+-- | [日本語]: 管理図を fit する。 X̄-R / I-MR は 2 chart を返す
 -- (順に X̄ chart / R chart、 I chart / MR chart)。
 -- chart 種別と入力の組合せが不正な場合 'Left' を返す。
+--
+-- [English]: Fit a control chart. X̄-R \/ I-MR return two charts (in
+-- order: X̄ chart \/ R chart, I chart \/ MR chart). Returns 'Left' if the
+-- chart kind and input combination is invalid.
 fitSPC :: SPCChart -> SPCInput -> Either Text [SPCChartResult]
 fitSPC XR  (VarSubgroups subs)    = fitXR subs
 fitSPC IMR (VarIndividual xs)     = fitIMR xs
@@ -197,10 +261,15 @@ fitSPC chart inp =
 -- X̄-R chart
 -- ---------------------------------------------------------------------------
 
--- | X̄-R chart:
+-- | [日本語]: X̄-R chart:
 --
 --   * X̄ chart: CL = X̿、 UCL = X̿ + A2·R̄、 LCL = X̿ − A2·R̄、 σ̂ = R̄ / d2
 --   * R chart: CL = R̄、 UCL = D4·R̄、 LCL = D3·R̄
+--
+--   [English]: X̄-R chart:
+--
+--   * X̄ chart: CL = X̿, UCL = X̿ + A2·R̄, LCL = X̿ − A2·R̄, σ̂ = R̄ / d2
+--   * R chart: CL = R̄, UCL = D4·R̄, LCL = D3·R̄
 fitXR :: Vector (Vector Double) -> Either Text [SPCChartResult]
 fitXR subs
   | V.null subs = Left "fitSPC XR: empty subgroup list"
@@ -245,11 +314,17 @@ fitXR subs
 -- I-MR chart
 -- ---------------------------------------------------------------------------
 
--- | I-MR chart:
+-- | [日本語]: I-MR chart:
 --
 --   * MR_i = |x_i − x_{i−1}|  for i = 1..N−1
 --   * I chart:  CL = x̄、 σ̂ = MR̄ / d2(n=2) = MR̄ / 1.128、 UCL/LCL = x̄ ± 3σ̂
 --   * MR chart: CL = MR̄、 UCL = D4(2)·MR̄ = 3.267·MR̄、 LCL = D3(2)·MR̄ = 0
+--
+--   [English]: I-MR chart:
+--
+--   * MR_i = |x_i − x_{i−1}| for i = 1..N−1
+--   * I chart: CL = x̄, σ̂ = MR̄ / d2(n=2) = MR̄ / 1.128, UCL\/LCL = x̄ ± 3σ̂
+--   * MR chart: CL = MR̄, UCL = D4(2)·MR̄ = 3.267·MR̄, LCL = D3(2)·MR̄ = 0
 fitIMR :: Vector Double -> Either Text [SPCChartResult]
 fitIMR xs
   | V.length xs < 2 = Left "fitSPC IMR: need at least 2 individual observations"
@@ -288,14 +363,24 @@ fitIMR xs
 -- p chart (proportion defective, variable subgroup size)
 -- ---------------------------------------------------------------------------
 
--- | p chart:
+-- | [日本語]: p chart:
 --
 --   * p̂_i = d_i / n_i
 --   * p̄   = Σ d_i / Σ n_i
 --   * CL  = p̄
 --   * UCL_i = p̄ + 3·sqrt(p̄(1−p̄)/n_i)、 LCL_i = max(0, …)
 --
--- σ̂ は **平均 n** に基づく代表値 (rule 判定用)。
+-- σ̂ は __平均 n__ に基づく代表値 (rule 判定用)。
+--
+-- [English]: p chart:
+--
+--   * p̂_i = d_i / n_i
+--   * p̄   = Σ d_i / Σ n_i
+--   * CL  = p̄
+--   * UCL_i = p̄ + 3·sqrt(p̄(1−p̄)/n_i), LCL_i = max(0, …)
+--
+-- σ̂ is a representative value based on the __average n__ (used for rule
+-- checking).
 fitP :: Vector Int -> Vector Int -> Either Text [SPCChartResult]
 fitP ds ns
   | V.length ds /= V.length ns
@@ -329,11 +414,17 @@ fitP ds ns
 -- np chart (count defective, constant subgroup size n)
 -- ---------------------------------------------------------------------------
 
--- | np chart (n は全 subgroup で一定):
+-- | [日本語]: np chart (n は全 subgroup で一定):
 --
 --   * CL  = n·p̄ = 平均不良数
 --   * σ̂  = sqrt(n·p̄·(1−p̄))
 --   * UCL = n·p̄ + 3·σ̂、 LCL = max(0, …)
+--
+--   [English]: np chart (n is constant across all subgroups):
+--
+--   * CL  = n·p̄ = mean number defective
+--   * σ̂  = sqrt(n·p̄·(1−p̄))
+--   * UCL = n·p̄ + 3·σ̂, LCL = max(0, …)
 fitNP :: Vector Int -> Int -> Either Text [SPCChartResult]
 fitNP ds n
   | V.null ds        = Left "fitSPC NP: empty defectives series"
@@ -362,11 +453,17 @@ fitNP ds n
 -- c chart (count of defects, constant unit size)
 -- ---------------------------------------------------------------------------
 
--- | c chart:
+-- | [日本語]: c chart:
 --
 --   * CL  = c̄ = 平均欠陥数
 --   * σ̂  = sqrt(c̄)
 --   * UCL = c̄ + 3·sqrt(c̄)、 LCL = max(0, …)
+--
+--   [English]: c chart:
+--
+--   * CL  = c̄ = mean number of defects
+--   * σ̂  = sqrt(c̄)
+--   * UCL = c̄ + 3·sqrt(c̄), LCL = max(0, …)
 fitC :: Vector Int -> Either Text [SPCChartResult]
 fitC ds
   | V.null ds         = Left "fitSPC C: empty defects series"
@@ -391,12 +488,19 @@ fitC ds
 -- u chart (defect rate, variable unit size)
 -- ---------------------------------------------------------------------------
 
--- | u chart:
+-- | [日本語]: u chart:
 --
 --   * u_i = d_i / n_i
 --   * ū   = Σ d_i / Σ n_i
 --   * CL  = ū
 --   * UCL_i = ū + 3·sqrt(ū/n_i)、 LCL_i = max(0, …)
+--
+--   [English]: u chart:
+--
+--   * u_i = d_i / n_i
+--   * ū   = Σ d_i / Σ n_i
+--   * CL  = ū
+--   * UCL_i = ū + 3·sqrt(ū/n_i), LCL_i = max(0, …)
 fitU :: Vector Int -> Vector Int -> Either Text [SPCChartResult]
 fitU ds ns
   | V.length ds /= V.length ns
@@ -427,19 +531,19 @@ fitU ds ns
 -- 判定ルール (Phase 1.4 / 1.5 で実装)
 -- ===========================================================================
 
--- | 判定ルール 1 個。
+-- | [日本語]: 判定ルール 1 個。 [English]: A single detection rule.
 data SPCRule = SPCRule
-  { ruleName   :: !Text                       -- ^ "Western Electric 1" / "Nelson 1" 等
-  , ruleNumber :: !Int                        -- ^ ルール番号 (1..8)
-  , ruleCheck  :: SPCChartResult -> [Int]     -- ^ 違反点の 0-origin index list
+  { ruleName   :: !Text                       -- ^ [日本語]: "Western Electric 1" / "Nelson 1" 等 [English]: e.g. "Western Electric 1" / "Nelson 1"
+  , ruleNumber :: !Int                        -- ^ [日本語]: ルール番号 (1..8) [English]: Rule number (1..8)
+  , ruleCheck  :: SPCChartResult -> [Int]     -- ^ [日本語]: 違反点の 0-origin index list [English]: 0-origin index list of violating points
   }
 
--- | ルール違反 1 件。
+-- | [日本語]: ルール違反 1 件。 [English]: A single rule violation.
 data SPCViolation = SPCViolation
   { vRuleName    :: !Text
   , vRuleNumber  :: !Int
   , vPointIndex  :: !Int
-  , vChartName   :: !Text   -- ^ どの chart で違反したか (X-bar / R / 等)
+  , vChartName   :: !Text   -- ^ [日本語]: どの chart で違反したか (X-bar / R / 等) [English]: Which chart the violation occurred on (X-bar \/ R \/ etc.)
   } deriving (Show, Eq)
 
 -- ---------------------------------------------------------------------------
@@ -447,11 +551,18 @@ data SPCViolation = SPCViolation
 -- ---------------------------------------------------------------------------
 
 -- $patternDetectors
--- ゾーン境界は CL ± k·σ で定義 (σ は 'spcSigma' フィールド)。
+-- [日本語]: ゾーン境界は CL ± k·σ で定義 (σ は 'spcSigma' フィールド)。
 -- 可変 limit chart (p / u) では σ は代表値 (平均 n から算出) なので、
 -- ゾーン判定はやや近似となる (canvas display 用途では実用上問題なし)。
+--
+-- [English]: Zone boundaries are defined as CL ± k·σ (σ is the 'spcSigma'
+-- field). For variable-limit charts (p \/ u), σ is a representative value
+-- (computed from the average n), so zone checks are somewhat approximate
+-- (not an issue in practice for canvas display purposes).
 
--- | k·σ の絶対値を超えた点の index (0-origin)。 chart 種別非依存。
+-- | [日本語]: k·σ の絶対値を超えた点の index (0-origin)。 chart 種別非依存。
+--   [English]: Index (0-origin) of points whose absolute value exceeds
+--   k·σ. Independent of chart kind.
 beyondSigma :: Double -> SPCChartResult -> [Int]
 beyondSigma k r =
   let cl    = spcCenter r
@@ -460,7 +571,9 @@ beyondSigma k r =
   in [ i | (i, x) <- zip [0..] pts
          , abs (x - cl) > k * sigma ]
 
--- | k·σ を超える点について「+ なら +1、 − なら −1、 ゾーン内なら 0」。
+-- | [日本語]: k·σ を超える点について「+ なら +1、 − なら −1、 ゾーン内なら 0」。
+--   [English]: For points exceeding k·σ: "+1 if positive side, −1 if
+--   negative side, 0 if inside the zone".
 sideAtSigma :: Double -> SPCChartResult -> [Int]
 sideAtSigma k r =
   let cl    = spcCenter r
@@ -472,7 +585,8 @@ sideAtSigma k r =
         | otherwise           =  0
   in map classify pts
 
--- | CL に対する符号 (上 = +1, 下 = -1, 上 = 0)。
+-- | [日本語]: CL に対する符号 (上 = +1, 下 = -1, 上 = 0)。
+--   [English]: Sign relative to CL (above = +1, below = -1, equal = 0).
 sideOfCenter :: SPCChartResult -> [Int]
 sideOfCenter r =
   let cl    = spcCenter r
@@ -483,8 +597,12 @@ sideOfCenter r =
         | otherwise = 0
   in map classify pts
 
--- | N 個連続で同符号 (CL の同じ側) になっている末尾点の index を返す。
+-- | [日本語]: N 個連続で同符号 (CL の同じ側) になっている末尾点の index を返す。
 --   例: 8 連続 → 連続区間の 8 点目以降を全部 violation として返す。
+--   [English]: Returns the index of the trailing point of a run of N
+--   consecutive points with the same sign (same side of CL). E.g. for a
+--   run of 8, every point from the 8th onward in the run is returned as a
+--   violation.
 runSameSide :: Int -> SPCChartResult -> [Int]
 runSameSide n r = go 0 0 0 (sideOfCenter r) []
   where
@@ -499,7 +617,9 @@ runSameSide n r = go 0 0 0 (sideOfCenter r) []
                  | otherwise    = acc
         in go (i + 1) curSide' runLen' xs acc'
 
--- | N 個連続で単調 (全て上昇 or 全て下降) のパターンの末尾 index。
+-- | [日本語]: N 個連続で単調 (全て上昇 or 全て下降) のパターンの末尾 index。
+--   [English]: Trailing index of a pattern of N consecutive monotone
+--   points (all increasing or all decreasing).
 trendMono :: Int -> SPCChartResult -> [Int]
 trendMono n r = go 0 0 0 (V.toList (spcPoints r)) []
   where
@@ -519,7 +639,9 @@ trendMono n r = go 0 0 0 (V.toList (spcPoints r)) []
                | otherwise    = acc
       in go (i + 1) dir' runLen' ys acc'
 
--- | N 個連続で交互上下のパターンの末尾 index。
+-- | [日本語]: N 個連続で交互上下のパターンの末尾 index。
+--   [English]: Trailing index of a pattern of N consecutive alternating
+--   up\/down points.
 alternating :: Int -> SPCChartResult -> [Int]
 alternating n r = go 0 0 0 (V.toList (spcPoints r)) []
   where
@@ -538,8 +660,11 @@ alternating n r = go 0 0 0 (V.toList (spcPoints r)) []
                | otherwise    = acc
       in go (i + 1) lastDir' runLen' ys acc'
 
--- | k 個連続で σ 倍の絶対値以内 (= ゾーン C 内のみ) の末尾 index。
+-- | [日本語]: k 個連続で σ 倍の絶対値以内 (= ゾーン C 内のみ) の末尾 index。
 --   stratification (W-E rule 6 / Nelson 7)。
+--   [English]: Trailing index of k consecutive points within σ multiples
+--   in absolute value (i.e. inside zone C only). Stratification (W-E
+--   rule 6 \/ Nelson 7).
 withinSigma :: Int -> Double -> SPCChartResult -> [Int]
 withinSigma n k r =
   let cl    = spcCenter r
@@ -548,8 +673,11 @@ withinSigma n k r =
       flags = map (\x -> abs (x - cl) <= k * sigma) pts
   in collectRun n flags
 
--- | k 個連続で σ 倍の絶対値より外 (= ゾーン A or B、 中央線の同/異側問わず) の末尾 index。
+-- | [日本語]: k 個連続で σ 倍の絶対値より外 (= ゾーン A or B、 中央線の同/異側問わず) の末尾 index。
 --   mixture (W-E rule 7 / Nelson 8)。
+--   [English]: Trailing index of k consecutive points outside σ
+--   multiples in absolute value (i.e. zone A or B, regardless of same\/
+--   different side of the center line). Mixture (W-E rule 7 \/ Nelson 8).
 beyondSigmaEither :: Int -> Double -> SPCChartResult -> [Int]
 beyondSigmaEither n k r =
   let cl    = spcCenter r
@@ -558,7 +686,9 @@ beyondSigmaEither n k r =
       flags = map (\x -> abs (x - cl) > k * sigma) pts
   in collectRun n flags
 
--- | True が n 個以上連続するパターンの末尾 index 集合。
+-- | [日本語]: True が n 個以上連続するパターンの末尾 index 集合。
+--   [English]: Set of trailing indices for runs of n or more consecutive
+--   True values.
 collectRun :: Int -> [Bool] -> [Int]
 collectRun n = go 0 0 []
   where
@@ -569,8 +699,11 @@ collectRun n = go 0 0 []
                | otherwise = acc
       in go (i + 1) rn' acc' fs
 
--- | 「直近 m 点のうち k 点以上が k·σ を **同じ側** で超えている」 末尾 index。
+-- | [日本語]: 「直近 m 点のうち k 点以上が k·σ を __同じ側__ で超えている」 末尾 index。
 --   Western Electric 2 / 3 用 (m, k, σ係数)。
+--   [English]: Trailing index where "at least k of the last m points
+--   exceed k·σ on the __same side__". For Western Electric 2 \/ 3 (m, k,
+--   σ coefficient).
 kOfMBeyondSameSide :: Int -> Int -> Double -> SPCChartResult -> [Int]
 kOfMBeyondSameSide kth m sigK r = go 0 (sideAtSigma sigK r) []
   where
@@ -591,7 +724,7 @@ kOfMBeyondSameSide kth m sigK r = go 0 (sideAtSigma sigK r) []
 -- Western Electric rules (WECO 8 rules)
 -- ---------------------------------------------------------------------------
 
--- | Western Electric Company (WECO) rules。 8 rules。
+-- | [日本語]: Western Electric Company (WECO) rules。 8 rules。
 --
 -- (Western Electric Statistical Quality Control Handbook 1956 +
 -- 一般的な 8-rule 拡張)
@@ -604,6 +737,20 @@ kOfMBeyondSameSide kth m sigK r = go 0 (sideAtSigma sigK r) []
 --   * Rule 6: 15 点連続で 1σ 以内 (stratification)
 --   * Rule 7: 8 点連続で 1σ 外 (mixture; どちら側でも可)
 --   * Rule 8: 14 点連続で交互上下
+--
+-- [English]: Western Electric Company (WECO) rules. 8 rules.
+--
+-- (Western Electric Statistical Quality Control Handbook 1956 + the
+-- commonly used 8-rule extension)
+--
+--   * Rule 1: 1 point beyond 3σ
+--   * Rule 2: 2 of 3 points beyond 2σ on the same side
+--   * Rule 3: 4 of 5 points beyond 1σ on the same side
+--   * Rule 4: 8 consecutive points on the same side of CL
+--   * Rule 5: 6 consecutive points monotone (increasing or decreasing)
+--   * Rule 6: 15 consecutive points within 1σ (stratification)
+--   * Rule 7: 8 consecutive points beyond 1σ (mixture; either side)
+--   * Rule 8: 14 consecutive alternating up\/down points
 westernElectricRules :: [SPCRule]
 westernElectricRules =
   [ SPCRule "Western Electric 1" 1 (beyondSigma 3)
@@ -620,7 +767,7 @@ westernElectricRules =
 -- Nelson rules (1984、 8 rules)
 -- ---------------------------------------------------------------------------
 
--- | Nelson rules (Nelson, L.S. 1984, J. Qual. Tech.)。 8 rules。
+-- | [日本語]: Nelson rules (Nelson, L.S. 1984, J. Qual. Tech.)。 8 rules。
 --
 -- WE 8 rules と多くが重複するが、 ルール番号と一部の N が異なる:
 --
@@ -634,6 +781,22 @@ westernElectricRules =
 --   * Rule 8: 8 点連続で 1σ 外 (どちら側でも可)                (= WE 7)
 --
 -- 検出ロジックは [[westernElectricRules]] と同じヘルパを再利用。
+--
+-- [English]: Nelson rules (Nelson, L.S. 1984, J. Qual. Tech.). 8 rules.
+--
+-- Many overlap with the WE 8 rules, but the rule numbers and some of the
+-- N values differ:
+--
+--   * Rule 1: 1 point beyond 3σ                                (= WE 1)
+--   * Rule 2: 9 consecutive points on the same side of CL      (WE 4 uses 8)
+--   * Rule 3: 6 consecutive points monotone                    (= WE 5)
+--   * Rule 4: 14 consecutive alternating up\/down points        (= WE 8)
+--   * Rule 5: 2 of 3 points beyond 2σ on the same side          (= WE 2)
+--   * Rule 6: 4 of 5 points beyond 1σ on the same side          (= WE 3)
+--   * Rule 7: 15 consecutive points within 1σ                   (= WE 6)
+--   * Rule 8: 8 consecutive points beyond 1σ (either side)      (= WE 7)
+--
+-- The detection logic reuses the same helpers as [[westernElectricRules]].
 nelsonRules :: [SPCRule]
 nelsonRules =
   [ SPCRule "Nelson 1" 1 (beyondSigma 3)
@@ -646,7 +809,8 @@ nelsonRules =
   , SPCRule "Nelson 8" 8 (beyondSigmaEither 8 1)
   ]
 
--- | 指定したルール集合で違反点を検出する。
+-- | [日本語]: 指定したルール集合で違反点を検出する。
+--   [English]: Detect violating points using the given rule set.
 checkRules :: [SPCRule] -> SPCChartResult -> [SPCViolation]
 checkRules rs r =
   [ SPCViolation (ruleName ru) (ruleNumber ru) i (spcChartName r)
@@ -658,13 +822,21 @@ checkRules rs r =
 -- EWMA chart (Phase 11)
 -- ---------------------------------------------------------------------------
 
--- | EWMA chart:
+-- | [日本語]: EWMA chart:
 --
 --   * 再帰: @z_i = λ x_i + (1 − λ) z_{i−1}@, @z_0 = μ₀@
 --   * 時変管理限界: @μ₀ ± L σ √(λ/(2−λ) · (1 − (1−λ)^{2i}))@
 --   * σ₀ ≤ 0 のとき xs の標本標準偏差で代用。
 --
 -- 入力検証: 0 < λ ≤ 1, L > 0, |xs| ≥ 1。
+--
+-- [English]: EWMA chart:
+--
+--   * Recursion: @z_i = λ x_i + (1 − λ) z_{i−1}@, @z_0 = μ₀@
+--   * Time-varying control limits: @μ₀ ± L σ √(λ/(2−λ) · (1 − (1−λ)^{2i}))@
+--   * When σ₀ ≤ 0, the sample standard deviation of xs is substituted.
+--
+-- Input validation: 0 < λ ≤ 1, L > 0, |xs| ≥ 1.
 fitEWMA :: Vector Double -> Double -> Double -> Double -> Double
         -> Either Text [SPCChartResult]
 fitEWMA xs lam ll mu0 s0In
@@ -698,7 +870,7 @@ fitEWMA xs lam ll mu0 s0In
 -- CUSUM chart (Phase 11)
 -- ---------------------------------------------------------------------------
 
--- | CUSUM (両側) chart:
+-- | [日本語]: CUSUM (両側) chart:
 --
 --   * @C⁺_i = max(0, x_i − (μ₀ + k σ) + C⁺_{i−1})@,  @C⁺_0 = 0@
 --   * @C⁻_i = max(0, (μ₀ − k σ) − x_i + C⁻_{i−1})@,  @C⁻_0 = 0@
@@ -706,6 +878,17 @@ fitEWMA xs lam ll mu0 s0In
 --
 -- 返り値: [C⁺ chart, C⁻ chart]。 C⁻ chart は points が負方向に出るよう
 -- @spcPoints = − C⁻@ として表現し、 LCL = −H、 UCL = 0 とする。
+--
+-- [English]: CUSUM (two-sided) chart:
+--
+--   * @C⁺_i = max(0, x_i − (μ₀ + k σ) + C⁺_{i−1})@,  @C⁺_0 = 0@
+--   * @C⁻_i = max(0, (μ₀ − k σ) − x_i + C⁻_{i−1})@,  @C⁻_0 = 0@
+--   * Decision limit: @H = h σ@ (upper side only; the lower side is
+--     returned for plotting as @-1 × C⁻@, i.e. @−H@)
+--
+-- Return value: [C⁺ chart, C⁻ chart]. The C⁻ chart is expressed so its
+-- points go in the negative direction, as @spcPoints = − C⁻@, with
+-- LCL = −H, UCL = 0.
 fitCUSUM :: Vector Double -> Double -> Double -> Double -> Double
          -> Either Text [SPCChartResult]
 fitCUSUM xs mu0 s0In k h
@@ -739,7 +922,9 @@ fitCUSUM xs mu0 s0In k h
             }
       in Right [chartPos, chartNeg]
 
--- | 標本標準偏差 (n-1 補正)。 EWMA/CUSUM の σ₀ デフォルト用。
+-- | [日本語]: 標本標準偏差 (n-1 補正)。 EWMA/CUSUM の σ₀ デフォルト用。
+--   [English]: Sample standard deviation (n-1 correction). Used as the
+--   default σ₀ for EWMA\/CUSUM.
 sampleSD :: Vector Double -> Double
 sampleSD xs
   | V.length xs < 2 = 0

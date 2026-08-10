@@ -5,7 +5,7 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- k-Nearest Neighbours (回帰 + 分類、 brute force ユークリッド距離).
+-- [日本語]: k-Nearest Neighbours (回帰 + 分類、 brute force ユークリッド距離).
 --
 -- @
 -- import qualified Hanalyze.Model.KNN as KNN
@@ -14,6 +14,17 @@
 -- @
 --
 -- /Complexity/: O(n_test · n_train · d)。 KD-tree は scope 外。
+--
+-- [English]: k-Nearest Neighbours (regression + classification, brute-force
+-- Euclidean distance).
+--
+-- @
+-- import qualified Hanalyze.Model.KNN as KNN
+-- let knnR = KNN.fitKNNR 5 xTrain yTrain
+--     yR   = KNN.predictKNNR knnR xTest
+-- @
+--
+-- /Complexity/: O(n_test · n_train · d). A KD-tree is out of scope.
 module Hanalyze.Model.KNN
   ( KNNRegressor (..)
   , KNNClassifier (..)
@@ -46,7 +57,7 @@ data KNNClassifier = KNNClassifier
   , knnCX          :: !(LA.Matrix Double)
   , knnCY          :: !(VU.Vector Int)
   , knnCClasses    :: ![Int]
-  , knnCClassNames :: ![Text]   -- ^ クラス名 (df|-> が levels 注入・空=数値表示)。
+  , knnCClassNames :: ![Text]   -- ^ [日本語]: クラス名 (df|-> が levels 注入・空=数値表示)。 [English]: Class names (injected as levels by df|->; empty = displayed numerically).
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
@@ -72,8 +83,10 @@ fitKNNC k x y = KNNClassifier
 rowVec :: LA.Matrix Double -> Int -> LA.Vector Double
 rowVec x i = LA.flatten (x LA.? [i])
 
--- | クエリ点に対し、 訓練データ各行までの距離 (二乗) と元 index のペア
+-- | [日本語]: クエリ点に対し、 訓練データ各行までの距離 (二乗) と元 index のペア
 -- を返す。
+--   [English]: For a query point, returns pairs of the (squared) distance to
+-- each training-data row and the original index.
 distancesSq :: LA.Matrix Double -> LA.Vector Double -> [(Int, Double)]
 distancesSq xTrain q =
   let !n = LA.rows xTrain

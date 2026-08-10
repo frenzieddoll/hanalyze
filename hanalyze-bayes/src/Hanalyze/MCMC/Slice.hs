@@ -150,12 +150,16 @@ sliceChains model cfg numChains initP baseGen = do
   gens <- replicateM numChains (spawnGen baseGen)
   mapConcurrently (\g -> slice model cfg initP g) gens
 
--- | Phase 50: 純粋・決定的な slice sampler (seed → 確定 Chain)。
+-- | [日本語]: 純粋・決定的な slice sampler (seed → 確定 Chain)。
+--   [English]: A pure, deterministic slice sampler (seed → a fixed Chain).
 slicePure :: ModelP r -> SliceConfig -> Params -> Word32 -> Chain
 slicePure model cfg initP seed =
   runST (initialize (V.singleton seed) >>= slice model cfg initP)
 
--- | Phase 50: 純粋・決定的な multi-chain slice。 子 seed を純粋導出し @parList rdeepseq@ で並列。
+-- | [日本語]: 純粋・決定的な multi-chain slice。 子 seed を純粋導出し @parList rdeepseq@ で並列。
+--   [English]: A pure, deterministic multi-chain slice sampler. Child
+--   seeds are derived purely, and chains run in parallel via
+--   @parList rdeepseq@.
 sliceChainsPure :: ModelP r -> SliceConfig -> Int -> Params -> Word32 -> [Chain]
 sliceChainsPure model cfg numChains initP seed =
   let childSeeds :: [Word32]

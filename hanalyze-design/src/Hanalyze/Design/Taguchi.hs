@@ -5,27 +5,52 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- The Taguchi method — an analytical layer that extends orthogonal
--- arrays ('Hanalyze.Design.Orthogonal') for robust design.
+-- [日本語]: タグチメソッド — ロバスト設計のために直交表
+-- ('Hanalyze.Design.Orthogonal') を拡張する解析レイヤー。
 --
--- Main building blocks:
+-- 主要な構成要素:
 --
--- 1. **Signal-to-Noise ratio (SN)** — quantifies variability:
+-- 1. __SN 比 (Signal-to-Noise ratio)__ — ばらつきを定量化する:
 --
---    * @SmallerBetter@   — smaller-the-better (e.g. defect rate),
---      @η = -10 log₁₀(Σ y²/n)@.
---    * @LargerBetter@    — larger-the-better (e.g. strength),
---      @η = -10 log₁₀(Σ (1/y²)/n)@.
---    * @NominalBest@     — nominal-the-best (mean/variance),
---      @η = 10 log₁₀(μ²/σ²)@.
+--    - @SmallerBetter@ — 望小特性 (例: 不良率)、
+--      @η = -10 log₁₀(Σ y²/n)@。
+--    - @LargerBetter@ — 望大特性 (例: 強度)、
+--      @η = -10 log₁₀(Σ (1/y²)/n)@。
+--    - @NominalBest@ — 望目特性 (平均/分散)、
+--      @η = 10 log₁₀(μ²/σ²)@。
 --    - NominalBestTarget m: 目標値 m への二乗平均偏差    η = -10 log₁₀(Σ (y-m)²/n)
 --
--- 2. **内側/外側配置 (Inner/Outer Arrays)** — 制御因子 (内側) と
+-- 2. __内側/外側配置 (Inner/Outer Arrays)__ — 制御因子 (内側) と
 --    雑音因子 (外側) のクロス設計。各内側試行で外側全条件を観測 → 行ごとに
 --    SN 比を計算 → 雑音に頑健な制御因子の組合せを発見。
 --
--- 3. **要因効果 (FactorEffect)** — 各因子の各水準での平均 SN 比。
+-- 3. __要因効果 (FactorEffect)__ — 各因子の各水準での平均 SN 比。
 --    最良水準 = 平均 SN 比が最大の水準。
+--
+-- [English]: The Taguchi method — an analytical layer that extends
+-- orthogonal arrays ('Hanalyze.Design.Orthogonal') for robust
+-- design.
+--
+-- Main building blocks:
+--
+-- 1. __Signal-to-Noise ratio (SN)__ — quantifies variability:
+--
+--    - @SmallerBetter@   — smaller-the-better (e.g. defect rate),
+--      @η = -10 log₁₀(Σ y²/n)@.
+--    - @LargerBetter@    — larger-the-better (e.g. strength),
+--      @η = -10 log₁₀(Σ (1/y²)/n)@.
+--    - @NominalBest@     — nominal-the-best (mean/variance),
+--      @η = 10 log₁₀(μ²/σ²)@.
+--    - NominalBestTarget m: the mean-square deviation to the target
+--      value m, @η = -10 log₁₀(Σ (y-m)²/n)@.
+--
+-- 2. __Inner/Outer Arrays__ — a cross design of control factors (inner)
+--    and noise factors (outer). Each inner run observes all outer
+--    conditions → compute the SN ratio per row → discover the
+--    control-factor combination that is robust to noise.
+--
+-- 3. __FactorEffect__ — the mean SN ratio at each level of each factor.
+--    The best level = the level with the largest mean SN ratio.
 module Hanalyze.Design.Taguchi
   ( -- * SN 比
     SNType (..)
@@ -278,7 +303,9 @@ renderInnerOuterCSV io =
                 <> "\n"
   in header <> "\n" <> T.intercalate "\n" rows <> "\n" <> footer
 
--- | LevelValue を CSV 用に文字列化。整数値は 150、小数は 0.1 形式。
+-- | [日本語]: LevelValue を CSV 用に文字列化。整数値は 150、小数は 0.1 形式。
+--   [English]: Stringifies a LevelValue for CSV. Integer values render
+--   like 150, decimals like 0.1.
 fmtLV :: LevelValue -> Text
 fmtLV (LText t) = t
 fmtLV (LNumeric d)

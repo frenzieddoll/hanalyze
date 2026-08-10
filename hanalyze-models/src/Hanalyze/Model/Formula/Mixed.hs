@@ -4,20 +4,39 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Formula DSL — 混合効果モデル (random effect) の接続層 (Phase 48)。
+-- [日本語]: Formula DSL — 混合効果モデル (random effect) の接続層。
 --
 --   lme4 流の @(1|g)@ / @(x|g)@ / @(1+x|g)@ を Formula DSL に追加し、
 --   'Hanalyze.Model.GLMM' の一般ランダム効果フィット ('fitLMEGeneral' /
 --   'fitGLMMGeneral') へ route する。
 --
---   ★設計判断 (Phase 48): random 項を AST の 'Term' 構成子として持たせず、
---   **字句プリパスで @(…|g)@ ブロックを抽出** する方式を採る。 理由は
---   'Term' に構成子を足すと 'Hanalyze.Model.Formula' 系 5 モジュールの網羅
---   pattern match が全て破壊されるため (計画 phase-48 のリスク注記)。 本方式なら
---   'Term'/'Formula' は不変で、 固定効果は既存の 'parseModel'/'designMatrixF'
+--   ★設計判断: random 項を AST の @Term@ 構成子として持たせず、
+--   __字句プリパスで @(…|g)@ ブロックを抽出__ する方式を採る。 理由は
+--   @Term@ に構成子を足すと 'Hanalyze.Model.Formula' 系 5 モジュールの網羅
+--   pattern match が全て破壊されるため (計画のリスク注記)。 本方式なら
+--   @Term@/'Formula' は不変で、 固定効果は既存の 'parseModel'/'designMatrixF'
 --   経路をそのまま使え、 random 項の解釈は本モジュールに閉じる。
 --
 --   frequentist GLMM ゆえ random 効果に prior 宣言は不要 (分散 G は推定対象)。
+--
+-- [English]: Formula DSL — connection layer for mixed-effects models
+-- (random effects).
+--
+--   Adds lme4-style @(1|g)@ \/ @(x|g)@ \/ @(1+x|g)@ to the Formula DSL and
+--   routes to 'Hanalyze.Model.GLMM''s general random-effects fitters
+--   ('fitLMEGeneral' \/ 'fitGLMMGeneral').
+--
+--   ★__Design decision__: rather than giving random terms their own
+--   @Term@ constructor, this module __extracts @(…|g)@ blocks in a lexical pre-pass__.
+--   The reason: adding a constructor to @Term@ would break the
+--   exhaustive pattern matches across the 5 modules of the
+--   'Hanalyze.Model.Formula' family (noted as a risk in the plan). This
+--   approach leaves @Term@\/'Formula' unchanged — fixed effects still go
+--   through the existing 'parseModel'\/'designMatrixF' path, and random-term
+--   interpretation stays contained in this module.
+--
+--   Since this is frequentist GLMM, random effects need no prior declaration
+--   (the variance G is estimated).
 module Hanalyze.Model.Formula.Mixed
   ( RandomSpec (..)
   , extractRandom
@@ -49,25 +68,36 @@ import           Hanalyze.Model.GLMM          (GLMMResultRE, buildGroups,
 -- random 項の表現
 -- ============================================================================
 
--- | 1 つの @(…|g)@ ブロックの解釈結果。
+-- | [日本語]: 1 つの @(…|g)@ ブロックの解釈結果。
 --   例: @(1+x|g)@ → @RandomSpec True ["x"] "g"@ / @(0+x|g)@ → @RandomSpec False ["x"] "g"@.
+--   [English]: The parsed result of a single @(…|g)@ block.
+--   Example: @(1+x|g)@ → @RandomSpec True ["x"] "g"@ \/ @(0+x|g)@ → @RandomSpec False ["x"] "g"@.
 data RandomSpec = RandomSpec
-  { rsIntercept :: Bool    -- ^ random intercept を含むか (@1@ あり or 既定 True、 @0@/@-1@ で抑制)
-  , rsSlopes    :: [Text]  -- ^ random slope の変数名 (左辺の @1@/@0@/@-1@ 以外)
-  , rsGroup     :: Text    -- ^ grouping 変数名 (@|@ の右)
+  { rsIntercept :: Bool    -- ^ [日本語]: random intercept を含むか (@1@ あり or 既定 True、 @0@/@-1@ で抑制)。 [English]: Whether a random intercept is included (present via @1@ or default True; suppressed by @0@\/@-1@).
+  , rsSlopes    :: [Text]  -- ^ [日本語]: random slope の変数名 (左辺の @1@/@0@/@-1@ 以外)。 [English]: Random-slope variable names (excluding @1@\/@0@\/@-1@ on the left-hand side).
+  , rsGroup     :: Text    -- ^ [日本語]: grouping 変数名 (@|@ の右)。 [English]: Grouping variable name (right of @|@).
   } deriving (Eq, Show)
 
 -- ============================================================================
 -- 字句プリパス: (…|g) ブロックの抽出
 -- ============================================================================
 
--- | formula 文字列から random 項 @(…|g)@ を抽出し、 (固定効果 formula, [RandomSpec])
+-- | [日本語]: formula 文字列から random 項 @(…|g)@ を抽出し、 (固定効果 formula, [RandomSpec])
 --   を返す。 LHS (@~@ or @=@) は保持し、 RHS から random ブロックを取り除く。
 --
---   * R 構文: @"y ~ x + (1+x|g)"@ → (@"y ~ x"@, [RandomSpec True ["x"] "g"])
---   * 独自構文: @"y x = b0 + b1*x + (1|g)"@ → (@"y x = b0 + b1*x"@, [RandomSpec True [] "g"])
+--   - R 構文: @"y ~ x + (1+x|g)"@ → (@"y ~ x"@, [RandomSpec True ["x"] "g"])
+--   - 独自構文: @"y x = b0 + b1*x + (1|g)"@ → (@"y x = b0 + b1*x"@, [RandomSpec True [] "g"])
 --
 --   固定効果側に項が残らない場合 (例 @"y ~ (1|g)"@) は intercept @"1"@ を補う。
+--   [English]: Extracts random terms @(…|g)@ from a formula string and
+--   returns (fixed-effects formula, [RandomSpec]). The LHS (@~@ or @=@) is
+--   kept as-is; random blocks are stripped from the RHS.
+--
+--   - R syntax: @"y ~ x + (1+x|g)"@ → (@"y ~ x"@, [RandomSpec True ["x"] "g"])
+--   - Custom syntax: @"y x = b0 + b1*x + (1|g)"@ → (@"y x = b0 + b1*x"@, [RandomSpec True [] "g"])
+--
+--   If no terms remain on the fixed-effects side (e.g. @"y ~ (1|g)"@), an
+--   intercept @"1"@ is added.
 extractRandom :: Text -> Either String (Text, [RandomSpec])
 extractRandom t =
   let s = T.unpack t
@@ -84,14 +114,18 @@ extractRandom t =
                             _  -> trimStr lhs ++ " " ++ sep ++ " " ++ fixedRHS
        Right (T.pack fixedFormula, specs)
 
--- | LHS と RHS を @~@ (R) または @=@ (独自) で分割。 区切りが無ければ ("", "", whole)。
+-- | [日本語]: LHS と RHS を @~@ (R) または @=@ (独自) で分割。 区切りが無ければ ("", "", whole)。
+--   [English]: Splits into LHS and RHS on @~@ (R) or @=@ (custom). If no
+--   separator is found, returns ("", "", whole).
 splitLHS :: String -> (String, String, String)
 splitLHS s
   | Just (l, r) <- breakTop '~' s = (l, "~", r)
   | Just (l, r) <- breakTop '=' s = (l, "=", r)
   | otherwise                     = ("", "", s)
 
--- | top-level (括弧外) の最初の区切り文字で 1 回分割。
+-- | [日本語]: top-level (括弧外) の最初の区切り文字で 1 回分割。
+--   [English]: Splits once at the first top-level (outside parentheses)
+--   separator character.
 breakTop :: Char -> String -> Maybe (String, String)
 breakTop target = go (0 :: Int) []
   where
@@ -102,7 +136,9 @@ breakTop target = go (0 :: Int) []
       | c == target && d == 0 = Just (reverse acc, cs)
       | otherwise           = go d (c:acc) cs
 
--- | top-level の @+@ で分割 (括弧内の @+@ は分割しない)。
+-- | [日本語]: top-level の @+@ で分割 (括弧内の @+@ は分割しない)。
+--   [English]: Splits on top-level @+@ (does not split on @+@ inside
+--   parentheses).
 splitTopPlus :: String -> [String]
 splitTopPlus = go (0 :: Int) [] []
   where
@@ -113,8 +149,11 @@ splitTopPlus = go (0 :: Int) [] []
       | c == '+' && d == 0  = go d [] (reverse cur : acc) cs
       | otherwise           = go d (c:cur) acc cs
 
--- | 各トークンを固定効果トークンか random ブロック (中身) に振り分ける。
+-- | [日本語]: 各トークンを固定効果トークンか random ブロック (中身) に振り分ける。
 --   random ブロック = trim 後 @(…)@ で囲まれ、 内部 top-level に @|@ を持つもの。
+--   [English]: Sorts each token into either a fixed-effects token or a
+--   random block (its contents). A random block is one that, after
+--   trimming, is enclosed in @(…)@ and contains a top-level @|@ inside.
 partitionTokens :: [String] -> Either String ([String], [String])
 partitionTokens = go [] []
   where
@@ -124,7 +163,8 @@ partitionTokens = go [] []
         Just inner -> go fixed (inner : rand) rest
         Nothing    -> go (tok : fixed) rand rest
 
--- | トークンが @(…|…)@ なら内部文字列を返す。
+-- | [日本語]: トークンが @(…|…)@ なら内部文字列を返す。
+--   [English]: If the token is @(…|…)@, returns the inner string.
 asRandomBlock :: String -> Maybe String
 asRandomBlock tok =
   case tok of
@@ -133,7 +173,8 @@ asRandomBlock tok =
       in if hasTopPipe inner then Just inner else Nothing
     _ -> Nothing
 
--- | top-level に @|@ を含むか。
+-- | [日本語]: top-level に @|@ を含むか。
+--   [English]: Whether it contains a top-level @|@.
 hasTopPipe :: String -> Bool
 hasTopPipe = go (0 :: Int)
   where
@@ -144,7 +185,8 @@ hasTopPipe = go (0 :: Int)
       | c == '|' && d == 0 = True
       | otherwise         = go d cs
 
--- | @"1 + x | g"@ → 'RandomSpec'。
+-- | [日本語]: @"1 + x | g"@ → 'RandomSpec'。
+--   [English]: @"1 + x | g"@ → 'RandomSpec'.
 parseBlock :: String -> Either String RandomSpec
 parseBlock inner =
   case breakTop '|' inner of
@@ -171,18 +213,34 @@ trimStr = f . f where f = reverse . dropWhile isSpace
 -- route 入口: 固定/random を分離し GLMM 一般フィットへ
 -- ============================================================================
 
--- | 混合効果モデルを DataFrame からフィットする。 @Nothing@ = Gaussian LME
+-- | [日本語]: 混合効果モデルを DataFrame からフィットする。 @Nothing@ = Gaussian LME
 --   ('fitLMEGeneral')、 @Just (family, link)@ = 非 Gaussian GLMM ('fitGLMMGeneral')。
 --   戻り値は (結果, 固定効果係数名)。
 --
---   ★現状は **単一 grouping factor** のみ対応 ((1|g) / (x|g) / (1+x|g))。 複数の
+--   ★現状は __単一 grouping factor__ のみ対応 ((1|g) / (x|g) / (1+x|g))。 複数の
 --   @(…|g1) + (…|g2)@ は block-diagonal Z が要るため未対応 (明示エラー)。
 --
---   TODO (Phase 48 follow-up):
---     * 複数 grouping factor @(…|g1) + (…|g2)@ — 群ごと Z ブロックを block-diagonal に
+--   TODO (follow-up):
+--     - 複数 grouping factor @(…|g1) + (…|g2)@ — 群ごと Z ブロックを block-diagonal に
 --       積み、 fitLMEGeneral/fitGLMMGeneral を multi-grouping 一般化する。
---     * GLMM offset (Poisson log-exposure 等) — 現状は線形 offset のみ ('fitWLSF')。
---     * REML 推定 — 現状の EM/Laplace は ML。 REML は固定効果 df 補正付き。
+--     - GLMM offset (Poisson log-exposure 等) — 現状は線形 offset のみ (@fitWLSF@)。
+--     - REML 推定 — 現状の EM/Laplace は ML。 REML は固定効果 df 補正付き。
+--   [English]: Fits a mixed-effects model from a DataFrame. @Nothing@ =
+--   Gaussian LME ('fitLMEGeneral'), @Just (family, link)@ = non-Gaussian GLMM
+--   ('fitGLMMGeneral'). Returns (result, fixed-effect coefficient names).
+--
+--   ★Currently supports only a __single grouping factor__ ((1|g) \/ (x|g) \/
+--   (1+x|g)). Multiple @(…|g1) + (…|g2)@ is not supported yet, since it
+--   would require a block-diagonal Z (raises an explicit error).
+--
+--   TODO (follow-up):
+--     - Multiple grouping factors @(…|g1) + (…|g2)@ — stack per-group Z
+--       blocks block-diagonally and generalize fitLMEGeneral\/fitGLMMGeneral
+--       to multi-grouping.
+--     - GLMM offset (e.g. Poisson log-exposure) — currently only linear
+--       offset is supported (@fitWLSF@).
+--     - REML estimation — the current EM\/Laplace is ML. REML would add a
+--       fixed-effect df correction.
 fitMixedF
   :: Maybe (Family, LinkFn)
   -> Text -> DXD.DataFrame
@@ -220,11 +278,15 @@ fitMixedF mfam formulaText df0 = do
               Just (fam, link) -> fitGLMMGeneral fam link x z y idx glabels
   Right (res, labels)
 
--- | Gaussian 線形混合効果モデル (LME)。 @fitMixedLME "y ~ x + (1+x|g)" df@。
+-- | [日本語]: Gaussian 線形混合効果モデル (LME)。 @fitMixedLME "y ~ x + (1+x|g)" df@。
+--   [English]: Gaussian linear mixed-effects model (LME).
+--   @fitMixedLME "y ~ x + (1+x|g)" df@.
 fitMixedLME :: Text -> DXD.DataFrame -> Either String (GLMMResultRE, [Text])
 fitMixedLME = fitMixedF Nothing
 
--- | 非 Gaussian GLMM。 @fitMixedGLMM Binomial Logit "y ~ x + (1|g)" df@。
+-- | [日本語]: 非 Gaussian GLMM。 @fitMixedGLMM Binomial Logit "y ~ x + (1|g)" df@。
+--   [English]: Non-Gaussian GLMM.
+--   @fitMixedGLMM Binomial Logit "y ~ x + (1|g)" df@.
 fitMixedGLMM :: Family -> LinkFn -> Text -> DXD.DataFrame
              -> Either String (GLMMResultRE, [Text])
 fitMixedGLMM fam link = fitMixedF (Just (fam, link))

@@ -37,7 +37,8 @@ bench/venv/bin/python bench/posteriordb/01-glm-poisson/model.py
 bench/venv/bin/python bench/posteriordb/01-glm-poisson/run_pymc_matrix.py
 
 # hanalyze (+ hs_dashboard_full.png 生成・az.summary 相当の要約表を標準出力へ)
-# hgg 連携につき plot-integration flag が必要。figures/ は事前に
+# hgg 連携のため別 package hanalyze-plot 経由でビルド
+# (cabal.project.plot を使う)。figures/ は事前に
 # 存在する前提 (実行時にディレクトリ作成はしない):
 cabal build --project-file=cabal.project.plot posteriordb-glm-poisson
 cabal run --project-file=cabal.project.plot posteriordb-glm-poisson

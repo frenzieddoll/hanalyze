@@ -3,9 +3,9 @@
 > 🌐 [English](03-mcmc-samplers.md) | **日本語**
 
 > 関連デモ:
-> - [`bench-mcmc`](../../demo/bayesian/BenchMCMC.hs) — MH/HMC/NUTS パフォーマンス比較 (易/難 2 ケース)
-> - [`test-hmc-nuts`](../../demo/bayesian/TestHMCNUTS.hs) — 1D ガウスで HMC/NUTS 動作検証
-> - [`hbm-example`](../../demo/bayesian/HBMExample.hs) — 4 チェーン NUTS + R-hat 診断
+> - [`bench-mcmc`](../../hanalyze-demos/demo/bayesian/BenchMCMC.hs) — MH/HMC/NUTS パフォーマンス比較 (易/難 2 ケース)
+> - [`test-hmc-nuts`](../../hanalyze-demos/demo/bayesian/TestHMCNUTS.hs) — 1D ガウスで HMC/NUTS 動作検証
+> - [`hbm-example`](../../hanalyze-demos/demo/bayesian/HBMExample.hs) — 4 チェーン NUTS + R-hat 診断
 
 ## サンプラー比較
 

@@ -4,17 +4,35 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Hanalyze の quickstart 出入口 (umbrella module)。
+-- [日本語]: Hanalyze の quickstart 出入口 (umbrella module)。
 --
 -- 最初に触れる中核 (モデル fit・基本統計・可視化・CSV I/O) を 1 つの
 -- @import Hanalyze@ で揃える窓口。 個別機能は各サブモジュール
 -- (@Hanalyze.Model.*@ / @Hanalyze.Stat.*@ / @Hanalyze.Viz.*@) を直接 import する。
 --
--- 方針 (Phase 46 / plot Phase 15 §A5):
---   * ここは **plot 非依存・portable** (re-export のみ、 flag 不要)。
---     plot 連携 (@toPlot@ / @Plottable@) は @flag plot-integration@ 配下の
---     @Hanalyze.Plot@ に分離してあり、 本 umbrella には含めない。
+-- 方針:
+--   * ここは __plot 非依存・portable__ (re-export のみ、 別パッケージ不要)。
+--     plot 連携 (@toPlot@ / @Plottable@) は別パッケージ @hanalyze-plot@
+--     の @Hanalyze.Plot@ (@cabal build --project-file=cabal.project.plot@
+--     で build) に分離してあり、 本 umbrella には含めない。
 --   * Formula DSL は本 Phase 対象外 (ロードマップ B 段)。
+--
+-- [English]: Quickstart entry point for Hanalyze (umbrella module).
+--
+-- Gathers the core pieces you'll touch first (model fitting, basic
+-- statistics, visualization, CSV I\/O) behind a single @import
+-- Hanalyze@. Individual features can be imported directly from their
+-- submodules (@Hanalyze.Model.*@ \/ @Hanalyze.Stat.*@ \/
+-- @Hanalyze.Viz.*@).
+--
+-- Policy:
+--   * This module is __plot-independent and portable__ (re-exports only, no
+--     separate package required). Plot integration (@toPlot@ \/ @Plottable@)
+--     is kept separate in the @hanalyze-plot@ package's
+--     @Hanalyze.Plot@ (built via @cabal build
+--     --project-file=cabal.project.plot@) and is not included in this
+--     umbrella.
+--   * The Formula DSL is out of scope for this Phase (roadmap stage B).
 module Hanalyze
   ( -- * モデル fit の共有核 / 能力別 protocol
     module Hanalyze.Model.Core

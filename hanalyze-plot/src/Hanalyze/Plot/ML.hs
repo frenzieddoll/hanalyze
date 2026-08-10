@@ -4,61 +4,79 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- hgg 連携層 — **ML / 統計モデル連携族** の図化 instance + 抽出子 (Phase 71.6)。
+-- [日本語]: hgg 連携層 — __ML / 統計モデル連携族__ の図化 instance + 抽出子。
 --
--- ⚠ 親 'Hanalyze.Plot' と同じ cabal flag @plot-integration@ (既定 off) を
--- on にしたときのみ build される。 共通基盤 (class / ModelSpec / grid 評価核) は
+-- ⚠ 親 'Hanalyze.Plot' と同じく別パッケージ @hanalyze-plot@ に属し、
+-- @cabal build --project-file=cabal.project.plot@ で build される。 共通基盤 (class / ModelSpec / grid 評価核) は
 -- 'Hanalyze.Plot.Core' を import して取り込む (orphan instance を許容:
 -- クラス=Core・instance=ここ・型=Wrappers/各 Model module)。
 --
--- 担当する型・ヘルパ (= Phase 68 A1-A7 群):
+-- 担当する型・ヘルパ:
 --   クラスタリング (KMeans) / 木・アンサンブル (PCA/RF/GB/DT) / 分類
 --   (Discriminant/NaiveBayes/KNN) / 次元圧縮 (PLS) / 時系列・生存・FDA
 --   (Forecast/GARCH/AFT/FunctionalPCA/FLM) / 罰則回帰・因果探索 (Reg/LiNGAM) /
 --   記述統計・検定 (TestResult)。 新規 plot mark は不要 (既存 mark の組合せ)。
+--
+-- [English]: hgg integration layer — __plotting instances and extractors__
+-- for the ML \/ statistical-model family.
+--
+-- ⚠ Lives in the same separate package @hanalyze-plot@ as the parent
+-- 'Hanalyze.Plot', built via @cabal build --project-file=cabal.project.plot@.
+-- It imports the common
+-- foundation (class \/ ModelSpec \/ grid evaluation core) from
+-- 'Hanalyze.Plot.Core' (orphan instances are permitted: class =
+-- Core, instance = here, type = Wrappers \/ each Model module).
+--
+-- Types and helpers covered:
+--   clustering (KMeans) \/ trees and ensembles (PCA\/RF\/GB\/DT) \/
+-- classification (Discriminant\/NaiveBayes\/KNN) \/ dimensionality reduction
+-- (PLS) \/ time series, survival, FDA (Forecast\/GARCH\/AFT\/FunctionalPCA\/FLM)
+-- \/ penalized regression and causal discovery (Reg\/LiNGAM) \/ descriptive
+-- statistics and testing (TestResult). No new plot marks are needed
+-- (combinations of existing marks suffice).
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
 module Hanalyze.Plot.ML
-  ( -- * クラスタリング (Phase 68 A1)
+  ( -- * クラスタリング
     clusterScatterOf
   , centroidsOf
-    -- * クラスタを囲む (凸包輪郭 / 95% 共分散楕円) — Phase 76.B
+    -- * クラスタを囲む (凸包輪郭 / 95% 共分散楕円)
   , clusterHullOf
   , clusterEllipseOf
-    -- * DOE prediction profiler — Phase 78.C / 78.D / 78.E / 78.F
+    -- * DOE prediction profiler
   , ResidualMode (..)
   , ProfilerSpec (..)
   , profiler
   , profilerResidual
   , contourOf
-    -- * 階層クラスタリング dendrogram — Phase 76.C
+    -- * 階層クラスタリング dendrogram
   , DendroOpts (..)
   , defaultDendroOpts
   , dendrogramOf
   , dendrogramOf'
-    -- * 木/アンサンブル — Phase 68 A2
+    -- * 木/アンサンブル
   , treeImportances
-    -- * 決定木 樹形図 (rpart.plot 流・annotation ベース) — Phase 75.26
+    -- * 決定木 樹形図 (rpart.plot 流・annotation ベース)
   , treePlot
   , treePlotRaw
-    -- * 分類 — Phase 68 A3
+    -- * 分類
   , decisionBoundaryOf
   , confusionOf
-    -- * MDS 埋め込み (モデル型 + 群色オプション) — Phase 75.21
+    -- * MDS 埋め込み (モデル型 + 群色オプション)
   , MDSView
   , mdsView
   , mdsGroupBy
-    -- * NN 可視化 — Phase 75.5
+    -- * NN 可視化
   , nnLossOf
-    -- * カーネル SVM サポートベクタ可視化 — Phase 75.12
+    -- * カーネル SVM サポートベクタ可視化
   , svmSupportVectorsOf
-    -- * 決定境界を線で描く (等高線) — Phase 75.13b
+    -- * 決定境界を線で描く (等高線)
   , ScorePredict (..)
   , decisionLineOf
-    -- * 部分従属図 (PDP / ICE) — Phase 75.27
+    -- * 部分従属図 (PDP / ICE)
   , RegPredict (..)
-    -- ** Plottable 中間型 (Phase 76.D・HBM 抽出子と同型・toPlot で描画)
+    -- ** Plottable 中間型 (HBM 抽出子と同型・toPlot で描画)
   , PDPView
   , pdp
   , pdpIce
@@ -68,22 +86,22 @@ module Hanalyze.Plot.ML
   , pdpIcePlot
   , partialDependencePlot
   , partialDependenceIcePlot
-    -- * 次元圧縮 (PLS 診断ビュー) — Phase 68 A4 / 70.B
+    -- * 次元圧縮 (PLS 診断ビュー)
   , PLSView (..)
   , PLSViewKind (..)
   , scoreView
   , loadingView
   , vipView
-    -- * 時系列・生存・FDA — Phase 68 A5
+    -- * 時系列・生存・FDA
   , garchVolatility
   , aftSurvivalAt
-    -- * 罰則回帰・因果探索 — Phase 68 A6
+    -- * 罰則回帰・因果探索
   , regPathPlot
   , lingamDag
   , lingamDagNamed
   , varLagDagNamed
   , bootstrapEdgeProbOf
-    -- * 記述統計・検定 — Phase 68 A7
+    -- * 記述統計・検定
   , testForest
   , testForestLabeled
   , describeBox
@@ -189,7 +207,7 @@ import           Hanalyze.Model.TimeSeries (ARFit (..), forecastAR)
 -- 持たない**。 そこで 'surfaceOf' <> 'dataScatter3DOf' と同じ **model 層 / data
 -- 層の二層イディオム**に分ける:
 --
---   * 'Plottable' 'KMeansResult' の 'toPlot' = centroid 散布のみ (データ不要・
+--   * 'Plottable' 'KMeansResult' の @toPlot@ = centroid 散布のみ (データ不要・
 --     クラス契約 @m -> VisualSpec@ を満たす)。 既定は centroid 行列の第 0/1 次元。
 --   * 'clusterScatterOf' = データ点をラベル色で散布 (要データ源・列名指定)。
 --   * 'centroidsOf' = centroid を任意 2 次元で重畳 (✚ マーカー・次元 index 明示)。
@@ -199,16 +217,25 @@ import           Hanalyze.Model.TimeSeries (ARFit (..), forecastAR)
 -- データ列 (@xn@, @yn@) と centroid 次元 (@i@, @j@) の対応をユーザが揃える。
 -- ===========================================================================
 
--- | KMeans クラスタの代表図 = centroid 散布 (第 0/1 次元・クラスタ色・✚ マーカー)。
+-- | [日本語]: KMeans クラスタの代表図 = centroid 散布 (第 0/1 次元・クラスタ色・✚ マーカー)。
 --   生データ点は 'clusterScatterOf' で別 layer に重ねる
 --   (cf. 'surfaceOf' (model) <> 'dataScatter3DOf' (data) の二層イディオム)。
+--   [English]: The representative KMeans cluster plot = a centroid scatter
+--   (dimensions 0\/1, cluster color, cross marker). Raw data points are
+--   overlaid as a separate layer via 'clusterScatterOf' (cf. the two-layer
+--   idiom of 'surfaceOf' (model) <> 'dataScatter3DOf' (data)).
 instance Plottable KMeansResult where
   toPlot res = centroidsOf res 0 1
 
--- | データ点をラベル色で散布する (= KMeans の定番「クラスタ別散布」)。
+-- | [日本語]: データ点をラベル色で散布する (= KMeans の定番「クラスタ別散布」)。
 --   @d@ は 'ColumnSource' (DataFrame / assoc / Map 等)、 @xn@\/@yn@ は描く列名。
 --   色はクラスタラベル ('kmrLabels') の categorical (= 点と同順)。
 --   列が無ければ空 ('mempty')。
+--   [English]: Scatters the data points colored by cluster label (the
+--   classic KMeans "scatter colored by cluster"). @d@ is a 'ColumnSource'
+--   (DataFrame \/ assoc \/ Map, etc.), and @xn@\/@yn@ are the column names to
+--   plot. Color is the categorical cluster label ('kmrLabels', in the same
+--   order as the points). Empty ('mempty') if the columns don't exist.
 clusterScatterOf :: ColumnSource d => d -> KMeansResult -> Text -> Text -> VisualSpec
 clusterScatterOf d res xn yn =
   case (lookupCol xn d, lookupCol yn d) of
@@ -217,8 +244,12 @@ clusterScatterOf d res xn yn =
             <> colorBy (inlineCat (map (T.pack . show) (kmrLabels res))) )
     _ -> mempty
 
--- | centroid を任意 2 次元 (@i@, @j@) で散布 (クラスタ色・✚ マーカーで点と区別)。
+-- | [日本語]: centroid を任意 2 次元 (@i@, @j@) で散布 (クラスタ色・✚ マーカーで点と区別)。
 --   index が centroid 次元数を超える / 負なら空 ('mempty')。
+--   [English]: Scatters the centroids over any two dimensions (@i@, @j@)
+--   (cluster color, cross marker to distinguish from the data points).
+--   Empty ('mempty') if an index exceeds the centroid dimension count or is
+--   negative.
 centroidsOf :: KMeansResult -> Int -> Int -> VisualSpec
 centroidsOf res i j
   | i < 0 || j < 0 || i >= d || j >= d = mempty
@@ -235,28 +266,39 @@ centroidsOf res i j
     ys   = LA.toList (cols !! j)
     cids = map (T.pack . show) [0 .. k - 1 :: Int]
 
--- | render の categorical 群色 (colorBy → @sort.nub@ 順 → 'ggplotHue') を analyze 側で
+-- | [日本語]: render の categorical 群色 (colorBy → @sort.nub@ 順 → 'ggplotHue') を analyze 側で
 --   再現し、 カテゴリ名 → 色(hex) の辞書を返す。 annotation の色は spec 時に確定するため
---   ('clusterScatterOf'/'toPlot' の凡例色と一致させる用)。
+--   ('clusterScatterOf'/@toPlot@ の凡例色と一致させる用)。
+--   [English]: Reproduces render's categorical group color (colorBy →
+--   @sort.nub@ order → 'ggplotHue') on the analyze side and returns a
+--   category name → color (hex) dictionary. Since annotation colors are
+--   fixed at spec time, this keeps them matching 'clusterScatterOf'\/@toPlot@
+--   legend colors.
 hueColorMap :: [Text] -> Map.Map Text Text
 hueColorMap labels =
   let cats = sort (nub labels)
   in Map.fromList (zip cats (ggplotHue (length cats) ++ repeat "#cccccc"))
 
--- | 色・太さ指定の線分注釈 ('annotLineP' は色固定なので 'AnnLine' を直接構築)。
+-- | [日本語]: 色・太さ指定の線分注釈 (@annotLineP@ は色固定なので 'AnnLine' を直接構築)。
+--   [English]: A line-segment annotation with a specified color and width
+--   (built directly as 'AnnLine' since @annotLineP@ has a fixed color).
 annotLineC :: Text -> Double -> (Double, Double) -> (Double, Double) -> VisualSpec
 annotLineC col w (x1, y1) (x2, y2) = annotate AnnLine
   { anX1 = PNative x1, anY1 = PNative y1, anX2 = PNative x2, anY2 = PNative y2
   , anColor = col, anWidth = w }
 
--- | 頂点列を閉じた折れ線 (最後→最初も結ぶ) として色付き線分で描く。
+-- | [日本語]: 頂点列を閉じた折れ線 (最後→最初も結ぶ) として色付き線分で描く。
+--   [English]: Draws a vertex sequence as a closed polyline (also connecting
+--   the last vertex back to the first) using colored line segments.
 closedPolyline :: Text -> Double -> [(Double, Double)] -> VisualSpec
 closedPolyline _   _ []  = mempty
 closedPolyline _   _ [_] = mempty
 closedPolyline col w vs  =
   mconcat [ annotLineC col w p q | (p, q) <- zip vs (tail vs ++ [head vs]) ]
 
--- | 2D 凸包 (Andrew monotone chain)・反時計回り頂点列。 3 点未満は入力そのまま。
+-- | [日本語]: 2D 凸包 (Andrew monotone chain)・反時計回り頂点列。 3 点未満は入力そのまま。
+--   [English]: 2D convex hull (Andrew's monotone chain); returns a
+--   counter-clockwise vertex sequence. Fewer than 3 points are returned as-is.
 convexHull :: [(Double, Double)] -> [(Double, Double)]
 convexHull ps0 =
   let ps = sort (nub ps0)                 -- lexicographic (x, y)
@@ -273,8 +315,10 @@ convexHull ps0 =
     popRight acc _ = acc
     cross (ox, oy) (ax, ay) (bx, by) = (ax - ox) * (by - oy) - (ay - oy) * (bx - ox)
 
--- | クラスタ点群をラベルごとにグルーピング (色は 'clusterScatterOf' と一致)。
+-- | [日本語]: クラスタ点群をラベルごとにグルーピング (色は 'clusterScatterOf' と一致)。
 --   d が xn/yn 列を持たなければ空。
+--   [English]: Groups the cluster point cloud by label (colors match
+--   'clusterScatterOf'). Empty if @d@ lacks the xn\/yn columns.
 clusterGroups
   :: ColumnSource d => d -> KMeansResult -> Text -> Text
   -> [(Text, [(Double, Double)])]         -- (群色 hex, 点列)
@@ -289,18 +333,31 @@ clusterGroups d res xn yn =
          | (l, ps) <- Map.toList gmap ]
     _ -> []
 
--- | 各クラスタを **凸包の輪郭線**で囲む (ggplot @geom_encircle@ 相当・塗りなし)。
+-- | [日本語]: 各クラスタを __凸包の輪郭線__ で囲む (ggplot @geom_encircle@ 相当・塗りなし)。
 --   群色は 'clusterScatterOf' と一致。 定番 = @cdf |>> (clusterScatterOf … \<\> clusterHullOf …)@。
---   ⚠ annotation は軸平行矩形しか塗れないため**輪郭線のみ** (半透明塗りは将来 'MPolygon' 移譲)。
+--   ⚠ annotation は軸平行矩形しか塗れないため __輪郭線のみ__ (半透明塗りは将来 @MPolygon@ 移譲)。
+--   [English]: Encircles each cluster with its __convex-hull outline__
+--   (equivalent to ggplot's @geom_encircle@; unfilled). Group colors match
+--   'clusterScatterOf'. Typical usage = @cdf |>> (clusterScatterOf … \<\> clusterHullOf …)@.
+--   ⚠ Since annotations can only fill axis-aligned rectangles, this draws
+--   __only the outline__ (semi-transparent fill is deferred to a future
+--   @MPolygon@ hand-off).
 clusterHullOf :: ColumnSource d => d -> KMeansResult -> Text -> Text -> VisualSpec
 clusterHullOf d res xn yn =
   mconcat [ closedPolyline col 1.5 (convexHull ps)
           | (col, ps) <- clusterGroups d res xn yn ]
 
--- | 各クラスタを **95% 共分散楕円** (χ²(0.95, 2)=5.991) の輪郭で囲む (ggplot @stat_ellipse@
+-- | [日本語]: 各クラスタを __95% 共分散楕円__ (χ²(0.95, 2)=5.991) の輪郭で囲む (ggplot @stat_ellipse@
 --   相当・正規分布仮定)。 群平均 μ・共分散 Σ を固有分解 ('LA.eigSH') し、 固有軸方向へ
 --   半径 √5.991·√λ の楕円点列を折れ線で近似。 群色は 'clusterScatterOf' と一致。
 --   点数 3 未満の群は描かない (共分散が定義できないため)。
+--   [English]: Encircles each cluster with its __95% covariance ellipse__
+--   outline (χ²(0.95, 2) = 5.991; equivalent to ggplot's @stat_ellipse@,
+--   assuming normality). Eigendecomposes ('LA.eigSH') the group mean μ and
+--   covariance Σ, then approximates the ellipse with a polyline of points at
+--   radius √5.991·√λ along the eigenvector axes. Group colors match
+--   'clusterScatterOf'. Groups with fewer than 3 points are not drawn
+--   (covariance is undefined).
 clusterEllipseOf :: ColumnSource d => d -> KMeansResult -> Text -> Text -> VisualSpec
 clusterEllipseOf d res xn yn =
   let ellipses = [ (col, ellipse95 ps) | (col, ps) <- clusterGroups d res xn yn ]
@@ -342,29 +399,44 @@ clusterEllipseOf d res xn yn =
         v1 = LA.toList (cols !! 0)
         v2 = LA.toList (cols !! 1)
 
--- | dendrogram の描画オプション。
+-- | [日本語]: dendrogram の描画オプション。
+--   [English]: Rendering options for the dendrogram.
 data DendroOpts = DendroOpts
-  { doLineColor      :: !Text            -- ^ 閾値超 (または閾値未指定) の線色。
-  , doWidth          :: !Double          -- ^ 線幅。
-  , doColorThreshold :: !(Maybe Double)  -- ^ @Just t@ で高さ @t@ 未満のサブツリーをクラスタ色分け
+  { doLineColor      :: !Text            -- ^ [日本語]: 閾値超 (または閾値未指定) の線色。 [English]: Line color above the threshold (or when no threshold is set).
+  , doWidth          :: !Double          -- ^ [日本語]: 線幅。 [English]: Line width.
+  , doColorThreshold :: !(Maybe Double)  -- ^ [日本語]: @Just t@ で高さ @t@ 未満のサブツリーをクラスタ色分け
                                          --   (scipy @color_threshold@ 流)。 @Nothing@ で単色。
+                                         --   [English]: With @Just t@, subtrees below height @t@ are
+                                         --   colored by cluster (scipy's @color_threshold@ convention).
+                                         --   @Nothing@ renders a single color.
   } deriving (Show)
 
--- | 既定 = 単色 (grey20 相当・閾値なし)。
+-- | [日本語]: 既定 = 単色 (grey20 相当・閾値なし)。
+--   [English]: The default: a single color (equivalent to grey20, no threshold).
 defaultDendroOpts :: DendroOpts
 defaultDendroOpts = DendroOpts "#4C4C4C" 1.2 Nothing
 
 instance Plottable HClusterFit where
   toPlot = dendrogramOf
 
--- | 階層クラスタリング結果を **dendrogram** で描く (scipy @dendrogram@ / ggdendro 流)。
+-- | [日本語]: 階層クラスタリング結果を __dendrogram__ で描く (scipy @dendrogram@ / ggdendro 流)。
 --   マージ列 ('hcMerges') と高さ ('hcHeights') から U 字リンク (縦 2 + 横 1) を 'AnnLine' で
 --   描画。 葉は x 軸に等間隔・各マージノードの x = 子の中点・y = マージ高。 リーフに元サンプル
 --   ID ラベル。 plot core は触らず annotation で描く (将来 plot 正式 mark 移譲予定)。
+--   [English]: Renders a hierarchical clustering result as a __dendrogram__
+--   (following scipy's @dendrogram@ \/ ggdendro convention). Draws U-shaped
+--   links (2 vertical + 1 horizontal) via 'AnnLine' from the merge sequence
+--   ('hcMerges') and heights ('hcHeights'). Leaves are equally spaced on the
+--   x axis; each merge node's x = the midpoint of its children, y = the
+--   merge height. Leaves are labeled with the original sample ID. Drawn via
+--   annotation without touching the plot core (a future hand-off to a
+--   proper plot mark is planned).
 dendrogramOf :: HClusterFit -> VisualSpec
 dendrogramOf = dendrogramOf' defaultDendroOpts
 
--- | 色閾値・線色等を指定できる版。
+-- | [日本語]: 色閾値・線色等を指定できる版。
+--   [English]: A variant that lets you specify the color threshold, line
+--   color, etc.
 dendrogramOf' :: DendroOpts -> HClusterFit -> VisualSpec
 dendrogramOf' opts fit
   | n <= 1 || null merges = mempty
@@ -448,10 +520,12 @@ dendrogramOf' opts fit
 -- 予測分散** から得る: AR の MA(∞) 表現の ψ-weights (ψ₀=1, ψⱼ=Σφᵢψⱼ₋ᵢ) を用いて
 -- @Var(ŷ_{n+k}) = σ² Σ_{j=0}^{k-1} ψⱼ²@ (σ² = 革新分散 'arResidVar')。 これは Gaussian
 -- 革新の下での正統な予測区間 (地平 k とともに単調に広がる)。 対称ゆえ band は
--- @中心 ± z·se@。 'toPlot' は履歴折れ線 + 予測折れ線 + 予測区間 band を 1 枚に重ねる。
+-- @中心 ± z·se@。 @toPlot@ は履歴折れ線 + 予測折れ線 + 予測区間 band を 1 枚に重ねる。
 -- ===========================================================================
 
--- | AR(p) の MA(∞) 表現の ψ-weights ψ₀..ψ_{h-1} (ψ₀=1, ψⱼ=Σ_{i=1}^{min j p} φᵢ ψⱼ₋ᵢ)。
+-- | [日本語]: AR(p) の MA(∞) 表現の ψ-weights ψ₀..ψ_{h-1} (ψ₀=1, ψⱼ=Σ_{i=1}^{min j p} φᵢ ψⱼ₋ᵢ)。
+--   [English]: The ψ-weights ψ₀..ψ_{h-1} of the AR(p) model's MA(∞)
+--   representation (ψ₀=1, ψⱼ=Σ_{i=1}^{min j p} φᵢ ψⱼ₋ᵢ).
 arPsiWeights :: [Double] -> Int -> [Double]
 arPsiWeights phi h = go [1.0]
   where
@@ -463,7 +537,9 @@ arPsiWeights phi h = go [1.0]
               pj = sum [ (phi !! (i - 1)) * (ps !! (j - i)) | i <- [1 .. min j p] ]
           in go (ps ++ [pj])
 
--- | k-step (k=1..h) 予測標準誤差 se_k = sqrt(σ² Σ_{j<k} ψⱼ²)。
+-- | [日本語]: k-step (k=1..h) 予測標準誤差 se_k = sqrt(σ² Σ_{j<k} ψⱼ²)。
+--   [English]: The k-step (k=1..h) forecast standard error se_k =
+--   sqrt(σ² Σ_{j<k} ψⱼ²).
 arForecastSE :: ARFit -> Int -> [Double]
 arForecastSE fit h =
   let phi  = LA.toList (arPhi fit)
@@ -536,7 +612,7 @@ instance Plottable PCAResult where
     in layer (bar (inlineCat labels) (inline ratios))
 
 instance Plottable RandomForest where
-  -- R 'varImpPlot' 流の 2 パネル: 左 = impurity (IncNodePurity)、 右 = permutation
+  -- R @varImpPlot@ 流の 2 パネル: 左 = impurity (IncNodePurity)、 右 = permutation
   -- (%IncMSE)。 各パネルは降順ソート + 実列名 + 横棒 ('coordFlip')。
   toPlot rf =
     let n     = V.length (featureImportance rf)
@@ -550,10 +626,16 @@ instance Plottable RandomForest where
          , importanceBarNamed "%IncMSE (permutation)"    names perm ]
        <> subplotCols 2
 
--- | 名前つき importance を横棒 ('coordFlip') で描く (R 'varImpPlot' 流)。 重要度で
+-- | [日本語]: 名前つき importance を横棒 ('coordFlip') で描く (R @varImpPlot@ 流)。 重要度で
 --   ソートするため 'scaleXDiscreteLimits' でカテゴリ順を明示する (bar 軸は既定
 --   アルファベット順ゆえデータ並びでは効かない)。 coordFlip 後は limits 順が下→上
 --   なので、 昇順 limits を渡して最重要を上端に置く。 タイトル付き。
+--   [English]: Draws named importances as a horizontal bar ('coordFlip',
+--   following R's @varImpPlot@). Since the bar axis defaults to alphabetical
+--   order (unaffected by data order), 'scaleXDiscreteLimits' is used to make
+--   the category order explicit for sorting. After @coordFlip@ the limits
+--   order runs bottom→top, so ascending limits are passed to place the most
+--   important feature at the top. Includes a title.
 importanceBarNamed :: T.Text -> [T.Text] -> [Double] -> VisualSpec
 importanceBarNamed ttl names vals =
   let ascByVal = map fst (sortBy (comparing snd) (zip names vals))  -- 昇順 → 最大が末尾 = 上端
@@ -578,8 +660,12 @@ importanceBarNamed ttl names vals =
 -- plot 側 Phase として起こす (= dendrogram Phase 48 と同型の判断)。
 -- ===========================================================================
 
--- | 弱学習器 ('Tree') 列の split 使用回数による特徴重要度 (RF と同方式・合計 1 に正規化)。
+-- | [日本語]: 弱学習器 ('Tree') 列の split 使用回数による特徴重要度 (RF と同方式・合計 1 に正規化)。
 --   特徴数は出現した最大 index + 1 (= 木で一度も使われない末尾特徴は現れない)。
+--   [English]: Feature importance from the split-usage count of the weak
+--   learner ('Tree') sequence (the same method as RF, normalized to sum 1).
+--   The feature count is the max observed index + 1 (a trailing feature
+--   never used in any tree simply doesn't appear).
 treeImportances :: [Tree] -> [Double]
 treeImportances trees =
   let counts = foldr walk Map.empty trees
@@ -598,7 +684,7 @@ instance Plottable GBClassifier where
   toPlot gb = importanceBar (treeImportances (gbcTrees gb))
 
 instance Plottable RFClassifierFit where
-  -- R 'varImpPlot' 流の 2 パネル: 左 = permutation (MeanDecreaseAccuracy)、
+  -- R @varImpPlot@ 流の 2 パネル: 左 = permutation (MeanDecreaseAccuracy)、
   -- 右 = gini 減少 (MeanDecreaseGini・MDI)。 各パネル降順・実列名・横棒。
   toPlot fit =
     let perm  = LA.toList (rfcImportance fit)
@@ -619,14 +705,23 @@ instance Plottable DTree where
     in bakeDAGRoutesInSpec $
          layer (dagFromListsWithPlates positioned routed LayoutHierarchical [])
 
--- | 学習済み 'DTFit' → **rpart.plot 流**の樹形図 ('treePlot' と同じ)。 @df |-> decisionTree@
+-- | [日本語]: 学習済み 'DTFit' → __rpart.plot 流__ の樹形図 ('treePlot' と同じ)。 @df |-> decisionTree@
 --   の返り値をそのまま @toPlot@ に渡せる。 素の node-link 図は 'DTree' の 'Plottable'。
+--   [English]: A trained 'DTFit' → the __rpart.plot style__ tree diagram
+--   (same as 'treePlot'). The return value of @df |-> decisionTree@ can be
+--   passed straight to @toPlot@. The plain node-link diagram is 'DTree'\'s
+--   'Plottable'.
 instance Plottable DTFit where
   toPlot = treePlot
 
--- | 'DTree' を MDAG の node/edge 列へ変換する。 ノード id は根から L/R を辿る経路
+-- | [日本語]: 'DTree' を MDAG の node/edge 列へ変換する。 ノード id は根から L/R を辿る経路
 --   ("n" / "nL" / "nLR" …) で一意。 split ノードは @NodeOther@、 葉は @NodeObserved@
 --   (色で区別)。 左 child = 条件成立 (≤)・右 = 不成立 (>) の慣例で並べる。
+--   [English]: Converts a 'DTree' into MDAG node\/edge lists. Node ids are
+--   unique paths from the root following L\/R ("n" \/ "nL" \/ "nLR" …). Split
+--   nodes are @NodeOther@, leaves are @NodeObserved@ (distinguished by
+--   color). By convention, the left child = the condition holds (≤), the
+--   right = it doesn't (>).
 dtreeToDag :: DTree -> ([DAGNode], [DAGEdge])
 dtreeToDag = go "n"
   where
@@ -649,45 +744,88 @@ dtreeToDag = go "n"
 -- Phase 75.26: 決定木 樹形図 (rpart.plot 流・annotation ベース)
 -- ---------------------------------------------------------------------------
 
--- | 位置付け済みの決定木ノード (annotation 描画用の中間表現)。 @tpU@ は葉単位の
+-- | [日本語]: 位置付け済みの決定木ノード (annotation 描画用の中間表現)。 @tpU@ は葉単位の
 --   水平座標 (葉 = 0,1,2,…・内部 = 子の中点)、 @tpDepth@ は根からの深さ。
+--   [English]: A positioned decision-tree node (an intermediate
+--   representation for annotation-based rendering). @tpU@ is the
+--   per-leaf horizontal coordinate (leaves = 0,1,2,…; internal nodes = the
+--   midpoint of their children), and @tpDepth@ is the depth from the root.
 data TPNode = TPNode
-  { tpU     :: !Double                -- ^ 葉単位の水平座標。
-  , tpDepth :: !Int                   -- ^ 根からの深さ (根 = 0)。
-  , tpMaj   :: !Int                   -- ^ 多数決 (予測) クラス。
-  , tpN     :: !Int                   -- ^ ノードのサンプル数。
-  , tpProbs :: !(Map.Map Int Double)  -- ^ クラス割合。
-  , tpSplit :: !(Maybe (Int, Double)) -- ^ 分岐なら (特徴 index, 閾値)。 葉は Nothing。
-  , tpKids  :: [TPNode]               -- ^ [] = 葉、 [左, 右] = 分岐。
+  { tpU     :: !Double                -- ^ [日本語]: 葉単位の水平座標。 [English]: The per-leaf horizontal coordinate.
+  , tpDepth :: !Int                   -- ^ [日本語]: 根からの深さ (根 = 0)。 [English]: Depth from the root (root = 0).
+  , tpMaj   :: !Int                   -- ^ [日本語]: 多数決 (予測) クラス。 [English]: The majority-vote (predicted) class.
+  , tpN     :: !Int                   -- ^ [日本語]: ノードのサンプル数。 [English]: The node's sample count.
+  , tpProbs :: !(Map.Map Int Double)  -- ^ [日本語]: クラス割合。 [English]: Class proportions.
+  , tpSplit :: !(Maybe (Int, Double)) -- ^ [日本語]: 分岐なら (特徴 index, 閾値)。 葉は Nothing。 [English]: @(feature index, threshold)@ for a split node; @Nothing@ for a leaf.
+  , tpKids  :: [TPNode]               -- ^ [日本語]: [] = 葉、 [左, 右] = 分岐。 [English]: @[]@ = leaf, @[left, right]@ = split.
   }
 
--- | Phase 75.26: 決定木を **rpart.plot 流**の樹形図で描く (analyze 側 annotation ベース)。
+-- | [日本語]: 決定木を __rpart.plot 流__ の樹形図で描く (analyze 側 annotation ベース)。
 --
--- 各ノードを矩形で表し、 内部に **予測クラス / 全クラス確率 / サンプル割合** を 3 行で
--- 書く (rpart.plot @type=2@ 既定に相当)。 配線は R と同じく **親→バスの縦線を引かず**、
+-- 各ノードを矩形で表し、 内部に __予測クラス / 全クラス確率 / サンプル割合__ を 3 行で
+-- 書く (rpart.plot @type=2@ 既定に相当)。 配線は R と同じく __親→バスの縦線を引かず__、
 -- 分割条件 @feat < thr@ を親の少し下の水平バス上に置き、 枝はその両端から出て子の真上で
--- 折れる。 条件の両脇 (**根の分岐のみ**) に枠付き白箱で @yes@ (左=成立)・@no@ (右) を添える。
+-- 折れる。 条件の両脇 (__根の分岐のみ__) に枠付き白箱で @yes@ (左=成立)・@no@ (右) を添える。
 --
 -- 塗り色は rpart.plot @box.palette="auto"@ 準拠で、 クラスごとに ColorBrewer 連番
--- パレット (Reds/Greys/Greens/…) を割当て、 **濃淡で予測クラスの確率 (確信度)** を表す
+-- パレット (Reds/Greys/Greens/…) を割当て、 __濃淡で予測クラスの確率 (確信度)__ を表す
 -- (淡=低・濃=高)。 暗い塗りには白文字を自動選択。 右上にクラス色の凡例を出す。
 --
--- 第 1 = 特徴量名、 第 2 = クラス名 ('printRpart' と同型・長さ不足は @f{i}@/整数へ
+-- 第 1 = 特徴量名、 第 2 = クラス名 (@printRpart@ と同型・長さ不足は @f{i}@/整数へ
 -- フォールバック)。 木レイアウトは葉を左→右へ等間隔・深さ→縦位置で配置し、 座標は
 -- panel 正規化 (PNpc) で算術する。 plot core の型は触らず annotation だけで描く
 -- (図が固まれば plot 正式 mark へ移譲予定・PS parity は移譲時に対応)。
 --
--- ⚠ 文字幅は annotation では実測できないため npc で概算する ('wpc')。 既定は図幅
+-- ⚠ 文字幅は annotation では実測できないため npc で概算する (@wpc@)。 既定は図幅
 -- 〜680px 前提に調律してあり、 極端なサイズでは箱幅/マスク幅が僅かにズレる。
 --
 -- 高レベル 'treePlot' は 'DTFit' 一つを取り (@df |-> decisionTree@ の返り値をそのまま
 -- 渡せる)、 内部に載った特徴量名・クラス名を使う。 名前を手渡ししたい行列 fit 用は
 -- 'treePlotRaw'。 'DTFit' は 'Plottable' なので @toPlot@ でも同じ図が出る。
+--
+-- [English]: Draws a decision tree as an __rpart.plot-style__ tree diagram
+-- (annotation-based, on the analyze side).
+--
+-- Each node is drawn as a rectangle, with
+-- __the predicted class \/ all class probabilities \/ sample proportion__
+-- written inside on three lines (equivalent to rpart.plot's default
+-- @type=2@). Wiring follows R:
+-- __no vertical line is drawn from the parent to the bus__;
+-- the split condition @feat < thr@ is placed on a horizontal bus just
+-- below the parent, and the branches leave from its two ends and bend down
+-- directly above each child. Bordered white boxes with @yes@ (left = holds)
+-- \/ @no@ (right) flank the condition (root split only).
+--
+-- Fill colors follow rpart.plot's @box.palette="auto"@: each class is
+-- assigned a sequential ColorBrewer palette (Reds\/Greys\/Greens\/…), with
+-- __shade encoding the predicted class's probability (confidence)__
+-- (light = low, dark = high). Dark fills automatically get white text. A
+-- class-color legend is shown in the top right.
+--
+-- The 1st argument is the feature names, the 2nd is the class names (same
+-- form as @printRpart@; falls back to @f{i}@\/integers when too short). The
+-- tree layout spaces leaves evenly left→right, maps depth to the vertical
+-- position, and computes coordinates in panel-normalized units (PNpc). It
+-- is drawn purely via annotation without touching the plot core types (a
+-- hand-off to a proper plot mark is planned once the diagram stabilizes;
+-- PS parity will be handled at hand-off time).
+--
+-- ⚠ Since annotation cannot measure text width, it is approximated in npc
+-- units (@wpc@). The default is tuned for a figure width of ~680px; box \/
+-- mask widths drift slightly at extreme sizes.
+--
+-- The high-level 'treePlot' takes a single 'DTFit' (the return value of
+-- @df |-> decisionTree@ can be passed straight through), using the feature
+-- \/ class names carried inside it. For matrix fits where you want to pass
+-- names explicitly, use 'treePlotRaw'. Since 'DTFit' is 'Plottable', @toPlot@
+-- produces the same diagram.
 treePlot :: DTFit -> VisualSpec
 treePlot (DTFit tree feats classes) = treePlotRaw feats classes tree
 
--- | 行列 fit 用の低レベル版 — 特徴量名・クラス名を明示的に渡す (名無しは @f{i}@/整数へ
+-- | [日本語]: 行列 fit 用の低レベル版 — 特徴量名・クラス名を明示的に渡す (名無しは @f{i}@/整数へ
 --   フォールバック)。
+--   [English]: The low-level variant for matrix fits — pass feature \/ class
+--   names explicitly (falls back to @f{i}@\/integers when unnamed).
 treePlotRaw :: [Text] -> [Text] -> DTree -> VisualSpec
 treePlotRaw featNames classNames tree =
   theme ThemeVoid
@@ -815,7 +953,7 @@ treePlotRaw featNames classNames tree =
     -- annotation は実測不可ゆえの heuristic。 doc/demo は size を指定して調律に合わせる。
     wpc fs t = 0.00095 * fs * fromIntegral (T.length t)
 
-    -- ---- 名前解決 ('printRpart' と同じ規則) ------------------------------
+    -- ---- 名前解決 (@printRpart@ と同じ規則) ------------------------------
     featName i   = pick i featNames  ("f" <> tShowI i)
     classLabel i = pick i classNames (tShowI i)
     pick i xs d  = case drop i xs of
@@ -830,8 +968,12 @@ treePlotRaw featNames classNames tree =
              in maybe s id (T.stripPrefix "0" s)
     ix d xs i = if i >= 0 && i < length xs then xs !! i else d
 
--- | 'DTree' を葉単位で位置付けした 'TPNode' へ変換する。 葉に左→右で連番 (slot) を
+-- | [日本語]: 'DTree' を葉単位で位置付けした 'TPNode' へ変換する。 葉に左→右で連番 (slot) を
 --   振り、 内部ノードは左右子の中点を水平座標にする。 戻りは (葉総数, 根ノード)。
+--   [English]: Converts a 'DTree' into a leaf-positioned 'TPNode'. Assigns
+--   leaves consecutive left→right numbers (slots), and gives internal nodes
+--   the midpoint of their left\/right children as horizontal coordinate.
+--   Returns @(total leaf count, root node)@.
 assign :: Int -> Int -> DTree -> (Int, TPNode)
 assign depth k node = case node of
   DLeaf p m n _ ->
@@ -842,12 +984,16 @@ assign depth k node = case node of
         u        = (tpU lp + tpU rp) / 2
     in (k2, TPNode u depth m n p (Just (f, thr)) [lp, rp])
 
--- | 'TPNode' 木を前順で平坦化する。
+-- | [日本語]: 'TPNode' 木を前順で平坦化する。
+--   [English]: Flattens a 'TPNode' tree in pre-order.
 flatten :: TPNode -> [TPNode]
 flatten t = t : concatMap flatten (tpKids t)
 
--- | ColorBrewer 9 段連番パレット (rpart.plot box.palette="auto" の per-class 割当)。
+-- | [日本語]: ColorBrewer 9 段連番パレット (rpart.plot box.palette="auto" の per-class 割当)。
 --   クラス index 0,1,2,… に Reds, Greys, Greens, Blues, Purples, Oranges を循環割当。
+--   [English]: The 9-step sequential ColorBrewer palettes (rpart.plot's
+--   @box.palette="auto"@ per-class assignment). Class indices 0,1,2,… cycle
+--   through Reds, Greys, Greens, Blues, Purples, Oranges.
 brewerPals :: [[Text]]
 brewerPals = [redsP, greysP, greensP, bluesP, purplesP, orangesP]
 
@@ -859,7 +1005,9 @@ bluesP   = ["#f7fbff","#deebf7","#c6dbef","#9ecae1","#6baed6","#4292c6","#2171b5
 purplesP = ["#fcfbfd","#efedf5","#dadaeb","#bcbddc","#9e9ac8","#807dba","#6a51a3","#54278f","#3f007d"]
 orangesP = ["#fff5eb","#fee6ce","#fdd0a2","#fdae6b","#fd8d3c","#f16913","#d94801","#a63603","#7f2704"]
 
--- | @#rrggbb@ の相対輝度 (0..1・Rec.601 加重和)。 塗りの明暗で文字色を切替える用。
+-- | [日本語]: @#rrggbb@ の相対輝度 (0..1・Rec.601 加重和)。 塗りの明暗で文字色を切替える用。
+--   [English]: The relative luminance of a @#rrggbb@ color (0..1, Rec.601
+--   weighted sum). Used to switch text color based on fill lightness.
 luminance :: Text -> Double
 luminance hex =
   let s = T.dropWhile (== '#') hex
@@ -880,12 +1028,12 @@ luminance hex =
 -- 走らせる」 図ゆえ、 KMeans (A1) と同じく **データ/範囲を取るヘルパ**で提供する
 -- (新規 plot mark 不要):
 --
---   * 'decisionBoundaryOf' = 2D grid を予測しクラス色で塗る (= 連続軸の散布を
+--   * @decisionBoundaryOf@ = 2D grid を予測しクラス色で塗る (= 連続軸の散布を
 --     四角マーカー・低 alpha で「領域」表現。 ★renderHeatmap はカテゴリ軸なので
 --     連続 grid には不適 → 'MScatter' + 'colorBy' (離散色) を採用)。 2 特徴前提。
---   * 'confusionOf' = テストデータの真値×予測の件数を 'MHeatmap' で (カテゴリ軸が適合)。
+--   * 'confusionOf' = テストデータの真値×予測の件数を @MHeatmap@ で (カテゴリ軸が適合)。
 --
--- 'Plottable' の 'toPlot' (データ非保持で描ける代表 1 枚):
+-- 'Plottable' の @toPlot@ (データ非保持で描ける代表 1 枚):
 --   * KNN は訓練データ ('knnCX'/'knnCY') を保持 → **ラベル色の訓練点散布**。
 --   * Discriminant / NaiveBayes(Gaussian) は **クラス平均散布** (✚)、
 --     NaiveBayes(Multinomial) は **クラス事前確率 bar**。
@@ -917,22 +1065,48 @@ instance ClassPredict SVMMulti where
   predictClasses m x = VU.toList (predictSVMMulti m x)
   classNamesOf = svmmClassNames
 
--- | 決定境界 (2 特徴) の **領域塗り** (Phase 76.A・annotation ベース)。
+-- | [日本語]: 決定境界 (2 特徴) の __領域塗り__ (annotation ベース)。
 --
 -- @res×res@ の格子セルを中心で予測し、 各セルを予測クラス色の塗り矩形 ('annotRectP')
 -- で敷き詰める (sklearn @DecisionBoundaryDisplay@ の pcolormesh 相当)。 点散布でなく
--- **実矩形**をセル境界ぴったりに敷くので、 旧実装 (半透明の四角散布) の**縞模様**が出ない。
+-- __実矩形__ をセル境界ぴったりに敷くので、 旧実装 (半透明の四角散布) の __縞模様__ が出ない。
 --
--- クラス色は 'toPlot' の凡例 (@colorBy@ → ggplot @hue_pal()@) と一致させる。 render が
+-- クラス色は @toPlot@ の凡例 (@colorBy@ → ggplot @hue_pal()@) と一致させる。 render が
 -- categorical を @sort.nub@ 順に並べ 'ggplotHue' を割り当てるのと同順で再現する。
 -- 訓練点・クラス平均は呼び出し側で上に重ねる (@decisionBoundaryOf c xr yr res \<\> toPlot c@)。
 --
--- ⚠ **annotation の制約**: 塗りは 'annotRectP' 固定の @fill-opacity=0.2@ (薄塗り)。
--- また annotation は layer の**後**に描かれるため、 塗りは重ねた訓練点の**上**に来る
+-- ⚠ __annotation の制約__: 塗りは 'annotRectP' 固定の @fill-opacity=0.2@ (薄塗り)。
+-- また annotation は layer の __後__ に描かれるため、 塗りは重ねた訓練点の __上__ に来る
 -- (0.2 の薄塗りなので点は透けて見える)。 「点が上・塗りが下」 の厳密な重ね順や
--- 半透明でない濃淡は将来 plot 正式 mark ('MTile'/'MRaster') 移譲時に対応する。
+-- 半透明でない濃淡は将来 plot 正式 mark (@MTile@/@MRaster@) 移譲時に対応する。
 -- クラス色は既定 hue パレット前提 (theme series palette を差し替えた場合、 塗り色は
 -- 追従しない — annotation 色は spec 時に確定するため)。
+--
+-- [English]: __Filled region__ rendering of the decision boundary (2
+-- features; annotation-based).
+--
+-- Predicts at the center of each @res×res@ grid cell and tiles each cell as
+-- a fill rectangle ('annotRectP') colored by the predicted class
+-- (equivalent to sklearn's @DecisionBoundaryDisplay@ pcolormesh). Since it
+-- tiles __actual rectangles__ flush with cell boundaries rather than point
+-- scatter, it doesn't show the __striping__ of the old implementation
+-- (semi-transparent square scatter).
+--
+-- Class colors are kept in sync with @toPlot@\'s legend (@colorBy@ → ggplot
+-- @hue_pal()@): the same procedure render uses — sorting categoricals in
+-- @sort.nub@ order and assigning 'ggplotHue' — is reproduced here. Training
+-- points and class means are overlaid by the caller
+-- (@decisionBoundaryOf c xr yr res \<\> toPlot c@).
+--
+-- ⚠ __Annotation constraints__: fills use 'annotRectP'\'s fixed
+-- @fill-opacity=0.2@ (light fill). Also, since annotations are drawn
+-- __after__ layers, the fill ends up __on top of__ any overlaid training
+-- points (points still show through the 0.2 light fill). Strict "points on
+-- top, fill below" ordering, or non-transparent shading, is deferred to a
+-- future hand-off to a proper plot mark (@MTile@\/@MRaster@). Class colors
+-- assume the default hue palette (if the theme's series palette is
+-- swapped, the fill colors won't follow — annotation colors are fixed at
+-- spec time).
 decisionBoundaryOf
   :: ClassPredict c => c -> (Double, Double) -> (Double, Double) -> Int -> VisualSpec
 decisionBoundaryOf c (x0, x1) (y0, y1) res
@@ -964,10 +1138,16 @@ decisionBoundaryOf c (x0, x1) (y0, y1) res
     cmap      = hueColorMap (map labelOf classK)
     colorFor k = Map.findWithDefault "#cccccc" (labelOf k) cmap
 
--- | confusion 行列のヒートマップ: テストデータ @X@ を予測し、 真値 @yTrue@ との件数を
---   x=予測 / y=真値 のセルに集計する ('MHeatmap'・色 = 件数)。
--- | クラス番号 k → 名前 (levels があれば @names !! k@・範囲外/空なら整数 show)。
+-- | [日本語]: confusion 行列のヒートマップ: テストデータ @X@ を予測し、 真値 @yTrue@ との件数を
+--   x=予測 / y=真値 のセルに集計する (@MHeatmap@・色 = 件数)。
+--   [English]: A confusion-matrix heatmap: predicts on test data @X@ and
+--   tallies counts against the true value @yTrue@ into cells with
+--   x=predicted \/ y=true (@MHeatmap@; color = count).
+-- | [日本語]: クラス番号 k → 名前 (levels があれば @names !! k@・範囲外/空なら整数 show)。
 --   分類 toPlot / confusion がクラス名を出す共通ヘルパ。
+--   [English]: Class number k → name (@names !! k@ if levels exist;
+--   otherwise the integer's @show@). A shared helper used by classification
+--   toPlot \/ confusion to render class names.
 classNameByIx :: [Text] -> Int -> Text
 classNameByIx names k
   | k >= 0 && k < length names = names !! k
@@ -1013,11 +1193,14 @@ confusionOf c x yTrue =
 -- MDS は反転・回転自由度があるので軸の向きは本質でない (相対配置を見る)。
 -- ===========================================================================
 
--- | MDS 埋め込みの描画オプション束 (Monoid)。 'mdsView' で結果を載せ、
+-- | [日本語]: MDS 埋め込みの描画オプション束 (Monoid)。 'mdsView' で結果を載せ、
 -- 'mdsGroupBy' で群色列を足して @<>@ で合成する。
+-- [English]: A bundle of MDS embedding rendering options (Monoid). Load the
+-- result via 'mdsView', then compose with @<>@ to add a group-color column
+-- via 'mdsGroupBy'.
 data MDSView = MDSView
-  { mvResult   :: !(Maybe MDSResult)  -- ^ 描く埋め込み (後勝ち)。
-  , mvGroupCol :: !(Maybe Text)       -- ^ 群色に使う元データの列名 (後勝ち)。
+  { mvResult   :: !(Maybe MDSResult)  -- ^ [日本語]: 描く埋め込み (後勝ち)。 [English]: The embedding to draw (last write wins).
+  , mvGroupCol :: !(Maybe Text)       -- ^ [日本語]: 群色に使う元データの列名 (後勝ち)。 [English]: The source data column name used for group color (last write wins).
   }
 
 instance Semigroup MDSView where
@@ -1029,12 +1212,16 @@ instance Semigroup MDSView where
 instance Monoid MDSView where
   mempty = MDSView Nothing Nothing
 
--- | MDS 結果を描画オプションに載せる (@<>@ の起点)。
+-- | [日本語]: MDS 結果を描画オプションに載せる (@<>@ の起点)。
+-- [English]: Loads an MDS result into rendering options (the @<>@ starting
+-- point).
 mdsView :: MDSResult -> MDSView
 mdsView m = mempty { mvResult = Just m }
 
--- | 元データの列名で群色を付ける (factor/数値どちらでも categorical 色に)。
+-- | [日本語]: 元データの列名で群色を付ける (factor/数値どちらでも categorical 色に)。
 -- @toPlot (mdsView m <> mdsGroupBy "species")@。
+-- [English]: Adds group color from a source-data column name (factor or
+-- numeric alike become categorical color). @toPlot (mdsView m <> mdsGroupBy "species")@.
 mdsGroupBy :: Text -> MDSView
 mdsGroupBy c = mempty { mvGroupCol = Just c }
 
@@ -1055,8 +1242,11 @@ instance Plottable MDSView where
             Nothing   -> base
       in layer withColor <> xLabel "MDS1" <> yLabel "MDS2"
 
--- | 元データの列を categorical な群ラベル ('[Text]') に変換する。 text 列
+-- | [日本語]: 元データの列を categorical な群ラベル ('[Text]') に変換する。 text 列
 -- ('getTextVec') を優先し、 無ければ数値列 ('getDoubleVec') を整数寄せで文字列化。
+-- [English]: Converts a source-data column into categorical group labels
+-- ('[Text]'). Prefers a text column ('getTextVec'); otherwise falls back to
+-- a numeric column ('getDoubleVec'), stringified with integer rounding.
 groupLabels :: Text -> DXD.DataFrame -> Maybe [Text]
 groupLabels gc frame =
   case getTextVec gc frame of
@@ -1069,8 +1259,11 @@ groupLabels gc frame =
     numLabel x = let r = round x :: Int
                  in if fromIntegral r == x then T.pack (show r) else T.pack (show x)
 
--- | NN 学習損失曲線 (Phase 75.5)。 'mlpLossHist' (エポックごとの損失) を epoch (x) 対
+-- | [日本語]: NN 学習損失曲線。 'mlpLossHist' (エポックごとの損失) を epoch (x) 対
 -- loss (y) の line で描く。 損失が単調減少して平坦化すれば収束 (keras @history@ 同型)。
+-- [English]: The NN training loss curve. Draws 'mlpLossHist' (per-epoch
+-- loss) as a line of epoch (x) against loss (y). Monotonic decrease
+-- flattening out indicates convergence (equivalent to keras's @history@).
 nnLossOf :: MLPFit -> VisualSpec
 nnLossOf fit =
   let losses = mlpLossHist fit
@@ -1078,10 +1271,17 @@ nnLossOf fit =
   in layer (line (inline epochs) (inline losses))
        <> xLabel "epoch" <> yLabel "loss"
 
--- | カーネル SVM のサポートベクタ (α>0 の点) を強調散布する (Phase 75.12)。 第 0/1 特徴を
--- **そのクラスの色のまま ✚ (cross) マーカー**で打つ (通常点 ○ と形で区別・色はクラスで一致)。
+-- | [日本語]: カーネル SVM のサポートベクタ (α>0 の点) を強調散布する。 第 0/1 特徴を
+-- __そのクラスの色のまま ✚ (cross) マーカー__ で打つ (通常点 ○ と形で区別・色はクラスで一致)。
 -- 決定境界に重ねて「SV が境界を定義する」 様子を見る。 凡例は通常点散布側に任せる
 -- ('legendOff')。 SV が無い/1 次元なら空。
+-- [English]: Emphasis-scatters the kernel SVM's support vectors (points
+-- with α>0). Features 0\/1 are plotted with a
+-- __cross marker in the same color as the class__
+-- (distinguished from ordinary points' circle shape, with matching class
+-- color). Overlaid on the decision boundary to show how
+-- SVs define it. The legend is left to the ordinary point scatter
+-- ('legendOff'). Empty if there are no SVs or the data is 1-dimensional.
 svmSupportVectorsOf :: SVM -> VisualSpec
 svmSupportVectorsOf m =
   let cols = LA.toColumns (svmSVx m)
@@ -1094,17 +1294,25 @@ svmSupportVectorsOf m =
      else layer ( scatter (inline xs) (inline ys)
                   <> colorBy (inlineCat labs) <> shape MShCross )
 
--- | 連続な決定スコアを持つ分類器 (decisionLineOf 用)。 score ≥ 0 が片クラス、 < 0 が他。
+-- | [日本語]: 連続な決定スコアを持つ分類器 (decisionLineOf 用)。 score ≥ 0 が片クラス、 < 0 が他。
+-- [English]: A classifier with a continuous decision score (for
+-- decisionLineOf). @score ≥ 0@ is one class, @< 0@ is the other.
 class ScorePredict c where
   decisionScore :: c -> LA.Matrix Double -> [Double]
 
 instance ScorePredict SVM where
   decisionScore m x = VU.toList (predictSVMScore m x)
 
--- | 決定境界を **線 (等高線)** で描く (Phase 75.13b)。 'decisionBoundaryOf' が領域を色で
+-- | [日本語]: 決定境界を __線 (等高線)__ で描く。 @decisionBoundaryOf@ が領域を色で
 -- 塗り分けるのに対し、 こちらは決定スコア = 0 の等値線を marching squares で引く
 -- (sklearn の @contour(…, levels=[0])@ 相当)。 スコアベースなので滑らかな曲線になる。
 -- @res@ = grid 解像度 (大きいほど滑らか)。 2 特徴前提。
+-- [English]: Draws the decision boundary as a __line (contour)__. Whereas
+-- @decisionBoundaryOf@ fills regions with color, this draws the
+-- score-equals-zero level curve via marching squares (equivalent to
+-- sklearn's @contour(…, levels=[0])@). Being score-based, it produces a
+-- smooth curve. @res@ = grid resolution (larger = smoother); assumes 2
+-- features.
 decisionLineOf :: ScorePredict c
                => c -> (Double, Double) -> (Double, Double) -> Int -> VisualSpec
 decisionLineOf c (xlo, xhi) (ylo, yhi) res0 =
@@ -1151,9 +1359,15 @@ decisionLineOf c (xlo, xhi) (ylo, yhi) res0 =
 -- R @pdp::partial@ / sklearn @PartialDependenceDisplay@ 相当。
 -- ===========================================================================
 
--- | 学習済モデルを評価点行列で走らせ、 各行の **連続予測値** を返す共通インターフェース
+-- | [日本語]: 学習済モデルを評価点行列で走らせ、 各行の __連続予測値__ を返す共通インターフェース
 --   (回帰モデルの PDP を種に依らず組むための薄い抽象)。 分類確率など instance の無い
 --   ものは 'partialDependencePlot' に predict 閉包を直接渡す。
+--   [English]: A common interface that runs a trained model on an
+--   evaluation-point matrix and returns a __continuous prediction__ per
+--   row (a thin abstraction letting regression-model PDPs be built without
+--   caring about model kind). Models lacking an instance — such as
+--   classification probabilities — pass a predict closure directly to
+--   'partialDependencePlot'.
 class RegPredict m where
   predictReg :: m -> LA.Matrix Double -> [Double]
 
@@ -1163,34 +1377,53 @@ instance RegPredict RandomForest where
 instance RegPredict GBRegressor where
   predictReg gb x = VU.toList (predictGBR gb x)
 
--- | 高レベル PDP: 訓練 df ('ColumnSource') と**列名**で部分従属図を描く。
+-- | [日本語]: 高レベル PDP: 訓練 df ('ColumnSource') と __列名__ で部分従属図を描く。
 --   @featCols@ = fit に使った特徴列 (順序込み)、 @target@ = 部分従属を見る列。 注目特徴を
 --   観測範囲の grid で振り、 他特徴は訓練分布のまま各行予測して平均した曲線を描く
---   (R pdp / sklearn @kind='average'@ 相当)。 列が引けない / target が featCols に無いときは空図。
+--   (R pdp / sklearn @kind=@average@@ 相当)。 列が引けない / target が featCols に無いときは空図。
+--   [English]: The high-level PDP: draws a partial-dependence plot from a
+--   training df ('ColumnSource') and __column names__. @featCols@ = the
+--   feature columns used to fit (in order), @target@ = the column to view
+--   partial dependence for. Sweeps the feature of interest over a grid
+--   spanning its observed range, predicts each row with the other features
+--   held at their training distribution, and draws the averaged curve
+--   (equivalent to R's pdp \/ sklearn's @kind=@average@@). Yields an empty
+--   plot if the columns can't be resolved or @target@ isn't in @featCols@.
 pdpOf :: (RegPredict m, ColumnSource d) => m -> d -> [Text] -> Text -> VisualSpec
 pdpOf model d featCols target =
   case (reqColsM featCols d, elemIndex target featCols) of
     (Right x, Just j) -> partialDependencePlot x (predictReg model) j target
     _                 -> mempty
 
--- | 高レベル PDP + ICE 重畳 (sklearn @kind='both'@)。 個体条件付き期待 (ICE) を薄灰で観測数
+-- | [日本語]: 高レベル PDP + ICE 重畳 (sklearn @kind=@both@@)。 個体条件付き期待 (ICE) を薄灰で観測数
 --   ぶん重ね、 平均 (PDP) を上描きする。 'pdpOf' の ICE 版。
+--   [English]: The high-level PDP + ICE overlay (sklearn @kind=@both@@).
+--   Overlays individual conditional expectation (ICE) curves in light gray,
+--   one per observation, then draws the average (PDP) on top. The ICE
+--   variant of 'pdpOf'.
 pdpIceOf :: (RegPredict m, ColumnSource d) => m -> d -> [Text] -> Text -> VisualSpec
 pdpIceOf model d featCols target =
   case (reqColsM featCols d, elemIndex target featCols) of
     (Right x, Just j) -> partialDependenceIcePlot x (predictReg model) j target
     _                 -> mempty
 
--- | 低レベル PDP: 訓練特徴**行列**と列 index を直接取る ('pdpOf' の実体)。
+-- | [日本語]: 低レベル PDP: 訓練特徴 __行列__ と列 index を直接取る ('pdpOf' の実体)。
+--   [English]: The low-level PDP: takes the training feature __matrix__ and
+--   column index directly (the implementation behind 'pdpOf').
 pdpPlot :: RegPredict m => m -> LA.Matrix Double -> Int -> Text -> VisualSpec
 pdpPlot m x j name = partialDependencePlot x (predictReg m) j name
 
--- | 低レベル PDP + ICE (行列・列 index 版)。
+-- | [日本語]: 低レベル PDP + ICE (行列・列 index 版)。
+--   [English]: The low-level PDP + ICE (matrix and column-index variant).
 pdpIcePlot :: RegPredict m => m -> LA.Matrix Double -> Int -> Text -> VisualSpec
 pdpIcePlot m x j name = partialDependenceIcePlot x (predictReg m) j name
 
--- | 任意モデル用 PDP。 predict 閉包 (行列 → 予測値) を直接受ける escape hatch。
+-- | [日本語]: 任意モデル用 PDP。 predict 閉包 (行列 → 予測値) を直接受ける escape hatch。
 --   分類の部分従属 (あるクラスの予測確率) 等、 'RegPredict' instance の無いモデルに使う。
+--   [English]: PDP for any model. An escape hatch that takes a predict
+--   closure (matrix → predictions) directly. Used for models without a
+--   'RegPredict' instance, such as classification partial dependence (a
+--   given class's predicted probability).
 partialDependencePlot
   :: LA.Matrix Double -> (LA.Matrix Double -> [Double]) -> Int -> Text -> VisualSpec
 partialDependencePlot x predict j name =
@@ -1201,7 +1434,9 @@ partialDependencePlot x predict j name =
                     <> color (fromHex "#1f77b4") )
             <> xLabel name <> yLabel "partial dependence"
 
--- | 任意モデル用 PDP+ICE。 'partialDependencePlot' の ICE 重畳版 (predict 閉包版)。
+-- | [日本語]: 任意モデル用 PDP+ICE。 'partialDependencePlot' の ICE 重畳版 (predict 閉包版)。
+--   [English]: PDP+ICE for any model. The ICE-overlay variant of
+--   'partialDependencePlot' (predict-closure version).
 partialDependenceIcePlot
   :: LA.Matrix Double -> (LA.Matrix Double -> [Double]) -> Int -> Text -> VisualSpec
 partialDependenceIcePlot x predict j name =
@@ -1220,7 +1455,7 @@ partialDependenceIcePlot x predict j name =
 -- ---------------------------------------------------------------------------
 -- Phase 76.D: PDP を HBM 抽出子と同型に (Plottable 中間型 + toPlot・<> で合成)
 --
--- @pdpOf model d featCols target@ は 'VisualSpec' を直に返すが、 demo は @[] |>> (…)@ の
+-- @pdpOf model d featCols target@ は @VisualSpec@ を直に返すが、 demo は @[] |>> (…)@ の
 -- ダミー束ねが要り不格好だった。 HBM の @forestOf@/@epred@ と同じく **Plottable 中間型**
 -- ('PDPView') にし、 @toPlot@ で描画・@<>@ で装飾を合成する:
 --
@@ -1232,8 +1467,12 @@ partialDependenceIcePlot x predict j name =
 
 data PDPKind = PDPAverage | PDPBoth
 
--- | PDP の Plottable 中間型 (Phase 76.D)。 特徴行列・予測子・注目列 index を捕捉し、
---   'toPlot' で PDP (平均) / PDP+ICE 曲線に描く。 'pdp' / 'pdpIce' で作る。
+-- | [日本語]: PDP の Plottable 中間型。 特徴行列・予測子・注目列 index を捕捉し、
+--   @toPlot@ で PDP (平均) / PDP+ICE 曲線に描く。 'pdp' / 'pdpIce' で作る。
+--   [English]: The Plottable intermediate type for PDP. Captures the
+--   feature matrix, predictor, and the column index of interest, and draws
+--   a PDP (average) \/ PDP+ICE curve via @toPlot@. Built with 'pdp' \/
+--   'pdpIce'.
 data PDPView = PDPView
   { pvX       :: !(LA.Matrix Double)              -- 訓練特徴行列 (周辺化の分布)
   , pvPredict :: LA.Matrix Double -> [Double]     -- モデルの連続予測 (RegPredict 由来)
@@ -1242,20 +1481,28 @@ data PDPView = PDPView
   , pvKind    :: !PDPKind
   }
 
--- | 訓練 df + 特徴列から (特徴行列, 注目列 index) を解く。 引けない / target が featCols に
+-- | [日本語]: 訓練 df + 特徴列から (特徴行列, 注目列 index) を解く。 引けない / target が featCols に
 --   無いときは 0×0 行列 (toPlot が 'mempty' にする)。
+--   [English]: Resolves @(feature matrix, target column index)@ from a
+--   training df and feature columns. Yields a 0×0 matrix when the columns
+--   can't be resolved or @target@ isn't in @featCols@ (which @toPlot@ turns
+--   into 'mempty').
 pdpXJ :: ColumnSource d => d -> [Text] -> Text -> (LA.Matrix Double, Int)
 pdpXJ d feats target =
   case (reqColsM feats d, elemIndex target feats) of
     (Right x, Just j) -> (x, j)
     _                 -> (LA.fromLists [], 0)
 
--- | 平均部分従属 (PDP)。 @noDf |>> (toPlot (pdp model trainDf featCols target) <> …)@。
+-- | [日本語]: 平均部分従属 (PDP)。 @noDf |>> (toPlot (pdp model trainDf featCols target) <> …)@。
+--   [English]: Average partial dependence (PDP).
+--   @noDf |>> (toPlot (pdp model trainDf featCols target) <> …)@.
 pdp :: (RegPredict m, ColumnSource d) => m -> d -> [Text] -> Text -> PDPView
 pdp model d feats target =
   let (x, j) = pdpXJ d feats target in PDPView x (predictReg model) j target PDPAverage
 
--- | PDP + ICE 重畳 (sklearn @kind='both'@)。 個体曲線 (薄灰) + 平均 (青)。
+-- | [日本語]: PDP + ICE 重畳 (sklearn @kind=@both@@)。 個体曲線 (薄灰) + 平均 (青)。
+--   [English]: PDP + ICE overlay (sklearn @kind=@both@@). Individual curves
+--   (light gray) + average (blue).
 pdpIce :: (RegPredict m, ColumnSource d) => m -> d -> [Text] -> Text -> PDPView
 pdpIce model d feats target =
   let (x, j) = pdpXJ d feats target in PDPView x (predictReg model) j target PDPBoth
@@ -1305,24 +1552,36 @@ instance Plottable NBModel where
 -- ===========================================================================
 
 
--- | PLS 診断ビューの種別 (score / loading / VIP)。
+-- | [日本語]: PLS 診断ビューの種別 (score / loading / VIP)。
+--   [English]: The PLS diagnostic view kind (score \/ loading \/ VIP).
 data PLSViewKind = ScoreView | LoadingView | VipView
   deriving (Show, Eq)
 
--- | PLS の中間 Plottable Spec (HBM 式統一 — Phase 70.B)。 終端 'VisualSpec' を
--- 直返ししていた旧 @plsScorePlot@ 系を、 forest/trace 等と同じく **'Plottable' な
--- 中間 Spec** に揃える ('toPlot' 境界でオプション合成可・診断束を型で表現)。
+-- | [日本語]: PLS の中間 Plottable Spec (HBM 式統一)。 終端 @VisualSpec@ を
+-- 直返ししていた旧 @plsScorePlot@ 系を、 forest/trace 等と同じく
+-- __'Plottable' な中間 Spec__ に揃える (@toPlot@ 境界でオプション合成可・診断束を型で表現)。
+-- [English]: The PLS intermediate Plottable Spec (unified with the HBM
+-- style). Brings the old @plsScorePlot@ family — which directly returned a
+-- terminal @VisualSpec@ — in line with forest\/trace etc. as an
+-- __intermediate 'Plottable' Spec__
+-- (options can be composed at the @toPlot@ boundary; the diagnostic bundle
+-- is expressed as a type).
 data PLSView = PLSView !PLSFit !PLSViewKind
 
--- | score ビュー: 標本を潜在空間の第 1/2 成分 (T[:,0] vs T[:,1]) で散布。
+-- | [日本語]: score ビュー: 標本を潜在空間の第 1/2 成分 (T[:,0] vs T[:,1]) で散布。
+--   [English]: The score view: scatters samples over latent-space
+--   components 1\/2 (T[:,0] vs T[:,1]).
 scoreView :: PLSFit -> PLSView
 scoreView fit = PLSView fit ScoreView
 
--- | loading ビュー: 変数を潜在空間の第 1/2 成分 (P[:,0] vs P[:,1]) で散布。
+-- | [日本語]: loading ビュー: 変数を潜在空間の第 1/2 成分 (P[:,0] vs P[:,1]) で散布。
+--   [English]: The loading view: scatters variables over latent-space
+--   components 1\/2 (P[:,0] vs P[:,1]).
 loadingView :: PLSFit -> PLSView
 loadingView fit = PLSView fit LoadingView
 
--- | VIP ビュー: 変数重要度 (Variable Importance in Projection) bar。
+-- | [日本語]: VIP ビュー: 変数重要度 (Variable Importance in Projection) bar。
+--   [English]: The VIP view: a Variable Importance in Projection bar chart.
 vipView :: PLSFit -> PLSView
 vipView fit = PLSView fit VipView
 
@@ -1353,14 +1612,17 @@ instance Plottable PLSFit where
 --
 --   * 'GARCHFit'      = 系列 (μ + ε_t) + 条件付き volatility 帯 (μ ± 2σ_t) の帯付き線。
 --   * 'AFTFit'        = パラメトリック生存曲線 S(t|x)。 fit は観測時刻を持たないので
---                       代表図 ('toPlot') は **基準共変量** (intercept のみ) の曲線、
+--                       代表図 (@toPlot@) は **基準共変量** (intercept のみ) の曲線、
 --                       任意共変量は 'aftSurvivalAt' ヘルパ。 t 範囲は予測平均寿命から導出。
 --   * 'FunctionalPCA' = 平均関数 + 上位固有関数を grid 上に重畳 (x = grid index)。
 --   * 'FLMResult'     = 関数回帰係数 β(t) の曲線。
 -- ===========================================================================
 
--- | GARCH の条件付き volatility 帯付き線: 系列 @y_t = μ + ε_t@ の line に、
+-- | [日本語]: GARCH の条件付き volatility 帯付き線: 系列 @y_t = μ + ε_t@ の line に、
 --   @μ ± 2σ_t@ (σ_t = √σ²_t) の帯を重ねる。 x = 時刻 index。
+--   [English]: A banded line of GARCH conditional volatility: overlays a
+--   band of @μ ± 2σ_t@ (σ_t = √σ²_t) on the line of series
+--   @y_t = μ + ε_t@. x = time index.
 garchVolatility :: GARCHFit -> VisualSpec
 garchVolatility fit =
   let eps   = LA.toList (gResiduals fit)
@@ -1379,9 +1641,14 @@ garchVolatility fit =
 instance Plottable GARCHFit where
   toPlot = garchVolatility
 
--- | AFT 生存曲線 S(t|x): 共変量 @x@ の線形予測子 @lp = x·β@ から
+-- | [日本語]: AFT 生存曲線 S(t|x): 共変量 @x@ の線形予測子 @lp = x·β@ から
 --   @z(t) = (log t − lp)/σ@・@S = exp(logS dist z)@ を t-grid 上で評価する。
 --   t 範囲は予測平均寿命の @(0.01, 3×mean)@、 grid 120 点。
+--   [English]: The AFT survival curve S(t|x): evaluates
+--   @z(t) = (log t − lp)/σ@ \/ @S = exp(logS dist z)@ over a t-grid from
+--   covariate @x@'s linear predictor @lp = x·β@. The t range is derived
+--   from the predicted mean lifetime as @(0.01, 3×mean)@, with a 120-point
+--   grid.
 aftSurvivalAt :: AFTFit -> [Double] -> VisualSpec
 aftSurvivalAt fit x =
   let beta   = LA.toList (aftBeta fit)
@@ -1430,7 +1697,7 @@ instance Plottable FLMResult where
 --   * 'RegFit'          = 単一 λ の係数 ('rfBeta') を bar (代表図)。
 --   * 'regPathPlot'     = 正則化パス @[(λ, [β_j])]@ ('regularizationPath' 出力) を、
 --                         係数ごとに 1 本の line で λ-横軸に重畳 (= LASSO 係数パス図)。
---   * 'DirectLiNGAMFit' = 推定した因果構造を **MDAG** で描く (B 行列 → node/edge、
+--   * @DirectLiNGAMFit@ = 推定した因果構造を **MDAG** で描く (B 行列 → node/edge、
 --                         決定木と同じ MDAG 再利用)。 edge j→i は @|adjacency[i,j]|>0@。
 -- ===========================================================================
 
@@ -1441,9 +1708,14 @@ instance Plottable RegFit where
         labels = [ "b" <> T.pack (show k) | k <- [0 .. length bs - 1] ]
     in layer (bar (inlineCat labels) (inline bs))
 
--- | 正則化パス図: @[(λ, [β_j])]@ を係数ごとに 1 本の line で重畳。 横軸は **log₁₀λ**
+-- | [日本語]: 正則化パス図: @[(λ, [β_j])]@ を係数ごとに 1 本の line で重畳。 横軸は __log₁₀λ__
 --   (glmnet の係数パス図と同じ慣例・小 λ=full model が左、 大 λ=sparse が右)。 色=係数 index。
 --   λ は正を仮定する (パスの λ グリッドは常に @> 0@)。
+--   [English]: The regularization-path plot: overlays @[(λ, [β_j])]@ as one
+--   line per coefficient. The x axis is __log₁₀λ__ (following glmnet's
+--   coefficient-path convention: small λ = full model on the left, large
+--   λ = sparse on the right). Color = coefficient index. Assumes λ is
+--   positive (the path's λ grid is always @> 0@).
 regPathPlot :: [(Double, [Double])] -> VisualSpec
 regPathPlot path
   | null path = mempty
@@ -1459,9 +1731,14 @@ regPathPlot path
       in mconcat [ mkCoef j | j <- [0 .. p - 1] ]
            <> xLabel "log10(lambda)" <> yLabel "coef"
 
--- | 隣接行列 + 変数名から因果 DAG (MDAG) を描く低レベル (Phase 77.A で切り出し)。
+-- | [日本語]: 隣接行列 + 変数名から因果 DAG (MDAG) を描く低レベル関数。
 --   edge @j→i@ は @|adj[i,j]| > 0@ (= x_i が x_j に依存)。 @names@ が列数と一致しなければ
 --   @x0..@ フォールバック。 全 LiNGAM variant の Plottable が共有する。
+--   [English]: The low-level function that draws a causal DAG (MDAG) from
+--   an adjacency matrix and variable names. Edge @j→i@ means
+--   @|adj[i,j]| > 0@ (i.e. x_i depends on x_j). Falls back to @x0..@ if
+--   @names@ doesn't match the column count. Shared by every LiNGAM
+--   variant's Plottable instance.
 lingamDagNamed :: [Text] -> LA.Matrix Double -> VisualSpec
 lingamDagNamed rawNames adj =
   let p     = LA.rows adj
@@ -1477,29 +1754,42 @@ lingamDagNamed rawNames adj =
   in bakeDAGRoutesInSpec $
        layer (dagFromListsWithPlates positioned routed LayoutHierarchical [])
 
--- | 推定因果構造 (DirectLiNGAM) を MDAG で描く。 ノード = @x0..x_{p-1}@ (変数名は
+-- | [日本語]: 推定因果構造 (DirectLiNGAM) を MDAG で描く。 ノード = @x0..x_{p-1}@ (変数名は
 --   高レベル @df |-> directLingam@ 経由で付く・'LiNGAMFitted' の Plottable 参照)。
+--   [English]: Draws the estimated causal structure (DirectLiNGAM) as an
+--   MDAG. Nodes are @x0..x_{p-1}@ (variable names come from the high-level
+--   @df |-> directLingam@; see 'LiNGAMFitted'\'s Plottable instance).
 lingamDag :: DirectLiNGAMFit -> VisualSpec
 lingamDag fit = lingamDagNamed [] (dlAdjacency fit)
 
 instance Plottable DirectLiNGAMFit where
   toPlot = lingamDag
 
--- | 高レベル @df |-> directLingam cols@ の結果 = **実変数名**の因果 DAG (Phase 77.A)。
+-- | [日本語]: 高レベル @df |-> directLingam cols@ の結果 = __実変数名__ の因果 DAG。
+--   [English]: The result of the high-level @df |-> directLingam cols@ =
+--   the causal DAG with __actual variable names__.
 instance Plottable (LiNGAMFitted DirectLiNGAMFit) where
   toPlot (LiNGAMFitted fit names) = lingamDagNamed names (dlAdjacency fit)
 
--- | ParceLiNGAM の名前付き DAG (Phase 77.B・pcAdjacency)。
+-- | [日本語]: ParceLiNGAM の名前付き DAG (pcAdjacency)。
+--   [English]: ParceLiNGAM's named DAG (pcAdjacency).
 instance Plottable (LiNGAMFitted ParceFit) where
   toPlot (LiNGAMFitted fit names) = lingamDagNamed names (pcAdjacency fit)
 
--- | MultiGroupLiNGAM の**共通** DAG (Phase 77.B・多数決 mgCommonAdj・名前付き)。
+-- | [日本語]: MultiGroupLiNGAM の __共通__ DAG (多数決 mgCommonAdj・名前付き)。
+--   [English]: MultiGroupLiNGAM's __common__ DAG (majority-vote
+--   mgCommonAdj, named).
 instance Plottable (LiNGAMFitted MultiGroupFit) where
   toPlot (LiNGAMFitted fit names) = lingamDagNamed names (mgCommonAdj fit)
 
--- | VARLiNGAM の**時間ラグ DAG** (Phase 77.B)。 ノード = 各変数の @name[t]@ / @name[t-l]@、
+-- | [日本語]: VARLiNGAM の __時間ラグ DAG__。 ノード = 各変数の @name[t]@ / @name[t-l]@、
 --   辺 = 同時刻 (@B0@: x_j[t]→x_i[t]) + ラグ (@structuralLags[l]@: x_j[t-l]→x_i[t])。
 --   @thr@ 未満の係数は辺を出さない。 孤立したラグノード (辺に現れない) は省く。
+--   [English]: VARLiNGAM's __time-lag DAG__. Nodes are each variable's
+--   @name[t]@ \/ @name[t-l]@; edges are contemporaneous (@B0@:
+--   x_j[t]→x_i[t]) plus lagged (@structuralLags[l]@: x_j[t-l]→x_i[t]).
+--   Coefficients below @thr@ yield no edge. Isolated lag nodes (not
+--   appearing in any edge) are omitted.
 varLagDagNamed :: [Text] -> LA.Matrix Double -> [LA.Matrix Double] -> Double -> VisualSpec
 varLagDagNamed rawNames b0 lags thr =
   let k    = LA.rows b0
@@ -1525,13 +1815,18 @@ varLagDagNamed rawNames b0 lags thr =
   in bakeDAGRoutesInSpec $
        layer (dagFromListsWithPlates positioned routed LayoutHierarchical [])
 
--- | VARLiNGAM の高レベル結果 = 時間ラグ DAG (辺閾値 0.1・同時刻 + ラグ)。
+-- | [日本語]: VARLiNGAM の高レベル結果 = 時間ラグ DAG (辺閾値 0.1・同時刻 + ラグ)。
+--   [English]: VARLiNGAM's high-level result = the time-lag DAG (edge
+--   threshold 0.1; contemporaneous + lagged).
 instance Plottable (LiNGAMFitted VARLiNGAMFit) where
   toPlot (LiNGAMFitted fit names) =
     varLagDagNamed names (vlB0 fit) (vlStructuralLags fit) 0.1
 
--- | PairwiseLiNGAM の 2 変数向き図 (Phase 77.B)。 検出向きの矢印 1 本 (Inconclusive は無向)。
+-- | [日本語]: PairwiseLiNGAM の 2 変数向き図。 検出向きの矢印 1 本 (Inconclusive は無向)。
 --   2×2 隣接に落として 'lingamDagNamed' を再利用する。
+--   [English]: PairwiseLiNGAM's two-variable direction diagram. A single
+--   arrow in the detected direction (undirected for Inconclusive). Reduced
+--   to a 2×2 adjacency and reuses 'lingamDagNamed'.
 instance Plottable (LiNGAMFitted PairwiseResult) where
   toPlot (LiNGAMFitted r names) =
     let adj = case prDirection r of
@@ -1540,13 +1835,19 @@ instance Plottable (LiNGAMFitted PairwiseResult) where
           Inconclusive -> LA.fromLists [[0, 0], [0, 0]]   -- 無向 (2 ノードのみ)
     in lingamDagNamed names adj
 
--- | ICA-LiNGAM の名前付き DAG (Phase 77.C・ilAdjacency)。
+-- | [日本語]: ICA-LiNGAM の名前付き DAG (ilAdjacency)。
+--   [English]: ICA-LiNGAM's named DAG (ilAdjacency).
 instance Plottable (LiNGAMFitted ICALiNGAMFit) where
   toPlot (LiNGAMFitted fit names) = lingamDagNamed names (ilAdjacency fit)
 
--- | 相関ネットワークのグラフ (Phase 77)。 @|r| > cgThreshold@ の対を辺にする (無向・向きは
---   index 順の便宜配置で**因果でない**)。 LiNGAM DAG と対比すると間接相関の過剰さが分かる。
+-- | [日本語]: 相関ネットワークのグラフ。 @|r| > cgThreshold@ の対を辺にする (無向・向きは
+--   index 順の便宜配置で __因果でない__ )。 LiNGAM DAG と対比すると間接相関の過剰さが分かる。
 --   下三角のみ辺にして重複/自己ループを避ける (相関は対称ゆえ)。
+--   [English]: The correlation-network graph. Pairs with @|r| > cgThreshold@
+--   become edges (undirected; the index-order layout is a convenience and
+--   __is not causal__). Contrasting this with the LiNGAM DAG reveals the
+--   excess of indirect correlations. Only the lower triangle is edged, to
+--   avoid duplicates \/ self-loops (correlation is symmetric).
 instance Plottable CorrelationGraph where
   toPlot (CorrelationGraph corr names thr) =
     let p   = LA.rows corr
@@ -1556,8 +1857,12 @@ instance Plottable CorrelationGraph where
                               then 1 else 0 :: Double)
     in lingamDagNamed names adj
 
--- | BootstrapLiNGAM の**確信度 DAG** (Phase 77.C)。 出現確率 ≥ 0.5 のエッジだけ描く
+-- | [日本語]: BootstrapLiNGAM の __確信度 DAG__。 出現確率 ≥ 0.5 のエッジだけ描く
 --   (= 過半数の bootstrap で現れた信頼できる因果構造)。 全確率は 'bootstrapEdgeProbOf' で。
+--   [English]: BootstrapLiNGAM's __confidence DAG__. Draws only edges with
+--   occurrence probability ≥ 0.5 (i.e. causal structure trusted enough to
+--   appear in a majority of bootstrap resamples). See 'bootstrapEdgeProbOf'
+--   for the full probabilities.
 instance Plottable (LiNGAMFitted BootstrapResult) where
   toPlot (LiNGAMFitted res names) =
     let prob = brEdgeProbability res
@@ -1566,8 +1871,12 @@ instance Plottable (LiNGAMFitted BootstrapResult) where
                  (\i j -> if prob `LA.atIndex` (round i, round j) >= 0.5 then 1 else 0)
     in lingamDagNamed names adj
 
--- | BootstrapLiNGAM の**エッジ出現確率ヒートマップ** (Phase 77.C)。 行=結果 i・列=原因 j、
+-- | [日本語]: BootstrapLiNGAM の __エッジ出現確率ヒートマップ__。 行=結果 i・列=原因 j、
 --   セル = P(j→i) (0..1)。 確信度の全体像を DAG と別に見せる (python lingam の確率行列相当)。
+--   [English]: BootstrapLiNGAM's __edge-occurrence-probability heatmap__.
+--   Rows = effect i, columns = cause j; cells = P(j→i) (0..1). Shows the
+--   full picture of confidence separately from the DAG (equivalent to
+--   python lingam's probability matrix).
 bootstrapEdgeProbOf :: LiNGAMFitted BootstrapResult -> VisualSpec
 bootstrapEdgeProbOf (LiNGAMFitted res rawNames) =
   let prob  = brEdgeProbability res
@@ -1592,30 +1901,44 @@ bootstrapEdgeProbOf (LiNGAMFitted res rawNames) =
 --
 -- 中間 Plottable 型 ('ProfilerSpec') にして @toPlot@ で描画・@<>@ でオプション合成
 -- (HBM @epred@ / 'PDPView' と同じ流儀)。 打点はモデル ('mvFrame') の観測値から算出
--- するので @noDf@ で束ねられる。 複数応答は @df |-> 'multiOutput' ys (designModel plan)@
+-- するので @noDf@ で束ねられる。 複数応答は @df |-> @multiOutput@ ys (designModel plan)@
 -- が返す @[(応答名, モデル)]@ をそのまま渡す。
 --
 -- > let model = df |-> multiOutput ["strength","yield"] (designModel plan)
 -- > noDf |>> toPlot (profiler model ["temp","time"] <> profilerResidual Partial)
 -- ===========================================================================
 
--- | 打点の種別。 'Raw' = 実測 y (他因子が動くぶん予測線から縦に散る = 多変量の正しい挙動)。
---   'Partial' = **偏残差** @fⱼ(xⱼ) + (全モデル残差)@ で他因子の寄与を除き点を予測線に乗せる
+-- | [日本語]: 打点の種別。 'Raw' = 実測 y (他因子が動くぶん予測線から縦に散る = 多変量の正しい挙動)。
+--   'Partial' = __偏残差__ @fⱼ(xⱼ) + (全モデル残差)@ で他因子の寄与を除き点を予測線に乗せる
 --   (R @termplot(partial.resid=TRUE)@ / @car::crPlots@ 相当)。
+--   [English]: The kind of plotted points. 'Raw' = observed y (scatters
+--   vertically off the prediction line as other factors vary — the correct
+--   multivariate behavior). 'Partial' = removes other factors'
+--   contributions via the __partial residual__
+--   @fⱼ(xⱼ) + (whole-model residual)@, placing points on the prediction
+--   line (equivalent to R's @termplot(partial.resid=TRUE)@ \/
+--   @car::crPlots@).
 data ResidualMode = Raw | Partial
   deriving (Eq, Show)
 
--- | prediction profiler の中間 Plottable Spec (Phase 78.F)。 @(応答名, モデル)@ のリスト
---   (複数応答)・因子名・打点モード ('ResidualMode') を捕捉し、 'toPlot' で「行=応答 ×
+-- | [日本語]: prediction profiler の中間 Plottable Spec。 @(応答名, モデル)@ のリスト
+--   (複数応答)・因子名・打点モード ('ResidualMode') を捕捉し、 @toPlot@ で「行=応答 ×
 --   列=因子」 のグリッドに描く。 'profiler' で作り、 @<> 'profilerResidual' Partial@ で
 --   モードを合成する。
+--   [English]: The prediction profiler's intermediate Plottable Spec.
+--   Captures a list of @(response name, model)@ (multiple responses),
+--   factor names, and the plotted-point mode ('ResidualMode'), and draws a
+--   "rows = responses × columns = factors" grid via @toPlot@. Built with
+--   'profiler'; compose the mode with @<> 'profilerResidual' Partial@.
 data ProfilerSpec m = ProfilerSpec
-  { psModels   :: [(Text, m)]        -- ^ (応答ラベル, 学習済モデル)。 行になる。
-  , psFactors  :: [Text]             -- ^ 説明因子名。 列になる。
-  , psResidual :: Maybe ResidualMode -- ^ 打点モード (合成後 'Nothing' は 'Raw' 既定)。
+  { psModels   :: [(Text, m)]        -- ^ [日本語]: (応答ラベル, 学習済モデル)。 行になる。 [English]: @(response label, trained model)@; becomes a row.
+  , psFactors  :: [Text]             -- ^ [日本語]: 説明因子名。 列になる。 [English]: Explanatory factor names; becomes a column.
+  , psResidual :: Maybe ResidualMode -- ^ [日本語]: 打点モード (合成後 'Nothing' は 'Raw' 既定)。 [English]: The plotted-point mode (@Nothing@ after composition defaults to 'Raw').
   }
 
--- | 右バイアス合成 (option-only 片は models\/factors が空)。 mode は後勝ち。
+-- | [日本語]: 右バイアス合成 (option-only 片は models\/factors が空)。 mode は後勝ち。
+--   [English]: Right-biased composition (an option-only side has empty
+--   models\/factors). @mode@ follows last-write-wins.
 instance Semigroup (ProfilerSpec m) where
   a <> b = ProfilerSpec
     { psModels   = psModels a  <> psModels b
@@ -1625,12 +1948,17 @@ instance Semigroup (ProfilerSpec m) where
 instance Monoid (ProfilerSpec m) where
   mempty = ProfilerSpec [] [] Nothing
 
--- | @profiler models factors@ — 応答×因子の profiler。 @models@ は
---   @df |-> 'multiOutput' ys (designModel plan)@ が返す @[(応答名, モデル)]@。 既定は 'Raw'。
+-- | [日本語]: @profiler models factors@ — 応答×因子の profiler。 @models@ は
+--   @df |-> @multiOutput@ ys (designModel plan)@ が返す @[(応答名, モデル)]@。 既定は 'Raw'。
+--   [English]: @profiler models factors@ — a response × factor profiler.
+--   @models@ is the @[(response name, model)]@ returned by
+--   @df |-> @multiOutput@ ys (designModel plan)@. Defaults to 'Raw'.
 profiler :: [(Text, m)] -> [Text] -> ProfilerSpec m
 profiler models factors = ProfilerSpec models factors Nothing
 
--- | 打点モードを差す option (@<>@ で合成)。 @profiler … <> profilerResidual Partial@。
+-- | [日本語]: 打点モードを差す option (@<>@ で合成)。 @profiler … <> profilerResidual Partial@。
+--   [English]: An option that sets the plotted-point mode (composed via
+--   @<>@). @profiler … <> profilerResidual Partial@.
 profilerResidual :: ResidualMode -> ProfilerSpec m
 profilerResidual mode = mempty { psResidual = Just mode }
 
@@ -1669,11 +1997,20 @@ instance MultiVarModel m => Plottable (ProfilerSpec m) where
              <> toPlot (statModelMulti m (along f) <> holdAt Median <> grid 60)
              <> xLabel f <> yLabel ylab
 
--- | RSM **等高線 / 応答曲面** (Phase 78.E)。 2 因子 (v1, v2) を grid で動かし他因子を
---   中央値固定して応答 μ̂ を評価し、 **塗り等値帯 ('contourFilled') + 等高線 ('contour')** で
+-- | [日本語]: RSM __等高線 / 応答曲面__。 2 因子 (v1, v2) を grid で動かし他因子を
+--   中央値固定して応答 μ̂ を評価し、 __塗り等値帯 ('contourFilled') + 等高線 ('contour')__ で
 --   描く (R @rsm::contour@ / matplotlib @contourf+contour@ 相当・応答面を平面で俯瞰)。
 --   3D の応答曲面は 'surfaceOf' (別途 @saveSVG3D@)。 評価はモデル観測範囲なので
 --   @noDf |>> contourOf model "temp" "time"@ で描ける。
+--   [English]: The RSM __contour \/ response-surface plot__. Sweeps two
+--   factors (v1, v2) on a grid, holds other factors at their median, and
+--   evaluates the response μ̂, drawing it as a
+--   __filled contour band ('contourFilled') + contour lines ('contour')__
+--   (equivalent to R's @rsm::contour@ \/ matplotlib's @contourf+contour@; a
+--   flat-plane overview of the response surface). The 3D response surface
+--   is 'surfaceOf' (separate @saveSVG3D@). Since evaluation uses the
+--   model's observed range, it can be drawn simply as
+--   @noDf |>> contourOf model "temp" "time"@.
 contourOf :: MultiVarModel m => m -> Text -> Text -> VisualSpec
 contourOf m v1 v2 =
   let (gxs, gys, grid') = surfaceGrid m v1 v2 (defaultSurfaceOpts { soHoldAt = Median })
@@ -1692,22 +2029,37 @@ contourOf m v1 v2 =
 -- 新規 plot mark は不要:
 --
 --   * 'TestResult'  = 効果量 + 95% CI の **forest** (検定パラメータの区間 + 0 基準線)。
---                     代表図 ('toPlot') は 1 行 forest、 複数検定は 'testForest'。
+--                     代表図 (@toPlot@) は 1 行 forest、 複数検定は 'testForest'。
 --   * 'describeBox' = 生データ列の **box plot** (= describe の分布図・5 数要約を可視化)。
 -- ===========================================================================
 
--- | 検定結果の forest plot: 各検定の 95% CI ('trCI') を区間、 中心を点推定として
+-- | [日本語]: 検定結果の forest plot: 各検定の 95% CI ('trCI') を区間、 中心を点推定として
 --   1 行に並べ、 0 の基準線を引く。 CI を持たない検定は除外する。 行ラベルは
---   'trMethod'。 同種検定を群間で並べるなど **ラベルを区別したい場合は
---   'testForestLabeled'** を使う。
+--   'trMethod'。 同種検定を群間で並べるなど
+--   __ラベルを区別したい場合は 'testForestLabeled'__ を使う。
 --
--- ⚠ 0 基準線は **平均差・効果量** (null = 0) 向け。 生の平均など null ≠ 0 の量を
+-- ⚠ 0 基準線は __平均差・効果量__ (null = 0) 向け。 生の平均など null ≠ 0 の量を
 -- 混在させると軸ドメインが歪むので、 同一スケールの量だけを 1 枚に並べること。
+--
+-- [English]: A forest plot of test results: lays out each test's 95% CI
+-- ('trCI') as an interval, with the point estimate as the center, one per
+-- row, and draws a reference line at 0. Tests without a CI are excluded.
+-- Row labels come from 'trMethod'. When you need to __distinguish labels__
+-- — e.g. laying out the same test kind across groups — use
+-- __'testForestLabeled'__.
+--
+-- ⚠ The 0 reference line targets __mean differences \/ effect sizes__
+-- (null = 0). Mixing in quantities whose null ≠ 0, such as raw means, would
+-- distort the axis domain, so only lay out quantities on the same scale in
+-- one plot.
 testForest :: [TestResult] -> VisualSpec
 testForest = testForestLabeled . map (\r -> (trMethod r, r))
 
--- | ラベル指定版 'testForest' (= 行ラベルを呼び出し側で与える)。 同じ検定種を
+-- | [日本語]: ラベル指定版 'testForest' (= 行ラベルを呼び出し側で与える)。 同じ検定種を
 --   群ごとに並べる (= 同名衝突を避ける) 用途に使う。
+--   [English]: A label-specified variant of 'testForest' (the caller
+--   supplies the row labels). Used for cases like laying out the same test
+--   kind across groups (avoiding name collisions).
 testForestLabeled :: [(Text, TestResult)] -> VisualSpec
 testForestLabeled labeled =
   let rows  = [ (nm, lo, hi) | (nm, r) <- labeled, Just (lo, hi) <- [trCI r] ]
@@ -1722,7 +2074,9 @@ instance Plottable TestResult where
   -- 代表図 = 単一検定の 1 行 forest (effect/CI)。
   toPlot r = testForest [r]
 
--- | describe の分布図: 生データ列の box plot (5 数要約を可視化)。
+-- | [日本語]: describe の分布図: 生データ列の box plot (5 数要約を可視化)。
+--   [English]: The describe distribution plot: a box plot of a raw data
+--   column (visualizes the five-number summary).
 describeBox :: [Double] -> VisualSpec
 describeBox xs = layer (boxplot (inline xs))
 
@@ -1773,9 +2127,15 @@ instance MultiVarModel GPRegModelN where
                                   , zipWith (\u s -> u + z * s) mu sds ) )
          Nothing -> (mu, Nothing)
 
--- | DOE 階層ベイズ fit の effect plot 開通 (Phase 78.G-f)。固定効果 β の事後 draw で
+-- | [日本語]: DOE 階層ベイズ fit の effect plot 対応。固定効果 β の事後 draw で
 --   評価点の μ を計算し、事後予測帯 (μ の分散 + 観測 noise σ²) を CI slot に載せる。
 --   ランダム効果は集団平均で marginalize (profiler = 代表条件の予測)。
+--   [English]: Effect-plot support for the DOE hierarchical Bayesian fit.
+--   Computes μ at evaluation points from the fixed effect β's posterior
+--   draws, and loads the posterior predictive band (variance of μ +
+--   observation noise σ²) into the CI slot. Random effects are marginalized
+--   over the population average (the profiler predicts a representative
+--   condition).
 instance MultiVarModel DesignHBMFit where
   mvFrame = dhfFrame
   mvEvalFrame m level ef =

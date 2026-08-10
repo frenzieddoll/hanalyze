@@ -6,7 +6,7 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Accelerated Failure Time (AFT) parametric survival model.
+-- [日本語]: Accelerated Failure Time (AFT) パラメトリック生存モデル。
 --
 -- AFT は寿命 T の対数を共変量の線形関数として表現する:
 --
@@ -16,10 +16,10 @@
 --
 -- ε の分布で family が決まる:
 --
---   * 'AFTWeibull'    : ε ~ Gumbel  (生存解析の Weibull AFT)
---   * 'AFTLogNormal'  : ε ~ Normal(0, 1)
---   * 'AFTLogLogistic': ε ~ Logistic(0, 1)
---   * 'AFTExponential': Weibull with σ = 1 を固定
+--   - 'AFTWeibull'    : ε ~ Gumbel  (生存解析の Weibull AFT)
+--   - 'AFTLogNormal'  : ε ~ Normal(0, 1)
+--   - 'AFTLogLogistic': ε ~ Logistic(0, 1)
+--   - 'AFTExponential': Weibull with σ = 1 を固定
 --
 -- 右側打ち切り (right censoring) 対応。 推定は対数尤度の最大化を
 -- Nelder-Mead で行う (純粋関数のため runIdentity 経由)。
@@ -29,12 +29,39 @@
 -- > fitAFT     :: AFTDistribution -> Matrix Double -> Vector Double
 -- >            -> Vector Bool -> IO (Either Text AFTFit)
 -- > predictAFT :: AFTFit -> Matrix Double -> Vector Double  -- 期待寿命
+--
+-- [English]: Accelerated Failure Time (AFT) parametric survival model.
+--
+-- AFT expresses the log of lifetime T as a linear function of covariates:
+--
+-- @
+-- log T_i = X_i β + σ ε_i
+-- @
+--
+-- The distribution of ε determines the family:
+--
+--   - 'AFTWeibull'    : ε ~ Gumbel (the Weibull AFT of survival analysis).
+--   - 'AFTLogNormal'  : ε ~ Normal(0, 1).
+--   - 'AFTLogLogistic': ε ~ Logistic(0, 1).
+--   - 'AFTExponential': Weibull with σ = 1 fixed.
+--
+-- Supports right censoring. Estimation maximizes the log-likelihood via
+-- Nelder-Mead (routed through runIdentity since it is a pure function).
+--
+-- API:
+--
+-- > fitAFT     :: AFTDistribution -> Matrix Double -> Vector Double
+-- >            -> Vector Bool -> IO (Either Text AFTFit)
+-- > predictAFT :: AFTFit -> Matrix Double -> Vector Double  -- expected lifetime
 module Hanalyze.Model.AFT
   ( AFTDistribution (..)
   , AFTFit (..)
   , fitAFT
   , predictAFT
-  , logS          -- ^ 標準化誤差 z の log 生存関数 (= 生存曲線描画に使用・Phase 68 A5)
+  , logS
+    -- ^ [日本語]: 標準化誤差 z の log 生存関数 (= 生存曲線描画に使用)。
+    --   [English]: The log survival function of the standardized error z
+    --   (used for drawing survival curves).
   ) where
 
 import qualified Data.Vector                       as V
@@ -61,7 +88,7 @@ data AFTDistribution
 
 data AFTFit = AFTFit
   { aftBeta         :: !(LA.Vector Double)
-  , aftScale        :: !Double            -- ^ scale parameter σ
+  , aftScale        :: !Double            -- ^ [日本語]: scale parameter σ。 [English]: The scale parameter σ.
   , aftLogLik       :: !Double
   , aftDistribution :: !AFTDistribution
   , aftIters        :: !Int
@@ -71,9 +98,12 @@ data AFTFit = AFTFit
 -- fit
 -- ===========================================================================
 
--- | AFT モデルを MLE で fit する。
+-- | [日本語]: AFT モデルを MLE で fit する。
 --   X: n × p 共変量、 t: n 観測時間 (> 0)、 delta: n failure indicator
 --   (True = 観測、 False = 右側打ち切り)。
+--   [English]: Fits an AFT model with MLE.
+--   X: n × p covariates, t: n observed times (> 0), delta: n failure
+--   indicators (True = observed, False = right-censored).
 fitAFT
   :: AFTDistribution
   -> LA.Matrix Double
@@ -129,10 +159,15 @@ fitAFT dist x t delta
               , aftIters        = orIters res
               })
 
--- | 期待寿命の予測 E[T | X] = exp(X β + σ² / 2) -- log-normal の場合
+-- | [日本語]: 期待寿命の予測 E[T | X] = exp(X β + σ² / 2) -- log-normal の場合
 --   Weibull AFT: E[T] = exp(X β) · Γ(1 + σ)
 --   LogLogistic: E[T] = exp(X β) · π σ / sin(π σ) (σ < 1)
 --   Exponential: E[T] = exp(X β)
+--   [English]: Predicts expected lifetime E[T | X] = exp(X β + σ² / 2) --
+--   for log-normal.
+--   Weibull AFT: E[T] = exp(X β) · Γ(1 + σ).
+--   LogLogistic: E[T] = exp(X β) · π σ / sin(π σ) (σ < 1).
+--   Exponential: E[T] = exp(X β).
 predictAFT :: AFTFit -> LA.Matrix Double -> LA.Vector Double
 predictAFT fit xNew =
   let linPred = xNew LA.#> aftBeta fit
@@ -151,7 +186,9 @@ predictAFT fit xNew =
 -- 内部 helpers
 -- ===========================================================================
 
--- | 対数尤度。 censored は log S(t)、 observed は log f(t)。
+-- | [日本語]: 対数尤度。 censored は log S(t)、 observed は log f(t)。
+--   [English]: The log-likelihood. Censored uses log S(t); observed uses
+--   log f(t).
 logLikAFT
   :: AFTDistribution
   -> LA.Matrix Double -> LA.Vector Double -> V.Vector Bool
@@ -173,7 +210,8 @@ logLikAFT dist x t delta beta sigma
                   else logS  dist z
            | i <- [0 .. n - 1] ]
 
--- | log f(t)  =  log f_ε(z) − log σ − log t
+-- | [日本語]: log f(t)  =  log f_ε(z) − log σ − log t
+--   [English]: log f(t) = log f_ε(z) − log σ − log t.
 logPDF :: AFTDistribution -> Double -> Double -> Double -> Double
 logPDF dist sigma logT z =
   let body = case dist of
@@ -183,7 +221,8 @@ logPDF dist sigma logT z =
         AFTLogLogistic -> z - 2 * log1p (exp z)
   in body - log (max 1e-300 sigma) - logT
 
--- | log S(t)  =  log S_ε(z)
+-- | [日本語]: log S(t)  =  log S_ε(z)
+--   [English]: log S(t) = log S_ε(z).
 logS :: AFTDistribution -> Double -> Double
 logS dist z = case dist of
   AFTWeibull     -> -exp z
@@ -196,7 +235,9 @@ log1p x
   | abs x < 1e-4 = x - x * x / 2 + x * x * x / 3
   | otherwise    = log (1 + x)
 
--- | Stirling 近似による Γ(x) (x > 0)。 AFT の平均補正で使うだけなので簡易版。
+-- | [日本語]: Stirling 近似による Γ(x) (x > 0)。 AFT の平均補正で使うだけなので簡易版。
+--   [English]: Γ(x) (x > 0) via Stirling's approximation. A simplified
+--   version, since it is only used for the AFT mean correction.
 gammaApprox :: Double -> Double
 gammaApprox x
   | x <= 0 = 1 / 0

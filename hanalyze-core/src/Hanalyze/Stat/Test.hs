@@ -406,9 +406,13 @@ kruskalWallis groups
 
 -- | Friedman test — non-parametric two-way ANOVA without replication.
 --
--- 入力: n × k 行列。 行 = block (被験者)、 列 = treatment。
--- 各 block 内で treatment を順位付け (1..k) し、 列ごとの平均順位の分散から
--- 検定統計量 Q を構成 (χ²(k-1) 近似)。
+-- [日本語]: 入力: n × k 行列。 行 = block (被験者)、 列 = treatment。
+--   各 block 内で treatment を順位付け (1..k) し、 列ごとの平均順位の分散から
+--   検定統計量 Q を構成 (χ²(k-1) 近似)。
+-- [English]: Input: an n × k matrix. Rows = blocks (subjects), columns =
+--   treatments. Within each block, treatments are ranked (1..k), and the
+--   test statistic Q is built from the variance of the column-wise mean
+--   ranks (χ²(k-1) approximation).
 friedmanTest :: LA.Matrix Double -> TestResult
 friedmanTest mat
   | LA.rows mat < 2 || LA.cols mat < 2 =
@@ -440,7 +444,9 @@ friedmanTest mat
            , trNote        = Just "chi-square approximation"
            }
 
--- | 多重比較の結果。 ペアごとの z 値と raw / adjusted p-value。
+-- | [日本語]: 多重比較の結果。 ペアごとの z 値と raw / adjusted p-value。
+--   [English]: Multiple-comparison result. Per-pair z-values along with
+--   raw and adjusted p-values.
 data MultiCompareResult = MultiCompareResult
   { mcrPairs :: ![(Int, Int)]
   , mcrZ     :: ![Double]
@@ -448,12 +454,19 @@ data MultiCompareResult = MultiCompareResult
   , mcrPAdj  :: ![Double]   -- Holm correction
   } deriving (Show)
 
--- | Dunn 多重比較 (Kruskal-Wallis post-hoc)。
+-- | [日本語]: Dunn 多重比較 (Kruskal-Wallis post-hoc)。
 --   各グループの平均順位 R̄_i / R̄_j の差を SE で標準化:
 --
 --     z_{ij} = (R̄_i - R̄_j) / √( (N(N+1)/12) (1/n_i + 1/n_j) )
 --
 --   p_raw = 2 (1 - Φ(|z|))、 Holm 補正で族別 p_adj。
+--   [English]: Dunn's multiple comparison (Kruskal-Wallis post-hoc).
+--   Standardizes the difference between each pair of groups' mean ranks
+--   R̄_i \/ R̄_j by its SE:
+--
+--     z_{ij} = (R̄_i - R̄_j) / √( (N(N+1)/12) (1/n_i + 1/n_j) )
+--
+--   p_raw = 2 (1 - Φ(|z|)); family-wise p_adj via Holm correction.
 dunnTest :: [LA.Vector Double] -> MultiCompareResult
 dunnTest groups =
   let k      = length groups
@@ -495,7 +508,9 @@ holmAdjust ps =
       mono = scanl1 (\(_, prev) (i, p) -> (i, max prev p)) stepwise
   in map snd (L.sortBy (comparing fst) mono)
 
--- | midrank: 同順位は順位平均。 入力: list of values, 出力: 同 length の rank list。
+-- | [日本語]: midrank: 同順位は順位平均。 入力: list of values, 出力: 同 length の rank list。
+--   [English]: midrank: ties get the average rank. Input: a list of
+--   values; output: a rank list of the same length.
 midrank :: [Double] -> [Double]
 midrank xs =
   let indexed = zip [0 :: Int ..] xs
@@ -833,7 +848,7 @@ choose n k
                 `div` product [fromIntegral i | i <- [1 .. k]]
 
 -- | Sort an LA vector (ascending) via 'Data.List.sort' (mergesort,
--- O(n log n) / O(n) space). Phase 11b (2026-05-14): replaced naive list
+-- O(n log n) / O(n) space). Replaced (2026-05-14) the naive list
 -- quicksort to avoid pivot-bias O(n²) blowup on large inputs.
 sortVec :: LA.Vector Double -> LA.Vector Double
 sortVec v = LA.fromList (L.sort (LA.toList v))
@@ -911,19 +926,33 @@ wilcoxonManual xs ys alt =
 -- 多変量検定 (Phase 4.3、 request/140)
 -- ===========================================================================
 
--- | 1 サンプル Hotelling T² 検定 (H_0: μ = μ_0)。
+-- | [日本語]: 1 サンプル Hotelling T² 検定 (H_0: μ = μ_0)。
 --
--- 入力:
+--   入力:
 --
---   * X (n × p): 各行が 1 観測の多変量ベクトル
---   * μ_0 (長さ p): 仮説の平均
+--     * X (n × p): 各行が 1 観測の多変量ベクトル
+--     * μ_0 (長さ p): 仮説の平均
 --
--- 統計量と分布:
+--   統計量と分布:
 --
--- > T² = n · (μ̂ − μ_0)ᵀ S⁻¹ (μ̂ − μ_0)
--- > F  = ((n − p) / ((n − 1) · p)) · T²,    df = (p, n − p)
+--   > T² = n · (μ̂ − μ_0)ᵀ S⁻¹ (μ̂ − μ_0)
+--   > F  = ((n − p) / ((n − 1) · p)) · T²,    df = (p, n − p)
 --
--- 戻り値の 'trStatistic' は F 値、 'trEffect' に @("T²", T²)@ を格納。
+--   戻り値の 'trStatistic' は F 値、 'trEffect' に @("T²", T²)@ を格納。
+--   [English]: One-sample Hotelling's T² test (H_0: μ = μ_0).
+--
+--   Input:
+--
+--     * X (n × p): each row is one multivariate observation
+--     * μ_0 (length p): the hypothesised mean
+--
+--   Statistic and distribution:
+--
+--   > T² = n · (μ̂ − μ_0)ᵀ S⁻¹ (μ̂ − μ_0)
+--   > F  = ((n − p) / ((n − 1) · p)) · T²,    df = (p, n − p)
+--
+--   The returned 'trStatistic' is the F value; 'trEffect' holds
+--   @("T²", T²)@.
 hotellingsT2 :: LA.Matrix Double -> LA.Vector Double -> TestResult
 hotellingsT2 x mu0
   | n < 2 = noResultTRR "Hotelling T² (1-sample)" TwoSided "need ≥ 2 observations"
@@ -965,14 +994,23 @@ hotellingsT2 x mu0
     n = LA.rows x
     p = LA.cols x
 
--- | 2 サンプル Hotelling T² 検定 (等分散仮定、 H_0: μ_X = μ_Y)。
+-- | [日本語]: 2 サンプル Hotelling T² 検定 (等分散仮定、 H_0: μ_X = μ_Y)。
 --
--- 入力: X (n_1 × p)、 Y (n_2 × p)。 両標本の次元 p は一致が必要。
+--   入力: X (n_1 × p)、 Y (n_2 × p)。 両標本の次元 p は一致が必要。
 --
--- 統計量:
+--   統計量:
 --
--- > T² = (n_1·n_2 / (n_1+n_2)) · (μ̂_1 − μ̂_2)ᵀ S_p⁻¹ (μ̂_1 − μ̂_2)
--- > F  = ((n_1+n_2−p−1) / ((n_1+n_2−2)·p)) · T²,  df = (p, n_1+n_2−p−1)
+--   > T² = (n_1·n_2 / (n_1+n_2)) · (μ̂_1 − μ̂_2)ᵀ S_p⁻¹ (μ̂_1 − μ̂_2)
+--   > F  = ((n_1+n_2−p−1) / ((n_1+n_2−2)·p)) · T²,  df = (p, n_1+n_2−p−1)
+--   [English]: Two-sample Hotelling's T² test (assumes equal covariance,
+--   H_0: μ_X = μ_Y).
+--
+--   Input: X (n_1 × p), Y (n_2 × p). Both samples must share dimension p.
+--
+--   Statistic:
+--
+--   > T² = (n_1·n_2 / (n_1+n_2)) · (μ̂_1 − μ̂_2)ᵀ S_p⁻¹ (μ̂_1 − μ̂_2)
+--   > F  = ((n_1+n_2−p−1) / ((n_1+n_2−2)·p)) · T²,  df = (p, n_1+n_2−p−1)
 hotellingsT2TwoSample :: LA.Matrix Double -> LA.Matrix Double -> TestResult
 hotellingsT2TwoSample x y
   | n1 < 2 || n2 < 2 =
@@ -1021,20 +1059,35 @@ hotellingsT2TwoSample x y
     n2 = LA.rows y
     p  = LA.cols x
 
--- | 1 元配置 MANOVA (H_0: 全群の μ が等しい)。
+-- | [日本語]: 1 元配置 MANOVA (H_0: 全群の μ が等しい)。
 --
--- 入力: 各群の観測行列リスト @[X_1, X_2, ..., X_k]@、 各 X_i は @n_i × p@。
+--   入力: 各群の観測行列リスト @[X_1, X_2, ..., X_k]@、 各 X_i は @n_i × p@。
 --
--- 統計量: Wilks' Λ = det(W) / det(W + B)。
---   B = between-group SSCP、 W = within-group SSCP。
--- p-value は Rao の F 近似:
+--   統計量: Wilks' Λ = det(W) / det(W + B)。
+--     B = between-group SSCP、 W = within-group SSCP。
+--   p-value は Rao の F 近似:
 --
--- > s = sqrt((p²·q² − 4) / (p² + q² − 5))     (q = k − 1)
--- > m = N − 1 − (p + q + 1) / 2
--- > df1 = p · q,   df2 = m·s − (p·q − 2) / 2
--- > F   = ((1 − Λ^(1/s)) / Λ^(1/s)) · (df2 / df1)
+--   > s = sqrt((p²·q² − 4) / (p² + q² − 5))     (q = k − 1)
+--   > m = N − 1 − (p + q + 1) / 2
+--   > df1 = p · q,   df2 = m·s − (p·q − 2) / 2
+--   > F   = ((1 − Λ^(1/s)) / Λ^(1/s)) · (df2 / df1)
 --
--- 'trStatistic' に F 値、 'trEffect' に @("Wilks Λ", Λ)@。
+--   'trStatistic' に F 値、 'trEffect' に @("Wilks Λ", Λ)@。
+--   [English]: One-way MANOVA (H_0: all groups share the same μ).
+--
+--   Input: a list of each group's observation matrix
+--   @[X_1, X_2, ..., X_k]@, each X_i being @n_i × p@.
+--
+--   Statistic: Wilks' Λ = det(W) / det(W + B), where B = the
+--   between-group SSCP and W = the within-group SSCP. The p-value uses
+--   Rao's F approximation:
+--
+--   > s = sqrt((p²·q² − 4) / (p² + q² − 5))     (q = k − 1)
+--   > m = N − 1 − (p + q + 1) / 2
+--   > df1 = p · q,   df2 = m·s − (p·q − 2) / 2
+--   > F   = ((1 − Λ^(1/s)) / Λ^(1/s)) · (df2 / df1)
+--
+--   'trStatistic' holds the F value; 'trEffect' holds @("Wilks Λ", Λ)@.
 manova :: [LA.Matrix Double] -> TestResult
 manova groups
   | k < 2 = noResultTRR "MANOVA (one-way)" TwoSided "need ≥ 2 groups"
@@ -1097,14 +1150,16 @@ manova groups
 -- 多変量 helper
 -- ---------------------------------------------------------------------------
 
--- | 列ごとの平均 (= サンプル平均ベクトル)。
+-- | [日本語]: 列ごとの平均 (= サンプル平均ベクトル)。
+--   [English]: Per-column mean (= the sample mean vector).
 columnMeans :: LA.Matrix Double -> LA.Vector Double
 columnMeans m =
   let n = fromIntegral (LA.rows m) :: Double
   in LA.scale (1 / n) (LA.fromList [ LA.sumElements (m LA.¿ [j])
                                     | j <- [0 .. LA.cols m - 1] ])
 
--- | 標本共分散行列 (n - 1 分母)。
+-- | [日本語]: 標本共分散行列 (n - 1 分母)。
+--   [English]: Sample covariance matrix (denominator n - 1).
 sampleCovariance :: LA.Matrix Double -> LA.Matrix Double
 sampleCovariance m =
   let n      = fromIntegral (LA.rows m) :: Double
@@ -1114,7 +1169,8 @@ sampleCovariance m =
       _ = meanRow  -- silence unused warning
   in LA.scale (1 / (n - 1)) (LA.tr centered LA.<> centered)
 
--- | 群内 SSCP: Σ (x_{ij} − x̄_i)(x_{ij} − x̄_i)ᵀ
+-- | [日本語]: 群内 SSCP: Σ (x_{ij} − x̄_i)(x_{ij} − x̄_i)ᵀ
+--   [English]: Within-group SSCP: Σ (x_{ij} − x̄_i)(x_{ij} − x̄_i)ᵀ
 withinSSCP :: LA.Matrix Double -> LA.Vector Double -> LA.Matrix Double
 withinSSCP g groupMean =
   let centered = g - LA.fromRows (replicate (LA.rows g) groupMean)

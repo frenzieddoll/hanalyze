@@ -94,4 +94,4 @@ randomSlope groupData = do
 **Recommendation**: fit with GLMM first → once the model structure is settled,
 estimate fully Bayesian with HBM. For a three-way comparison (LM / GLMM / HBM)
 on the Simpson's paradox example see
-[`simpson-paradox`](../../demo/bayesian/SimpsonParadoxDemo.hs).
+[`simpson-paradox`](../../hanalyze-demos/demo/bayesian/SimpsonParadoxDemo.hs).

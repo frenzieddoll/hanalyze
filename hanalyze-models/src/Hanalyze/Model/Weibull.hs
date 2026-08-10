@@ -7,7 +7,7 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Weibull 分布の最尤推定 + B_x 寿命 + Wald SE。
+-- [日本語]: Weibull 分布の最尤推定 + B_x 寿命 + Wald SE。
 --
 -- 信頼性 / 故障時間解析の中核。 半導体 / 材料分野の加速試験データ解析に使う。
 -- 加速モデル (Arrhenius / Eyring / Inverse Power Law) は
@@ -20,6 +20,23 @@
 --
 -- 形状 k と尺度 λ は両方とも正。 k < 1 は故障率低下 (初期不良)、 k = 1 は
 -- 指数分布、 k > 1 は故障率上昇 (摩耗故障)。
+--
+-- [English]: Weibull distribution maximum-likelihood estimation + B_x life +
+-- Wald SE.
+--
+-- The core of reliability \/ time-to-failure analysis. Used for analyzing
+-- accelerated test data in the semiconductor \/ materials domains.
+-- Acceleration models (Arrhenius \/ Eyring \/ Inverse Power Law) are handled
+-- separately in @Hanalyze.Model.Reliability@.
+--
+-- The probability density \/ survival function of Weibull(k, λ):
+--
+-- > f(x) = (k/λ) (x/λ)^(k-1) exp(-(x/λ)^k)        for x > 0
+-- > S(x) = exp(-(x/λ)^k)
+--
+-- Both the shape k and scale λ are positive. k < 1 means decreasing failure
+-- rate (early failures/infant mortality), k = 1 is the exponential
+-- distribution, and k > 1 means increasing failure rate (wear-out failures).
 module Hanalyze.Model.Weibull
   ( -- * 結果型
     WeibullFit (..)
@@ -43,39 +60,52 @@ import qualified Data.Vector   as V
 -- 型定義
 -- ===========================================================================
 
--- | Weibull MLE 結果。
+-- | [日本語]: Weibull MLE 結果。
+--   [English]: A Weibull MLE result.
 data WeibullFit = WeibullFit
-  { wfShape   :: !Double           -- ^ k (形状パラメータ、 > 0)
-  , wfScale   :: !Double           -- ^ λ (尺度パラメータ、 > 0)
-  , wfLogLik  :: !Double           -- ^ 対数尤度の MLE 値
-  , wfN       :: !Int              -- ^ 観測総数 (打ち切り含む)
-  , wfRObs    :: !Int              -- ^ 観測 failure 数 (打ち切り除く)
+  { wfShape   :: !Double           -- ^ [日本語]: k (形状パラメータ、 > 0) [English]: k (the shape parameter, > 0)
+  , wfScale   :: !Double           -- ^ [日本語]: λ (尺度パラメータ、 > 0) [English]: λ (the scale parameter, > 0)
+  , wfLogLik  :: !Double           -- ^ [日本語]: 対数尤度の MLE 値 [English]: The log-likelihood at the MLE
+  , wfN       :: !Int              -- ^ [日本語]: 観測総数 (打ち切り含む) [English]: The total number of observations (including censored)
+  , wfRObs    :: !Int              -- ^ [日本語]: 観測 failure 数 (打ち切り除く) [English]: The number of observed failures (excluding censored)
   , wfFisher  :: !(Double, Double, Double)
-    -- ^ Fisher 情報行列 2x2 を上三角 (I_kk, I_kλ, I_λλ) で保持。
+    -- ^ [日本語]: Fisher 情報行列 2x2 を上三角 (I_kk, I_kλ, I_λλ) で保持。
     --   Wald SE 計算で逆行列を取る。
+    --   [English]: Holds the upper triangle of the 2x2 Fisher information
+    --   matrix (I_kk, I_kλ, I_λλ). Its inverse is taken for the Wald SE
+    --   calculation.
   } deriving (Show)
 
 -- ===========================================================================
 -- 内部ヘルパ
 -- ===========================================================================
 
--- | 観測値リストの sanity check (全て正で非空)。
+-- | [日本語]: 観測値リストの sanity check (全て正で非空)。
+--   [English]: A sanity check on the observation list (all positive and
+--   non-empty).
 validatePositive :: Vector Double -> Either Text ()
 validatePositive xs
   | V.null xs           = Left "fitWeibull: empty observation series"
   | V.any (<= 0) xs     = Left "fitWeibull: all observations must be positive"
   | otherwise           = Right ()
 
--- | A(k) = Σ x_i^k log x_i (failures のみ加算する版は censored 用)。
+-- | [日本語]: A(k) = Σ x_i^k log x_i (failures のみ加算する版は censored 用)。
+--   [English]: A(k) = Σ x_i^k log x_i (the variant summing only failures is
+--   for the censored case).
 weightedLog :: Double -> Vector Double -> Double
 weightedLog k xs = V.sum (V.map (\x -> x ** k * log x) xs)
 
--- | B(k) = Σ x_i^k。 censored 含む場合は加算範囲を呼び出し側で制御する。
+-- | [日本語]: B(k) = Σ x_i^k。 censored 含む場合は加算範囲を呼び出し側で制御する。
+--   [English]: B(k) = Σ x_i^k. When censored observations are included, the
+--   caller controls the summation range.
 sumPow :: Double -> Vector Double -> Double
 sumPow k xs = V.sum (V.map (** k) xs)
 
--- | g(k) = A(k)/B(k) − (1/r)·Σ_{failures} log x − 1/k = 0
+-- | [日本語]: g(k) = A(k)/B(k) − (1/r)·Σ_{failures} log x − 1/k = 0
 --   r = failure 数。 単調増加なので bisection で root を取れる。
+--   [English]: g(k) = A(k)/B(k) − (1/r)·Σ_{failures} log x − 1/k = 0,
+--   where r = the number of failures. Since it is monotonically increasing,
+--   the root can be found via bisection.
 scoreG :: Double -> Vector Double -> Vector Double -> Int -> Double
 scoreG k allXs failuresXs r =
   let bk = sumPow k allXs
@@ -83,7 +113,9 @@ scoreG k allXs failuresXs r =
       meanLogFail = V.sum (V.map log failuresXs) / fromIntegral r
   in ak / bk - meanLogFail - 1 / k
 
--- | 単調増加関数の root を bisection で。 区間 [lo, hi] で g(lo) < 0 < g(hi) を仮定。
+-- | [日本語]: 単調増加関数の root を bisection で。 区間 [lo, hi] で g(lo) < 0 < g(hi) を仮定。
+--   [English]: Finds the root of a monotonically increasing function via
+--   bisection. Assumes g(lo) < 0 < g(hi) over the interval [lo, hi].
 bisect
   :: (Double -> Double)  -- 単調増加 g
   -> Double              -- lo
@@ -103,8 +135,11 @@ bisect g lo0 hi0 tol maxIter = go lo0 hi0 0
                then go lo mid (i + 1)
                else go mid hi (i + 1)
 
--- | 区間を「拡張 + 縮小」 でブラケットを取る。
+-- | [日本語]: 区間を「拡張 + 縮小」 でブラケットを取る。
 --   関数 g は単調増加。 g(start_lo) ≥ 0 や g(start_hi) ≤ 0 の場合は範囲を広げる。
+--   [English]: Brackets the root by "expanding + shrinking" the interval.
+--   g is monotonically increasing; the range is widened when g(start_lo) ≥ 0
+--   or g(start_hi) ≤ 0.
 findBracket
   :: (Double -> Double)
   -> Double  -- 初期 lo (>0)
@@ -126,8 +161,12 @@ findBracket g lo0 hi0 maxExp = go lo0 hi0 0
                              then go lo (hi * 4) (i + 1)
                              else Right (lo, hi)
 
--- | 全観測 failure 仮定で MLE を解く中核ロジック。
---   xs (failure 時間) + xsAll (全観測; censored 含む) を分けるのは Phase 2.3 用。
+-- | [日本語]: 全観測 failure 仮定で MLE を解く中核ロジック。
+--   xs (failure 時間) + xsAll (全観測; censored 含む) を分けるのは、 打ち切りに
+--   対応するため。
+--   [English]: The core logic solving the MLE, assuming all observations are
+--   failures. Splitting xs (failure times) from xsAll (all observations,
+--   including censored) is to support censoring.
 solveWeibull
   :: Vector Double  -- failures (時間)
   -> Vector Double  -- 全観測 (失敗 + 打ち切り)
@@ -173,11 +212,17 @@ solveWeibull failuresXs allXs r = do
 -- 公開関数
 -- ===========================================================================
 
--- | Weibull MLE (打ち切り無し)。
+-- | [日本語]: Weibull MLE (打ち切り無し)。
 --
 -- 入力: 全て観測済の故障時間 (> 0)。
 -- 解法: score equation @1/k = A(k)/B(k) − (1/n)·Σ log x@ を 1D bisection で
 --       解き、 λ = (Σ x^k / n)^(1/k)。
+--
+--   [English]: Weibull MLE (no censoring).
+--
+-- Input: fully observed failure times (> 0).
+-- Method: solves the score equation @1/k = A(k)/B(k) − (1/n)·Σ log x@ via
+--       1-D bisection, then λ = (Σ x^k / n)^(1/k).
 fitWeibullMLE :: Vector Double -> Either Text WeibullFit
 fitWeibullMLE xs = do
   _ <- validatePositive xs
@@ -191,12 +236,20 @@ fitWeibullMLE xs = do
            then Left "fitWeibullMLE: data is constant (degenerate)"
            else solveWeibull xs xs (V.length xs)
 
--- | Weibull MLE (右打ち切り対応)。
+-- | [日本語]: Weibull MLE (右打ち切り対応)。
 --
 -- 第 2 引数の @True@ = failure observed、 @False@ = right-censored。
 -- 同じ score equation @1/k = A_all(k)/B_all(k) − (1/r)·Σ_{δ=1} log x@ を解くが、
 -- @A@, @B@ は 全観測 (failure + 打ち切り) で加算し、 log-sum は failure のみ。
 -- @r@ は failure 数。
+--
+--   [English]: Weibull MLE (supports right censoring).
+--
+-- The second argument's @True@ = failure observed, @False@ = right-censored.
+-- Solves the same score equation
+-- @1/k = A_all(k)/B_all(k) − (1/r)·Σ_{δ=1} log x@, but @A@ and @B@ sum over
+-- all observations (failures + censored), while the log-sum is over failures
+-- only. @r@ is the number of failures.
 fitWeibullCensored :: Vector Double -> Vector Bool -> Either Text WeibullFit
 fitWeibullCensored xs deltas = do
   _ <- validatePositive xs
@@ -215,10 +268,15 @@ fitWeibullCensored xs deltas = do
                   then Left "fitWeibullCensored: failure data is constant (degenerate)"
                   else solveWeibull failuresXs xs r
 
--- | B_p 寿命: F^{-1}(p) = λ · (−ln(1−p))^(1/k)。
+-- | [日本語]: B_p 寿命: F^{-1}(p) = λ · (−ln(1−p))^(1/k)。
 --
 -- 典型用途: @bxLife 0.10 fit@ → B_10 (10%故障時間)、
 --           @bxLife 0.50 fit@ → B_50 (中央寿命)。
+--
+--   [English]: B_p life: F^{-1}(p) = λ · (−ln(1−p))^(1/k).
+--
+-- Typical usage: @bxLife 0.10 fit@ → B_10 (the 10% failure time),
+--           @bxLife 0.50 fit@ → B_50 (the median life).
 bxLife :: Double -> WeibullFit -> Double
 bxLife p _ | p <= 0 || p >= 1 = error "bxLife: probability must be in (0, 1)"
 bxLife p fit =
@@ -226,16 +284,25 @@ bxLife p fit =
       lam = wfScale fit
   in lam * (- log (1 - p)) ** (1 / k)
 
--- | (k_SE, λ_SE) — Fisher 情報行列の逆行列の対角の平方根。
+-- | [日本語]: (k_SE, λ_SE) — Fisher 情報行列の逆行列の対角の平方根。
 --
 -- 2x2 逆行列: var(k) = I_λλ / det、 var(λ) = I_kk / det、 det = I_kk·I_λλ − I_kλ²
+--
+--   [English]: (k_SE, λ_SE) — the square root of the diagonal of the inverse
+--   Fisher information matrix.
+--
+-- 2x2 inverse: var(k) = I_λλ / det, var(λ) = I_kk / det,
+-- det = I_kk·I_λλ − I_kλ².
 weibullParameterSE :: WeibullFit -> (Double, Double)
 weibullParameterSE fit =
   let (vK, _, vL) = weibullParameterCovariance fit
   in (sqrt (max 0 vK), sqrt (max 0 vL))
 
--- | (Var(k), Cov(k, λ), Var(λ))。 Fisher 情報行列の 2x2 逆行列。
+-- | [日本語]: (Var(k), Cov(k, λ), Var(λ))。 Fisher 情報行列の 2x2 逆行列。
 --   非正定値の場合は (0, 0, 0) を返す (canvas 側で警告するための signal)。
+--   [English]: (Var(k), Cov(k, λ), Var(λ)). The 2x2 inverse of the Fisher
+--   information matrix. Returns (0, 0, 0) when not positive-definite (a
+--   signal for the canvas side to warn about).
 weibullParameterCovariance :: WeibullFit -> (Double, Double, Double)
 weibullParameterCovariance fit =
   let (iKK, iKL, iLL) = wfFisher fit
@@ -244,7 +311,7 @@ weibullParameterCovariance fit =
        then (0, 0, 0)
        else (iLL / det, -iKL / det, iKK / det)
 
--- | B_p 寿命の Wald 信頼区間 (delta method)。
+-- | [日本語]: B_p 寿命の Wald 信頼区間 (delta method)。
 --
 -- @bxLifeCI p α fit@ で「故障時間が確率 p に達する時刻」 の
 -- 信頼度 @1 − α@ 信頼区間 (例: α = 0.05 で 95% CI) を返す。
@@ -259,6 +326,24 @@ weibullParameterCovariance fit =
 -- (寿命は非負)。 共分散が非正定値で SE 計算不能の場合は @(estimate, estimate, estimate)@。
 --
 -- 注: α は両側で考えるので 95% CI なら z = 1.96 を内部使用。
+--
+--   [English]: The Wald confidence interval for B_p life (delta method).
+--
+-- @bxLifeCI p α fit@ returns the @1 − α@ confidence interval (e.g. α = 0.05
+-- for a 95% CI) for "the time at which the failure probability reaches p".
+--
+-- Delta method:
+--
+-- > Var(B_p) ≈ (∂B_p/∂k)² Var(k) + (∂B_p/∂λ)² Var(λ) + 2 (∂B_p/∂k)(∂B_p/∂λ) Cov(k,λ)
+-- > ∂B_p/∂λ = B_p / λ
+-- > ∂B_p/∂k = −B_p · log(−log(1−p)) / k²
+--
+-- Return value: @(estimate, lower, upper)@. lower is clipped to 0 via
+-- max(0, ...) (life is non-negative). When the covariance is not
+-- positive-definite and the SE cannot be computed, returns
+-- @(estimate, estimate, estimate)@.
+--
+-- Note: since α is considered two-sided, a 95% CI uses z = 1.96 internally.
 bxLifeCI :: Double -> Double -> WeibullFit -> (Double, Double, Double)
 bxLifeCI p alpha fit =
   let bp     = bxLife p fit
@@ -275,8 +360,11 @@ bxLifeCI p alpha fit =
       hi     = bp + z * seBp
   in (bp, lo, hi)
 
--- | 標準正規分布の分位点 (近似)。 95% CI で z = 1.959964…。
+-- | [日本語]: 標準正規分布の分位点 (近似)。 95% CI で z = 1.959964…。
 --   Acklam 高精度近似 (12 桁) を採用。
+--   [English]: The quantile of the standard normal distribution
+--   (approximate). z = 1.959964… for a 95% CI. Uses Acklam's
+--   high-precision approximation (12 digits).
 quantileNormal :: Double -> Double
 quantileNormal q
   | q <= 0 || q >= 1 = error "quantileNormal: q must be in (0, 1)"

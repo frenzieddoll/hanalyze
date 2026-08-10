@@ -6,12 +6,21 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Phase 58.4: 分布からのサンプリング (事前/事後予測用) を分離。
+-- [日本語]: 分布からのサンプリング (事前/事後予測用) を分離。
 --
--- 'Distribution' / 'HBM.Util' の上層。 PrimMonad + mwc-random に依存し、
--- mwc-random が直接提供しない分布 (Cauchy, HalfCauchy, Weibull, …) は
--- 逆 CDF 法 / rejection でここに実装する。 NUTS の per-draw 経路には乗らず
--- (事前/事後予測のみ)、 性能ホットではない。
+--   'Distribution' / 'HBM.Util' の上層。 PrimMonad + mwc-random に依存し、
+--   mwc-random が直接提供しない分布 (Cauchy, HalfCauchy, Weibull, …) は
+--   逆 CDF 法 / rejection でここに実装する。 NUTS の per-draw 経路には乗らず
+--   (事前/事後予測のみ)、 性能ホットではない。
+-- [English]: Sampling from distributions (for prior/posterior predictive
+--   checks), factored out as its own module.
+--
+--   Sits above 'Distribution' / 'HBM.Util'. Depends on PrimMonad +
+--   mwc-random; distributions mwc-random doesn't provide directly (Cauchy,
+--   HalfCauchy, Weibull, …) are implemented here via inverse-CDF /
+--   rejection sampling. This does not sit on NUTS's per-draw path (used
+--   only for prior/posterior predictive checks), so it is not
+--   performance-hot.
 module Hanalyze.Model.HBM.Sampling
   ( sampleDist
   , sampleMvDist
@@ -33,9 +42,14 @@ import Hanalyze.Model.HBM.Distribution (Distribution (..), phiCdfA)
 -- ---------------------------------------------------------------------------
 
 -- | Draw a single sample from a 'Distribution Double'.
--- 事前予測サンプリング、事後予測サンプリング、観測値の生成に使う。
+-- [日本語]: 事前予測サンプリング、事後予測サンプリング、観測値の生成に使う。
 --
--- mwc-random が直接提供しない分布はここで実装する (Cauchy, HalfCauchy, etc.)。
+--   mwc-random が直接提供しない分布はここで実装する (Cauchy, HalfCauchy, etc.)。
+-- [English]: Used for prior predictive sampling, posterior predictive
+--   sampling, and generating observed values.
+--
+--   Distributions mwc-random doesn't provide directly are implemented here
+--   (Cauchy, HalfCauchy, etc.).
 sampleDist :: forall m. PrimMonad m => Distribution Double -> Gen (PrimState m) -> m Double
 sampleDist (Normal mu sig) gen = MWC.normal mu sig gen
 sampleDist (Exponential rate) gen = do
@@ -290,11 +304,19 @@ sampleDist (DiscreteWeibull q beta) gen = do
       k  = max 0 k0
   return (fromIntegral k)
 
--- | 多変量分布から 1 観測 (k-vector) を draw する (Phase 44、 PPC 用)。
--- 'sampleDist' (スカラ観測専用 'error') と別経路。 @y = μ + C z@ で z ~ N(0,1)、
--- C は MvNormal なら @choleskyL Σ@、 MvNormalChol なら scaled Cholesky
--- @M = diag σ · L@ (再分解不要)。 対応外の多変量分布は空リスト (= worker 側で
--- graceful にスキップ。 本 Phase は MvNormal/MvNormalChol に集中)。
+-- | [日本語]: 多変量分布から 1 観測 (k-vector) を draw する (PPC 用)。
+--   @sampleDist@ (スカラ観測専用 'error') と別経路。 @y = μ + C z@ で z ~ N(0,1)、
+--   C は MvNormal なら @choleskyL Σ@、 MvNormalChol なら scaled Cholesky
+--   @M = diag σ · L@ (再分解不要)。 対応外の多変量分布は空リスト (= worker 側で
+--   graceful にスキップ。 MvNormal/MvNormalChol に集中)。
+--   [English]: Draws one observation (a k-vector) from a multivariate
+--   distribution (for posterior predictive checks). A separate path from
+--   @sampleDist@ (which 'error's on scalar-only observations). Computes
+--   @y = μ + C z@ with z ~ N(0,1), where C is @choleskyL Σ@ for MvNormal,
+--   or the scaled Cholesky @M = diag σ · L@ for MvNormalChol (no
+--   re-decomposition needed). Unsupported multivariate distributions
+--   return an empty list (gracefully skipped on the worker side; coverage
+--   is focused on MvNormal/MvNormalChol).
 sampleMvDist :: forall m. PrimMonad m => Distribution Double -> Gen (PrimState m) -> m [Double]
 sampleMvDist (MvNormal mu cov) gen = do
   let k = length mu
@@ -313,13 +335,22 @@ sampleMvDist (MvNormalGpRBF xs alpha rho sigma) gen =    -- Phase 95 B-dsl: cov 
   sampleMvDist (MvNormal (replicate (length xs) 0) (gpRBFCovList xs alpha rho sigma)) gen
 sampleMvDist _ _ = pure []
 
--- | 1 observe ノード分の複製データ (y_rep) をまとめて draw する (Phase 90 A2)。
--- PPC ('sampleYRep'/'epredPIAtHeld' 等) はこれまで観測分布を問わず ys の要素
--- ごとに 'sampleDist' (スカラ専用) を呼んでいたため、 多変量分布 (MvNormal/
--- MvNormalChol、 ys = 1 つの k-vector 観測がフラット化された形) では即座に
--- @error@ していた (07-gp-regr で実測発覚)。 ここで次元 k ごとに ys をチャンク
--- し 'sampleMvDist' に委譲する。 Multinomial は 'sampleMvDist' が未対応の
--- ままなので (本 Phase の対象外)、 従来どおり 'sampleDist' に委ねる。
+-- | [日本語]: 1 observe ノード分の複製データ (y_rep) をまとめて draw する。
+--   PPC (@sampleYRep@/@epredPIAtHeld@ 等) はこれまで観測分布を問わず ys の要素
+--   ごとに @sampleDist@ (スカラ専用) を呼んでいたため、 多変量分布 (MvNormal/
+--   MvNormalChol、 ys = 1 つの k-vector 観測がフラット化された形) では即座に
+--   @error@ していた (07-gp-regr で実測発覚)。 ここで次元 k ごとに ys をチャンク
+--   し 'sampleMvDist' に委譲する。 Multinomial は 'sampleMvDist' が未対応の
+--   ままなので、 従来どおり @sampleDist@ に委ねる。
+--   [English]: Draws replicated data (y_rep) for one observe node, all at
+--   once. PPC helpers (@sampleYRep@/@epredPIAtHeld@, etc.) used to call
+--   @sampleDist@ (scalar-only) per element of ys regardless of the
+--   observation distribution, which immediately @error@'d for multivariate
+--   distributions (MvNormal/MvNormalChol, where ys is a single flattened
+--   k-vector observation) — discovered via 07-gp-regr. Here, ys is chunked
+--   by dimension k and delegated to 'sampleMvDist'. Multinomial is still
+--   unsupported by 'sampleMvDist', so it continues to be delegated to
+--   @sampleDist@ as before.
 sampleObsRep :: forall m. PrimMonad m
              => Gen (PrimState m) -> Distribution Double -> [Double] -> m [Double]
 sampleObsRep gen d@(MvNormal mu _) ys =
@@ -392,7 +423,9 @@ sampleObsRep gen (GradedResponseIrt thetas ncats deltas gammas) ys = do
   concat <$> sequence [ drawRow th row | (th, row) <- zip thetas rows ]
 sampleObsRep gen d ys = mapM (const (sampleDist d gen)) ys
 
--- | Knuth のアルゴリズムで Poisson(λ) サンプル。λ < 30 程度なら十分高速。
+-- | [日本語]: Knuth のアルゴリズムで Poisson(λ) サンプル。λ < 30 程度なら十分高速。
+--   [English]: Samples Poisson(λ) via Knuth's algorithm. Fast enough for
+--   λ around 30 or less.
 samplePoissonKnuth :: forall m. PrimMonad m => Double -> Gen (PrimState m) -> m Double
 samplePoissonKnuth lam gen = do
   let l = exp (-lam)

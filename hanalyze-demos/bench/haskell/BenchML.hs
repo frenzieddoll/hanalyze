@@ -33,16 +33,16 @@ pcaPhantom _ k x = PCA.pca PCA.CenterScale (Just k) x
 
 {-# NOINLINE kmeansPhantom #-}
 kmeansPhantom :: Int -> Int -> LA.Matrix Double -> MWC.GenIO -> IO Cl.KMeansResult
-kmeansPhantom _ k x gen = Cl.kMeans (Cl.defaultKMeansConfig k) x gen
+kmeansPhantom _ k x gen = Cl.kMeans (Cl.defaultKMeans k) x gen
 
 {-# NOINLINE dtPhantom #-}
 dtPhantom :: Int -> [[Double]] -> [Int] -> DT.DTree
-dtPhantom _ xs ys = DT.fitDT DT.defaultDTConfig xs ys
+dtPhantom _ xs ys = DT.fitDT DT.defaultDecisionTree xs ys
 
 {-# NOINLINE rfPhantom #-}
 rfPhantom :: Int -> [[Double]] -> [Double] -> MWC.GenIO -> IO RF.RandomForest
 rfPhantom _ xs ys gen =
-  RF.fitRF RF.defaultRFConfig { RF.rfTrees = 20 } xs ys gen
+  RF.fitRF RF.defaultRandomForest { RF.rfTrees = 20 } xs ys gen
 
 -- ---------------------------------------------------------------------------
 

@@ -1,7 +1,5 @@
 # Custom Design (JMP 同等) の使い方
 
-> 🌐 [English](usage-custom-design.md) | **日本語**
-
 > JMP Pro "Custom Design" 相当の **任意モデル × 任意制約 × 任意 runs** を
 > 1 関数で生成する。 候補集合ベースの古典 D-optimal (`Hanalyze.Design.Optimal`)
 > と異なり、 連続因子は coordinate exchange (Meyer-Nachtsheim 1995)、 categorical

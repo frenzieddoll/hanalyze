@@ -63,13 +63,22 @@ import Hanalyze.Model.HBM (ModelP, Params, Distribution (..),
 -- 型
 -- ---------------------------------------------------------------------------
 
--- | A Gibbs update block. Receives the current parameter set and returns
--- a single fresh @(name, value)@ sampled from the assigned parameter's
--- full conditional distribution.
+-- | [日本語]: Gibbs update block。 現在のパラメータ集合を受け取り、 割り当てられた
+--   パラメータのフル条件付き分布からサンプルした新しい @(name, value)@ を
+--   1 個返す。
 --
--- Phase 50: monad パラメタ化 (@m@) で 'IO' でも @ST s@ でも走らせる
--- (純粋 Gibbs に必要)。 rank-N alias にすると @Maybe@/list 構築が impredicative に
--- なるため、 alias を kind @* -> *@ にして関数側 ('gibbsFromModel' 等) を多相にする。
+--   monad パラメータ化 (@m@) により 'IO' でも @ST s@ でも走らせられる
+--   (純粋 Gibbs に必要)。 rank-N alias にすると @Maybe@/list 構築が impredicative に
+--   なるため、 alias を kind @* -> *@ にして関数側 ('gibbsFromModel' 等) を多相にする。
+--   [English]: A Gibbs update block. Receives the current parameter set and
+--   returns a single fresh @(name, value)@ sampled from the assigned
+--   parameter's full conditional distribution.
+--
+--   Parameterizing over the monad (@m@) lets this run under either 'IO'
+--   or @ST s@ (needed for pure Gibbs). Making the alias rank-N would make
+--   @Maybe@/list construction impredicative, so instead the alias is kept
+--   at kind @* -> *@ and the functions that use it (e.g.
+--   'gibbsFromModel') are made polymorphic.
 type GibbsUpdate m = Params -> Gen (PrimState m) -> m (Text, Double)
 
 -- ---------------------------------------------------------------------------
@@ -476,12 +485,20 @@ gibbsMHChains model cfg mhSteps numChains initP baseGen = do
 -- Phase 50: 純粋 (ST + seed) ラッパ
 -- ---------------------------------------------------------------------------
 
--- | 純粋・決定的な hybrid Gibbs+MH (モデルから共役 update を内部導出)。 seed → 確定 Chain。
+-- | [日本語]: 純粋・決定的な hybrid Gibbs+MH (モデルから共役 update を内部導出)。
+--   seed → 確定 Chain。
+--   [English]: A pure, deterministic hybrid Gibbs+MH sampler (internally
+--   derives the conjugate updates from the model). Maps seed → a
+--   deterministic Chain.
 gibbsMHPure :: ModelP r -> GibbsConfig -> Map Text Double -> Params -> Word32 -> Chain
 gibbsMHPure model cfg mhSteps initP seed =
   runST (initialize (V.singleton seed) >>= gibbsMH model cfg mhSteps initP)
 
--- | 純粋・決定的な multi-chain hybrid Gibbs+MH。 子 seed を純粋導出し @parList rdeepseq@ で並列。
+-- | [日本語]: 純粋・決定的な multi-chain hybrid Gibbs+MH。 子 seed を純粋導出し
+--   @parList rdeepseq@ で並列。
+--   [English]: A pure, deterministic multi-chain hybrid Gibbs+MH sampler.
+--   Derives the child seeds purely and parallelizes with
+--   @parList rdeepseq@.
 gibbsMHChainsPure :: ModelP r -> GibbsConfig -> Map Text Double -> Int -> Params -> Word32 -> [Chain]
 gibbsMHChainsPure model cfg mhSteps numChains initP seed =
   let childSeeds :: [Word32]
@@ -491,23 +508,34 @@ gibbsMHChainsPure model cfg mhSteps numChains initP seed =
       chains = [ gibbsMHPure model cfg mhSteps initP s | s <- childSeeds ]
   in chains `using` parList rdeepseq
 
--- | 純粋・決定的な Beta-Binomial 共役 Gibbs (seed → 確定 Chain)。
+-- | [日本語]: 純粋・決定的な Beta-Binomial 共役 Gibbs (seed → 確定 Chain)。
+--   [English]: A pure, deterministic Beta-Binomial conjugate Gibbs sampler
+--   (seed → deterministic Chain).
 gibbsBetaBinomialPure
   :: Text -> Double -> Double -> Int -> Int -> GibbsConfig -> Word32 -> Chain
 gibbsBetaBinomialPure paramName alpha0 beta0 n k cfg seed =
   runST (initialize (V.singleton seed)
            >>= gibbsBetaBinomial paramName alpha0 beta0 n k cfg)
 
--- | 純粋・決定的な汎用 Gibbs (seed → 確定 Chain)。 update 群は **rank-N**
--- (@forall m. PrimMonad m => [GibbsUpdate m]@) で渡す = リストリテラルを直接渡せば
--- 多相のまま通る (@let updates = …@ で束縛すると単相化するので注意・直接渡しが楽)。
+-- | [日本語]: 純粋・決定的な汎用 Gibbs (seed → 確定 Chain)。 update 群は __rank-N__
+--   (@forall m. PrimMonad m => [GibbsUpdate m]@) で渡す = リストリテラルを直接渡せば
+--   多相のまま通る (@let updates = …@ で束縛すると単相化するので注意・直接渡しが楽)。
+--   [English]: A pure, deterministic generic Gibbs sampler (seed →
+--   deterministic Chain). The update set is passed as __rank-N__
+--   (@forall m. PrimMonad m => [GibbsUpdate m]@) — passing a list literal
+--   directly keeps it polymorphic (binding it with @let updates = …@
+--   monomorphizes it, so beware; passing it directly is easiest).
 gibbsPure
   :: (forall m. PrimMonad m => [GibbsUpdate m])
   -> GibbsConfig -> Params -> Word32 -> Chain
 gibbsPure updates cfg initP seed =
   runST (initialize (V.singleton seed) >>= gibbs updates cfg initP)
 
--- | 純粋・決定的な汎用 multi-chain Gibbs。 子 seed を純粋導出し @parList rdeepseq@ で並列。
+-- | [日本語]: 純粋・決定的な汎用 multi-chain Gibbs。 子 seed を純粋導出し
+--   @parList rdeepseq@ で並列。
+--   [English]: A pure, deterministic generic multi-chain Gibbs sampler.
+--   Derives the child seeds purely and parallelizes with
+--   @parList rdeepseq@.
 gibbsChainsPure
   :: (forall m. PrimMonad m => [GibbsUpdate m])
   -> GibbsConfig -> Int -> Params -> Word32 -> [Chain]

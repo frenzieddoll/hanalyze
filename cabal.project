@@ -1,4 +1,14 @@
+-- standalone build root (plot 非依存・upstream portable)。
+-- Phase 106: multi-package 化 (repo 直下 flat 配置)。 分割 7 package のうち plot を除く 6
+-- (hanalyze-plot は sibling の hgg 必須ゆえ cabal.project.plot 側のみ)。
 packages:
-  .
+  hanalyze
+  hanalyze-core
+  hanalyze-frame
+  hanalyze-bayes
+  hanalyze-models
+  hanalyze-design
+  hanalyze-viz
+  hanalyze-cli
 
 tests: True

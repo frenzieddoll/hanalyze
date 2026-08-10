@@ -13,7 +13,7 @@
 --
 -- 1. Interpolate each id's @(z, y)@ via 'Hanalyze.Stat.Interpolate' and evaluate on a
 --    common coarse grid (e.g. 200 points).
--- 2. For each z, compute @|dy/dz|@ across all ids and take the **maximum**
+-- 2. For each z, compute @|dy/dz|@ across all ids and take the __maximum__
 --    (peak) as @density(z)@.
 -- 3. Add @ε = 0.05 × max(density)@ to avoid division by zero on flat regions.
 -- 4. Build the cumulative integral @F(z) = ∫ (density(z) + ε) dz@.
@@ -119,7 +119,9 @@ uniformGrid n zmin zmax
 
 -- ---------------------------------------------------------------------------
 
--- | 中央差分での |dy/dz|。両端は片側差分。
+-- | [日本語]: 中央差分での |dy/dz|。両端は片側差分。
+--   [English]: |dy/dz| via central differences; one-sided differences
+--   at both endpoints.
 slopeAbs :: [Double] -> [Double] -> U.Vector Double
 slopeAbs zs ys =
   let zV = U.fromList zs
@@ -134,7 +136,9 @@ slopeAbs zs ys =
        else
          abs ((yV U.! (i+1) - yV U.! (i-1)) / (zV U.! (i+1) - zV U.! (i-1)))
 
--- | 累積分布 F[i] = ∫_{z_0}^{z_i} ρ dz (台形則)。F[0] = 0。
+-- | [日本語]: 累積分布 F[i] = ∫_{z_0}^{z_i} ρ dz (台形則)。F[0] = 0。
+--   [English]: Cumulative distribution F[i] = ∫_{z_0}^{z_i} ρ dz
+--   (trapezoidal rule). F[0] = 0.
 trapezoidalCDF :: U.Vector Double -> U.Vector Double -> U.Vector Double
 trapezoidalCDF zs rho =
   let n = U.length zs
@@ -144,7 +148,9 @@ trapezoidalCDF zs rho =
              r  = (rho U.! i + rho U.! (i + 1)) / 2
          in dz * r
 
--- | 累積 F の逆写像: target に対応する z を線形内挿で求める。
+-- | [日本語]: 累積 F の逆写像: target に対応する z を線形内挿で求める。
+--   [English]: Inverse map of the cumulative F: finds the z corresponding
+--   to a target value via linear interpolation.
 invMap :: U.Vector Double -> U.Vector Double -> Double -> Double
 invMap zs cum target =
   let n  = U.length cum
@@ -162,7 +168,9 @@ invMap zs cum target =
       t  = if c1 > c0 then (target - c0) / (c1 - c0) else 0
   in z0 + t * (z1 - z0)
 
--- | 端点を [zmin, zmax] にスナップ + 単調化 (重複は微小 ε ずつシフト)。
+-- | [日本語]: 端点を [zmin, zmax] にスナップ + 単調化 (重複は微小 ε ずつシフト)。
+--   [English]: Snaps the endpoints to [zmin, zmax] and enforces
+--   monotonicity (duplicates are shifted by a tiny ε each).
 ensureMonotone :: Double -> Double -> [Double] -> [Double]
 ensureMonotone zmin zmax xs0 =
   let xs = case xs0 of

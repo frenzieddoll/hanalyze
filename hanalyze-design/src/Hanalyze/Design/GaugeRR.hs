@@ -6,18 +6,34 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Gauge R&R — Measurement System Analysis の分散分解。
+-- [日本語]: Gauge R&R — Measurement System Analysis の分散分解。
 --
 -- 製造工程で「測定値のばらつき」 を
 --
---   * 部品本来のばらつき (σ²_part)
---   * 操作者 / 装置間のばらつき (σ²_reproducibility)
---   * 測定の再現性 (σ²_repeatability)
+--   - 部品本来のばらつき (σ²_part)
+--   - 操作者 / 装置間のばらつき (σ²_reproducibility)
+--   - 測定の再現性 (σ²_repeatability)
 --
 -- に分解する。 AIAG MSA Manual 4th ed. に準拠した ANOVA 法。
 --
 -- Crossed (全操作者 が 全部品 を測定) と Nested (操作者が部品ごとに異なる) を
 -- 別 API で提供。 hmatrix Vector 演算で完結。
+--
+-- [English]: Gauge R&R — variance decomposition for Measurement System
+-- Analysis.
+--
+-- Decomposes the "variability in measured values" seen in a manufacturing
+-- process into
+--
+--   - the inherent part-to-part variation (σ²_part)
+--   - the operator / equipment variation (σ²_reproducibility)
+--   - the repeatability of the measurement (σ²_repeatability)
+--
+-- using an ANOVA method compliant with the AIAG MSA Manual, 4th ed.
+--
+-- Provides Crossed (every operator measures every part) and Nested (the
+-- operator differs per part) through separate APIs. Implemented entirely
+-- with hmatrix Vector operations.
 module Hanalyze.Design.GaugeRR
   ( GaugeRRResult (..)
   , gaugeRRCrossed
@@ -34,43 +50,61 @@ import qualified Data.Text             as T
 -- 型
 -- ===========================================================================
 
--- | Gauge R&R の分散分解結果。
+-- | [日本語]: Gauge R&R の分散分解結果。
+--   [English]: The variance decomposition result of Gauge R&R.
 data GaugeRRResult = GaugeRRResult
-  { grrPartVar       :: !Double  -- ^ σ²_part (部品間)
-  , grrReproducVar   :: !Double  -- ^ σ²_reproducibility (操作者間)
-  , grrRepeatVar     :: !Double  -- ^ σ²_repeatability (繰り返し)
+  { grrPartVar       :: !Double  -- ^ [日本語]: σ²_part (部品間) [English]: σ²_part (between parts)
+  , grrReproducVar   :: !Double  -- ^ [日本語]: σ²_reproducibility (操作者間) [English]: σ²_reproducibility (between operators)
+  , grrRepeatVar     :: !Double  -- ^ [日本語]: σ²_repeatability (繰り返し) [English]: σ²_repeatability (repeated measurements)
   , grrTotalVar      :: !Double  -- ^ σ²_total = part + reproducibility + repeatability
   , grrPctRepeat     :: !Double  -- ^ % of total = repeat / total × 100
   , grrPctReproduc   :: !Double
   , grrPctGRR        :: !Double  -- ^ % (repeat + reproducibility) / total × 100
   , grrPctPart       :: !Double
   , grrNumDistinct   :: !Double
-    -- ^ ndc = 1.41 · (σ_part / σ_GRR)。 ≥ 5 が望ましい (AIAG)
+    -- ^ [日本語]: ndc = 1.41 · (σ_part / σ_GRR)。 ≥ 5 が望ましい (AIAG)
+    --   [English]: ndc = 1.41 · (σ_part / σ_GRR). ≥ 5 is desirable (AIAG).
   } deriving (Show)
 
 -- ===========================================================================
 -- 公開関数
 -- ===========================================================================
 
--- | Crossed Gauge R&R: 全操作者が全部品を測定 (operator × part 直交)。
+-- | [日本語]: Crossed Gauge R&R: 全操作者が全部品を測定 (operator × part 直交)。
 --
--- ANOVA 分散分解:
+--   ANOVA 分散分解:
 --
--- > SS_part         = n_op · n_rep · Σ (μ̂_part_i − μ̂_grand)²
--- > SS_operator     = n_part · n_rep · Σ (μ̂_op_j − μ̂_grand)²
--- > SS_interaction  = n_rep · Σ Σ (μ̂_ij − μ̂_part_i − μ̂_op_j + μ̂_grand)²
--- > SS_error        = Σ (y_ijk − μ̂_ij)²
+--   > SS_part         = n_op · n_rep · Σ (μ̂_part_i − μ̂_grand)²
+--   > SS_operator     = n_part · n_rep · Σ (μ̂_op_j − μ̂_grand)²
+--   > SS_interaction  = n_rep · Σ Σ (μ̂_ij − μ̂_part_i − μ̂_op_j + μ̂_grand)²
+--   > SS_error        = Σ (y_ijk − μ̂_ij)²
 --
--- σ² 推定 (期待値式から):
+--   σ² 推定 (期待値式から):
 --
--- > σ²_repeatability   = MS_error
--- > σ²_interaction     = max(0, (MS_int - MS_error) / n_rep)
--- > σ²_reproducibility = max(0, (MS_op - MS_int) / (n_part · n_rep)) + σ²_interaction
--- > σ²_part            = max(0, (MS_part - MS_int) / (n_op · n_rep))
+--   > σ²_repeatability   = MS_error
+--   > σ²_interaction     = max(0, (MS_int - MS_error) / n_rep)
+--   > σ²_reproducibility = max(0, (MS_op - MS_int) / (n_part · n_rep)) + σ²_interaction
+--   > σ²_part            = max(0, (MS_part - MS_int) / (n_op · n_rep))
+--   [English]: Crossed Gauge R&R: every operator measures every part
+--   (operator × part orthogonal).
+--
+--   ANOVA variance decomposition:
+--
+--   > SS_part         = n_op · n_rep · Σ (μ̂_part_i − μ̂_grand)²
+--   > SS_operator     = n_part · n_rep · Σ (μ̂_op_j − μ̂_grand)²
+--   > SS_interaction  = n_rep · Σ Σ (μ̂_ij − μ̂_part_i − μ̂_op_j + μ̂_grand)²
+--   > SS_error        = Σ (y_ijk − μ̂_ij)²
+--
+--   σ² estimates (from the expected-value equations):
+--
+--   > σ²_repeatability   = MS_error
+--   > σ²_interaction     = max(0, (MS_int - MS_error) / n_rep)
+--   > σ²_reproducibility = max(0, (MS_op - MS_int) / (n_part · n_rep)) + σ²_interaction
+--   > σ²_part            = max(0, (MS_part - MS_int) / (n_op · n_rep))
 gaugeRRCrossed
-  :: V.Vector Int       -- ^ 操作者 ID (length n)
-  -> V.Vector Int       -- ^ 部品 ID (length n)
-  -> V.Vector Double    -- ^ 測定値 (length n)
+  :: V.Vector Int       -- ^ [日本語]: 操作者 ID (length n) [English]: Operator IDs (length n)
+  -> V.Vector Int       -- ^ [日本語]: 部品 ID (length n) [English]: Part IDs (length n)
+  -> V.Vector Double    -- ^ [日本語]: 測定値 (length n) [English]: Measured values (length n)
   -> Either Text GaugeRRResult
 gaugeRRCrossed ops parts ys
   | V.length ops /= V.length parts || V.length ops /= V.length ys =
@@ -93,10 +127,15 @@ gaugeRRCrossed ops parts ys
     opIds   = V.fromList (sort (nub (V.toList ops)))
     partIds = V.fromList (sort (nub (V.toList parts)))
 
--- | Nested Gauge R&R: 操作者が部品ごとに異なる (operator within part)。
+-- | [日本語]: Nested Gauge R&R: 操作者が部品ごとに異なる (operator within part)。
 --
--- 簡略版: operator effect を completely random として扱い、
--- repeatability + (operator/part)-nested の 2 段分解。
+--   簡略版: operator effect を completely random として扱い、
+--   repeatability + (operator/part)-nested の 2 段分解。
+--   [English]: Nested Gauge R&R: the operator differs per part (operator
+--   within part).
+--
+--   Simplified version: treats the operator effect as completely random,
+--   a two-stage decomposition of repeatability + (operator/part)-nested.
 gaugeRRNested
   :: V.Vector Int
   -> V.Vector Int

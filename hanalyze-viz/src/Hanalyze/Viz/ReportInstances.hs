@@ -6,31 +6,59 @@
 --
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
--- | 'Hanalyze.Viz.ReportBuilder.Reportable' instances for the various fit types.
+-- | [日本語]: 各種フィット結果型に対する
+--   'Hanalyze.Viz.ReportBuilder.Reportable' インスタンス集。
 --
--- Importing this module (purely for its instances) lets a user pass any
--- supported fit result directly to 'renderReport':
+--   このモジュールを (インスタンスのためだけに) import すると、任意のサポート
+--   対象フィット結果を直接 'renderReport' に渡せるようになる:
 --
--- @
--- import Hanalyze.Model.Regularized
--- import Hanalyze.Viz.ReportBuilder
--- import Hanalyze.Viz.ReportInstances ()
+--   @
+--   import Hanalyze.Model.Regularized
+--   import Hanalyze.Viz.ReportBuilder
+--   import Hanalyze.Viz.ReportInstances ()
 --
--- main = do
---   let fit = fitRegularized (L2 0.1) xMat yVec
---       cfg = defaultReportConfig "Ridge demo"
---   renderReport "out.html" cfg (toReport cfg df ["x"] "y" fit)
--- @
+--   main = do
+--     let fit = fitRegularized (L2 0.1) xMat yVec
+--         cfg = defaultReportConfig "Ridge demo"
+--     renderReport "out.html" cfg (toReport cfg df ["x"] "y" fit)
+--   @
 --
--- 提供されるインスタンス:
--- - 'RegFit'         (Hanalyze.Model.Regularized) — 正則化線形回帰
--- - 'SplineFit'      (Hanalyze.Model.Spline)      — B-spline / Natural cubic
--- - 'KernelRidgeFit' (Hanalyze.Model.KernelRegression)      — Kernel Ridge regression
--- - 'RFFRidgeFit'    (Hanalyze.Model.RFF)         — Random Fourier Features Ridge
--- - 'RobustGPFit'    (Hanalyze.Model.GPRobust)    — ロバスト GP
+--   提供されるインスタンス:
+--   - 'RegFit'         (Hanalyze.Model.Regularized) — 正則化線形回帰
+--   - 'SplineFit'      (Hanalyze.Model.Spline)      — B-spline / Natural cubic
+--   - 'KernelRidgeFit' (Hanalyze.Model.KernelRegression)      — Kernel Ridge regression
+--   - 'RFFRidgeFit'    (Hanalyze.Model.RFF)         — Random Fourier Features Ridge
+--   - 'RobustGPFit'    (Hanalyze.Model.GPRobust)    — ロバスト GP
 --
--- LM/GLM/GLMM/GP/HBM は当面 'Hanalyze.Viz.AnalysisReport' (非推奨) 経由。
--- ReportBuilder 化が次の課題。
+--   LM/GLM/GLMM/GP/HBM は当面 'Hanalyze.Viz.AnalysisReport' (非推奨) 経由。
+--   ReportBuilder 化が次の課題。
+--   [English]: 'Hanalyze.Viz.ReportBuilder.Reportable' instances for
+--   the various fit types.
+--
+--   Importing this module (purely for its instances) lets a user pass any
+--   supported fit result directly to 'renderReport':
+--
+--   @
+--   import Hanalyze.Model.Regularized
+--   import Hanalyze.Viz.ReportBuilder
+--   import Hanalyze.Viz.ReportInstances ()
+--
+--   main = do
+--     let fit = fitRegularized (L2 0.1) xMat yVec
+--         cfg = defaultReportConfig "Ridge demo"
+--     renderReport "out.html" cfg (toReport cfg df ["x"] "y" fit)
+--   @
+--
+--   Provided instances:
+--   - 'RegFit'         (Hanalyze.Model.Regularized) — regularized linear regression
+--   - 'SplineFit'      (Hanalyze.Model.Spline)      — B-spline / Natural cubic
+--   - 'KernelRidgeFit' (Hanalyze.Model.KernelRegression) — Kernel Ridge regression
+--   - 'RFFRidgeFit'    (Hanalyze.Model.RFF)         — Random Fourier Features Ridge
+--   - 'RobustGPFit'    (Hanalyze.Model.GPRobust)    — robust GP
+--
+--   LM/GLM/GLMM/GP/HBM are, for now, routed through
+--   'Hanalyze.Viz.AnalysisReport' (deprecated). Migrating them to
+--   ReportBuilder is the next task.
 module Hanalyze.Viz.ReportInstances
   ( LMReport (..)
   , GLMReport (..)
@@ -81,7 +109,8 @@ import Hanalyze.Viz.ReportBuilder
 -- 内部ユーティリティ
 -- ---------------------------------------------------------------------------
 
--- | x グリッド (データの min/max から 100 点)。
+-- | [日本語]: x グリッド (データの min/max から 100 点)。
+--   [English]: x grid (100 points spanning the data's min/max).
 xGridFromVec :: V.Vector Double -> [Double]
 xGridFromVec v
   | V.null v  = []
@@ -90,7 +119,8 @@ xGridFromVec v
           hi = V.maximum v
       in [ lo + fromIntegral i * (hi - lo) / 99 | i <- [0 .. 99 :: Int] ]
 
--- | DataFrame から x 列 (1 つ) を numeric vector で取り出す。
+-- | [日本語]: DataFrame から x 列 (1 つ) を numeric vector で取り出す。
+--   [English]: Extracts a single x column from the DataFrame as a numeric vector.
 firstNumericVec :: [Text] -> DXD.DataFrame -> Maybe (V.Vector Double)
 firstNumericVec []     _  = Nothing
 firstNumericVec (c:_)  df = getDoubleVec c df
@@ -321,7 +351,8 @@ familyLabel Gaussian = "Gaussian"
 familyLabel Binomial = "Binomial"
 familyLabel Poisson  = "Poisson"
 
--- | 残差から σ_hat / RMSE / max|r| を作る。
+-- | [日本語]: 残差から σ_hat / RMSE / max|r| を作る。
+--   [English]: Computes σ_hat / RMSE / max|r| from the residuals.
 residStats :: [Double] -> Int -> (Double, Double, Double)
 residStats resid p =
   let n        = length resid
@@ -331,12 +362,14 @@ residStats resid p =
       maxAbs   = maximum (0 : map abs resid)
   in (sigmaHat, rmse, maxAbs)
 
--- | smoothFit → SmoothCurve への変換 (空 Smooth は空カーブ)。
+-- | [日本語]: smoothFit → SmoothCurve への変換 (空 Smooth は空カーブ)。
+--   [English]: Converts a smoothFit into a SmoothCurve (an empty Smooth yields an empty curve).
 smoothFitToCurve :: Maybe SmoothFit -> SmoothCurve
 smoothFitToCurve Nothing   = SmoothCurve [] [] [] []
 smoothFitToCurve (Just sf) = SmoothCurve (sfX sf) (sfFit sf) (sfLower sf) (sfUpper sf)
 
--- | xCols + xVecs から InteractiveModel を構築 (LM/GLM 共通)。
+-- | [日本語]: xCols + xVecs から InteractiveModel を構築 (LM/GLM 共通)。
+--   [English]: Builds an InteractiveModel from xCols + xVecs (shared by LM/GLM).
 mkInteractive :: [Text] -> Text -> [V.Vector Double] -> [Double]
               -> Double -> [Double] -> Text -> Maybe Double
               -> InteractiveModel
@@ -360,7 +393,8 @@ mkInteractive xCols yCol xVecs ys b0 betas link mSigma =
        , imCISigma   = mSigma
        }
 
--- | 数式: y = β₀ + β₁ x_1 + ... + β_p x_p
+-- | [日本語]: 数式: y = β₀ + β₁ x_1 + ... + β_p x_p
+--   [English]: Formula: y = β₀ + β₁ x_1 + ... + β_p x_p
 linearFormula :: Text -> [Text] -> Text
 linearFormula yCol xCols =
   yCol <> " ~ "
@@ -678,7 +712,8 @@ instance Reportable RFReport where
 -- GLMM (axis-1 C, Phase A残)
 -- ---------------------------------------------------------------------------
 
--- | GLMM (LME / non-Gaussian GLMM) レポート用ラッパ。
+-- | [日本語]: GLMM (LME / non-Gaussian GLMM) レポート用ラッパ。
+--   [English]: Report wrapper for GLMM (LME / non-Gaussian GLMM).
 data GLMMReport = GLMMReport
   { glmmrResult   :: GLMM.GLMMResult
   , glmmrFamily   :: Family
@@ -755,11 +790,17 @@ instance Reportable GLMMReport where
 -- GP (axis-1 C, Phase A残)
 -- ---------------------------------------------------------------------------
 
--- | GP レポート用ラッパ。
+-- | [日本語]: GP レポート用ラッパ。
 --
--- `gprResult` は予測グリッド (`gprGridX`) 上の事後平均と 95% 信用帯を保持。
--- ライブラリ利用者は `Hanalyze.Model.GP.fitGP` で外挿域も含めた grid を渡すと
--- 対話的予測の信頼帯がそのまま使える。
+--   `gprResult` は予測グリッド (`gprGridX`) 上の事後平均と 95% 信用帯を保持。
+--   ライブラリ利用者は `Hanalyze.Model.GP.fitGP` で外挿域も含めた grid を渡すと
+--   対話的予測の信頼帯がそのまま使える。
+--   [English]: Report wrapper for GP.
+--
+--   `gprResult` holds the posterior mean and 95% credible band on the
+--   prediction grid (`gprGridX`). If the library user passes a grid that
+--   includes the extrapolation region to `Hanalyze.Model.GP.fitGP`,
+--   the interactive prediction's confidence band works out of the box.
 data GPReport = GPReport
   { gprKernel  :: GP.Kernel
   , gprParams  :: GP.GPParams
@@ -838,21 +879,28 @@ instance Reportable GPReport where
 -- HBM (Bayesian Linear Regression) (axis-1 C, Phase A残)
 -- ---------------------------------------------------------------------------
 
--- | ベイズ単回帰 (`y ~ Normal(α + β x, σ)`) の HBM レポート用ラッパ。
+-- | [日本語]: ベイズ単回帰 (`y ~ Normal(α + β x, σ)`) の HBM レポート用ラッパ。
 --
--- 一般的な HBM (任意の構造) は section を直接構築するか、用途別ラッパを別途定義する。
--- ここでは「α + β·x」という最も典型的なパターンに特化。
+--   一般的な HBM (任意の構造) は section を直接構築するか、用途別ラッパを別途定義する。
+--   ここでは「α + β·x」という最も典型的なパターンに特化。
+--   [English]: Report wrapper for HBM Bayesian simple regression
+--   (`y ~ Normal(α + β x, σ)`).
+--
+--   For a general HBM (with arbitrary structure), either build the
+--   sections directly or define a separate use-case-specific wrapper.
+--   This one specializes in the most typical pattern, "α + β·x".
 data HBMLinearReport = HBMLinearReport
   { hbmrChain     :: MC.Chain
   , hbmrXs        :: [Double]
   , hbmrYs        :: [Double]
-  , hbmrAlphaName :: Text     -- ^ 例: "alpha"
-  , hbmrBetaName  :: Text     -- ^ 例: "beta"
-  , hbmrSigmaName :: Text     -- ^ 例: "sigma"
-  , hbmrGraph     :: Maybe Text  -- ^ Mermaid DAG (`Hanalyze.Viz.ModelGraph` で構築)
+  , hbmrAlphaName :: Text     -- ^ [日本語]: 例: "alpha" [English]: e.g. "alpha"
+  , hbmrBetaName  :: Text     -- ^ [日本語]: 例: "beta" [English]: e.g. "beta"
+  , hbmrSigmaName :: Text     -- ^ [日本語]: 例: "sigma" [English]: e.g. "sigma"
+  , hbmrGraph     :: Maybe Text  -- ^ [日本語]: Mermaid DAG (`Hanalyze.Viz.ModelGraph` で構築) [English]: Mermaid DAG (built via `Hanalyze.Viz.ModelGraph`)
   }
 
--- | x の各点での α + β·x の事後分位点 (中央値, 2.5%, 97.5%)。
+-- | [日本語]: x の各点での α + β·x の事後分位点 (中央値, 2.5%, 97.5%)。
+--   [English]: Posterior quantiles of α + β·x at each x point (median, 2.5%, 97.5%).
 hbmRibbonAt :: [Double] -> [Double] -> [Double] -> ([Double], [Double], [Double])
 hbmRibbonAt grid alphas betas =
   let qsAt p s =
@@ -966,48 +1014,83 @@ mean0 xs = sum xs / fromIntegral (length xs)
 -- HBM (一般) - multi-x / 非線形対応の汎用ラッパ (Cycle 7)
 -- ---------------------------------------------------------------------------
 
--- | 単変数 x 上の予測リボン (中央値 + 信用区間)。
+-- | [日本語]: 単変数 x 上の予測リボン (中央値 + 信用区間)。
 --
--- 任意の HBM (非線形を含む) に対しユーザー側で事後ドローから計算したものを渡す。
--- 'HBMReport' に含めると散布図 + リボン + 対話的予測 (信用帯付き) が描かれる。
+--   任意の HBM (非線形を含む) に対しユーザー側で事後ドローから計算したものを渡す。
+--   'HBMReport' に含めると散布図 + リボン + 対話的予測 (信用帯付き) が描かれる。
+--   [English]: Prediction ribbon on a single-variable x (median + credible interval).
+--
+--   For any HBM (including nonlinear ones), the user computes this from
+--   posterior draws on their side and passes it in. Including it in
+--   'HBMReport' draws a scatter plot + ribbon + interactive prediction
+--   (with a credible band).
 data HBMRibbon = HBMRibbon
-  { hribXCol :: Text          -- ^ x 軸ラベル (列名)
-  , hribXObs :: [Double]      -- ^ 学習データ x
-  , hribYObs :: [Double]      -- ^ 学習データ y
-  , hribGrid :: [Double]      -- ^ 予測グリッド X (推奨: ±50% 外挿)
-  , hribMid  :: [Double]      -- ^ 各グリッド点での事後中央値
-  , hribLow  :: [Double]      -- ^ 各グリッド点での 2.5% 分位
-  , hribHigh :: [Double]      -- ^ 各グリッド点での 97.5% 分位
+  { hribXCol :: Text          -- ^ [日本語]: x 軸ラベル (列名) [English]: x-axis label (column name)
+  , hribXObs :: [Double]      -- ^ [日本語]: 学習データ x [English]: training data x
+  , hribYObs :: [Double]      -- ^ [日本語]: 学習データ y [English]: training data y
+  , hribGrid :: [Double]      -- ^ [日本語]: 予測グリッド X (推奨: ±50% 外挿) [English]: prediction grid X (recommended: ±50% extrapolation)
+  , hribMid  :: [Double]      -- ^ [日本語]: 各グリッド点での事後中央値 [English]: posterior median at each grid point
+  , hribLow  :: [Double]      -- ^ [日本語]: 各グリッド点での 2.5% 分位 [English]: 2.5% quantile at each grid point
+  , hribHigh :: [Double]      -- ^ [日本語]: 各グリッド点での 97.5% 分位 [English]: 97.5% quantile at each grid point
   } deriving Show
 
--- | HBM (一般) レポート用ラッパ。multi-x / 非線形 / 任意の構造に対応。
+-- | [日本語]: HBM (一般) レポート用ラッパ。multi-x / 非線形 / 任意の構造に対応。
 --
--- 'HBMLinearReport' は @α + β·x@ という線形 HBM に特化したショートカット。
--- 一般のモデルでは 'HBMReport' に以下の情報をユーザー側で集約して渡す:
+--   'HBMLinearReport' は @α + β·x@ という線形 HBM に特化したショートカット。
+--   一般のモデルでは 'HBMReport' に以下の情報をユーザー側で集約して渡す:
 --
--- * `hbmrChainG` — MCMC チェーン (診断プロット用)
--- * `hbmrPostSummaryG` — 事後要約 (mean/SD/quantile/ESS/R-hat) を直接指定
--- * `hbmrYHatG` — 学習データへの予測値 (例: 事後中央値による予測)
--- * `hbmrRibbonG` — 単変数 x 上の予測リボン (省略可)
--- * `hbmrPairsG` — 興味のあるパラメータペア散布
+--   * `hbmrChainG` — MCMC チェーン (診断プロット用)
+--   * `hbmrPostSummaryG` — 事後要約 (mean/SD/quantile/ESS/R-hat) を直接指定
+--   * `hbmrYHatG` — 学習データへの予測値 (例: 事後中央値による予測)
+--   * `hbmrRibbonG` — 単変数 x 上の予測リボン (省略可)
+--   * `hbmrPairsG` — 興味のあるパラメータペア散布
 --
--- @
--- let postRows =
---       [ ("alpha", aMean, aSD, aQ025, aQ975, aESS, Just aRhat)
---       , ...
---       ]
---     rep = HBMReport { hbmrChainG = chain, hbmrParamsG = ["alpha","beta","sigma"]
---                     , hbmrFormulaG = "$y_i \\sim ...$"
---                     , hbmrSamplerG = "NUTS"
---                     , hbmrModelTypeG = "HBM(NUTS)"
---                     , hbmrGraphG = Just dag
---                     , hbmrPostSummaryG = postRows
---                     , hbmrYObsG = ys, hbmrYHatG = yHat
---                     , hbmrRibbonG = Just ribbon
---                     , hbmrPairsG = [("alpha","beta")]
---                     }
--- renderReport "out.html" cfg (toReport cfg df xCols yCol rep)
--- @
+--   @
+--   let postRows =
+--         [ ("alpha", aMean, aSD, aQ025, aQ975, aESS, Just aRhat)
+--         , ...
+--         ]
+--       rep = HBMReport { hbmrChainG = chain, hbmrParamsG = ["alpha","beta","sigma"]
+--                       , hbmrFormulaG = "$y_i \\sim ...$"
+--                       , hbmrSamplerG = "NUTS"
+--                       , hbmrModelTypeG = "HBM(NUTS)"
+--                       , hbmrGraphG = Just dag
+--                       , hbmrPostSummaryG = postRows
+--                       , hbmrYObsG = ys, hbmrYHatG = yHat
+--                       , hbmrRibbonG = Just ribbon
+--                       , hbmrPairsG = [("alpha","beta")]
+--                       }
+--   renderReport "out.html" cfg (toReport cfg df xCols yCol rep)
+--   @
+--   [English]: Report wrapper for HBM (general). Supports multi-x / nonlinear / arbitrary structure.
+--
+--   'HBMLinearReport' is a shortcut specialized to the linear HBM
+--   @α + β·x@. For general models, 'HBMReport' expects the user to
+--   assemble the following information on their side:
+--
+--   * `hbmrChainG` — the MCMC chain (for diagnostic plots)
+--   * `hbmrPostSummaryG` — posterior summary (mean/SD/quantile/ESS/R-hat), supplied directly
+--   * `hbmrYHatG` — predictions on the training data (e.g. predictions using the posterior median)
+--   * `hbmrRibbonG` — prediction ribbon on a single-variable x (optional)
+--   * `hbmrPairsG` — pairwise scatter of parameters of interest
+--
+--   @
+--   let postRows =
+--         [ ("alpha", aMean, aSD, aQ025, aQ975, aESS, Just aRhat)
+--         , ...
+--         ]
+--       rep = HBMReport { hbmrChainG = chain, hbmrParamsG = ["alpha","beta","sigma"]
+--                       , hbmrFormulaG = "$y_i \\sim ...$"
+--                       , hbmrSamplerG = "NUTS"
+--                       , hbmrModelTypeG = "HBM(NUTS)"
+--                       , hbmrGraphG = Just dag
+--                       , hbmrPostSummaryG = postRows
+--                       , hbmrYObsG = ys, hbmrYHatG = yHat
+--                       , hbmrRibbonG = Just ribbon
+--                       , hbmrPairsG = [("alpha","beta")]
+--                       }
+--   renderReport "out.html" cfg (toReport cfg df xCols yCol rep)
+--   @
 data HBMReport = HBMReport
   { hbmrChainG       :: MC.Chain
   , hbmrParamsG      :: [Text]
@@ -1092,17 +1175,24 @@ instance Reportable HBMReport where
 -- RFFMVReport — 多変量 RFF Ridge (Phase B-RFF)
 -- ---------------------------------------------------------------------------
 
--- | 多変量 RFF Ridge のレポート。`rfmvGroup` 列で色分けし、`rfmvXAxis` 列
--- (xCols のいずれか) を横軸にして観測点 + 予測曲線を描く。
+-- | [日本語]: 多変量 RFF Ridge のレポート。`rfmvGroup` 列で色分けし、`rfmvXAxis` 列
+--   (xCols のいずれか) を横軸にして観測点 + 予測曲線を描く。
+--   [English]: Report for multivariate RFF Ridge. Colors points by the
+--   `rfmvGroup` column and draws observations + prediction curves with the
+--   `rfmvXAxis` column (one of xCols) as the horizontal axis.
 data RFFMVReport = RFFMVReport
   { rfmvFit          :: RFFRidgeFitMV
   , rfmvGroup        :: Text
   , rfmvXAxis        :: Text
   , rfmvInteractive  :: Bool
-    -- ^ True なら 'secInteractiveRFFMV' (スライダ + リアルタイム JS 予測) を含める
+    -- ^ [日本語]: True なら 'secInteractiveRFFMV' (スライダ + リアルタイム JS 予測) を含める
+    --   [English]: if True, include 'secInteractiveRFFMV' (slider + real-time JS prediction)
   , rfmvStandardizer :: Maybe Std.Standardizer
-    -- ^ fit 時に X を標準化したときの μ/σ。Nothing なら未標準化。
+    -- ^ [日本語]: fit 時に X を標準化したときの μ/σ。Nothing なら未標準化。
     --   plot や JS 予測時はこれで raw → 標準化変換を行う。
+    --   [English]: the μ/σ used to standardize X at fit time. Nothing means
+    --   unstandardized. Used to perform the raw → standardized conversion at
+    --   plot / JS prediction time.
   } deriving (Show)
 
 instance Reportable RFFMVReport where

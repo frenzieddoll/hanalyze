@@ -120,8 +120,8 @@ let ccaFit = cca xMat yMat
 
 ```haskell
 import Hanalyze.Plot (plsScorePlot, plsLoadingPlot, plsVipPlot)
-import Hgg.Plot.Frame   ((|>>))
-import Hgg.Plot.Spec    (ColData)
+import Graphics.Hgg.Frame   ((|>>))
+import Graphics.Hgg.Spec    (ColData)
 
 let noDf = [] :: [(Text, ColData)]
     scorePlot   = noDf |>> plsScorePlot   pls'

@@ -5,15 +5,28 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Multidimensional Scaling (MDS).
+-- [日本語]: Multidimensional Scaling (MDS)。
 --
--- * Classical MDS (Torgerson) — 距離行列を二重中心化 → 固有分解 → 上位 k 成分。
--- * Sammon MDS — Sammon stress を勾配降下で最小化 (古典 MDS を初期値)。
+-- - Classical MDS (Torgerson) — 距離行列を二重中心化 → 固有分解 → 上位 k 成分。
+-- - Sammon MDS — Sammon stress を勾配降下で最小化 (古典 MDS を初期値)。
 --
 -- @
 -- import qualified Hanalyze.Stat.MDS as MDS
 -- let d  = MDS.euclideanDist x                -- x :: Matrix Double (n × p)
 --     emb = MDS.mdsClassical d 2              -- 2-D 埋め込み (n × 2)
+-- @
+--
+-- [English]: Multidimensional Scaling (MDS).
+--
+-- - Classical MDS (Torgerson) — double-center the distance matrix →
+--   eigendecomposition → top k components.
+-- - Sammon MDS — minimize Sammon stress via gradient descent (initialized
+--   from classical MDS).
+--
+-- @
+-- import qualified Hanalyze.Stat.MDS as MDS
+-- let d  = MDS.euclideanDist x                -- x :: Matrix Double (n × p)
+--     emb = MDS.mdsClassical d 2              -- 2-D embedding (n × 2)
 -- @
 module Hanalyze.Stat.MDS
   ( euclideanDist
@@ -30,7 +43,9 @@ import qualified Numeric.LinearAlgebra as LA
 -- Distance matrix helper
 -- ---------------------------------------------------------------------------
 
--- | n × p のデータ行列から n × n のユークリッド距離行列を作る。
+-- | [日本語]: n × p のデータ行列から n × n のユークリッド距離行列を作る。
+--   [English]: Build an n × n Euclidean distance matrix from an n × p
+--   data matrix.
 euclideanDist :: LA.Matrix Double -> LA.Matrix Double
 euclideanDist x =
   let !n = LA.rows x
@@ -42,13 +57,19 @@ euclideanDist x =
 -- Classical MDS (Torgerson)
 -- ---------------------------------------------------------------------------
 
--- | 距離行列 D (n × n) を k 次元埋め込み (n × k) に。
+-- | [日本語]: 距離行列 D (n × n) を k 次元埋め込み (n × k) に。
 --
 -- B = -1/2 · H · D² · H、 H = I - 1/n · 11ᵀ。 B = V Λ Vᵀ から
 -- 正の上位 k 成分のみ抽出して X = V_k √Λ_k。
-mdsClassical :: LA.Matrix Double  -- ^ 距離行列 D (n × n)。
-             -> Int                -- ^ 目的次元 k。
-             -> LA.Matrix Double  -- ^ 埋め込み (n × k)。
+--
+-- [English]: Turn distance matrix D (n × n) into a k-dimensional
+-- embedding (n × k).
+--
+-- B = -1/2 · H · D² · H, H = I - 1/n · 11ᵀ. From B = V Λ Vᵀ, extract only
+-- the top k positive components to get X = V_k √Λ_k.
+mdsClassical :: LA.Matrix Double  -- ^ [日本語]: 距離行列 D (n × n)。 [English]: Distance matrix D (n × n).
+             -> Int                -- ^ [日本語]: 目的次元 k。 [English]: Target dimension k.
+             -> LA.Matrix Double  -- ^ [日本語]: 埋め込み (n × k)。 [English]: Embedding (n × k).
 mdsClassical d k =
   let !n   = LA.rows d
       !d2  = d * d
@@ -72,8 +93,8 @@ mdsClassical d k =
 
 data SammonConfig = SammonConfig
   { sammonMaxIter :: !Int
-  , sammonLR      :: !Double   -- ^ 学習率。
-  , sammonTol     :: !Double   -- ^ stress 改善の許容下限。
+  , sammonLR      :: !Double   -- ^ [日本語]: 学習率。 [English]: Learning rate.
+  , sammonTol     :: !Double   -- ^ [日本語]: stress 改善の許容下限。 [English]: Lower tolerance for stress improvement.
   } deriving (Show)
 
 defaultSammonConfig :: SammonConfig
@@ -83,10 +104,13 @@ defaultSammonConfig = SammonConfig
   , sammonTol     = 1e-6
   }
 
--- | Sammon stress E = (1/c) Σ_{i<j} (δ_ij - d_ij)² / δ_ij
+-- | [日本語]: Sammon stress E = (1/c) Σ_{i<j} (δ_ij - d_ij)² / δ_ij
 --   ただし δ_ij は元距離、 d_ij は埋め込み距離、 c = Σ_{i<j} δ_ij。
-sammonStress :: LA.Matrix Double  -- ^ 元距離行列 (n × n)。
-             -> LA.Matrix Double  -- ^ 埋め込み (n × k)。
+--   [English]: Sammon stress E = (1/c) Σ_{i<j} (δ_ij - d_ij)² / δ_ij
+--   where δ_ij is the original distance, d_ij the embedding distance, and
+--   c = Σ_{i<j} δ_ij.
+sammonStress :: LA.Matrix Double  -- ^ [日本語]: 元距離行列 (n × n)。 [English]: Original distance matrix (n × n).
+             -> LA.Matrix Double  -- ^ [日本語]: 埋め込み (n × k)。 [English]: Embedding (n × k).
              -> Double
 sammonStress d y =
   let !n = LA.rows d
@@ -102,11 +126,13 @@ sammonStress d y =
                   | (i, j) <- pairs ]
   in if cTot > 0 then num / cTot else 0
 
--- | Sammon MDS。 古典 MDS を初期値にして勾配降下。
+-- | [日本語]: Sammon MDS。 古典 MDS を初期値にして勾配降下。
+--   [English]: Sammon MDS. Gradient descent initialized from classical
+--   MDS.
 mdsSammon :: SammonConfig
-          -> LA.Matrix Double  -- ^ 距離行列 D (n × n)。
-          -> Int                -- ^ 目的次元 k。
-          -> LA.Matrix Double  -- ^ 埋め込み (n × k)。
+          -> LA.Matrix Double  -- ^ [日本語]: 距離行列 D (n × n)。 [English]: Distance matrix D (n × n).
+          -> Int                -- ^ [日本語]: 目的次元 k。 [English]: Target dimension k.
+          -> LA.Matrix Double  -- ^ [日本語]: 埋め込み (n × k)。 [English]: Embedding (n × k).
 mdsSammon cfg d k =
   let !y0 = mdsClassical d k
       loop !y !iter !prevE
@@ -120,7 +146,8 @@ mdsSammon cfg d k =
                  else loop y' (iter + 1) e'
   in loop y0 0 (sammonStress d y0)
 
--- | Sammon stress の勾配 (n × k)。
+-- | [日本語]: Sammon stress の勾配 (n × k)。
+--   [English]: Gradient of Sammon stress (n × k).
 sammonGrad :: LA.Matrix Double -> LA.Matrix Double -> LA.Matrix Double
 sammonGrad d y =
   let !n = LA.rows d

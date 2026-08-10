@@ -133,15 +133,15 @@ cabal run hanalyze -- regress data.csv x y LM --report    # 既存の回帰 (= b
 ### A. 線形回帰 → 描画 (3 行)
 
 万能動詞 `df |-> spec` で学習し、`toPlot` で散布図に重畳する
-(`(|->)` の全 API は [io/04-fit-api.md](io/04-fit-api.ja.md) を参照):
+(`(|->)` の全 API は [io/04-fit-api.md](io/04-fit-api.md) を参照):
 
 ```haskell
 {-# LANGUAGE OverloadedStrings #-}
 import qualified Data.Vector              as V
 import           Hanalyze.Plot     (lm, (|->), toPlot)
-import           Hgg.Plot.Spec        (ColData (..), layer, scatter)
-import           Hgg.Plot.Frame       ((|>>))
-import           Hgg.Plot.Backend.SVG (saveSVGBound)
+import           Graphics.Hgg.Spec        (ColData (..), layer, scatter)
+import           Graphics.Hgg.Frame       ((|>>))
+import           Graphics.Hgg.Backend.SVG (saveSVGBound)
 
 let df  = [ ("x", NumData (V.fromList xs))
           , ("y", NumData (V.fromList ys)) ]   -- 任意の ColumnSource (CSV DataFrame でも可)
@@ -172,9 +172,9 @@ let fit  = fitLMVec (designMatrix xs) ys   -- FitResult: β, ŷ, residuals, R²
 import qualified Data.Vector              as V
 import           Hanalyze.Model.HBM (ModelP, sample, observe, dataNamedObs, Distribution (..))
 import           Hanalyze.Plot      (hbm, defaultHBM, (|->), toPlot, forestOf)
-import           Hgg.Plot.Spec         (ColData (..))
-import           Hgg.Plot.Frame        ((|>>))
-import           Hgg.Plot.Backend.SVG  (saveSVGBound)
+import           Graphics.Hgg.Spec         (ColData (..))
+import           Graphics.Hgg.Frame        ((|>>))
+import           Graphics.Hgg.Backend.SVG  (saveSVGBound)
 import           Data.Text                 (Text)
 
 myModel :: ModelP ()
@@ -193,7 +193,7 @@ main = do
 
 > 純粋動詞 `(|->)` は無音。 サンプリング中に進捗バーを出したいときは IO 版
 > `df |->! hbm defaultHBM myModel` を使う (結果はビット一致)。
-> [io/04-fit-api.md](io/04-fit-api.ja.md) を参照。
+> [io/04-fit-api.md](io/04-fit-api.md) を参照。
 
 **低レベル (明示サンプラ + HTML レポート)** — 純粋 NUTS サンプラを直接呼び、
 従来の MCMC レポートを描画する:

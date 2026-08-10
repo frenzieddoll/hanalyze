@@ -8,18 +8,30 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Data-preprocessing helpers built on Hackage's @dataframe@.
+-- [日本語]: Hackage の @dataframe@ 上に構築した前処理ヘルパ。
 --
--- All operations consume and produce 'DXD.DataFrame'.
+-- すべての操作は @DXD.DataFrame@ を受け取り、@DXD.DataFrame@ を返す。
+--
+--   * 欠損値の検出・除去・補完 (平均 / 中央値 / 定数)。
+--   * 列の選択 / 削除 / リネーム
+--   * 行のフィルタリング
+--   * 派生列の計算 (mapNumeric / deriveNumeric / deriveText)
+--   * Text 列を数値化 (NA 除去 + parse)
+--
+-- すべて純粋に新しい @DXD.DataFrame@ を返す。
+--
+-- [English]: Data-preprocessing helpers built on Hackage's @dataframe@.
+--
+-- All operations consume and produce @DXD.DataFrame@.
 --
 --   * Missing-value detection, removal, and imputation
 --     (mean / median / constant).
--- - 列の選択 / 削除 / リネーム
--- - 行のフィルタリング
--- - 派生列の計算 (mapNumeric / deriveNumeric / deriveText)
--- - Text 列を数値化 (NA 除去 + parse)
+--   * Column select / drop / rename.
+--   * Row filtering.
+--   * Derived-column computation (mapNumeric / deriveNumeric / deriveText).
+--   * Numericizing Text columns (NA removal + parse).
 --
--- すべて純粋に新しい 'DXD.DataFrame' を返す。
+-- Everything purely returns a new @DXD.DataFrame@.
 module Hanalyze.DataIO.Preprocess
   ( -- * 値・行の表現
     Value (..)
@@ -162,9 +174,13 @@ isNullAt name i df = case DXD.getColumn name df of
   Just c  -> DXC.columnElemIsNull c i
   Nothing -> True
 
--- | 列を @[a]@ として安全に取り出す。型不一致や例外 (Hackage が
--- @error "fromMaybeVec: Nothing slot"@ 等を投げるケース) も 'Nothing' で吸収。
--- 'force' でリスト要素まで NF にしてから捕捉する。
+-- | [日本語]: 列を @[a]@ として安全に取り出す。型不一致や例外 (Hackage が
+--   @error "fromMaybeVec: Nothing slot"@ 等を投げるケース) も 'Nothing' で吸収。
+--   'force' でリスト要素まで NF にしてから捕捉する。
+--   [English]: Safely extracts a column as @[a]@. Absorbs into
+--   'Nothing' even type mismatches or exceptions (e.g. the case where
+--   Hackage throws @error "fromMaybeVec: Nothing slot"@ etc). 'force'
+--   is used to reduce list elements to NF before catching.
 tryColumnAsList
   :: forall a. (DXC.Columnable a, NFData a)
   => Text -> DXD.DataFrame -> Maybe [a]
@@ -219,7 +235,8 @@ dropMissingRows targets df =
       keep = [ i | i <- [0 .. n - 1], not (rowMissing i) ]
   in selectRows keep df
 
--- | インデックス集合で全列を縦スライス。
+-- | [日本語]: インデックス集合で全列を縦スライス。
+--   [English]: Vertically slices every column by an index set.
 selectRows :: [Int] -> DXD.DataFrame -> DXD.DataFrame
 selectRows idxs df = foldr ins DX.empty (DX.columnNames df)
   where
@@ -228,8 +245,11 @@ selectRows idxs df = foldr ins DX.empty (DX.columnNames df)
         Just c  -> DX.insertColumn name c acc
         Nothing -> acc
 
--- | 列を indices で取り出して新しい Column を作る。
--- BoxedColumn / UnboxedColumn のどちらでも columnAsList 経由で安全に処理する。
+-- | [日本語]: 列を indices で取り出して新しい Column を作る。
+--   BoxedColumn / UnboxedColumn のどちらでも columnAsList 経由で安全に処理する。
+--   [English]: Extracts a column by indices and builds a new Column.
+--   Handled safely via columnAsList for either BoxedColumn or
+--   UnboxedColumn.
 sliceColumn :: Text -> DXD.DataFrame -> [Int] -> Maybe DX.Column
 sliceColumn name df idxs = case DXD.getColumn name df of
   Nothing -> Nothing
@@ -289,13 +309,21 @@ imputeMedian name df = case readMaybeDoubleColumn name df of
          then Nothing
          else imputeConstant name (s !! (length s `div` 2)) df
 
--- | Read any of Text / Double / Maybe Double / Int / Maybe Int as
--- @[Maybe Double]@.
--- に正規化して取り出す。Text 列の NA 文字列・parse 失敗は Nothing として扱う。
+-- | [日本語]: Text / Double / Maybe Double / Int / Maybe Int のいずれかを
+--   @[Maybe Double]@ に正規化して取り出す。Text 列の NA 文字列・parse 失敗は
+--   Nothing として扱う。
 --
--- 注意: Hackage 'DX.columnAsList' は @Maybe a@ 列に対して @col @a@ を要求しても
--- 例外を投げず、null セルを 0 などのデフォルト値で埋めて返す。そのため null は
--- 必ず @isNullAt@ (= columnElemIsNull) で別途マスクする。
+--   注意: Hackage 'DX.columnAsList' は @Maybe a@ 列に対して @col @a@ を要求しても
+--   例外を投げず、null セルを 0 などのデフォルト値で埋めて返す。そのため null は
+--   必ず @isNullAt@ (= columnElemIsNull) で別途マスクする。
+--   [English]: Reads any of Text / Double / Maybe Double / Int / Maybe
+--   Int, normalizing it to @[Maybe Double]@. NA strings and parse
+--   failures in a Text column are treated as Nothing.
+--
+--   Note: Hackage's 'DX.columnAsList' does not throw even when @col @a@
+--   is requested against a @Maybe a@ column; it fills null cells with
+--   a default such as 0. Therefore nulls must always be separately
+--   masked via @isNullAt@ (= columnElemIsNull).
 readMaybeDoubleColumn :: Text -> DXD.DataFrame -> Maybe [Maybe Double]
 readMaybeDoubleColumn name df = fmap (maskNulls . zip [0..]) raw
   where
@@ -418,15 +446,19 @@ addColumn = DX.insertColumn
 -- groupBy / aggregate
 -- ---------------------------------------------------------------------------
 
--- | Aggregate a numeric column with the given function, grouped by a
--- text key column.
--- カスタム集約 (任意の @[Double] -> Double@) を扱うため、Hackage の
--- @groupBy + aggregate@ ではなく独自バケット実装。決まった集約は
--- 'groupByMean' 等を経由した方が高速。
+-- | [日本語]: 与えられた関数で数値列を text キー列単位に集約する。
+--   カスタム集約 (任意の @[Double] -> Double@) を扱うため、Hackage の
+--   @groupBy + aggregate@ ではなく独自バケット実装。決まった集約は
+--   'groupByMean' 等を経由した方が高速。
+--   [English]: Aggregates a numeric column with the given function,
+--   grouped by a text key column. To handle custom aggregation
+--   (an arbitrary @[Double] -> Double@), this uses a custom bucket
+--   implementation rather than Hackage's @groupBy + aggregate@. For
+--   fixed aggregations, going through 'groupByMean' etc. is faster.
 groupByAggregate
-  :: Text                          -- ^ グループ列
-  -> Text                          -- ^ 集約対象列
-  -> ([Double] -> Double)          -- ^ 集約関数
+  :: Text                          -- ^ [日本語]: グループ列。 [English]: Group column.
+  -> Text                          -- ^ [日本語]: 集約対象列。 [English]: Column to aggregate.
+  -> ([Double] -> Double)          -- ^ [日本語]: 集約関数。 [English]: Aggregation function.
   -> DXD.DataFrame
   -> Maybe DXD.DataFrame
 groupByAggregate gCol nCol agg df =
@@ -442,12 +474,21 @@ groupByAggregate gCol nCol agg df =
              DX.empty
     _ -> Nothing
 
--- | 順序保持の group→[value] 蓄積。
+-- | [日本語]: 出現順を保った group→[value] 蓄積。
 --
--- Phase Q3 (2026-05-14): 旧実装は @foldl@ + @lookup@ + @vs ++ [v]@ の三重で
--- O(n²) (n=50000 で 1.2 s / 10.4 GB alloc を観測)。Map で初出順 index と
--- 累積値を保持し、最後に index 順に並べる O(n log n) 実装に置換。
--- 蓄積は @v :@ で先頭 cons → 最後に @reverse@ するため per-element O(1)。
+--   Phase Q3 (2026-05-14): 旧実装は @foldl@ + @lookup@ + @vs ++ [v]@ の三重で
+--   O(n²) (n=50000 で 1.2 s / 10.4 GB alloc を観測)。Map で初出順 index と
+--   累積値を保持し、最後に index 順に並べる O(n log n) 実装に置換。
+--   蓄積は @v :@ で先頭 cons → 最後に @reverse@ するため per-element O(1)。
+--   [English]: Order-preserving group→[value] accumulation.
+--
+--   Phase Q3 (2026-05-14): the old implementation was O(n²) via a
+--   triple combination of @foldl@ + @lookup@ + @vs ++ [v]@ (observed
+--   1.2 s / 10.4 GB alloc at n=50000). It was replaced with an
+--   O(n log n) implementation that keeps a first-occurrence index and
+--   accumulated values in a Map, sorting by index order at the end.
+--   Accumulation is per-element O(1) since it front-conses with @v :@
+--   and only @reverse@s at the end.
 collectInOrder :: Ord k => [(k, v)] -> [(k, [v])]
 collectInOrder kvs =
   let go (!nextIdx, !mp) (k, v) =
@@ -505,22 +546,50 @@ medianD xs = let s = sort xs in s !! (length s `div` 2)
 -- Wide → Long 変形 (melt / pivot_longer)
 -- ---------------------------------------------------------------------------
 
--- | Wide-form の DataFrame を long-form に展開する (R/pandas の pivot_longer
--- / melt 相当)。
+-- | [日本語]: Wide-form の DataFrame を long-form に展開する (R/pandas の pivot_longer
+--   / melt 相当)。
 --
--- @meltLonger idCols valueCols varName valueName parseVarAsDouble df@:
+--   @meltLonger idCols valueCols varName valueName parseVarAsDouble df@:
 --
--- * @idCols@         そのまま残す (繰返しコピー) 列。
--- * @valueCols@      縦方向に展開する列。これらの列名が新しい @varName@ 列の値になる。
--- * @varName@        新しい variable 列の名前 (例: \"t\")。
--- * @valueName@      新しい value 列の名前 (例: \"y\")。
--- * @parseVarAsDouble@
---                    True なら variable 列の中身 (= 元 wide 列名) を Double として
---                    parse して数値列に。Parse 失敗時は Text 列のまま。
+--   * @idCols@         そのまま残す (繰返しコピー) 列。
+--   * @valueCols@      縦方向に展開する列。これらの列名が新しい @varName@ 列の値になる。
+--   * @varName@        新しい variable 列の名前 (例: \"t\")。
+--   * @valueName@      新しい value 列の名前 (例: \"y\")。
+--   * @parseVarAsDouble@
+--                      True なら variable 列の中身 (= 元 wide 列名) を Double として
+--                      parse して数値列に。Parse 失敗時は Text 列のまま。
 --
--- 元セルが NA (null bitmap or NA 文字列) の行は出力から除外される。
+--   元セルが NA (null bitmap or NA 文字列) の行は出力から除外される。
 --
--- 例:
+--   例:
+--
+-- @
+-- name x1 1   2   3       --      name x1 t y
+-- a    1  10  20  -    →          a    1  1 10
+-- b    2  -   30  60              a    1  2 20
+--                                 b    2  2 30
+--                                 b    2  3 60
+-- @
+--   [English]: Expands a wide-form DataFrame into long-form (equivalent
+--   to R/pandas' pivot_longer / melt).
+--
+--   @meltLonger idCols valueCols varName valueName parseVarAsDouble df@:
+--
+--   * @idCols@         Columns left as-is (repeated/copied).
+--   * @valueCols@      Columns expanded vertically. Their names become
+--     the values of the new @varName@ column.
+--   * @varName@        Name of the new variable column (e.g. \"t\").
+--   * @valueName@      Name of the new value column (e.g. \"y\").
+--   * @parseVarAsDouble@
+--                      If True, parses the variable column's content
+--                      (= the original wide column names) as Double
+--                      into a numeric column. Stays as a Text column
+--                      on parse failure.
+--
+--   Rows whose original cell is NA (null bitmap or NA string) are
+--   excluded from the output.
+--
+--   Example:
 --
 -- @
 -- name x1 1   2   3       --      name x1 t y
@@ -530,11 +599,11 @@ medianD xs = let s = sort xs in s !! (length s `div` 2)
 --                                 b    2  3 60
 -- @
 meltLonger
-  :: [Text]      -- ^ id 列 (そのまま残す)
-  -> [Text]      -- ^ wide 列 (縦展開する)
-  -> Text        -- ^ 新しい variable 列名
-  -> Text        -- ^ 新しい value 列名
-  -> Bool        -- ^ True: variable 列を Double に parse
+  :: [Text]      -- ^ [日本語]: id 列 (そのまま残す)。 [English]: id columns (left as-is).
+  -> [Text]      -- ^ [日本語]: wide 列 (縦展開する)。 [English]: wide columns (expanded vertically).
+  -> Text        -- ^ [日本語]: 新しい variable 列名。 [English]: New variable column name.
+  -> Text        -- ^ [日本語]: 新しい value 列名。 [English]: New value column name.
+  -> Bool        -- ^ [日本語]: True: variable 列を Double に parse。 [English]: True: parses the variable column to Double.
   -> DXD.DataFrame
   -> DXD.DataFrame
 meltLonger idCols valueCols varName valueName parseVar df =
@@ -609,8 +678,11 @@ meltLonger idCols valueCols varName valueName parseVar df =
     showCell Nothing  = ""
     showCell (Just t) = t
 
--- | 列を 'Maybe Double' のリストとして取り出すヘルパ (内部用)。
--- 数値 / Maybe Double / Int / Maybe Int / Text 列のいずれでも対応。
+-- | [日本語]: 列を 'Maybe Double' のリストとして取り出すヘルパ (内部用)。
+--   数値 / Maybe Double / Int / Maybe Int / Text 列のいずれでも対応。
+--   [English]: Internal helper that extracts a column as a list of
+--   'Maybe Double'. Handles numeric / Maybe Double / Int / Maybe Int /
+--   Text columns alike.
 valueAsMaybeDouble :: Text -> DXD.DataFrame -> [Maybe Double]
 valueAsMaybeDouble name df = case readMaybeDoubleColumn name df of
   Just xs -> xs
@@ -620,23 +692,34 @@ valueAsMaybeDouble name df = case readMaybeDoubleColumn name df of
 -- Long-form regrid (Phase G3): 歯抜けの long-form データを共通 grid に揃える
 -- ---------------------------------------------------------------------------
 
--- | 共通 z 範囲の決定方式。
+-- | [日本語]: 共通 z 範囲の決定方式。
+--   [English]: The method for determining the common z range.
 data ZBoundsMode
-  = ZIntersection  -- ^ 全 id で観測がある区間: (max_id min_z, min_id max_z) — 外挿なし
-  | ZUnion         -- ^ 全 id をカバー: (min_id min_z, max_id max_z) — 外挿あり
+  = ZIntersection  -- ^ [日本語]: 全 id で観測がある区間: (max_id min_z, min_id max_z) — 外挿なし。
+                   --   [English]: The interval observed across all ids:
+                   --   (max_id min_z, min_id max_z) — no extrapolation.
+  | ZUnion         -- ^ [日本語]: 全 id をカバー: (min_id min_z, max_id max_z) — 外挿あり。
+                   --   [English]: Covers all ids: (min_id min_z,
+                   --   max_id max_z) — with extrapolation.
   deriving (Show, Eq)
 
--- | 'regridLong' の設定。
+-- | [日本語]: 'regridLong' の設定。
+--   [English]: 'regridLong' settings.
 data RegridOpts = RegridOpts
   { roInterp     :: !Hanalyze.Stat.Interpolate.InterpKind
   , roGridKind   :: !Hanalyze.Stat.AdaptiveGrid.GridKind
   , roN          :: !Int
   , roZBoundsMode :: !ZBoundsMode
-  , roCoarseN    :: !Int     -- ^ adaptive 用粗 grid サイズ (default 200)
-  , roEpsRatio   :: !Double  -- ^ adaptive 用平坦部最低密度比 (default 0.05)
+  , roCoarseN    :: !Int     -- ^ [日本語]: adaptive 用粗 grid サイズ (default 200)。
+                             --   [English]: Coarse grid size for adaptive mode (default 200).
+  , roEpsRatio   :: !Double  -- ^ [日本語]: adaptive 用平坦部最低密度比 (default 0.05)。
+                             --   [English]: Minimum density ratio for flat regions in
+                             --   adaptive mode (default 0.05).
   } deriving (Show, Eq)
 
--- | 推奨デフォルト (PCHIP / Adaptive / N=30 / Intersection / coarse=200 / ε=0.05)。
+-- | [日本語]: 推奨デフォルト (PCHIP / Adaptive / N=30 / Intersection / coarse=200 / ε=0.05)。
+--   [English]: Recommended defaults (PCHIP / Adaptive / N=30 /
+--   Intersection / coarse=200 / ε=0.05).
 defaultRegridOpts :: RegridOpts
 defaultRegridOpts = RegridOpts
   { roInterp      = Hanalyze.Stat.Interpolate.PCHIP
@@ -647,18 +730,26 @@ defaultRegridOpts = RegridOpts
   , roEpsRatio    = 0.05
   }
 
--- | id ごとの統計 (G4 のレポートで使用)。
+-- | [日本語]: id ごとの統計 (G4 のレポートで使用)。
+--   [English]: Per-id statistics (used by the G4 report).
 data PerIdStat = PerIdStat
   { piId          :: !Text
-  , piNObserved   :: !Int        -- ^ 元観測点数
-  , piZMin        :: !Double     -- ^ 観測 z 最小
-  , piZMax        :: !Double     -- ^ 観測 z 最大
-  , piExtrapBelow :: !Double     -- ^ 共通 grid zmin が観測 zmin より小さい量 (>0 なら外挿)
-  , piExtrapAbove :: !Double     -- ^ 共通 grid zmax が観測 zmax より大きい量 (>0 なら外挿)
-  , piResidualMax :: !Double     -- ^ 補間関数を観測 z に再投入したときの最大残差
+  , piNObserved   :: !Int        -- ^ [日本語]: 元観測点数。 [English]: Original observation count.
+  , piZMin        :: !Double     -- ^ [日本語]: 観測 z 最小。 [English]: Observed z minimum.
+  , piZMax        :: !Double     -- ^ [日本語]: 観測 z 最大。 [English]: Observed z maximum.
+  , piExtrapBelow :: !Double     -- ^ [日本語]: 共通 grid zmin が観測 zmin より小さい量 (>0 なら外挿)。
+                                 --   [English]: The amount by which the common grid's zmin is
+                                 --   smaller than the observed zmin (>0 means extrapolation).
+  , piExtrapAbove :: !Double     -- ^ [日本語]: 共通 grid zmax が観測 zmax より大きい量 (>0 なら外挿)。
+                                 --   [English]: The amount by which the common grid's zmax is
+                                 --   larger than the observed zmax (>0 means extrapolation).
+  , piResidualMax :: !Double     -- ^ [日本語]: 補間関数を観測 z に再投入したときの最大残差。
+                                 --   [English]: The maximum residual when the interpolation
+                                 --   function is re-evaluated at the observed z values.
   } deriving (Show, Eq)
 
--- | regridLong の戻り値。data + レポート用統計。
+-- | [日本語]: regridLong の戻り値。data + レポート用統計。
+--   [English]: 'regridLong''s return value: data + statistics for the report.
 data RegridResult = RegridResult
   { rrDataFrame   :: !DXD.DataFrame
   , rrZGrid       :: ![Double]
@@ -667,23 +758,39 @@ data RegridResult = RegridResult
   , rrPerIdStats  :: ![PerIdStat]
   , rrIds         :: ![Text]
   , rrPerIdInterp :: ![(Text, [(Double, Double)], Double -> Double)]
-                       -- ^ id ごとに (id, 元観測点, 補間関数)。レポートのオーバーレイ用
-  , rrDensity     :: ![(Double, Double)]   -- ^ adaptive 時の (z, density) ペア (空: uniform 時)
+                       -- ^ [日本語]: id ごとに (id, 元観測点, 補間関数)。レポートのオーバーレイ用。
+                       --   [English]: Per id, (id, original observations, interpolation
+                       --   function). Used for report overlays.
+  , rrDensity     :: ![(Double, Double)]   -- ^ [日本語]: adaptive 時の (z, density) ペア (空: uniform 時)。
+                                           --   [English]: (z, density) pairs for adaptive mode
+                                           --   (empty for uniform mode).
   }
 
--- | 歯抜けの long-form @[idCol, zCol, yCol]@ を共通 grid に揃える。
+-- | [日本語]: 歯抜けの long-form @[idCol, zCol, yCol]@ を共通 grid に揃える。
 --
--- 1. idCol で groupBy → id ごとに (z, y) ペア取得 (NA は除外)
--- 2. ZBoundsMode に従って共通 (zmin, zmax) を決定
--- 3. 'Hanalyze.Stat.AdaptiveGrid.makeGrid' で N 点 grid を生成
--- 4. 各 id を 'Hanalyze.Stat.Interpolate.interp1d' で補間し grid 上で評価
--- 5. id × grid の long-form DataFrame を返す
+--   1. idCol で groupBy → id ごとに (z, y) ペア取得 (NA は除外)
+--   2. ZBoundsMode に従って共通 (zmin, zmax) を決定
+--   3. 'Hanalyze.Stat.AdaptiveGrid.makeGrid' で N 点 grid を生成
+--   4. 各 id を 'Hanalyze.Stat.Interpolate.interp1d' で補間し grid 上で評価
+--   5. id × grid の long-form DataFrame を返す
 --
--- 観測点が < 2 の id は補間できないため除外され、レポートに記録される。
+--   観測点が < 2 の id は補間できないため除外され、レポートに記録される。
+--   [English]: Resamples a jagged long-form @[idCol, zCol, yCol]@ onto
+--   a common grid.
+--
+--   1. groupBy on idCol → get (z, y) pairs per id (NA excluded).
+--   2. Determine the common (zmin, zmax) according to ZBoundsMode.
+--   3. Generate an N-point grid via 'Hanalyze.Stat.AdaptiveGrid.makeGrid'.
+--   4. Interpolate each id via 'Hanalyze.Stat.Interpolate.interp1d'
+--      and evaluate it on the grid.
+--   5. Return an id × grid long-form DataFrame.
+--
+--   Ids with fewer than 2 observed points can't be interpolated, so
+--   they're excluded and recorded in the report.
 regridLong
-  :: Text          -- ^ id 列名
-  -> Text          -- ^ z 列名
-  -> Text          -- ^ y 列名
+  :: Text          -- ^ [日本語]: id 列名。 [English]: id column name.
+  -> Text          -- ^ [日本語]: z 列名。 [English]: z column name.
+  -> Text          -- ^ [日本語]: y 列名。 [English]: y column name.
   -> RegridOpts
   -> DXD.DataFrame
   -> RegridResult
@@ -782,7 +889,9 @@ regridLong idCol zCol yCol opts df =
   where
     sortBy = Data.List.sortBy
 
--- | 内部: adaptive レポート用の (z, max_id |dy/dz|) 列を再計算 (G4 の R3 で表示)。
+-- | [日本語]: 内部: adaptive レポート用の (z, max_id |dy/dz|) 列を再計算 (G4 の R3 で表示)。
+--   [English]: Internal: recomputes the (z, max_id |dy/dz|) column for
+--   the adaptive report (shown in G4's R3).
 computeDensity
   :: [[(Double, Double)]] -> Hanalyze.Stat.Interpolate.InterpKind -> Int
   -> Double -> Double

@@ -4,11 +4,11 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Latent Class Analysis (LCA) via EM algorithm (Phase 32-A2)。
+-- [日本語]: Latent Class Analysis (LCA) via EM algorithm。
 --
 -- カテゴリ変数の潜在クラスクラスタリング。 @K@ 個の潜在クラスを仮定し、
 -- 各クラスでの各 categorical 特徴の条件付き分布 @P(X_j | class)@ を推定する。
--- R `poLCA` 相当。
+-- R @poLCA@ 相当。
 --
 -- ## モデル
 --
@@ -21,8 +21,33 @@
 --
 -- ## EM
 --
--- - **E-step**: posterior @γ_{i,k} = π_k Π_j ρ_{k,j,X_{i,j}} / Σ_{k'} (...)@
--- - **M-step**: @π_k ← (1/n) Σ_i γ_{i,k}@、
+-- - __E-step__: posterior @γ_{i,k} = π_k Π_j ρ_{k,j,X_{i,j}} / Σ_{k'} (...)@
+-- - __M-step__: @π_k ← (1/n) Σ_i γ_{i,k}@、
+--   @ρ_{k,j,l} ← Σ_i γ_{i,k} [X_{i,j} = l] / Σ_i γ_{i,k}@
+--
+-- Reference: Linzer-Lewis (2011) "poLCA: An R package for polytomous
+-- variable latent class analysis". J Stat Softw 42(10).
+--
+-- [English]: Latent Class Analysis (LCA) via the EM algorithm.
+--
+-- Latent-class clustering of categorical variables. Assumes @K@
+-- latent classes, and estimates the conditional distribution
+-- @P(X_j | class)@ of each categorical feature within each class.
+-- Equivalent to R's @poLCA@.
+--
+-- ## Model
+--
+-- @
+--   P(X_i) = Σ_k π_k · Π_j ρ_{k, j, X_{i,j}}
+-- @
+--
+-- where @π_k@ is the class mixing weight and @ρ_{k,j,l}@ is the
+-- probability that feature @j@ takes level @l@ in class @k@.
+--
+-- ## EM
+--
+-- - __E-step__: posterior @γ_{i,k} = π_k Π_j ρ_{k,j,X_{i,j}} / Σ_{k'} (...)@
+-- - __M-step__: @π_k ← (1/n) Σ_i γ_{i,k}@,
 --   @ρ_{k,j,l} ← Σ_i γ_{i,k} [X_{i,j} = l] / Σ_i γ_{i,k}@
 --
 -- Reference: Linzer-Lewis (2011) "poLCA: An R package for polytomous
@@ -53,11 +78,18 @@ data LCAFit = LCAFit
 -- fitLCA
 -- ---------------------------------------------------------------------------
 
--- | @K@ クラス、 @L@ 水準の LCA を EM で fit。 入力 @X@ は @n@ 行 @J@ 列の
+-- | [日本語]: @K@ クラス、 @L@ 水準の LCA を EM で fit。 入力 @X@ は @n@ 行 @J@ 列の
 -- 0-indexed カテゴリ値 (`[[Int]]`、 全要素 ∈ @[0, L-1]@)。
 --
 -- 初期化はランダム (Dirichlet(1) ≈ uniform-on-simplex の近似で MWC を使う)。
 -- 同じ seed で再現性あり。
+--
+-- [English]: Fits an LCA with @K@ classes and @L@ levels via EM. The
+-- input @X@ is 0-indexed category values with @n@ rows and @J@ columns
+-- (`[[Int]]`, all elements ∈ @[0, L-1]@).
+--
+-- Initialization is random (using MWC as an approximation of
+-- Dirichlet(1) ≈ uniform-on-simplex). Reproducible for the same seed.
 fitLCA
   :: Int                  -- ^ K (classes)
   -> Int                  -- ^ L (levels per feature)
@@ -92,12 +124,16 @@ fitLCA k l xRaw maxIter tol gen = do
     , lcaLogLik          = llFinal
     }
 
--- | E-step: per-row posterior @γ_{i,k}@ と log-likelihood。
+-- | [日本語]: E-step: per-row posterior @γ_{i,k}@ と log-likelihood。
 -- log-space で stable: @log P(X_i | k) = Σ_j log ρ_{k, j, X_{i,j}}@
+--
+-- [English]: E-step: the per-row posterior @γ_{i,k}@ and the
+-- log-likelihood. Stable in log-space:
+-- @log P(X_i | k) = Σ_j log ρ_{k, j, X_{i,j}}@.
 eStep
-  :: LA.Matrix Double  -- ^ X (n × J)、 0/1/.../L-1 を Double で
+  :: LA.Matrix Double  -- ^ [日本語]: X (n × J)、 0/1/.../L-1 を Double で。 [English]: X (n × J), with 0/1/.../L-1 as Double.
   -> LA.Vector Double  -- ^ π
-  -> [LA.Matrix Double] -- ^ ρ (J 個の K × L)
+  -> [LA.Matrix Double] -- ^ [日本語]: ρ (J 個の K × L)。 [English]: ρ (J instances of K × L).
   -> Int               -- ^ L
   -> (LA.Matrix Double, Double)
 eStep xMat pVec rhoList _ =
@@ -123,7 +159,8 @@ eStep xMat pVec rhoList _ =
       ll = sum perRowLL
   in (gamma, ll)
 
--- | M-step: γ から π / ρ を更新。
+-- | [日本語]: M-step: γ から π / ρ を更新。
+--   [English]: M-step: updates π \/ ρ from γ.
 mStep
   :: LA.Matrix Double   -- ^ X (n × J)
   -> LA.Matrix Double   -- ^ γ (n × K)
@@ -155,15 +192,20 @@ mStep xMat gamma l =
 -- 初期化ヘルパ
 -- ---------------------------------------------------------------------------
 
--- | 長さ @k@ の simplex 上の uniform ランダム vector (= Dir(1) 近似)。
+-- | [日本語]: 長さ @k@ の simplex 上の uniform ランダム vector (= Dir(1) 近似)。
 -- 単純に @k@ 個の uniform を引いて正規化。
+--
+-- [English]: A uniform random vector on the length-@k@ simplex (an
+-- approximation of Dir(1)). Simply draws @k@ uniforms and normalizes.
 randomSimplex :: Int -> MWC.GenIO -> IO (LA.Vector Double)
 randomSimplex k gen = do
   rs <- replicateM k (MWC.uniformR (1e-3, 1.0 :: Double) gen)
   let s = sum rs
   pure (LA.fromList (map (/ s) rs))
 
--- | K × L 行 stochastic matrix のランダム生成。 各行を randomSimplex。
+-- | [日本語]: K × L 行 stochastic matrix のランダム生成。 各行を randomSimplex。
+--   [English]: Randomly generates a K × L row-stochastic matrix. Each
+--   row via randomSimplex.
 randomRowStochastic :: Int -> Int -> MWC.GenIO -> IO (LA.Matrix Double)
 randomRowStochastic k l gen = do
   rows <- replicateM k (randomSimplex l gen)

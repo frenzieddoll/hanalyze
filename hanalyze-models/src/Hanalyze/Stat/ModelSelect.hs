@@ -14,9 +14,9 @@
 --
 -- References:
 --
--- * Watanabe (2010) — WAIC.
--- * Vehtari, Gelman, Gabry (2017) — PSIS-LOO.
--- * Hosking & Wallis (1987) — generalized Pareto moment estimator.
+-- - Watanabe (2010) — WAIC.
+-- - Vehtari, Gelman, Gabry (2017) — PSIS-LOO.
+-- - Hosking & Wallis (1987) — generalized Pareto moment estimator.
 --
 -- @
 -- let logLikMat = chainLogLikMatrix model chain  -- [[Double]]
@@ -314,18 +314,18 @@ glmPosteriorLogLiks family linkFn x y fisherInv fr s gen = do
     -- 'lmPosteriorLogLiks'.
     return (VS.toList (VS.zipWith (glmLogDensity family linkFn) y eta))
 
--- | Log-likelihood matrix for the **conditional** WAIC of a Gaussian
+-- | Log-likelihood matrix for the __conditional__ WAIC of a Gaussian
 -- LME (random intercepts).
 --
 -- This is not a fully marginal GLMM posterior. It conditions on a point
 -- estimate of the BLUPs @û@ and posterior-samples @(β, σ²)@ as if from
 -- a residualized LM:
 --
---   * @y' := y − Z·û@  (response with BLUP offset removed).
---   * @σ² ~ InvGamma((n−p)/2, RSS_cond/2)@ where @RSS_cond@ is the LME
+--   - @y' := y − Z·û@  (response with BLUP offset removed).
+--   - @σ² ~ InvGamma((n−p)/2, RSS_cond/2)@ where @RSS_cond@ is the LME
 --     conditional residual sum of squares.
---   * @β ~ MVN(β̂,  σ² (X'X)⁻¹)@.
---   * @log p(y_i | β^s, û_{j(i)}, σ^s) = log N(y_i; X_iβ^s + û_{j(i)}, σ^s)@.
+--   - @β ~ MVN(β̂,  σ² (X'X)⁻¹)@.
+--   - @log p(y_i | β^s, û_{j(i)}, σ^s) = log N(y_i; X_iβ^s + û_{j(i)}, σ^s)@.
 --
 -- Because @u@ is held fixed, @p_WAIC@ tends to be smaller than the true
 -- value; this is still useful for comparing fixed-effect structures on
@@ -390,7 +390,8 @@ mean :: [Double] -> Double
 mean [] = 0
 mean xs = sum xs / fromIntegral (length xs)
 
--- | 標本分散 (n-1 で割る)
+-- | [日本語]: 標本分散 (n-1 で割る)
+--   [English]: Sample variance (divides by n-1).
 sampleVar :: [Double] -> Double
 sampleVar xs
   | length xs < 2 = 0
@@ -421,14 +422,24 @@ data CompareResult = CompareResult
   , crWeight    :: Double          -- ^ Pseudo-BMA weight (sums to 1 over models).
   } deriving (Show)
 
--- | Compare several models by WAIC / LOO and compute Pseudo-BMA weights.
+-- | [日本語]: 複数モデルを WAIC / LOO で比較し、 Pseudo-BMA 重みを計算する。
+--
+-- アルゴリズム:
+--
+--   - 各モデルの WAIC と LOO を計算する。
+--   - 最良 (最小) のモデルを @ΔWAIC@ / @ΔLOO@ の基準とする。
+--   - Pseudo-BMA 重み: @w_i = exp(elpd_i) / Σ exp(elpd_j)@。
+--     (実用的には Δ から計算: w_i ∝ exp(-Δelpd_i))
+--
+--   [English]: Compare several models by WAIC / LOO and compute
+--   Pseudo-BMA weights.
 --
 -- Algorithm:
 --
---   * Compute WAIC and LOO for each model.
---   * Use the best (minimum) model as baseline for @ΔWAIC@ / @ΔLOO@.
---   * Pseudo-BMA weight: @w_i = exp(elpd_i) / Σ exp(elpd_j)@.
---     (実用的には Δ から計算: w_i ∝ exp(-Δelpd_i))
+--   - Compute WAIC and LOO for each model.
+--   - Use the best (minimum) model as baseline for @ΔWAIC@ / @ΔLOO@.
+--   - Pseudo-BMA weight: @w_i = exp(elpd_i) / Σ exp(elpd_j)@.
+--     (in practice, computed from Δ: w_i ∝ exp(-Δelpd_i))
 compareModels :: [CompareEntry] -> [CompareResult]
 compareModels entries =
   let waicResults = map (\e -> (ceLabel e, waic (ceLogLikMat e))) entries

@@ -85,12 +85,14 @@ defaultRandomForest = RFConfig
 data RandomForest = RandomForest
   { rfTreesV         :: ![Tree]
   , rfNFeatures      :: !Int
-  , rfImportance     :: !(V.Vector Double)  -- ^ impurity/split ベース (MDI 相当・R IncNodePurity)。
-  , rfPermImportance :: !(V.Vector Double)  -- ^ permutation ベース (MSE 増加・R %IncMSE・sklearn permutation_importance)。
-  , rfFeatureNames   :: ![Text]             -- ^ 特徴列名。 df|-> 経路が実列名を設定、 低レベル行列 fit は 'defaultFeatureNames' ("f1"..)。
+  , rfImportance     :: !(V.Vector Double)  -- ^ [日本語]: impurity/split ベース (MDI 相当・R IncNodePurity)。 [English]: Impurity\/split-based importance (equivalent to MDI; R's IncNodePurity).
+  , rfPermImportance :: !(V.Vector Double)  -- ^ [日本語]: permutation ベース (MSE 増加・R %IncMSE・sklearn permutation_importance)。 [English]: Permutation-based importance (MSE increase; R's %IncMSE, sklearn's permutation_importance).
+  , rfFeatureNames   :: ![Text]             -- ^ [日本語]: 特徴列名。 df|-> 経路が実列名を設定、 低レベル行列 fit は 'defaultFeatureNames' ("f1"..)。 [English]: Feature column names. The df|-> path sets the real column names; low-level matrix fits use 'defaultFeatureNames' ("f1"..).
   } deriving (Show)
 
--- | 名前を持たない行列入力の既定特徴名 ("f1", "f2", …・1 始まり = R/sklearn 慣例)。
+-- | [日本語]: 名前を持たない行列入力の既定特徴名 ("f1", "f2", …・1 始まり = R/sklearn 慣例)。
+--   [English]: Default feature names for unnamed matrix input ("f1", "f2",
+--   …; 1-indexed, following R\/sklearn convention).
 defaultFeatureNames :: Int -> [Text]
 defaultFeatureNames d = [ "f" <> T.pack (show k) | k <- [1 .. d] ]
 
@@ -98,8 +100,11 @@ defaultFeatureNames d = [ "f" <> T.pack (show k) | k <- [1 .. d] ]
 -- Vector-based fit (primary)
 -- ---------------------------------------------------------------------------
 
--- | IO ラッパ。 ロジックは 'PrimMonad' 汎用の 'fitRFVM' を共有
+-- | [日本語]: IO ラッパ。 ロジックは 'PrimMonad' 汎用の 'fitRFVM' を共有
 -- (mwc は 'PrimMonad' 汎用ゆえ ST/IO 両経路で同コード)。
+-- [English]: An IO wrapper. The logic is shared with the 'PrimMonad'-generic
+-- 'fitRFVM' (since mwc is 'PrimMonad'-generic, both the ST and IO paths
+-- share the same code).
 fitRFV :: RFConfig
        -> LA.Matrix Double
        -> VU.Vector Double
@@ -107,9 +112,13 @@ fitRFV :: RFConfig
        -> IO RandomForest
 fitRFV = fitRFVM
 
--- | 'PrimMonad' 汎用の forest 本体。 'fitRFV' (IO) / 'fitRFVPure' (ST) が共有。
+-- | [日本語]: 'PrimMonad' 汎用の forest 本体。 'fitRFV' (IO) / @fitRFVPure@ (ST) が共有。
 -- 乱数 (gen) は bootstrap index のみで使う。 木構築 'buildTreeV' と feature
 -- importance は純粋ゆえ ST/IO でビット同一。
+-- [English]: The 'PrimMonad'-generic forest core, shared by 'fitRFV' (IO)
+-- and @fitRFVPure@ (ST). The random generator (gen) is used only for the
+-- bootstrap index. Tree building ('buildTreeV') and feature importance are
+-- pure, so ST and IO give bit-identical results.
 fitRFVM :: PrimMonad m
         => RFConfig
         -> LA.Matrix Double
@@ -140,9 +149,13 @@ fitRF cfg xs ys gen
   | null xs   = pure emptyForest
   | otherwise = fitRFV cfg (LA.fromLists xs) (VU.fromList ys) gen
 
--- | 純粋・決定的な行列入力 forest。 同じ @seed@ なら必ず同じ 'RandomForest'。
--- 'fitRFVM' を 'ST' で走らせ 'runST' で閉じる
--- ([[phase-50-mcmc-purification-status]] の 'nutsPure' と同方針)。
+-- | [日本語]: 純粋・決定的な行列入力 forest。 同じ @seed@ なら必ず同じ 'RandomForest'。
+-- 'fitRFVM' を @ST@ で走らせ 'runST' で閉じる
+-- ([[phase-50-mcmc-purification-status]] の @nutsPure@ と同方針)。
+-- [English]: A pure, deterministic matrix-input forest. The same @seed@
+-- always yields the same 'RandomForest'. Runs 'fitRFVM' in @ST@ and closes
+-- it with 'runST' (the same approach as @nutsPure@ in
+-- [[phase-50-mcmc-purification-status]]).
 fitRFVPure :: RFConfig
            -> LA.Matrix Double
            -> VU.Vector Double
@@ -151,13 +164,16 @@ fitRFVPure :: RFConfig
 fitRFVPure cfg x y seed =
   runST (MWC.initialize (V.singleton seed) >>= fitRFVM cfg x y)
 
--- | 純粋・決定的な list 入力 forest (list 版 'fitRF' の seed 純粋版)。
+-- | [日本語]: 純粋・決定的な list 入力 forest (list 版 'fitRF' の seed 純粋版)。
+--   [English]: A pure, deterministic list-input forest (the seed-pure
+--   version of the list-based 'fitRF').
 fitRFPure :: RFConfig -> [[Double]] -> [Double] -> Word32 -> RandomForest
 fitRFPure cfg xs ys seed
   | null xs   = emptyForest
   | otherwise = fitRFVPure cfg (LA.fromLists xs) (VU.fromList ys) seed
 
--- | 空データ時の forest (全フィールド空)。
+-- | [日本語]: 空データ時の forest (全フィールド空)。
+--   [English]: The forest for empty data (all fields empty).
 emptyForest :: RandomForest
 emptyForest = RandomForest [] 0 V.empty V.empty []
 
@@ -219,7 +235,7 @@ buildTreeV cfg x y idx depth =
 -- | Deterministic pseudo-random feature subset using an LCG seeded by
 -- @(depth, n)@. Different nodes typically see different subsets,
 -- which is the decorrelation that random forests need at split time.
--- Tree-level randomness comes from 'bootstrapIdx', which threads
+-- Tree-level randomness comes from @bootstrapIdx@, which threads
 -- through 'MWC.GenIO'.
 pickFeats :: Int -> Int -> Int -> Int -> VU.Vector Int
 pickFeats d mtry depth n
@@ -354,9 +370,15 @@ featureImportance rf =
       tot = V.sum raw
   in if tot <= 0 then raw else V.map (/ tot) raw
 
--- | Permutation importance (= 列を無作為置換したときの MSE 増加) を正の総和で
+-- | [日本語]: Permutation importance (= 列を無作為置換したときの MSE 増加) を正の総和で
 -- 正規化して返す。 全て非正なら raw のまま (負 = その特徴が予測に無寄与)。
 -- R @randomForest %IncMSE@ / sklearn @permutation_importance@ 同方式。
+-- [English]: Returns permutation importance (= the MSE increase when a
+-- column is randomly permuted), normalized by the sum of the positive
+-- values. If all values are non-positive, returns the raw values unchanged
+-- (negative = that feature contributes nothing to prediction). The same
+-- method as R's @randomForest %IncMSE@ \/ sklearn's
+-- @permutation_importance@.
 rfPermutationImportance :: RandomForest -> V.Vector Double
 rfPermutationImportance rf =
   let raw = rfPermImportance rf
@@ -367,8 +389,11 @@ rfPermutationImportance rf =
 -- Permutation importance (MSE 増加ベース)
 -- ---------------------------------------------------------------------------
 
--- | 各特徴列を無作為置換し、 forest の MSE 増加量を測る (純粋・'PrimMonad')。
+-- | [日本語]: 各特徴列を無作為置換し、 forest の MSE 増加量を測る (純粋・'PrimMonad')。
 -- gen は列シャッフルにのみ使う。 同 seed → ビット同一。
+-- [English]: Randomly permutes each feature column and measures the
+-- forest's MSE increase (pure, 'PrimMonad'-generic). gen is used only for
+-- column shuffling; the same seed gives bit-identical results.
 permImportanceRegM :: PrimMonad m
                    => LA.Matrix Double -> VU.Vector Double -> [Tree]
                    -> MWC.Gen (PrimState m) -> m (V.Vector Double)
@@ -382,7 +407,9 @@ permImportanceRegM x y trees gen
                      [0 .. LA.cols x - 1]
       pure (V.fromList scores)
 
--- | forest の平均二乗誤差 (行毎に木予測を平均)。
+-- | [日本語]: forest の平均二乗誤差 (行毎に木予測を平均)。
+--   [English]: The forest's mean squared error (averages the per-tree
+--   predictions per row).
 forestMSE :: LA.Matrix Double -> VU.Vector Double -> [Tree] -> Double
 forestMSE x y trees =
   let !n = LA.rows x
@@ -394,7 +421,9 @@ forestMSE x y trees =
       sse = sum [ (rowPred i - y VU.! i) ^ (2 :: Int) | i <- [0 .. n - 1] ]
   in if n == 0 then 0 else sse / fromIntegral n
 
--- | 列 j を Fisher-Yates で置換した行列を返す (他列は不変)。
+-- | [日本語]: 列 j を Fisher-Yates で置換した行列を返す (他列は不変)。
+--   [English]: Returns the matrix with column j permuted via Fisher-Yates
+--   (the other columns are unchanged).
 permuteColM :: PrimMonad m
             => Int -> LA.Matrix Double -> MWC.Gen (PrimState m) -> m (LA.Matrix Double)
 permuteColM j x gen = do
@@ -405,7 +434,9 @@ permuteColM j x gen = do
                 | kk <- [0 .. length cols0 - 1] ]
   pure (LA.fromColumns newCols)
 
--- | 可変ベクトル上の Fisher-Yates シャッフル ('PrimMonad'・gen 決定的)。
+-- | [日本語]: 可変ベクトル上の Fisher-Yates シャッフル ('PrimMonad'・gen 決定的)。
+--   [English]: A Fisher-Yates shuffle over a mutable vector ('PrimMonad'
+--   -generic; deterministic given gen).
 fisherYatesM :: PrimMonad m
              => MWC.Gen (PrimState m) -> VU.Vector Double -> m (VU.Vector Double)
 fisherYatesM gen v0 = do
@@ -422,8 +453,12 @@ fisherYatesM gen v0 = do
 -- Importance accumulation (per split, simple count)
 -- ---------------------------------------------------------------------------
 
--- | 全木の split 特徴を 1 回の可変ベクトル走査で集計 (純粋)。 旧 'IORef'
+-- | [日本語]: 全木の split 特徴を 1 回の可変ベクトル走査で集計 (純粋)。 旧 @IORef@
 -- 版を 'runST' + 可変ベクトルへ置換 (count の和は可換ゆえ木順不問で同値)。
+-- [English]: Tallies the split features across all trees in a single
+-- mutable-vector pass (pure). Replaces the old @IORef@-based version with
+-- 'runST' + a mutable vector (since summing counts is commutative, this is
+-- equivalent regardless of tree order).
 importanceOf :: Int -> [Tree] -> V.Vector Double
 importanceOf d trees = runST $ do
   v <- VM.replicate d 0.0

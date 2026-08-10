@@ -3,9 +3,9 @@
 > 🌐 [English](06-model-comparison.md) | **日本語**
 
 > 関連デモ:
-> - [`gibbs-demo`](../../demo/bayesian/GibbsDemo.hs) — WAIC/LOO で 2 モデル比較
-> - [`simpson-paradox`](../../demo/bayesian/SimpsonParadoxDemo.hs) — LM/GLMM/HBM の WAIC を 1 つの HTML に並列表示
-> - [`hbm-random-slope`](../../demo/bayesian/HBMRandomSlopeDemo.hs) — ランダム切片 vs +ランダム傾きの ΔWAIC 比較
+> - [`gibbs-demo`](../../hanalyze-demos/demo/bayesian/GibbsDemo.hs) — WAIC/LOO で 2 モデル比較
+> - [`simpson-paradox`](../../hanalyze-demos/demo/bayesian/SimpsonParadoxDemo.hs) — LM/GLMM/HBM の WAIC を 1 つの HTML に並列表示
+> - [`hbm-random-slope`](../../hanalyze-demos/demo/bayesian/HBMRandomSlopeDemo.hs) — ランダム切片 vs +ランダム傾きの ΔWAIC 比較
 >
 > CLI: `--waic` フラグで LM / GLM / GLMM / HBM レポートに WAIC/LOO を埋め込み。
 
@@ -222,7 +222,7 @@ compareSlopeModels = do
   return (w1, w2, l1, l2)
 ```
 
-完全動作する実装は [`hbm-random-slope`](../../demo/bayesian/HBMRandomSlopeDemo.hs) に。
+完全動作する実装は [`hbm-random-slope`](../../hanalyze-demos/demo/bayesian/HBMRandomSlopeDemo.hs) に。
 3 群で各群の真の傾きが異なるデータでは M2 (ランダム傾き) が WAIC / LOO 共に
 小さくなることが実測できます。
 

@@ -45,9 +45,9 @@ formula を直接当てはめ、 `MultiLMModel` を返します。 多変量モ�
 {-# LANGUAGE OverloadedStrings #-}
 import Hanalyze.Plot     (lmF, glmF, glmmF, (|->), toPlot, statModelMulti, along, holdAt, HoldAgg (..))
 import Hanalyze.Model.GLM (Family (..), LinkFn (..))
-import Hgg.Plot.Spec        (ColData (..), layer, scatter)
-import Hgg.Plot.Frame       ((|>>))
-import Hgg.Plot.Backend.SVG (saveSVGBound)
+import Graphics.Hgg.Spec        (ColData (..), layer, scatter)
+import Graphics.Hgg.Frame       ((|>>))
+import Graphics.Hgg.Backend.SVG (saveSVGBound)
 import qualified Data.Vector as V
 
 main :: IO ()
@@ -252,4 +252,4 @@ y ~ x + (0+x|g)      # random slope のみ (intercept 抑制)
 - **複数 grouping factor** の random effect (`(…|g1) + (…|g2)`): 単一群のみ実装。
 - `smooth` (B-spline) の信頼帯 (現状は点推定のみ)。
 
-> 設計の詳細は 内部設計文書 spec: analysis-language §2.1/§2.2/§2.4/§3.6 (非公開) を参照。
+> 設計の詳細は analysis-language 設計 spec §2.1/§2.2/§2.4/§3.6 (内部資料・本 repo には含まれない) を参照。

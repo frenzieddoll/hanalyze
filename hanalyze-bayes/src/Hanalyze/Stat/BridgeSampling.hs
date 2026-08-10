@@ -7,8 +7,8 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Bridge Sampling estimator of the marginal likelihood @log p(y)@
--- (Meng & Wong 1996).
+-- [日本語]: Bridge Sampling による周辺尤度 @log p(y)@ 推定
+-- (Meng & Wong 1996)。
 --
 -- Reference:
 --
@@ -19,7 +19,7 @@
 --     Wagenmakers, Steingroever (2017) "A tutorial on bridge sampling".
 --     Journal of Mathematical Psychology 81:80-97.
 --
--- ## アルゴリズム (Phase 29-A2)
+-- ## アルゴリズム
 --
 -- 目的: 周辺尤度 @log p(y) = log ∫ p(y|θ) p(θ) dθ@ を、 既存 MCMC chain
 -- (posterior samples) と diagonal Gaussian proposal @g(θ)@ から推定する。
@@ -42,16 +42,67 @@
 --   * @θ̃_1@ は proposal @g@ から (本実装では Gaussian fit-to-chain)
 --   * @θ̃_2@ は posterior chain サンプル
 --   * @s_1 = N_1/(N_1+N_2)@、 @s_2 = N_2/(N_1+N_2)@
---   * @q(θ) = p(y|θ)·p(θ)@ = 'logJoint' の exp 化
+--   * @q(θ) = p(y|θ)·p(θ)@ = @logJoint@ の exp 化
 --
--- 全計算は **log space** で行い (log-sum-exp 安定化)、 浮動小数 underflow を回避。
+-- 全計算は __log space__ で行い (log-sum-exp 安定化)、 浮動小数 underflow を回避。
 --
--- ## SMC との関係 (Phase 29-A1/A2 統合)
+-- ## SMC との関係
 --
 -- SMC は副産物として log marginal を推定する (= temperature schedule の
 -- incremental log-mean-weight 累積)。 Bridge Sampling は MCMC chain + proposal
--- から **独立な推定経路** で求めるので、 両者が 5% 以内で一致すれば妥当性が裏付け。
+-- から __独立な推定経路__ で求めるので、 両者が 5% 以内で一致すれば妥当性が裏付け。
 -- 不一致なら chain の収束不足 / SMC schedule 粗さ / proposal 不適切のサイン。
+--
+-- [English]: Bridge Sampling estimator of the marginal likelihood
+-- @log p(y)@ (Meng & Wong 1996).
+--
+-- Reference:
+--
+--   * Meng & Wong (1996) "Simulating ratios of normalising constants
+--     via a simple identity: a theoretical exploration". Statistica
+--     Sinica 6:831-860.
+--   * Gronau, Sarafoglou, Matzke, Ly, Boehm, Marsman, Leslie, Forster,
+--     Wagenmakers, Steingroever (2017) "A tutorial on bridge sampling".
+--     Journal of Mathematical Psychology 81:80-97.
+--
+-- ## Algorithm
+--
+-- Goal: estimate the marginal likelihood @log p(y) = log ∫ p(y|θ) p(θ) dθ@
+-- from an existing MCMC chain (posterior samples) and a diagonal Gaussian
+-- proposal @g(θ)@.
+--
+-- Bridge identity (Meng-Wong):
+--
+-- @
+--   p(y) = E_g[α(θ) q(θ)] / E_p[α(θ) g(θ)]
+-- @
+--
+-- Using the optimal bridge function @α*(θ) = 1 / (s_1 q(θ) + s_2 r g(θ))@,
+-- @r̂@ is found via the following iterative scheme:
+--
+-- @
+--   r̂_{t+1} = [(1/N_2) Σ_i q(θ̃_2,i) / (s_1 q(θ̃_2,i) + s_2 r̂_t g(θ̃_2,i))]
+--           / [(1/N_1) Σ_j g(θ̃_1,j) / (s_1 q(θ̃_1,j) + s_2 r̂_t g(θ̃_1,j))]
+-- @
+--
+-- where:
+--   * @θ̃_1@ comes from the proposal @g@ (a Gaussian fit-to-chain in this
+--     implementation)
+--   * @θ̃_2@ are posterior chain samples
+--   * @s_1 = N_1\/(N_1+N_2)@, @s_2 = N_2\/(N_1+N_2)@
+--   * @q(θ) = p(y|θ)·p(θ)@, i.e. the exponentiated @logJoint@
+--
+-- All computation is done in __log space__ (log-sum-exp stabilized) to
+-- avoid floating-point underflow.
+--
+-- ## Relationship to SMC
+--
+-- SMC estimates the log marginal as a byproduct (= the cumulative
+-- incremental log-mean-weight over the temperature schedule). Bridge
+-- Sampling derives its estimate via an __independent path__ from the MCMC
+-- chain and proposal, so agreement between the two within 5% corroborates
+-- validity. Disagreement signals insufficient chain convergence, a coarse
+-- SMC schedule, or an unsuitable proposal.
 module Hanalyze.Stat.BridgeSampling
   ( BridgeConfig (..)
   , defaultBridgeConfig
@@ -72,11 +123,12 @@ import           Hanalyze.MCMC.Core        (Chain (..), chainVals)
 -- Configuration
 -- ---------------------------------------------------------------------------
 
--- | Bridge Sampling 設定。
+-- | [日本語]: Bridge Sampling 設定。
+--   [English]: Bridge Sampling configuration.
 data BridgeConfig = BridgeConfig
-  { bcNProposal :: !Int     -- ^ N_1: proposal samples 数 (典型 chain サンプル数と同等)
-  , bcMaxIter   :: !Int     -- ^ 反復解の最大回数 (典型 100、 通常 < 20 で収束)
-  , bcTolerance :: !Double  -- ^ 反復収束判定 |Δ log r̂| < tol (典型 1e-6)
+  { bcNProposal :: !Int     -- ^ [日本語]: N_1: proposal samples 数 (典型 chain サンプル数と同等)。 [English]: N_1: the number of proposal samples (typically comparable to the chain's sample count).
+  , bcMaxIter   :: !Int     -- ^ [日本語]: 反復解の最大回数 (典型 100、 通常 < 20 で収束)。 [English]: Maximum number of solver iterations (typically 100; usually converges in < 20).
+  , bcTolerance :: !Double  -- ^ [日本語]: 反復収束判定 |Δ log r̂| < tol (典型 1e-6)。 [English]: Iterative convergence threshold |Δ log r̂| < tol (typically 1e-6).
   } deriving (Show)
 
 defaultBridgeConfig :: BridgeConfig
@@ -86,26 +138,37 @@ defaultBridgeConfig = BridgeConfig
   , bcTolerance = 1e-6
   }
 
--- | Bridge Sampling 結果。
+-- | [日本語]: Bridge Sampling 結果。
+--   [English]: Bridge Sampling result.
 data BridgeResult = BridgeResult
-  { brLogMarginal :: !Double   -- ^ 推定 @log p(y)@
-  , brIterations  :: !Int      -- ^ 収束に要した反復数
-  , brConverged   :: !Bool     -- ^ tol 以内で収束したか
+  { brLogMarginal :: !Double   -- ^ [日本語]: 推定 @log p(y)@。 [English]: Estimated @log p(y)@.
+  , brIterations  :: !Int      -- ^ [日本語]: 収束に要した反復数。 [English]: Number of iterations needed to converge.
+  , brConverged   :: !Bool     -- ^ [日本語]: tol 以内で収束したか。 [English]: Whether it converged within the tolerance.
   } deriving (Show)
 
 -- ---------------------------------------------------------------------------
 -- 公開 API
 -- ---------------------------------------------------------------------------
 
--- | Bridge Sampling で @log p(y)@ を推定。
+-- | [日本語]: Bridge Sampling で @log p(y)@ を推定。
 --
--- 入力:
---   * モデル (logJoint = log q(θ) = log p(y|θ) + log p(θ))
---   * posterior chain (既存 NUTS / MH / SMC 等の結果)
---   * proposal は **diagonal Gaussian fit** to chain (各パラメータの sample
---     mean / SD から構築)
+--   入力:
+--     * モデル (logJoint = log q(θ) = log p(y|θ) + log p(θ))
+--     * posterior chain (既存 NUTS / MH / SMC 等の結果)
+--     * proposal は __diagonal Gaussian fit__ to chain (各パラメータの sample
+--       mean / SD から構築)
 --
--- 出力: log marginal likelihood 推定値 + 収束情報。
+--   出力: log marginal likelihood 推定値 + 収束情報。
+--   [English]: Estimate @log p(y)@ via Bridge Sampling.
+--
+--   Inputs:
+--     * the model (logJoint = log q(θ) = log p(y|θ) + log p(θ))
+--     * a posterior chain (the result of an existing NUTS \/ MH \/ SMC run,
+--       etc.)
+--     * the proposal is a __diagonal Gaussian fit__ to the chain (built
+--       from each parameter's sample mean \/ SD)
+--
+--   Output: the estimated log marginal likelihood + convergence info.
 bridgeSampling
   :: forall r. ModelP r
   -> BridgeConfig
@@ -143,7 +206,7 @@ iterateBridge
   -> [Double] -> [Double]   -- ^ logq2, logg2 (posterior samples)
   -> Double                 -- ^ s_1
   -> Double                 -- ^ s_2
-  -> Double                 -- ^ 初期 log r̂
+  -> Double                 -- ^ [日本語]: 初期 log r̂。 [English]: Initial log r̂.
   -> (Double, Int, Bool)
 iterateBridge cfg logq1 logg1 logq2 logg2 s1 s2 logR0 = go 0 logR0
   where
@@ -172,8 +235,11 @@ iterateBridge cfg logq1 logg1 logq2 logg2 s1 s2 logR0 = go 0 logR0
 -- Diagonal Gaussian proposal (fit-to-chain)
 -- ---------------------------------------------------------------------------
 
--- | chain から各パラメータの sample mean / SD を抽出。 SD = 0 になりうる
--- (定数推定) 場合は 1e-6 で下駄を履かせる (g(θ) 評価で除算 0 を避ける safety)。
+-- | [日本語]: chain から各パラメータの sample mean / SD を抽出。 SD = 0 になりうる
+--   (定数推定) 場合は 1e-6 で下駄を履かせる (g(θ) 評価で除算 0 を避ける safety)。
+--   [English]: Extract each parameter's sample mean \/ SD from the chain.
+--   When the SD could be 0 (a constant estimate), it is floored at 1e-6
+--   as a safety measure to avoid division by zero when evaluating g(θ).
 fitDiagGaussian
   :: [Text] -> Chain -> (Map.Map Text Double, Map.Map Text Double)
 fitDiagGaussian names chain =
@@ -190,7 +256,8 @@ fitDiagGaussian names chain =
       in if n <= 1 then 0
                    else sqrt (sum [(x - mu) ^ (2 :: Int) | x <- xs] / (n - 1))
 
--- | Diagonal Gaussian proposal からサンプル抽出。
+-- | [日本語]: Diagonal Gaussian proposal からサンプル抽出。
+--   [English]: Draw a sample from the diagonal Gaussian proposal.
 sampleProposal
   :: [Text] -> Map.Map Text Double -> Map.Map Text Double -> GenIO
   -> IO Params
@@ -201,7 +268,8 @@ sampleProposal names mus sds gen =
     x <- normal mu sd gen
     pure (n, x)
 
--- | log density of diagonal Gaussian proposal at θ。
+-- | [日本語]: θ における diagonal Gaussian proposal の log density。
+--   [English]: Log density of the diagonal Gaussian proposal at θ.
 logProposal
   :: [Text] -> Map.Map Text Double -> Map.Map Text Double -> Params
   -> Double

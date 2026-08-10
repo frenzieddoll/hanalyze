@@ -69,10 +69,8 @@ N=12という極小規模データではlegacy経路のO(N)残差AD再計算コ�
 
 ## 図 — 両側とも「フルダッシュボード」1 枚に統一
 
-`figures/hs_dashboard_full.png` /
-`figures/py_dashboard_full.svg`
-
-(図はベンチ実行後に `figures/` へ生成される。リポジトリには含めていない)
+[hs_dashboard_full.png](./figures/hs_dashboard_full.png) /
+[py_dashboard_full.svg](./figures/py_dashboard_full.svg)
 
 ## 既知の課題
 

@@ -166,16 +166,17 @@ tol = 1e-8
 -- support. Used for the IRLS log-likelihood-based early termination
 -- (see 'runIRLS').
 --
---   * Gaussian: @-½ (y − μ)²@ (constant terms dropped, harmless for the
+--   - Gaussian: @-½ (y − μ)²@ (constant terms dropped, harmless for the
 --     ratio-based stopping rule).
---   * Binomial: @y log μ + (1 − y) log (1 − μ)@.
---   * Poisson : @y log μ − μ@ (Stirling term dropped).
--- Phase 11c: list-based zipWith/sum was 11.3% time + 8.3% alloc on
--- the n=10k logit profile. Replaced with vector-native zipVectorWith
--- + sumElements (no list materialization, single BLAS-friendly pass).
--- The family is dispatched once at the top-level let-binding so the
--- inner zipVectorWith sees a fully monomorphic Double -> Double ->
--- Double closure that GHC can specialize.
+--   - Binomial: @y log μ + (1 − y) log (1 − μ)@.
+--   - Poisson : @y log μ − μ@ (Stirling term dropped).
+--
+-- List-based zipWith/sum accounted for 11.3% of time + 8.3% of
+-- allocation on the n=10k logit profile. Replaced with vector-native
+-- zipVectorWith + sumElements (no list materialization, single
+-- BLAS-friendly pass). The family is dispatched once at the top-level
+-- let-binding so the inner zipVectorWith sees a fully monomorphic
+-- Double -> Double -> Double closure that GHC can specialize.
 glmLogLik :: Family -> LA.Vector Double -> LA.Vector Double -> Double
 glmLogLik family y mu = VS.sum (VS.zipWith f y mu)
   where
@@ -246,11 +247,11 @@ irlsStep (_, gInv, gDeriv) varFn clamp family x y beta =
 
 -- | GLM solver back-end.
 --
---   * 'IRLS' — Iteratively Re-weighted Least Squares. Each iteration
+--   - 'IRLS' — Iteratively Re-weighted Least Squares. Each iteration
 --     builds and solves the SPD normal equations @XᵀWX β = XᵀWz@ via
 --     'Hanalyze.Stat.Cholesky.cholSolveJitter'. Quadratic convergence (= a full
 --     Newton step every iteration); each iteration is @O(np²)@.
---   * 'LBFGS' — direct L-BFGS minimization of the negative
+--   - 'LBFGS' — direct L-BFGS minimization of the negative
 --     log-likelihood with the analytic gradient @Xᵀ(μ − y)@ (canonical
 --     link). Per-iteration cost is @O(np)@. This is what @sklearn@
 --     uses, and is the better choice in @n ≫ p²@ regimes once the
@@ -695,11 +696,11 @@ inverfApprox x =
 data GLMFitMulti = GLMFitMulti
   { gfmFamily   :: Family
   , gfmLinkFn   :: LinkFn
-  , gfmFits     :: [FitResult]            -- ^ 列ごと FitResult
-  , gfmFisher   :: [LA.Matrix Double]     -- ^ 列ごと (XᵀWX)⁻¹
-  , gfmBeta     :: LA.Matrix Double       -- ^ 係数行列 p × q
-  , gfmFitted   :: LA.Matrix Double       -- ^ 予測 n × q
-  , gfmResid    :: LA.Matrix Double       -- ^ 残差 n × q
+  , gfmFits     :: [FitResult]            -- ^ [日本語]: 列ごと FitResult [English]: Per-column FitResult
+  , gfmFisher   :: [LA.Matrix Double]     -- ^ [日本語]: 列ごと (XᵀWX)⁻¹ [English]: Per-column (XᵀWX)⁻¹
+  , gfmBeta     :: LA.Matrix Double       -- ^ [日本語]: 係数行列 p × q [English]: Coefficient matrix, p × q
+  , gfmFitted   :: LA.Matrix Double       -- ^ [日本語]: 予測 n × q [English]: Fitted values, n × q
+  , gfmResid    :: LA.Matrix Double       -- ^ [日本語]: 残差 n × q [English]: Residuals, n × q
   } deriving (Show)
 
 -- | Fit a multi-output GLM. @Y@ has shape @n × q@; family and link

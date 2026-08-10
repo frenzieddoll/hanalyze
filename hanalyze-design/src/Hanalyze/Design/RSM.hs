@@ -7,14 +7,14 @@
 --
 -- Response Surface Methodology (RSM).
 --
---   * 'centralComposite' — central composite design (CCD): @2^k@ factorial
+--   - 'centralComposite' — central composite design (CCD): @2^k@ factorial
 --     + axial points + center points.
---   * 'boxBehnken'       — Box-Behnken design: @k@ three-level factors
+--   - 'boxBehnken'       — Box-Behnken design: @k@ three-level factors
 --     without axial points.
---   * 'quadraticDesign'  — design matrix for the quadratic model
+--   - 'quadraticDesign'  — design matrix for the quadratic model
 --     (intercept + main + squared + interaction terms).
---   * 'fitQuadratic'     — fit the quadratic regression by least squares.
---   * 'optimumPoint'     — analytically solve for the extremum (max / min)
+--   - @fitQuadratic@     — fit the quadratic regression by least squares.
+--   - @optimumPoint@     — analytically solve for the extremum (max / min)
 --     from the fit.
 module Hanalyze.Design.RSM
   ( CCDType (..)
@@ -52,9 +52,9 @@ data CCDType
 --
 -- Composition:
 --
---   * @2^k@ factorial part: every @±1@ combination (@2^k@ rows).
---   * @2k@ axial points: @(±α, 0, …, 0)@ for each factor.
---   * @nC@ center points at @(0, …, 0)@.
+--   - @2^k@ factorial part: every @±1@ combination (@2^k@ rows).
+--   - @2k@ axial points: @(±α, 0, …, 0)@ for each factor.
+--   - @nC@ center points at @(0, …, 0)@.
 --
 -- @centralComposite k ccdType nC@: @k@ factors and @nC@ centre points.
 centralComposite :: Int -> CCDType -> Int -> [[Double]]
@@ -88,9 +88,9 @@ centralCompositeRotatable k nC =
 -- | Box-Behnken design for @k = 3, 4, 5@. Returns @nC@ additional
 -- centre points.
 --
---   * @k = 3@: 12 corner points + @nC@ centre points.
---   * @k = 4@: 24 corner points + @nC@ centre points.
---   * @k = 5@: 40 corner points + @nC@ centre points.
+--   - @k = 3@: 12 corner points + @nC@ centre points.
+--   - @k = 4@: 24 corner points + @nC@ centre points.
+--   - @k = 5@: 40 corner points + @nC@ centre points.
 boxBehnken :: Int -> Int -> [[Double]]
 boxBehnken k nC
   | k == 3 = bb3 ++ centers
@@ -171,13 +171,22 @@ fitQuadratic xs ys =
 -- | Solve analytically for the extremum (saddle / max / min) of the
 -- fitted quadratic model.
 --
--- Writing @ŷ = b₀ + bᵀx + xᵀ B x@, set @∂ŷ/∂x = 0@ to obtain
--- x* = −½ B⁻¹ b。固有値の符号で性質を判定。
+-- [日本語]: @ŷ = b₀ + bᵀx + xᵀ B x@ と書いて @∂ŷ/∂x = 0@ を解くと
+-- x* = −½ B⁻¹ b。 固有値の符号で性質を判定。
 --
 -- 戻り値: (x*, predicted_y, eigenvalues)
 --   eigenvalues 全部 < 0 → 極大
 --   eigenvalues 全部 > 0 → 極小
 --   混在 → 鞍点
+--
+-- [English]: Writing @ŷ = b₀ + bᵀx + xᵀ B x@, set @∂ŷ/∂x = 0@ to obtain
+-- x* = −½ B⁻¹ b. The sign of the eigenvalues determines the nature of the
+-- extremum.
+--
+-- Return value: (x*, predicted_y, eigenvalues)
+--   all eigenvalues < 0 → maximum
+--   all eigenvalues > 0 → minimum
+--   mixed              → saddle point
 optimumPoint :: QuadFit -> ([Double], Double, [Double])
 optimumPoint fit =
   let k     = qfK fit
@@ -200,8 +209,12 @@ optimumPoint fit =
     -- (i, j) ペア (i < j) の β_int 配列内のインデックス
     pairIndex n i j = sum [n - 1 - p | p <- [0 .. i - 1]] + (j - i - 1)
 
--- | 二次モデルの @B@ 行列 (@ŷ = b₀ + bᵀx + xᵀ B x@ の 2 次係数)。 対角は β_sq、
+-- | [日本語]: 二次モデルの @B@ 行列 (@ŷ = b₀ + bᵀx + xᵀ B x@ の 2 次係数)。 対角は β_sq、
 --   非対角は β_int/2 で対称化。 canonical 解析 / 停留点計算の共通部品。
+--   [English]: The @B@ matrix of the quadratic model (the 2nd-order
+--   coefficients of @ŷ = b₀ + bᵀx + xᵀ B x@). The diagonal is β_sq;
+--   off-diagonal entries are symmetrized as β_int/2. A shared component
+--   for canonical analysis \/ stationary-point computation.
 quadBMatrix :: QuadFit -> LA.Matrix Double
 quadBMatrix fit =
   let k     = qfK fit
@@ -218,10 +231,18 @@ quadBMatrix fit =
        | i <- [0 .. k - 1] ]
   where pairIndex n i j = sum [n - 1 - p | p <- [0 .. i - 1]] + (j - i - 1)
 
--- | Canonical 解析。 @B@ 行列の固有分解を返す (固有値, 固有ベクトル) のペア列。
+-- | [日本語]: Canonical 解析。 @B@ 行列の固有分解を返す (固有値, 固有ベクトル) のペア列。
 --   固有値の符号で応答曲面の性質が読める (全負=極大 / 全正=極小 / 混在=鞍点)、
 --   固有ベクトルは canonical 軸 (停留点周りで応答が最も急/緩に動く coded 方向)。
 --   ペアは固有値の昇順。 単位はモデルを当てた座標系 (通常 coded)。
+--   [English]: Canonical analysis. Returns the eigendecomposition of the
+--   @B@ matrix as a list of (eigenvalue, eigenvector) pairs. The sign of
+--   the eigenvalues reveals the nature of the response surface (all
+--   negative = maximum \/ all positive = minimum \/ mixed = saddle point);
+--   the eigenvectors are the canonical axes (the coded directions along
+--   which the response moves most steeply \/ gently around the stationary
+--   point). Pairs are sorted in ascending eigenvalue order. Units are in
+--   the coordinate system the model was fit in (usually coded).
 canonicalAnalysis :: QuadFit -> [(Double, [Double])]
 canonicalAnalysis fit =
   let (vals, vecs) = LA.eigSH (LA.sym (quadBMatrix fit))

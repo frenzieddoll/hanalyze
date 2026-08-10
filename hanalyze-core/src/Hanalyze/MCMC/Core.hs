@@ -50,13 +50,21 @@ data Chain = Chain
     --   @|H_proposal − H_initial| > 1000@. Many divergences signal a
     --   pathological posterior that needs reparameterization.
   , chainTreeDepths :: [Int]
-    -- ^ Phase 85.3: NUTS の per-draw tree depth (実行された doubling 回数・
+    -- ^ [日本語]: NUTS の per-draw tree depth (実行された doubling 回数・
     --   post-burn-in・draw 順)。 leapfrog 数 ≈ 2^depth ゆえ per-draw コストの
     --   診断に使う (PyMC の tree_depth 相当)。 NUTS 以外のサンプラは []。
+    --   [English]: NUTS's per-draw tree depth (the number of doubling
+    --   iterations executed; post-burn-in, in draw order). Since the
+    --   leapfrog count ≈ 2^depth, this is used to diagnose per-draw cost
+    --   (equivalent to PyMC's tree_depth). Empty ([]) for samplers other
+    --   than NUTS.
   } deriving (Show)
 
--- | Phase 50: 純粋 multi-chain (`nutsChainsPure`) で @parList rdeepseq@ により
--- chain 横断を spark 並列評価するため、 'Chain' を完全評価できるようにする。
+-- | [日本語]: 純粋 multi-chain (@nutsChainsPure@) で @parList rdeepseq@ により
+--   chain 横断を spark 並列評価するため、 'Chain' を完全評価できるようにする。
+--   [English]: Makes 'Chain' fully evaluable so that pure multi-chain
+--   (@nutsChainsPure@) can spark-evaluate across chains in parallel via
+--   @parList rdeepseq@.
 instance NFData Chain where
   rnf (Chain s a t e d td) =
     rnf s `seq` rnf a `seq` rnf t `seq` rnf e `seq` rnf d `seq` rnf td
@@ -110,8 +118,11 @@ chainVals name ch = [v | Just v <- map (Map.lookup name) (chainSamples ch)]
 -- | Spawn an independent child generator seeded from a parent generator.
 -- Used to give each parallel chain a different seed.
 --
--- Phase 50: 'PrimMonad' に一般化 (既存 IO 呼出は @m=IO@ で不変)。 これにより
+-- [日本語]: 'PrimMonad' に一般化 (既存 IO 呼出は @m=IO@ で不変)。 これにより
 -- @ST s@ でも同じ種まきができ、 純粋な multi-chain (runST + seed) に使える。
+-- [English]: Generalized to 'PrimMonad' (existing IO call sites are
+-- unchanged at @m=IO@). This allows the same seeding to be done in
+-- @ST s@ too, usable for pure multi-chain (runST + seed).
 spawnGen :: PrimMonad m => Gen (PrimState m) -> m (Gen (PrimState m))
 spawnGen base = do
   seed <- uniform base

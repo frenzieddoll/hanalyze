@@ -86,10 +86,15 @@ tracePlotFile :: OutputFormat -> FilePath -> PlotConfig -> [Text] -> Chain -> IO
 tracePlotFile fmt path cfg names chain =
   writeSpec fmt path (tracePlot cfg names chain)
 
--- | Trace plot with the HDI band overlaid (e.g. @level = 0.94@).
--- 上下の HDI 境界を赤い水平ルールで描画し、内側を半透明赤で塗りつぶす。
--- バーンイン後サンプルから HDI を計算し、視覚的に「事後分布の質量がどこに
--- 集中しているか」をトレースと一緒に確認できる。
+-- | [日本語]: HDI 帯を重ねたトレースプロット (例: @level = 0.94@)。
+--   上下の HDI 境界を赤い水平ルールで描画し、内側を半透明赤で塗りつぶす。
+--   バーンイン後サンプルから HDI を計算し、視覚的に「事後分布の質量がどこに
+--   集中しているか」をトレースと一緒に確認できる。
+--   [English]: Trace plot with the HDI band overlaid (e.g. @level = 0.94@).
+--   Draws the upper/lower HDI boundaries as red horizontal rules and fills
+--   the interior with translucent red. Computes the HDI from post-burn-in
+--   samples, so where the posterior mass concentrates can be checked
+--   visually alongside the trace.
 tracePlotHDI :: PlotConfig -> Double -> [Text] -> Chain -> VegaLite
 tracePlotHDI cfg level names chain = toVegaLite
   [ title (plotTitle cfg) []
@@ -265,8 +270,10 @@ mcmcDiagnosticsFile fmt path cfg names chain =
 -- Combined PyMC-style: [KDE | multi-trace]  (多チェーン)
 -- ---------------------------------------------------------------------------
 
--- | PyMC-style combined diagnostics for multiple chains.
--- 左: 全チェーン合算の KDE。右: チェーン別色分けトレース。
+-- | [日本語]: 複数チェーン用の PyMC 形式統合診断プロット。
+--   左: 全チェーン合算の KDE。 右: チェーン別色分けトレース。
+--   [English]: PyMC-style combined diagnostics for multiple chains.
+--   Left: KDE pooled across all chains. Right: trace colored per chain.
 mcmcDiagnosticsMulti :: PlotConfig -> [Text] -> [Chain] -> VegaLite
 mcmcDiagnosticsMulti cfg names chains = toVegaLite
   [ title (plotTitle cfg) []
@@ -396,17 +403,25 @@ mkMultiTracePanel pname w h chains =
 -- Forest plot (パラメータ事後を 1 つの図に並べて比較)
 -- ---------------------------------------------------------------------------
 
--- | Forest plot: per-parameter posterior mean with a 95 % credible
--- interval, stacked horizontally.
+-- | [日本語]: フォレストプロット: 各パラメータの事後平均を 95% 信用区間と
+--   ともに横に並べて表示する。
 --
--- ArviZ の @plot_forest@ 相当。複数モデル/複数チェーンの比較や、
--- 階層モデルでグループ別パラメータを並べて見るのに便利。
+--   ArviZ の @plot_forest@ 相当。複数モデル/複数チェーンの比較や、
+--   階層モデルでグループ別パラメータを並べて見るのに便利。
 --
--- 単一チェーンの場合は @[chain]@ に 1 要素入れて呼ぶ。
+--   単一チェーンの場合は @[chain]@ に 1 要素入れて呼ぶ。
+--   [English]: Forest plot: per-parameter posterior mean with a 95%
+--   credible interval, stacked horizontally.
+--
+--   Analogous to ArviZ's @plot_forest@. Useful for comparing multiple
+--   models/chains, or for viewing per-group parameters side by side in
+--   hierarchical models.
+--
+--   For a single chain, call with one element in @[chain]@.
 forestPlot
   :: PlotConfig
-  -> [Text]      -- ^ 表示するパラメータ名 (上から下に並ぶ)
-  -> [Chain]     -- ^ 1 つ以上のチェーン (複数あれば色分け)
+  -> [Text]      -- ^ [日本語]: 表示するパラメータ名 (上から下に並ぶ)。 [English]: Parameter names to display (listed top to bottom).
+  -> [Chain]     -- ^ [日本語]: 1 つ以上のチェーン (複数あれば色分け)。 [English]: One or more chains (colored separately when more than one).
   -> VegaLite
 forestPlot cfg params chains = toVegaLite
   [ title (plotTitle cfg) []
@@ -483,17 +498,31 @@ forestPlotFile fmt path cfg params chains =
 -- Energy plot (NUTS の BFMI 診断)
 -- ---------------------------------------------------------------------------
 
--- | PyMC-style energy plot for HMC / NUTS chains.
+-- | [日本語]: HMC / NUTS チェーン用の PyMC 形式エネルギープロット。
 --
--- 2 本の KDE を重ね描き:
+--   2 本の KDE を重ね描き:
 --
---   * Marginal energy E_n         — 事後分布から見た energy の分布
---   * Energy transition |E_n − E_{n−1}| を中心化した分布 (= π_E)
+--     * Marginal energy E_n         — 事後分布から見た energy の分布
+--     * Energy transition |E_n − E_{n−1}| を中心化した分布 (= π_E)
 --
--- 両者がよく重なるなら良好。乖離が大きい (= BFMI が低い) と
--- 運動量再サンプリングがエネルギー方向の探索を取りこぼしている可能性。
+--   両者がよく重なるなら良好。乖離が大きい (= BFMI が低い) と
+--   運動量再サンプリングがエネルギー方向の探索を取りこぼしている可能性。
 --
--- 'chainEnergy' が空のチェーン (MH/Gibbs 由来) では空の図になる。
+--   'chainEnergy' が空のチェーン (MH/Gibbs 由来) では空の図になる。
+--   [English]: PyMC-style energy plot for HMC / NUTS chains.
+--
+--   Overlays two KDEs:
+--
+--     * Marginal energy E_n         — the distribution of energy as seen
+--       from the posterior
+--     * The centered distribution of the energy transition
+--       |E_n − E_{n−1}| (= π_E)
+--
+--   Good overlap between the two indicates healthy sampling. A large
+--   divergence (i.e. low BFMI) suggests momentum resampling may be
+--   missing part of the exploration along the energy direction.
+--
+--   Chains with empty 'chainEnergy' (from MH/Gibbs) produce an empty plot.
 energyPlot :: PlotConfig -> Chain -> VegaLite
 energyPlot cfg chain =
   let es     = chainEnergy chain
@@ -648,11 +677,19 @@ printPosteriorSummary params chains = do
 -- Rank plot (多チェーン収束診断)
 -- ---------------------------------------------------------------------------
 
--- | Rank plot (analogous to PyMC's @plot_rank@). Proposed by Vehtari et al. (2021)
--- 多チェーンの収束診断: 全チェーンを混ぜた順位を各チェーン内で
--- ヒストグラムにすると、収束時はチェーンごとに一様分布に近づく。
+-- | [日本語]: ランクプロット (PyMC の @plot_rank@ 相当・Vehtari et al. (2021) が提案)。
+--   多チェーンの収束診断: 全チェーンを混ぜた順位を各チェーン内で
+--   ヒストグラムにすると、収束時はチェーンごとに一様分布に近づく。
 --
--- 引数 nBins は順位ヒストグラムのビン数 (典型値: 20)。
+--   引数 nBins は順位ヒストグラムのビン数 (典型値: 20)。
+--   [English]: Rank plot (analogous to PyMC's @plot_rank@; proposed by
+--   Vehtari et al. (2021)).
+--   Multi-chain convergence diagnostic: pooling the ranks across all
+--   chains and histogramming them within each chain approaches a uniform
+--   distribution per chain when convergence has been achieved.
+--
+--   The nBins argument is the number of bins in the rank histogram
+--   (typical value: 20).
 rankPlot :: PlotConfig -> Int -> [Text] -> [Chain] -> VegaLite
 rankPlot cfg nBins names chains = toVegaLite
   [ title (plotTitle cfg) []
@@ -701,16 +738,30 @@ rankPlotFile fmt path cfg nBins names chains =
 -- Posterior predictive check (pp_check 相当)
 -- ---------------------------------------------------------------------------
 
--- | Posterior-predictive check: overlay the KDE of the observations on
--- the KDEs returned by @posteriorPredictive@
--- K 件の予測サンプル KDE をスパゲッティ式に重ね描き、平均予測 KDE を太線で
--- 重ねる。観測 (青) と予測の中心線 (オレンジ) が一致しなければモデル誤指定。
+-- | [日本語]: 事後予測チェック: 観測データの KDE を @posteriorPredictive@ が
+--   返す KDE 群の上に重ね描きする。
+--   K 件の予測サンプル KDE をスパゲッティ式に重ね描き、平均予測 KDE を太線で
+--   重ねる。観測 (青) と予測の中心線 (オレンジ) が一致しなければモデル誤指定。
 --
--- 引数:
---   * @observed@ — 元観測 y のリスト
---   * @predDraws@ — @posteriorPredictive@ 出力の各サンプル (各要素は元データと
---                   同じ長さの y_rep)
---   * @nOverlay@ — 描画する個別予測ドローの本数 (典型 50)
+--   引数:
+--     * @observed@ — 元観測 y のリスト
+--     * @predDraws@ — @posteriorPredictive@ 出力の各サンプル (各要素は元データと
+--                     同じ長さの y_rep)
+--     * @nOverlay@ — 描画する個別予測ドローの本数 (典型 50)
+--   [English]: Posterior-predictive check: overlay the KDE of the
+--   observations on the KDEs returned by @posteriorPredictive@.
+--   Overlays K predictive-sample KDEs in a "spaghetti" style, and adds the
+--   mean predictive KDE as a thick line. If the observed line (blue) and
+--   the predictive center line (orange) do not line up, the model is
+--   misspecified.
+--
+--   Arguments:
+--     * @observed@ — list of the original observed y values
+--     * @predDraws@ — each sample from @posteriorPredictive@'s output
+--                     (each element is a y_rep of the same length as the
+--                     original data)
+--     * @nOverlay@ — number of individual predictive draws to render
+--                    (typically 50)
 ppcPlot :: PlotConfig -> [Double] -> [[Double]] -> Int -> VegaLite
 ppcPlot cfg observed predDraws nOverlay =
   let nDraws        = length predDraws
@@ -790,16 +841,30 @@ ppcPlotFile fmt path cfg observed predDraws nOverlay =
 -- Divergence overlay (NUTS divergent transitions の可視化)
 -- ---------------------------------------------------------------------------
 
--- | Pair scatter overlaid with divergent iterations as red X markers.
+-- | [日本語]: ペア散布図に divergent な反復を赤い X マーカーで重ね描きする。
 --
--- 引数:
---   * @xName@, @yName@: ペア散布の軸となる latent パラメタ名
---   * @divIdx@        : divergent 反復の 0-origin index 列 (バーンイン後)。
---                       将来 NUTS が `chainDivergences` を返したらそれを渡す。
---                       Phase F5 では空リストや手動指定で動作確認できる。
+--   引数:
+--     * @xName@, @yName@: ペア散布の軸となる latent パラメタ名
+--     * @divIdx@        : divergent 反復の 0-origin index 列 (バーンイン後)。
+--                         将来 NUTS が `chainDivergences` を返したらそれを渡す。
+--                         現時点では空リストや手動指定で動作確認できる。
 --
--- パラメタ空間で divergent が局所化していれば、その付近の事後分布が
--- 病的 (高曲率) であることを示し、reparameterization の検討材料になる。
+--   パラメタ空間で divergent が局所化していれば、その付近の事後分布が
+--   病的 (高曲率) であることを示し、reparameterization の検討材料になる。
+--   [English]: Pair scatter overlaid with divergent iterations as red X
+--   markers.
+--
+--   Arguments:
+--     * @xName@, @yName@: names of the latent parameters forming the pair
+--       scatter's axes
+--     * @divIdx@: 0-origin index list of divergent iterations
+--       (post-burn-in). Pass this once NUTS returns `chainDivergences` in
+--       the future; for now, it can be exercised with an empty list or a
+--       manually specified one.
+--
+--   If divergences are localized in parameter space, it indicates the
+--   posterior there is pathological (high curvature), which is a
+--   candidate for reparameterization.
 pairScatterDiv :: PlotConfig -> Text -> Text -> Chain -> [Int] -> VegaLite
 pairScatterDiv cfg xName yName chain divIdx =
   let xs       = chainVals xName chain

@@ -3,8 +3,8 @@
 > 🌐 [English](04-gibbs.md) | **日本語**
 
 > 関連デモ:
-> - [`gibbs-demo`](../../demo/bayesian/GibbsDemo.hs) — Gibbs + WAIC/LOO モデル比較
-> - [`gibbs-hbm-demo`](../../demo/bayesian/GibbsHBMDemo.hs) — HBM DSL × Gibbs (共役自動検出)
+> - [`gibbs-demo`](../../hanalyze-demos/demo/bayesian/GibbsDemo.hs) — Gibbs + WAIC/LOO モデル比較
+> - [`gibbs-hbm-demo`](../../hanalyze-demos/demo/bayesian/GibbsHBMDemo.hs) — HBM DSL × Gibbs (共役自動検出)
 
 ## 概要と原理
 

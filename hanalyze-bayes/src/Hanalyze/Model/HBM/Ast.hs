@@ -8,14 +8,22 @@
 --
 -- HBM dialog DSL の AST 型と JSON decoder。
 --
--- Phase 27.5 (2026-05-31): canvas-backend @フロントエンド app.Analysis.HBM@ から
--- 移設。 frontend が backend 統一 parser (@/api/v1/dsl/parse@) から得た
--- @program_ast@ (JSON) を、 streaming sidecar が直接 decode して実モデルを
--- 構築できるよう、 AST 型 + 'parseAst' をライブラリ層 (hanalyze) に置く。
+-- [日本語]: canvas-backend @CanvasApp.Analysis.HBM@ から移設。 frontend が
+--   backend 統一 parser (@/api/v1/dsl/parse@) から得た @program_ast@ (JSON) を、
+--   streaming sidecar が直接 decode して実モデルを構築できるよう、 AST 型 +
+--   'parseAst' をライブラリ層 (hanalyze) に置く。
+--   [English]: Relocated from the canvas-backend
+--   @CanvasApp.Analysis.HBM@. So the streaming sidecar can decode the
+--   @program_ast@ (JSON) the frontend obtains from the backend's unified
+--   parser (@/api/v1/dsl/parse@) directly into a real model, the AST type
+--   and 'parseAst' live in this library layer (hanalyze).
 --
--- 本 module は **canvas wire 型にも text parser (DSL frontend) にも依存しない**
--- (= aeson のみ)。 text → AST 変換 ('parseHbmTextToExpr' 等) は HT (DSL frontend)
--- に依存するため canvas-backend 側に残す。
+-- [日本語]: 本 module は __canvas wire 型・text parser (DSL frontend) いずれにも非依存__
+--   (= aeson のみ)。 text → AST 変換 (@parseHbmTextToExpr@ 等) は HT (DSL frontend)
+--   に依存するため canvas-backend 側に残す。
+--   [English]: This module depends on __neither the canvas wire types nor the text parser (DSL frontend)__
+--   (aeson only). The text → AST conversion (e.g. @parseHbmTextToExpr@)
+--   depends on HT (DSL frontend), so it stays on the canvas-backend side.
 module Hanalyze.Model.HBM.Ast
   ( -- * AST
     Expr (..)
@@ -28,7 +36,7 @@ module Hanalyze.Model.HBM.Ast
   , parseBind
   , parseDoStmt
     -- * JSON encode (= 'parseAst' の正確な逆。 backend が sidecar に
-    --   program_ast / top_binds を送る際に使う、 Phase 27.5 step 3)
+    --   program_ast / top_binds を送る際に使う)
   , exprToJSON
   , litToJSON
   , bindToJSON
@@ -80,7 +88,7 @@ data DoStmt
   | DoExpr Expr
   deriving (Show)
 
--- | 評価系で多用する Either alias。
+-- | [日本語]: 評価系で多用する Either alias。 [English]: An @Either@ alias used heavily throughout the evaluator.
 type Err a = Either Text a
 
 -- ---------------------------------------------------------------------------
@@ -204,8 +212,11 @@ doStmtToJSON s = case s of
   DoLet bs   -> A.object ["tag" A..= ("DoLet"  :: Text), "binds" A..= map bindToJSON bs]
   DoExpr v   -> A.object ["tag" A..= ("DoExpr" :: Text), "value" A..= exprToJSON v]
 
--- | @EApp (EApp (EVar f) a) b@ → @(f, [a, b])@。 distribution / 関数適用の
--- head + 引数列を取り出す。 head が変数でなければ Left。
+-- | [日本語]: @EApp (EApp (EVar f) a) b@ → @(f, [a, b])@。 distribution /
+--   関数適用の head + 引数列を取り出す。 head が変数でなければ Left。
+--   [English]: @EApp (EApp (EVar f) a) b@ → @(f, [a, b])@. Extracts the
+--   head and argument list of a distribution / function application.
+--   Returns @Left@ if the head is not a variable.
 collectApp :: Expr -> Err (Text, [Expr])
 collectApp e0 = go e0 []
   where

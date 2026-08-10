@@ -10,8 +10,8 @@
 -- scalar random effect per group (variance @σ²_u@, scalar BLUP @û_j@).
 -- 'fitLME' is Gaussian via exact EM; 'fitGLMM' is non-Gaussian via Laplace.
 --
--- 'fitLMEGeneral' / 'fitGLMMGeneral' (Phase 48) generalise to __vector
--- random effects__ (random intercept + slopes): a per-group design block
+-- 'fitLMEGeneral' / 'fitGLMMGeneral' generalise to
+-- __vector random effects__ (random intercept + slopes): a per-group design block
 -- @Z_j@ with an @r×r@ covariance matrix @G@ and a vector BLUP @b̂_j@. With
 -- @r = 1@ (intercept only) they reduce exactly to 'fitLME' / 'fitGLMM'.
 --
@@ -23,7 +23,7 @@ module Hanalyze.Model.GLMM
   , fitGLMM
   , fitLMEDataFrame
   , fitGLMMDataFrame
-    -- * General random effects (intercept + slope; Phase 48)
+    -- * General random effects (intercept + slope)
   , GLMMResultRE (..)
   , fitLMEGeneral
   , fitGLMMGeneral
@@ -73,7 +73,7 @@ data GLMMResult = GLMMResult
   } deriving (Show)
 
 -- | Fit result for a __general__ mixed model with vector random effects
---   (random intercept + slopes), Phase 48.
+--   (random intercept + slopes).
 --
 --   * LME (Gaussian):     @y_j = X_j β + Z_j b_j + ε_j@, @b_j ~ N(0, G)@,
 --     @ε_i ~ N(0, σ²)@, where @Z_j@ is the per-group random-effect design
@@ -201,7 +201,7 @@ fitLME x y idx labels sizes =
 -- General random effects (intercept + slope): vector EM for Gaussian LME
 -- ---------------------------------------------------------------------------
 
--- | Fit a Gaussian LME with __vector__ random effects via EM (ML), Phase 48.
+-- | Fit a Gaussian LME with __vector__ random effects via EM (ML).
 --
 -- Per group @j@ the model is @y_j = X_j β + Z_j b_j + ε_j@ with
 -- @b_j ~ N(0, G)@ (@G@ is @r×r@) and @ε ~ N(0, σ²I)@. The @Z@ argument holds
@@ -562,7 +562,7 @@ nrOneGroupVec family link gInv zs etaFixed ys = go maxNRIter
       in if LA.norm_2 delta < nrTol then (b', LA.inv hess) else go (k-1) b'
 
 -- | Fit a non-Gaussian GLMM with __vector__ random effects via Laplace
--- approximation (Phase 48). Per group @j@: @g(E[y|b]) = X_j β + Z_j b_j@,
+-- approximation. Per group @j@: @g(E[y|b]) = X_j β + Z_j b_j@,
 -- @b_j ~ N(0, G)@ (@G@ is @r×r@). Outer loop: multivariate NR for the modes
 -- @b̂_j@ (with Laplace posterior cov @P_j@), one IRLS step for @β@ (random
 -- effects as offset), and an EM update @G = (1/q) Σ_j (P_j + b̂_j b̂_jᵀ)@.

@@ -67,7 +67,7 @@ data BayesOptConfig = BayesOptConfig
   } deriving (Show)
 
 -- | Default configuration: 30 iterations, 5 initial points,
--- **Matérn 5/2 kernel**, @β = 2.0@ for UCB, grid size 200 for 1D
+-- __Matérn 5/2 kernel__, @β = 2.0@ for UCB, grid size 200 for 1D
 -- inner optimization.
 --
 -- Matérn 5/2 is the recommended default for general-purpose BO
@@ -88,12 +88,13 @@ defaultBayesOptConfig = BayesOptConfig
 --
 -- Returns @(observations, best)@: the full @(x, y)@ history and the best
 -- @(x*, y*)@.
--- | Phase 21 で追加。 BO の各 iteration 末端で発火するイベント。
+-- | [日本語]: BO の各 iteration 末端で発火するイベント。
+--   [English]: The event fired at the end of each BO iteration.
 data BOIterEvent = BOIterEvent
-  { boeIter        :: !Int               -- ^ 0-based iteration index
-  , boeProposedX   :: !Double             -- ^ acquisition が選んだ新点
-  , boeProposedY   :: !Double             -- ^ そこでの f 値
-  , boeCurrentBest :: !(Double, Double)   -- ^ (x*, y*) これまで
+  { boeIter        :: !Int               -- ^ [日本語]: 0-based iteration index。 [English]: 0-based iteration index.
+  , boeProposedX   :: !Double             -- ^ [日本語]: acquisition が選んだ新点。 [English]: The new point chosen by the acquisition function.
+  , boeProposedY   :: !Double             -- ^ [日本語]: そこでの f 値。 [English]: The f value at that point.
+  , boeCurrentBest :: !(Double, Double)   -- ^ [日本語]: (x*, y*) これまで。 [English]: The best (x*, y*) so far.
   } deriving (Show)
 
 bayesOpt :: BayesOptConfig
@@ -104,8 +105,11 @@ bayesOpt :: BayesOptConfig
 bayesOpt cfg f bounds gen =
   bayesOptWithCallback cfg f bounds gen (\_ -> pure ())
 
--- | Phase 21 で追加。 BO iteration ごとに 'BOIterEvent' を渡す callback 付き版。
+-- | [日本語]: BO iteration ごとに 'BOIterEvent' を渡す callback 付き版。
 -- 既存 'bayesOpt' は no-op callback の wrapper として保持される。
+--   [English]: A version with a callback that passes a 'BOIterEvent' on
+-- every BO iteration. The existing 'bayesOpt' is kept as a wrapper around a
+-- no-op callback.
 bayesOptWithCallback
   :: BayesOptConfig
   -> (Double -> IO Double)
@@ -234,14 +238,19 @@ optimizeGPMVRestart n kern x y gen = do
                            , ll == maximum (map snd results) ]
   pure best
 
--- | N-dimensional single-objective Bayesian Optimization.
--- 内側 acquisition 最大化を **L-BFGS multi-start** で行う:
+-- | [日本語]: N-dimensional single-objective Bayesian Optimization。
+-- 内側 acquisition 最大化を __L-BFGS multi-start__ で行う:
 -- bounds 範囲内で nStarts 個の初期点を一様乱数で生成、各点から L-BFGS で
 -- 負 EI を最小化、最良点を採用。
+--   [English]: N-dimensional single-objective Bayesian Optimization.
+-- The inner acquisition maximization is done via __L-BFGS multi-start__:
+-- generate nStarts initial points via uniform random sampling within the
+-- bounds, minimize the negative EI from each with L-BFGS, and take the best
+-- point.
 bayesOptND :: BayesOptConfig
-           -> Int                         -- ^ multi-start 数 (典型 5-20)
-           -> ([Double] -> IO Double)     -- ^ 目的関数 (N 次元、最小化)
-           -> Bounds                      -- ^ 各次元 (lo, hi)
+           -> Int                         -- ^ [日本語]: multi-start 数 (典型 5-20)。 [English]: The number of multi-starts (typically 5-20).
+           -> ([Double] -> IO Double)     -- ^ [日本語]: 目的関数 (N 次元、最小化)。 [English]: The objective function (N-dimensional, minimized).
+           -> Bounds                      -- ^ [日本語]: 各次元 (lo, hi)。 [English]: The (lo, hi) bounds for each dimension.
            -> GenIO
            -> IO ([([Double], Double)], ([Double], Double))
 bayesOptND cfg nStarts f bounds gen = do
@@ -625,10 +634,15 @@ optimizeHPMultiRestart nRestarts kern trainX y p0 =
       best = minimumBy (comparing OC.orValue) results
   in vecToParams (OC.orBest best)
 
--- | Multi-objective BO using **scalarization** (ParEGO-style).
+-- | [日本語]: Multi-objective BO using __scalarization__ (ParEGO-style)。
 -- 各反復で random 重み w で Tchebycheff scalarize し、単目的 BO の 1 ステップ
 -- (L-BFGS multi-start で acquisition 最大化) を実行する。
 -- NSGA 版より高速、acquisition 計算コストが軽い問題に向く。
+--   [English]: Multi-objective BO using __scalarization__ (ParEGO-style).
+-- Each iteration performs a Tchebycheff scalarization with a random weight
+-- w, then executes a single-objective BO step (maximizing acquisition via
+-- L-BFGS multi-start). Faster than the NSGA version; suited to problems
+-- where acquisition evaluation is cheap.
 bayesOptScalarMO :: Int                                -- iter
                  -> Int                                -- nInit
                  -> Int                                -- nStarts (multi-start)

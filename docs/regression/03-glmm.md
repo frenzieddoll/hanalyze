@@ -335,9 +335,9 @@ Practical guidance:
 
 ```haskell
 import Hanalyze.Plot     (glmmF, (|->), toPlot)
-import Hgg.Plot.Spec        (ColData (..))
-import Hgg.Plot.Frame       ((|>>))
-import Hgg.Plot.Backend.SVG (saveSVGBound)
+import Graphics.Hgg.Spec        (ColData (..))
+import Graphics.Hgg.Frame       ((|>>))
+import Graphics.Hgg.Backend.SVG (saveSVGBound)
 import Data.Text                (Text)
 
 let (re, fixedNames) = df |-> glmmF "score ~ hours + (1|school)"  -- (GLMMResultRE, names)

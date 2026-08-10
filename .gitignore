@@ -46,3 +46,15 @@ bench/data/
 /request/
 /HANALYZE_REQUESTS.md
 _trash/
+
+# Demo output artifacts (regeneratable from demos)
+/demo-output/
+
+# Python bytecode cache
+__pycache__/
+
+# ess 調査の draw dump (580KB・posteriordb-hmm 再実行で再生成可)
+bench/posteriordb/14-hmm-example/hmm_draws_postwarmup.csv
+
+# haddock 検証用の別 builddir
+dist-haddock/

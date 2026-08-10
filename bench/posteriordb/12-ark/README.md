@@ -99,10 +99,8 @@ PyMC は sampler×backend 7 通りを計測 (blackjax は他モデルと同型�
 
 ### 図
 
-`figures/hs_dashboard_full.png` /
-`figures/py_dashboard_full.svg`
-
-(図はベンチ実行後に `figures/` へ生成される。リポジトリには含めていない)
+[hs_dashboard_full.png](./figures/hs_dashboard_full.png) /
+[py_dashboard_full.svg](./figures/py_dashboard_full.svg)
 
 ### 既知の課題
 

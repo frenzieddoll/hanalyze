@@ -107,14 +107,17 @@ runNelderMeadWith cfg fUser x0 =
        , orConverged = conv
        }
 
--- | 軸 i 方向に step だけ動かす。
+-- | [日本語]: 軸 i 方向に step だけ動かす。
+--   [English]: Moves by step along axis i.
 perturb :: [Double] -> Int -> Double -> [Double]
 perturb xs i step =
   [ if k == i then v + (if v == 0 then step else step * (1 + abs v))
               else v
   | (k, v) <- zip [0 ..] xs ]
 
--- | 反復本体。引数 vertices は f 値で昇順ソート済を維持する。
+-- | [日本語]: 反復本体。引数 vertices は f 値で昇順ソート済を維持する。
+--   [English]: The iteration body. The @vertices@ argument is maintained
+--   sorted ascending by @f@ value.
 loop :: NMConfig -> StopCriteria
      -> ([Double] -> Double)
      -> Int                      -- 反復カウンタ
@@ -177,18 +180,23 @@ loop cfg stop f iter vertices hist
           sortedR  = sortBy (comparing snd) replaced
       in (sortedR, snd (head sortedR) : hist)
 
--- | 単体の最大辺長 (∞-norm)。tolX 判定用。
+-- | [日本語]: 単体の最大辺長 (∞-norm)。tolX 判定用。
+--   [English]: The simplex's maximum edge length (∞-norm). Used for the
+--   tolX check.
 simplexSpread :: [([Double], Double)] -> Double
 simplexSpread vs =
   let xs = map fst vs
       x0 = head xs
   in maximum [ maximum (zipWith (\a b -> abs (a - b)) x0 x) | x <- tail xs ]
 
--- | s1 * a - s2 * b の線形結合 (純粋にベクトル演算ユーティリティ)。
+-- | [日本語]: s1 * a - s2 * b の線形結合 (純粋にベクトル演算ユーティリティ)。
+--   [English]: Linear combination s1 * a - s2 * b (a pure vector-arithmetic
+--   utility).
 combine :: Double -> [Double] -> Double -> [Double] -> [Double]
 combine s1 a s2 b = zipWith (\ai bi -> s1 * ai - s2 * bi) a b
 
--- | 同じ長さの複数ベクトルの平均。
+-- | [日本語]: 同じ長さの複数ベクトルの平均。
+--   [English]: The average of multiple vectors of the same length.
 avgVecs :: [[Double]] -> [Double]
 avgVecs xs =
   let n = fromIntegral (length xs) :: Double

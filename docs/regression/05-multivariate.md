@@ -125,8 +125,8 @@ one of the three figures below, drawn from the fit alone (no df needed):
 
 ```haskell
 import Hanalyze.Plot (scoreView, loadingView, vipView, toPlot)
-import Hgg.Plot.Frame   ((|>>))
-import Hgg.Plot.Spec    (ColData)
+import Graphics.Hgg.Frame   ((|>>))
+import Graphics.Hgg.Spec    (ColData)
 
 let noDf = [] :: [(Text, ColData)]
     scorePlot   = noDf |>> toPlot (scoreView   pls')

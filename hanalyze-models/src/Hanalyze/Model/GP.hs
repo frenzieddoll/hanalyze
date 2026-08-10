@@ -6,11 +6,10 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Gaussian-process regression.
+-- [日本語]: ガウス過程回帰 (Gaussian-process regression)。
 --
--- Pick a kernel, fit it to training data and obtain the posterior
--- predictive at arbitrary test points. Hyperparameters can be tuned
--- automatically by maximizing the log marginal likelihood.
+-- カーネルを選び、 訓練データに fit して、 任意のテスト点での事後予測を得る。
+-- ハイパーパラメータは対数周辺尤度の最大化で自動調整できる。
 --
 -- @
 -- import Hanalyze.Model.GP
@@ -25,6 +24,27 @@
 --     res = fitGP (GPModel RBF opt) xs ys testXs
 --
 -- -- gpMean res, gpLower res, gpUpper res で結果を取得
+-- @
+--
+-- [English]: Gaussian-process regression.
+--
+-- Pick a kernel, fit it to training data and obtain the posterior
+-- predictive at arbitrary test points. Hyperparameters can be tuned
+-- automatically by maximizing the log marginal likelihood.
+--
+-- @
+-- import Hanalyze.Model.GP
+--
+-- -- training data
+-- let xs = [0, 0.5 .. 5]
+--     ys = map (\x -> sin x + 0.1 * noise) xs
+--
+-- -- initialize the hyperparameters from the data and optimize them
+-- let p0  = initParamsFromData xs ys
+--     opt = optimizeGP RBF xs ys p0
+--     res = fitGP (GPModel RBF opt) xs ys testXs
+--
+-- -- retrieve the results via gpMean res, gpLower res, gpUpper res
 -- @
 module Hanalyze.Model.GP
   ( -- * カーネル型 (re-export from "Hanalyze.Model.Kernel")
@@ -91,11 +111,19 @@ import           Hanalyze.Model.Kernel
 -- 'Hanalyze.Model.Kernel' へ分離。 GP は後方互換のため re-export する
 -- (上の import 参照)。
 
--- | GP hyperparameters (= 'KernelParams' + 観測ノイズ σ_n²)。
+-- | [日本語]: GP hyperparameters (= 'KernelParams' + 観測ノイズ σ_n²)。
 --
 -- カーネル系フィールド (ℓ / σ_f² / period / ARD) は 'gpKernelParams' で
 -- 'KernelParams' へ射影でき、 カーネル評価関数 ('kernelFn' / 'kEvalMV' /
 -- 'buildKernelMatrix' 等) はその 'KernelParams' を取る。
+--
+-- [English]: GP hyperparameters (= 'KernelParams' + the observation noise
+-- σ_n²).
+--
+-- The kernel-related fields (ℓ \/ σ_f² \/ period \/ ARD) can be projected onto
+-- a 'KernelParams' with 'gpKernelParams', and the kernel evaluation functions
+-- ('kernelFn' \/ 'kEvalMV' \/ 'buildKernelMatrix' etc.) take that
+-- 'KernelParams'.
 data GPParams = GPParams
   { gpLengthScale  :: Double
     -- ^ Isotropic length scale @ℓ@; larger means smoother. Used unless
@@ -120,9 +148,13 @@ data GPParams = GPParams
 defaultGPParams :: GPParams
 defaultGPParams = GPParams 1.0 1.0 0.1 1.0 Nothing
 
--- | Project the kernel hyperparameters of a 'GPParams' onto a
--- 'KernelParams' (drops the observation noise σ_n²). カーネル評価関数へ
+-- | [日本語]: 'GPParams' のカーネル系ハイパーパラメータを 'KernelParams' へ
+-- 射影する (観測ノイズ σ_n² は落とす)。 カーネル評価関数へ
 -- 渡す際に使う。
+--
+-- [English]: Project the kernel hyperparameters of a 'GPParams' onto a
+-- 'KernelParams' (drops the observation noise σ_n²). Used when passing them
+-- to the kernel evaluation functions.
 gpKernelParams :: GPParams -> KernelParams
 gpKernelParams p = KernelParams
   { kpLengthScale  = gpLengthScale p
@@ -232,11 +264,18 @@ logMarginalLikelihood trainX trainY ker params =
              dataFit = LA.dot y alpha
          in -0.5 * dataFit - 0.5 * logDet - fromIntegral n / 2 * log (2 * pi)
 
--- | Single-output GP posterior prediction at @testX@.
+-- | [日本語]: @testX@ における単出力 GP の事後予測。
 -- 多出力 'fitGPMulti' に y を 1 列行列化して委譲、列 0 を取り出す。
 --
 -- 事後平均: μ_* = K_*ᵀ Ky⁻¹ y
 -- 事後分散: σ²_i = k(x*_i, x*_i) − K_*[i] Ky⁻¹ K_*[i]ᵀ
+--
+-- [English]: Single-output GP posterior prediction at @testX@.
+-- Delegates to the multi-output 'fitGPMulti' by turning y into a
+-- single-column matrix, and extracts column 0.
+--
+-- Posterior mean: μ_* = K_*ᵀ Ky⁻¹ y
+-- Posterior variance: σ²_i = k(x*_i, x*_i) − K_*[i] Ky⁻¹ K_*[i]ᵀ
 fitGP :: GPModel -> [Double] -> [Double] -> [Double] -> GPResult
 fitGP model trainX trainY testX =
   let yMat = LA.asColumn (LA.fromList trainY)
@@ -251,12 +290,20 @@ fitGP model trainX trainY testX =
        , gpUpper  = zipWith (\m s -> m + 2 * s) mu stdList
        }
 
--- | Multi-output GP posterior prediction. @Y@ has shape @n × q@ (one
--- column per output task) and shares a single kernel and
+-- | [日本語]: 多出力 GP の事後予測。 @Y@ は @n × q@ (出力タスクごとに 1 列) で、
+-- 単一のカーネルと
 -- ハイパーパラメータを共有する (Cholesky / Ky⁻¹ も共有)。
 --
 -- 戻り値: (事後平均行列 m × q, 事後分散ベクトル 長さ m)。
 -- 分散は y に依らないため q 出力で共通。
+--
+-- [English]: Multi-output GP posterior prediction. @Y@ has shape @n × q@ (one
+-- column per output task) and shares a single kernel and one set of
+-- hyperparameters (the Cholesky factor \/ Ky⁻¹ are shared as well).
+--
+-- Returns: (the m × q posterior mean matrix, the length-m posterior variance
+-- vector). The variance does not depend on y, so it is common to all q
+-- outputs.
 fitGPMulti :: GPModel -> [Double] -> LA.Matrix Double -> [Double]
            -> (LA.Matrix Double, [Double])
 fitGPMulti model trainX trainY testX =
@@ -346,8 +393,8 @@ gramLOOCV k y lam =
 -- 'Hanalyze.Model.RFF.gridSearchLOOCVRBFMV', where @σ_f@ and @λ@
 -- are degenerate and @λ@ absorbs the scale). Returns 'GPParams' with the
 -- selected @ℓ*@, @σ_f² = std(y)²@ and @σ_n² = λ*@ (KRR ≡ GP mean with
--- @λ = σ_n²@). Used by the @AutoCV@ 'HyperStrategy' for the exact
--- ('Gp'/'Ridge') quadrants.
+-- @λ = σ_n²@). Used by the @AutoCV@ @HyperStrategy@ for the exact
+-- (@Gp@/@Ridge@) quadrants.
 autoCVHyperGP :: Kernel -> [Double] -> [Double] -> GPParams
 autoCVHyperGP ker xs ys =
   let p0      = initParamsFromData xs ys
@@ -404,15 +451,19 @@ logSpaceList lo hi n
 -- Interactive prediction data (for Hanalyze.Viz.GPReport)
 -- ---------------------------------------------------------------------------
 
--- | JavaScript 対話予測に必要な内部データ。
+-- | [日本語]: JavaScript 対話予測に必要な内部データ。
 -- Ky⁻¹ と α = Ky⁻¹ y を事前に計算して保持する。
+--
+-- [English]: The internal data required for interactive prediction in
+-- JavaScript. Pre-computes and stores Ky⁻¹ and α = Ky⁻¹ y.
 data GPPredData = GPPredData
-  { pdTrainX :: [Double]     -- ^ 訓練点 X
-  , pdAlpha  :: [Double]     -- ^ α = Ky⁻¹ y (長さ n)
-  , pdKyInv  :: [[Double]]   -- ^ Ky⁻¹ を行リストで表現 (n × n)
+  { pdTrainX :: [Double]     -- ^ [日本語]: 訓練点 X [English]: The training points X.
+  , pdAlpha  :: [Double]     -- ^ [日本語]: α = Ky⁻¹ y (長さ n) [English]: α = Ky⁻¹ y (length n).
+  , pdKyInv  :: [[Double]]   -- ^ [日本語]: Ky⁻¹ を行リストで表現 (n × n) [English]: Ky⁻¹ represented as a list of rows (n × n).
   } deriving (Show)
 
--- | 訓練データから GPPredData を計算する。
+-- | [日本語]: 訓練データから GPPredData を計算する。
+--   [English]: Computes a GPPredData from the training data.
 gpPredData :: GPModel -> [Double] -> [Double] -> GPPredData
 gpPredData model trainX trainY =
   let ker    = gpKernel model

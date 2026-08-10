@@ -6,15 +6,15 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Formula DSL — designMatrixF + 線形性検出 + 識別性 (A17)。
+-- [日本語]: Formula DSL — designMatrixF + 線形性検出 + 識別性 (A17)。
 --   'ModelFrame' から OLS 用の設計行列を組み立て、 線形モデルなら 'fitLMF' で fit する。
 --
 --   ★中核の考え方:
 --     - 右辺を加法項に分解し、 各項を乗法葉 (param / factor 添字 / data 式) に分類。
---     - **線形 OLS では parameter 名自体は fit に効かない** (各設計列に 1 係数が付くだけ)。
+--     - __線形 OLS では parameter 名自体は fit に効かない__ (各設計列に 1 係数が付くだけ)。
 --       param 名が効くのは ① 報告 ② 非線形検出。 → param が data 式の内側に現れたら
 --       「非線形 (OLS 不可)」 として Left を返す = 線形性検出を兼ねる。
---     - factor は **使われ方 (! 添字)** で展開 ('ModelFrame' が既に判定済)。 識別性は
+--     - factor は __使われ方 (! 添字)__ で展開 ('ModelFrame' が既に判定済)。 識別性は
 --       treatment contrast: 切片があれば参照水準 (=第1水準, 昇順先頭) を drop して満ランク化。
 --     - 交互作用は専用演算子を持たず、 連続×連続=積・factor×連続=水準別列・factor×factor=
 --       添字連鎖の grid 展開、 として加法項ごとに独立に列生成。
@@ -23,6 +23,39 @@
 --     飽和 factor×factor の ŷ = セル平均、 という Python 非依存オラクルで正しさを確認できる。
 --
 --   spline/poly 基底展開 (@bs ! bspline(x,k)@) は本 sub では未対応 (明示エラー)。 後続で配線。
+--
+-- [English]: Formula DSL — designMatrixF + linearity detection +
+-- identifiability (A17).
+--   Builds the OLS design matrix from a 'ModelFrame', and fits it with
+--   'fitLMF' if the model is linear.
+--
+--   ★Core idea:
+--     - Decompose the right-hand side into additive terms, and classify
+--       each term's multiplicative leaves (param \/ factor subscript \/
+--       data expression).
+--     - In __linear OLS the parameter name itself has no effect on the fit__
+--       (each design column just gets one coefficient). The param
+--       name matters only for ① reporting and ② nonlinearity detection —
+--       if a param appears inside a data expression, this returns Left as
+--       "nonlinear (OLS not applicable)", which doubles as linearity
+--       detection.
+--     - A factor is expanded according to __how it is used (! subscript)__
+--       (already determined by 'ModelFrame'). Identifiability uses
+--       treatment contrast: if there is an intercept, the reference level
+--       (= the first level in ascending order) is dropped to obtain full
+--       rank.
+--     - Interactions have no dedicated operator; continuous×continuous =
+--       product, factor×continuous = per-level columns, and
+--       factor×factor = a grid expansion of the subscript chain, with
+--       columns generated independently per additive term.
+--
+--   ★Validation principle (parameterization-invariant): ŷ and R² do not
+--     depend on the choice of contrast. Correctness can be checked against
+--     a Python-independent oracle: for a saturated factor×factor model,
+--     ŷ = the cell means.
+--
+--   Spline\/poly basis expansion (@bs ! bspline(x,k)@) is not supported in
+--   this sub (an explicit error is raised); wiring is planned for later.
 module Hanalyze.Model.Formula.Design
   ( designMatrixF
   , fitLMF
@@ -58,20 +91,26 @@ import qualified DataFrame.Internal.DataFrame  as DX
 -- 加法 / 乗法への分解
 -- ============================================================================
 
--- | 加法項に分解。 符号 (Sub/Neg) は係数に吸収され ŷ に効かないので Add 扱い。
+-- | [日本語]: 加法項に分解。 符号 (Sub/Neg) は係数に吸収され ŷ に効かないので Add 扱い。
+--   [English]: Decomposes into additive terms. Sign (Sub/Neg) is absorbed
+--   into the coefficient and does not affect ŷ, so it is treated as Add.
 flattenAdd :: Term -> [Term]
 flattenAdd (Bin Add a b) = flattenAdd a ++ flattenAdd b
 flattenAdd (Bin Sub a b) = flattenAdd a ++ flattenAdd b
 flattenAdd (Neg a)       = flattenAdd a
 flattenAdd t             = [t]
 
--- | 乗法葉に分解。
+-- | [日本語]: 乗法葉に分解。
+--   [English]: Decomposes into multiplicative leaves.
 mulLeaves :: Term -> [Term]
 mulLeaves (Bin Mul a b) = mulLeaves a ++ mulLeaves b
 mulLeaves (Neg a)       = mulLeaves a
 mulLeaves t             = [t]
 
--- | Index spine: 入れ子添字を (base項, [添字項]) に。 base が Ref でなければ Nothing。
+-- | [日本語]: Index spine: 入れ子添字を (base 項, [添字項]) に。 base が Ref でなければ
+--   Nothing。
+--   [English]: Index spine: unnests nested subscripts into (base term,
+--   [subscript terms]). Returns Nothing if the base is not a Ref.
 indexSpine :: Term -> Maybe (Term, [Term])
 indexSpine (Index a b) = do (base, ixs) <- indexSpine a; pure (base, ixs ++ [b])
 indexSpine t           = Just (t, [])
@@ -81,12 +120,14 @@ indexSpine t           = Just (t, [])
 -- ============================================================================
 
 data Leaf
-  = LParam Text                       -- ^ パラメータ単独 (係数。 OLS 列は持たない)
-  | LFactor [(Text, ContrastCoding)]  -- ^ factor 添字 + contrast (1 個=主効果 / 複数=交互作用)
-  | LBasis Text [Term]                -- ^ 基底展開 (bs ! bspline(x,n) / bp ! poly(x,n))
-  | LData Term                        -- ^ データ式 (連続変数・Lit・単項関数・算術)
+  = LParam Text                       -- ^ [日本語]: パラメータ単独 (係数。 OLS 列は持たない)。 [English]: A bare parameter (a coefficient; has no OLS column).
+  | LFactor [(Text, ContrastCoding)]  -- ^ [日本語]: factor 添字 + contrast (1 個=主効果 / 複数=交互作用)。 [English]: Factor subscript(s) + contrast (one = main effect / multiple = interaction).
+  | LBasis Text [Term]                -- ^ [日本語]: 基底展開 (bs ! bspline(x,n) / bp ! poly(x,n))。 [English]: Basis expansion (bs ! bspline(x,n) / bp ! poly(x,n)).
+  | LData Term                        -- ^ [日本語]: データ式 (連続変数・Lit・単項関数・算術)。 [English]: A data expression (continuous variable, Lit, unary function, arithmetic).
 
--- | 基底関数名 (! の右に App として現れたら factor でなく基底展開)。
+-- | [日本語]: 基底関数名 (! の右に App として現れたら factor でなく基底展開)。
+--   [English]: Basis function names (if it appears as an App to the right
+--   of !, it is a basis expansion rather than a factor).
 basisFns :: [Text]
 basisFns = ["poly", "opoly", "bspline"]
 
@@ -162,7 +203,9 @@ binFn Pow = (**)
 -- 加法項 → 設計列
 -- ============================================================================
 
--- | 切片項か (data も factor も無く param のみ → 1 の列)。
+-- | [日本語]: 切片項か (data も factor も無く param のみ → 1 の列)。
+--   [English]: Whether this is an intercept term (no data or factor, only a
+--   param → a column of 1s).
 isInterceptTerm :: ModelFrame -> Term -> Bool
 isInterceptTerm mf term =
   case mapM (classify mf) (mulLeaves term) of
@@ -172,7 +215,9 @@ isInterceptTerm mf term =
   where isParam (LParam _) = True
         isParam _          = False
 
--- | 加法項 1 つの設計列群 (列ラベル, 列ベクトル)。
+-- | [日本語]: 加法項 1 つの設計列群 (列ラベル, 列ベクトル)。
+--   [English]: The design columns for a single additive term (column label,
+--   column vector).
 termColumns :: Bool -> ModelFrame -> Term -> Either String [(Text, V.Vector Double)]
 termColumns hasInt mf term = do
   leaves <- mapM (classify mf) (mulLeaves term)
@@ -194,12 +239,22 @@ termColumns hasInt mf term = do
         [] -> Right [ (prettyTerm term, dataVec) ]
         fs -> factorColumns hasInt mf fs dataVec dataLabel
 
--- | 基底展開列。
+-- | [日本語]: 基底展開列。
 --   - @poly(x,n)@ = x¹..xⁿ (n 列・定数なし。 切片は b0 が担う → polyDesignMatrix と同 span)。
 --   - @bspline(x,n)@ = degree-3 clamped B-spline、 knots = quantileKnots n x
 --     (= fitSpline (BSpline 3) (quantileKnots n x) と同一基底)。 既定 degree=3、
 --     @bspline(x,n,k)@ で degree 指定可。 B-spline 基底は partition of unity ゆえ切片と
 --     共線 → 切片併用時 (hasInt) は先頭基底列を drop して満ランク化 (R splines::bs 既定と同様)。
+--   [English]: Basis-expansion columns.
+--   - @poly(x,n)@ = x¹..xⁿ (n columns, no constant; the intercept is carried
+--     by b0, so this has the same span as polyDesignMatrix).
+--   - @bspline(x,n)@ = a degree-3 clamped B-spline with knots =
+--     quantileKnots n x (the same basis as
+--     fitSpline (BSpline 3) (quantileKnots n x)). Default degree=3;
+--     @bspline(x,n,k)@ lets you specify the degree. Because the B-spline
+--     basis is a partition of unity, it is collinear with the intercept, so
+--     when an intercept is present (hasInt) the first basis column is
+--     dropped to obtain full rank (as with R's splines::bs default).
 basisColumns :: Bool -> ModelFrame -> Text -> [Term]
              -> Either String [(Text, V.Vector Double)]
 basisColumns hasInt mf fname args = case (fname, args) of
@@ -234,15 +289,32 @@ basisColumns hasInt mf fname args = case (fname, args) of
     lbl xe suf = fname <> "(" <> prettyTerm xe <> ")" <> suf
     tshow      = T.pack . show
 
--- | factor (1 個=主効果 / 複数=交互作用) を contrast 符号化で展開 (A2 一般化)。
---   ★各 factor の **contrast 行列 C** (k×m) で行を符号化する。 交互作用列は factor ごとの
---   contrast 列の **Kronecker 積** (各行で contrast 値の積) を取り、 data ベクトルを掛ける。
---   ★符号化の縮約は **指示列のとき (dataLabel == Nothing) のみ**: 指示列は合計が切片 (1s)
+-- | [日本語]: factor (1 個=主効果 / 複数=交互作用) を contrast 符号化で展開 (A2 一般化)。
+--   ★各 factor の __contrast 行列 C__ (k×m) で行を符号化する。 交互作用列は factor ごとの
+--   contrast 列の __Kronecker 積__ (各行で contrast 値の積) を取り、 data ベクトルを掛ける。
+--   ★符号化の縮約は __指示列のとき (dataLabel == Nothing) のみ__: 指示列は合計が切片 (1s)
 --   と共線ゆえ contrast 行列 (k×(k-1)) で 1 列落として満ランク化する。 一方 factor×連続
---   (dataLabel == Just、 masked データ列) は切片と共線でない → **full coding (k×k 単位行列)**
---   = 全水準保持で per-level の傾きを持つ (Phase 46 の masked 列罠を踏襲。 落とすと参照群の
+--   (dataLabel == Just、 masked データ列) は切片と共線でない → __full coding (k×k 単位行列)__
+--   = 全水準保持で per-level の傾きを持つ (masked 列罠を踏襲。 落とすと参照群の
 --   傾きが 0 固定で自由度を失う = statsmodels の C(g):x と不一致)。 full coding では単位行列
 --   ゆえ contrast の選択は ŷ に影響しない (= parameterization 不変)。
+--   [English]: Expands a factor (one = main effect / multiple = interaction)
+--   via contrast coding (A2 generalization).
+--   ★Each factor's rows are coded with its __contrast matrix C__ (k×m).
+--   Interaction columns are formed by taking the __Kronecker product__ of the
+--   per-factor contrast columns (the product of contrast values in each row)
+--   and multiplying by the data vector.
+--   ★The coding is reduced __only for indicator columns__ (dataLabel ==
+--   Nothing): indicator columns sum to the intercept (1s) and are
+--   collinear with it, so one column is dropped via the (k×(k-1)) contrast
+--   matrix to obtain full rank. Factor×continuous (dataLabel == Just, a
+--   masked data column), on the other hand, is not collinear with the
+--   intercept, so it uses __full coding (a k×k identity matrix)__ — keeping
+--   all levels and giving each level its own slope (following the masked
+--   column trap: dropping a level would fix the reference group's slope at
+--   0 and lose a degree of freedom, disagreeing with statsmodels'
+--   C(g):x). With full coding, the identity matrix means the choice of
+--   contrast does not affect ŷ (parameterization-invariant).
 factorColumns :: Bool -> ModelFrame -> [(Text, ContrastCoding)] -> V.Vector Double -> Maybe Text
               -> Either String [(Text, V.Vector Double)]
 factorColumns hasInt mf fcs dataVec dataLabel = do
@@ -261,8 +333,12 @@ factorColumns hasInt mf fcs dataVec dataLabel = do
           lbl     = T.intercalate ":" (map fst picks ++ maybe [] (: []) dataLabel)
       in (lbl, col)
 
--- | 1 factor の contrast 列群。 reduced=True で contrast 行列 (k×(k-1))、 False で
+-- | [日本語]: 1 factor の contrast 列群。 reduced=True で contrast 行列 (k×(k-1))、 False で
 --   full coding (k×k 単位行列 = 指示変数)。 各列は行ごとの contrast 値ベクトル。
+--   [English]: The contrast columns for a single factor. When reduced=True,
+--   the (k×(k-1)) contrast matrix is used; when False, full coding (a k×k
+--   identity matrix, i.e. indicator variables) is used. Each column is a
+--   per-row contrast value vector.
 factorContrastCols :: Bool -> (Text, [Text], V.Vector Int, ContrastCoding)
                    -> [(Text, V.Vector Double)]
 factorContrastCols reduced (nm, lev, idx, coding) =
@@ -285,16 +361,33 @@ cartesian (xs:rest) = [ x : r | x <- xs, r <- cartesian rest ]
 -- Contrast coding (A2)
 -- ============================================================================
 
--- | factor 符号化方式。 切片併用時に満ランク化する contrast。
+-- | [日本語]: factor 符号化方式。 切片併用時に満ランク化する contrast。
+--   [English]: Factor coding scheme. A contrast that yields full rank when
+--   used with an intercept.
 data ContrastCoding
-  = Treatment                    -- ^ 参照水準 (昇順先頭) を 0 に、 他を指示 (既定・R 既定 contr.treatment)
-  | Sum                          -- ^ sum-to-zero (最終水準 = −Σ others、 R contr.sum)
-  | Helmert                      -- ^ 各水準 vs それ以前の平均 (R contr.helmert)
-  | Polynomial                   -- ^ ordered factor 用の直交多項式 (R contr.poly)
-  | CustomContrast (LA.Matrix Double)  -- ^ ユーザ指定の k×(k-1) contrast 行列
+  = Treatment
+    -- ^ [日本語]: 参照水準 (昇順先頭) を 0 に、 他を指示 (既定・R 既定 contr.treatment)。
+    --   [English]: Sets the reference level (first in ascending order) to
+    --   0 and indicates the others (default; R's default contr.treatment).
+  | Sum
+    -- ^ [日本語]: sum-to-zero (最終水準 = −Σ others、 R contr.sum)。
+    --   [English]: Sum-to-zero coding (last level = −Σ others; R's
+    --   contr.sum).
+  | Helmert
+    -- ^ [日本語]: 各水準 vs それ以前の平均 (R contr.helmert)。
+    --   [English]: Each level vs. the mean of the preceding levels (R's
+    --   contr.helmert).
+  | Polynomial
+    -- ^ [日本語]: ordered factor 用の直交多項式 (R contr.poly)。
+    --   [English]: Orthogonal polynomials for ordered factors (R's
+    --   contr.poly).
+  | CustomContrast (LA.Matrix Double)
+    -- ^ [日本語]: ユーザ指定の k×(k-1) contrast 行列。
+    --   [English]: A user-specified k×(k-1) contrast matrix.
   deriving (Eq, Show)
 
--- | contrast 名 (C(g, name) の name) を解釈。
+-- | [日本語]: contrast 名 (C(g, name) の name) を解釈。
+--   [English]: Parses a contrast name (the name in C(g, name)).
 parseContrast :: Text -> Either String ContrastCoding
 parseContrast t = case T.toLower t of
   "treatment" -> Right Treatment
@@ -305,7 +398,8 @@ parseContrast t = case T.toLower t of
   _ -> Left $ "未知の contrast '" <> T.unpack t
               <> "' (Treatment/Sum/Helmert/Polynomial)"
 
--- | 列ラベル用の短いタグ。
+-- | [日本語]: 列ラベル用の短いタグ。
+--   [English]: A short tag for use in column labels.
 codingTag :: ContrastCoding -> Text
 codingTag Treatment          = "T"
 codingTag Sum                = "S"
@@ -313,8 +407,11 @@ codingTag Helmert            = "H"
 codingTag Polynomial         = "P"
 codingTag (CustomContrast _) = "C"
 
--- | k 水準の contrast 行列 (k×(k-1))。 切片併用時の満ランク符号化。
+-- | [日本語]: k 水準の contrast 行列 (k×(k-1))。 切片併用時の満ランク符号化。
 --   行 = 水準 (昇順 index)、 列 = contrast。 行 l の値が水準 l の設計行寄与。
+--   [English]: The (k×(k-1)) contrast matrix for k levels. Full-rank coding
+--   for use with an intercept. Rows = levels (ascending index), columns =
+--   contrasts. Row l's values are level l's design-row contribution.
 contrastMatrix :: ContrastCoding -> Int -> LA.Matrix Double
 contrastMatrix coding k = case coding of
   Treatment ->
@@ -332,8 +429,12 @@ contrastMatrix coding k = case coding of
                 | l == j + 1  = fromIntegral (j + 1)
                 | otherwise   = 0
 
--- | 直交多項式 contrast (k×(k-1))。 中心化水準スコアの Vandermonde を QR 分解し
+-- | [日本語]: 直交多項式 contrast (k×(k-1))。 中心化水準スコアの Vandermonde を QR 分解し
 --   定数列を落とした直交基底 (R contr.poly と同 span。 符号差は ŷ 不変ゆえ無害)。
+--   [English]: Orthogonal polynomial contrast (k×(k-1)). QR-decomposes the
+--   Vandermonde matrix of centered level scores and drops the constant
+--   column to obtain an orthogonal basis (the same span as R's contr.poly;
+--   sign differences are harmless since ŷ is invariant).
 polyContrast :: Int -> LA.Matrix Double
 polyContrast k =
   let xs    = map fromIntegral [1 .. k] :: [Double]
@@ -346,7 +447,9 @@ polyContrast k =
 -- designMatrixF / fitLMF / linearityCheck
 -- ============================================================================
 
--- | 'Formula' + 'ModelFrame' → 設計行列 (n×p) と列ラベル。 非線形なら Left。
+-- | [日本語]: 'Formula' + 'ModelFrame' → 設計行列 (n×p) と列ラベル。 非線形なら Left。
+--   [English]: 'Formula' + 'ModelFrame' → the (n×p) design matrix and column
+--   labels. Returns Left if nonlinear.
 designMatrixF :: Formula -> ModelFrame -> Either String (LA.Matrix Double, [Text])
 designMatrixF (Formula _ _ rhs) mf = do
   let terms  = flattenAdd rhs
@@ -359,7 +462,9 @@ designMatrixF (Formula _ _ rhs) mf = do
     else Right ( LA.fromColumns (map (LA.fromList . V.toList . snd) cols)
                , labels )
 
--- | 線形モデルを OLS で fit。 設計列ラベルも返す。 非線形なら Left。
+-- | [日本語]: 線形モデルを OLS で fit。 設計列ラベルも返す。 非線形なら Left。
+--   [English]: Fits a linear model with OLS. Also returns the design column
+--   labels. Returns Left if nonlinear.
 fitLMF :: Formula -> DX.DataFrame -> Either String (FitResult, [Text])
 fitLMF f df = do
   mf            <- modelFrame f df
@@ -368,7 +473,8 @@ fitLMF f df = do
   let y = LA.asColumn (LA.fromList (V.toList yv))
   Right (fitLM x y, labels)
 
--- | 応答ベクトル取り出し。
+-- | [日本語]: 応答ベクトル取り出し。
+--   [English]: Extracts the response vector.
 responseVec :: ModelFrame -> Either String (V.Vector Double)
 responseVec mf = case mfRoles mf of
   ((_, RoleResponse v) : _) -> Right v
@@ -378,25 +484,48 @@ responseVec mf = case mfRoles mf of
 -- weights / offset = WLS (A3)
 -- ============================================================================
 
--- | 重み付き最小二乗 + offset の設定。 statsmodels @smf.wls(formula, data, weights=…)@
---   に倣い、 weights/offset は **列名で渡す** (R でも weights は formula 外)。
+-- | [日本語]: 重み付き最小二乗 + offset の設定。 statsmodels @smf.wls(formula, data, weights=…)@
+--   に倣い、 weights/offset は __列名で渡す__ (R でも weights は formula 外)。
+--   [English]: Configuration for weighted least squares + offset. Following
+--   statsmodels' @smf.wls(formula, data, weights=…)@, weights/offset are
+--   __passed by column name__ (in R too, weights are outside the formula).
 data WLSConfig = WLSConfig
-  { wcWeights :: Maybe Text  -- ^ 重み列名 (WLS。 'Nothing' = 等重み OLS)
-  , wcOffset  :: Maybe Text  -- ^ offset 列名 (η への固定加算。 線形では @y* = y − offset@ を fit)
+  { wcWeights :: Maybe Text
+    -- ^ [日本語]: 重み列名 (WLS。 'Nothing' = 等重み OLS)。
+    --   [English]: The weight column name (for WLS; 'Nothing' = equal-weight
+    --   OLS).
+  , wcOffset  :: Maybe Text
+    -- ^ [日本語]: offset 列名 (η への固定加算。 線形では @y* = y − offset@ を fit)。
+    --   [English]: The offset column name (a fixed addition to η; for
+    --   linear models this fits @y* = y − offset@).
   }
   deriving (Eq, Show)
 
--- | 既定 (重みなし・offset なし = OLS、 'fitLMF' と等価)。
+-- | [日本語]: 既定 (重みなし・offset なし = OLS、 'fitLMF' と等価)。
+--   [English]: The default (no weights, no offset = OLS; equivalent to
+--   'fitLMF').
 defaultWLS :: WLSConfig
 defaultWLS = WLSConfig Nothing Nothing
 
--- | weights / offset 付きで線形モデルを fit。
+-- | [日本語]: weights / offset 付きで線形モデルを fit。
 --
 --   ★行整列: 'modelFrame' は欠損 policy で行を落とし得るので、 weights/offset 列が frame と
---   ずれないよう **formula 関与列 ∪ weights ∪ offset をまとめて 'dropMissingRows'** してから
+--   ずれないよう __formula 関与列 ∪ weights ∪ offset をまとめて 'dropMissingRows'__ してから
 --   frame を組み、 weights/offset も同じ DataFrame から取り出す。
 --   ★WLS = @√w@ で X/y を行スケール (@X' = diag(√w) X@, @y' = √w ⊙ y@) し OLS に帰着。
 --   ★offset = η への固定加算ゆえ線形では @y − offset@ を解けばよい (GLM offset は別経路・未対応)。
+--   [English]: Fits a linear model with weights \/ offset.
+--
+--   ★Row alignment: because 'modelFrame' can drop rows under the missing
+--   policy, so the weights\/offset columns stay aligned with the frame,
+--   we first call __'dropMissingRows' on the column union__ (the formula's
+--   columns ∪ weights ∪ offset) before building the frame, and take
+--   weights\/offset from the same DataFrame.
+--   ★WLS reduces to OLS by row-scaling X\/y with @√w@ (@X' = diag(√w) X@,
+--   @y' = √w ⊙ y@).
+--   ★Since offset is a fixed addition to η, for linear models it suffices
+--   to solve @y − offset@ (GLM offset takes a different path and is not
+--   supported).
 fitWLSF :: WLSConfig -> Formula -> DX.DataFrame -> Either String (FitResult, [Text])
 fitWLSF cfg f@(Formula resp dvars _) df0 = do
   let extra = catMaybes [wcWeights cfg, wcOffset cfg]
@@ -420,7 +549,9 @@ fitWLSF cfg f@(Formula resp dvars _) df0 = do
                        Right (getDoubleVec name d)
     asCol v = LA.asColumn (LA.fromList (V.toList v))
 
--- | 線形性チェック (designMatrixF が通れば線形)。 メッセージ付き Either。
+-- | [日本語]: 線形性チェック (designMatrixF が通れば線形)。 メッセージ付き Either。
+--   [English]: Checks linearity (linear if designMatrixF succeeds). An
+--   Either with a message.
 linearityCheck :: Formula -> DX.DataFrame -> Either String ()
 linearityCheck f df = do
   mf <- modelFrame f df

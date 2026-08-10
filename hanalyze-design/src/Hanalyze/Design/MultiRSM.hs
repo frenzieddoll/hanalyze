@@ -26,7 +26,7 @@ data MultiQuadFit = MultiQuadFit
   , mqQ    :: Int         -- ^ Number of responses @q@.
   } deriving (Show)
 
--- | Multi-response quadratic regression: apply 'fitQuadratic' to each
+-- | Multi-response quadratic regression: apply @fitQuadratic@ to each
 -- response column independently.
 fitMultiQuadratic :: [[Double]]            -- ^ Design matrix (@n × k@).
                   -> LA.Matrix Double      -- ^ Response @Y@ (@n × q@).
@@ -38,7 +38,7 @@ fitMultiQuadratic design y =
       fits = [colFit j | j <- [0 .. q - 1]]
   in MultiQuadFit fits k q
 
--- | Compute 'optimumPoint' for each response and aggregate the
+-- | Compute @optimumPoint@ for each response and aggregate the
 -- extremum information.
 optimumPointsMulti :: MultiQuadFit -> [([Double], Double, [Double])]
 optimumPointsMulti mq = map optimumPoint (mqFits mq)

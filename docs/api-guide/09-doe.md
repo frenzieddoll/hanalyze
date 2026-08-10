@@ -721,8 +721,8 @@ noDf |>> contourOf (modelFor "strength" model) "temp" "time"   -- strength surfa
 3D response visualize → `surfaceOf`. Grid 2 factors, return `VisualSpec3D`, 3D renderer outputs. `modelFor` selects response (same as `contourOf`).
 
 ```haskell
-import Hgg.Plot.ThreeD.Easy    (saveSVG3D)      -- Static (SVG / PDF / PNG)
-import Hgg.Plot.ThreeD.Browser (saveHTML3D, showBrowser)  -- WebGL (interactive)
+import Graphics.Hgg.ThreeD.Easy    (saveSVG3D)      -- Static (SVG / PDF / PNG)
+import Graphics.Hgg.ThreeD.Browser (saveHTML3D, showBrowser)  -- WebGL (interactive)
 
 let surf = surfaceOf (modelFor "strength" model) "temp" "time"
 
@@ -733,11 +733,11 @@ showBrowser surf                     -- WebGL in-browser immediately
 
 ![DOE 3D response surface (quadratic regression + CCD points)](../images/rsm-surface-3d.svg)
 
-- **Static**: `saveSVG3D` (vector, doc embed), `savePDF3D`, `savePNG3D` (`Hgg.Plot.ThreeD.Easy`).
-- **WebGL**: `saveHTML3D` (self-contained), `showBrowser` (in-browser now) from `Hgg.Plot.ThreeD.Browser`. Orbit camera, rotate/zoom interactive.
+- **Static**: `saveSVG3D` (vector, doc embed), `savePDF3D`, `savePNG3D` (`Graphics.Hgg.ThreeD.Easy`).
+- **WebGL**: `saveHTML3D` (self-contained), `showBrowser` (in-browser now) from `Graphics.Hgg.ThreeD.Browser`. Orbit camera, rotate/zoom interactive.
 
 ## Low-Level API (Raw Design Generation)
 
 High-level `Design` workflow underlies low-level functions handling designs as matrices (`[[Double]]`) — `Design.Factorial` / `Design.RSM` / `Design.Optimal` / `Design.Orthogonal` / `Design.Anova` / `Design.Power` / `Design.Quality` / `Design.Custom.*`. Use only for hand-held candidates or non-standard DIY designs (high-level API standard).
 
-→ **Low-Level DOE API Reference** (internal document, not published) consolidated (full factorial / RSM / optimal / OA-Taguchi / ANOVA-power / constrained optimal / process capability / custom design [coordinate exchange, split-plot, Bayesian D]).
+→ **[Low-Level DOE API Reference (internal)](../internal/09-doe-lowlevel.md)** consolidates the full picture (full factorial / RSM / optimal / OA-Taguchi / ANOVA-power / constrained optimal / process capability / custom design [coordinate exchange, split-plot, Bayesian D]).

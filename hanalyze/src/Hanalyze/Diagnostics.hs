@@ -5,14 +5,29 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- 回帰モデルの係数診断 (plot 非依存層)。
+-- [日本語]: 回帰モデルの係数診断 (plot 非依存層)。
 --
 -- fit 済モデルを「数値として」 使う細粒度 API: 点予測・係数ベクトル・係数要約。
--- 'Hanalyze.Plot' (cabal flag @plot-integration@ 配下) が描画
--- ('VisualSpec' 化) を担うのに対し、 本モジュールは **hgg に依存しない**
+-- 別パッケージ @hanalyze-plot@ の 'Hanalyze.Plot'
+-- (@cabal build --project-file=cabal.project.plot@ で build) が描画
+-- (@VisualSpec@ 化) を担うのに対し、 本モジュールは __hgg に依存しない__
 -- 係数統計 (t\/z・p 値・95% CI) のみを切り出したもの。 非ゲート (常時 build) なので
--- 'df |-> spec' / 'coefSummary' が plot フラグ無しで使える。
+-- 'df |-> spec' / @coefSummary@ が plot フラグ無しで使える。
 -- 'Hanalyze.Plot' は本モジュールを import し従来の名前で再 export する。
+--
+-- [English]: Coefficient diagnostics for regression models (plot-independent
+-- layer).
+--
+-- A fine-grained API for using a fitted model "numerically": point
+-- prediction, coefficient vectors, coefficient summaries. Whereas
+-- 'Hanalyze.Plot' (in the separate @hanalyze-plot@ package,
+-- built via @cabal build --project-file=cabal.project.plot@) handles
+-- rendering (turning results into a @VisualSpec@), this module carves out
+-- only the coefficient statistics (t\/z, p values, 95% CI), which are
+-- __independent of hgg__. It's ungated (always built), so
+-- @df |-> spec@ \/ @coefSummary@ can be used without the plot flag.
+-- 'Hanalyze.Plot' imports this module and re-exports under the
+-- traditional names.
 module Hanalyze.Diagnostics
   ( -- * モデル API 層 (描画と独立: predict / describe / coefficients)
     Coef (..)
@@ -73,11 +88,13 @@ import           Hanalyze.Model.Formula (Formula (..))
 -- ===========================================================================
 -- モデル API 層 (描画と独立: predict / describe / coefficients)
 --
--- 'Plottable' (図にする) とは別の細粒度 class (god class 回避、 Core.hs §2.3 方針)。
+-- @Plottable@ (図にする) とは別の細粒度 class (god class 回避、 Core.hs §2.3 方針)。
 -- fit 済モデルを「数値として」 使う: 点予測・係数・要約。 Phase 16 §3 D。
 -- ===========================================================================
 
--- | 係数 1 つの要約 (名前・推定値・標準誤差・95% Wald CI)。
+-- | [日本語]: 係数 1 つの要約 (名前・推定値・標準誤差・95% Wald CI)。
+--   [English]: Summary of one coefficient (name, estimate, standard error,
+--   95% Wald CI).
 data Coef = Coef
   { coefName  :: Text
   , coefValue :: Double
@@ -85,23 +102,32 @@ data Coef = Coef
   , coefCI    :: (Double, Double)
   } deriving (Show, Eq)
 
--- | fit 済モデルを描画と独立に使う細粒度 API。
+-- | [日本語]: fit 済モデルを描画と独立に使う細粒度 API。
+--   [English]: A fine-grained API for using a fitted model independently of
+--   rendering.
 class ModelAPI m where
-  -- | 係数ベクトル (intercept 含む)。
+  -- | [日本語]: 係数ベクトル (intercept 含む)。
+  --   [English]: The coefficient vector (including the intercept).
   modelCoefficients :: m -> [Double]
-  -- | 単一説明変数 x での点予測 (μ スケール。 GLM は逆リンク後)。
+  -- | [日本語]: 単一説明変数 x での点予測 (μ スケール。 GLM は逆リンク後)。
+  --   [English]: Point prediction at a single explanatory variable x (on the
+  --   μ scale; for GLM, after the inverse link).
   predictPoint      :: m -> Double -> Double
-  -- | 各係数の要約 (推定値 + SE + 95% Wald CI)。
+  -- | [日本語]: 各係数の要約 (推定値 + SE + 95% Wald CI)。
+  --   [English]: Summary of each coefficient (estimate + SE + 95% Wald CI).
   describeModel     :: m -> [Coef]
 
--- | 係数共分散 Cov と β から要約を作る (SE = √diag, 95% CI = β ± 1.96·SE)。
+-- | [日本語]: 係数共分散 Cov と β から要約を作る (SE = √diag, 95% CI = β ± 1.96·SE)。
+--   [English]: Builds a summary from the coefficient covariance Cov and β
+--   (SE = √diag, 95% CI = β ± 1.96·SE).
 coefSummaryFromCov :: LA.Matrix Double -> LA.Vector Double -> [Text] -> [Coef]
 coefSummaryFromCov cov beta names =
   [ Coef nm b se (b - 1.96 * se, b + 1.96 * se)
   | (nm, b, se) <- zip3 names (LA.toList beta)
                        (map (sqrt . max 0) (LA.toList (LA.takeDiag cov))) ]
 
--- | LM の係数共分散 = σ̂²·(XᵀX)⁻¹  (σ̂² = RSS/(n−p))。
+-- | [日本語]: LM の係数共分散 = σ̂²·(XᵀX)⁻¹  (σ̂² = RSS/(n−p))。
+--   [English]: LM's coefficient covariance = σ̂²·(XᵀX)⁻¹ (σ̂² = RSS/(n−p)).
 lmCoefCov :: LA.Matrix Double -> FitResult -> LA.Matrix Double
 lmCoefCov x res =
   let r      = residualsV res
@@ -138,22 +164,30 @@ instance ModelAPI GLMModel where
 -- @RLM@ は z。 ★statsmodels 突合済 Phase 70.D)。
 -- ===========================================================================
 
--- | 統一係数サマリの 1 行。 検定統計量 'crStat' は OLS 系で t 値、 GLM\/RLM で z 値。
+-- | [日本語]: 統一係数サマリの 1 行。 検定統計量 'crStat' は OLS 系で t 値、 GLM\/RLM で z 値。
+--   [English]: One row of the unified coefficient summary. The test
+--   statistic 'crStat' is a t value for the OLS family and a z value for
+--   GLM\/RLM.
 data CoefRow = CoefRow
-  { crTerm     :: !Text              -- ^ 係数名 (@\"(Intercept)\"@ / 変数名)。
-  , crEstimate :: !Double            -- ^ 点推定 β̂。
-  , crStdErr   :: !Double            -- ^ 標準誤差 SE。
-  , crStat     :: !Double            -- ^ Wald 統計量 β̂\/SE (t or z)。
-  , crPValue   :: !Double            -- ^ 両側 p 値。
-  , crCI95     :: !(Double, Double)  -- ^ 95% 信頼区間。
+  { crTerm     :: !Text              -- ^ [日本語]: 係数名 (@\"(Intercept)\"@ / 変数名)。 [English]: Coefficient name (@\"(Intercept)\"@ or a variable name).
+  , crEstimate :: !Double            -- ^ [日本語]: 点推定 β̂。 [English]: Point estimate β̂.
+  , crStdErr   :: !Double            -- ^ [日本語]: 標準誤差 SE。 [English]: Standard error SE.
+  , crStat     :: !Double            -- ^ [日本語]: Wald 統計量 β̂\/SE (t or z)。 [English]: Wald statistic β̂\/SE (t or z).
+  , crPValue   :: !Double            -- ^ [日本語]: 両側 p 値。 [English]: Two-sided p value.
+  , crCI95     :: !(Double, Double)  -- ^ [日本語]: 95% 信頼区間。 [English]: 95% confidence interval.
   } deriving (Show, Eq)
 
--- | fit 済モデルの統一係数サマリ。 @coefSummary model@ で全係数の表を得る。
+-- | [日本語]: fit 済モデルの統一係数サマリ。 @coefSummary model@ で全係数の表を得る。
+--   [English]: Unified coefficient summary of a fitted model. Call
+--   @coefSummary model@ to get a table of all coefficients.
 class HasCoefSummary m where
   coefSummary :: m -> [CoefRow]
 
--- | OLS 経路の係数行 (t 分布・df = n − p)。 'lmCoefStats' (SE\/t\/p) を再利用し、
+-- | [日本語]: OLS 経路の係数行 (t 分布・df = n − p)。 'lmCoefStats' (SE\/t\/p) を再利用し、
 --   95% CI は @β̂ ± t_{0.975, df}·SE@。 WLS は √w スケール設計を渡せば正しい。
+--   [English]: Coefficient rows for the OLS path (t distribution, df = n − p).
+--   Reuses 'lmCoefStats' (SE\/t\/p); the 95% CI is @β̂ ± t_{0.975, df}·SE@.
+--   For WLS, passing a √w-scaled design gives the correct result.
 coefRowsLM :: [Text] -> LA.Matrix Double -> FitResult -> [CoefRow]
 coefRowsLM names x res =
   let stats = lmCoefStats x res
@@ -164,8 +198,11 @@ coefRowsLM names x res =
                (b - tc * csSE s, b + tc * csSE s)
      | (nm, b, s) <- zip3 names betas stats ]
 
--- | z 経路の係数行 (正規・GLM\/RLM)。 共分散 Cov から SE = √diag、 z = β̂\/SE、
+-- | [日本語]: z 経路の係数行 (正規・GLM\/RLM)。 共分散 Cov から SE = √diag、 z = β̂\/SE、
 --   両側 p = @2·(1 − Φ(|z|))@、 95% CI = @β̂ ± z_{0.975}·SE@。
+--   [English]: Coefficient rows for the z path (Normal, GLM\/RLM). From the
+--   covariance Cov: SE = √diag, z = β̂\/SE, two-sided p = @2·(1 − Φ(|z|))@,
+--   95% CI = @β̂ ± z_{0.975}·SE@.
 coefRowsZ :: [Text] -> LA.Vector Double -> LA.Matrix Double -> [CoefRow]
 coefRowsZ names beta cov =
   let ses = map (sqrt . max 0) (LA.toList (LA.takeDiag cov))
@@ -175,9 +212,14 @@ coefRowsZ names beta cov =
      | (nm, b, se) <- zip3 names (LA.toList beta) ses
      , let z = if se == 0 then 0 else b / se ]
 
--- | 設計列数に合わせた係数名 (@\"(Intercept)\" : 変数名@)。 加法数値モデル
+-- | [日本語]: 設計列数に合わせた係数名 (@\"(Intercept)\" : 変数名@)。 加法数値モデル
 --   ('additiveFormula' \/ 単純 @y ~ x1 + x2@) では列数が @1 + |dvars|@ と一致するので
 --   変数名をそのまま使う。 factor\/交互作用で列数が増える場合は総称名へフォールバック。
+--   [English]: Coefficient names matching the design column count
+--   (@\"(Intercept)\" : variable names@). For additive numeric models
+--   ('additiveFormula' \/ simple @y ~ x1 + x2@), the column count matches
+--   @1 + |dvars|@, so the variable names are used as-is. When factors\/
+--   interactions increase the column count, falls back to generic names.
 designCoefNames :: Int -> [Text] -> [Text]
 designCoefNames p dvars
   | length dvars == p - 1 = "(Intercept)" : dvars
@@ -224,7 +266,7 @@ instance HasCoefSummary MultiRobustModel where
 --
 -- 解析的 SE を持たないモデル (分位点回帰) や、 罰則化で解析 SE が定義し難い
 -- モデル (Lasso / Ridge 等) に対し、 **case (行) bootstrap** で係数の
--- 不確実性を要約する。 返り値は 'coefSummary' と同型の '[CoefRow]' だが、
+-- 不確実性を要約する。 返り値は @coefSummary@ と同型の '[CoefRow]' だが、
 --
 --   * 'crStdErr' = B 回再標本化した係数の標本 SD
 --   * 'crStat'   = β̂ \/ SE_boot
@@ -234,14 +276,22 @@ instance HasCoefSummary MultiRobustModel where
 -- seed 固定 + ST + MWC なので **純粋・再現可能**。
 -- ===========================================================================
 
--- | bootstrap 係数サマリを持つモデル。 @coefSummaryBoot seed B model@ で
+-- | [日本語]: bootstrap 係数サマリを持つモデル。 @coefSummaryBoot seed B model@ で
 --   B 回の case bootstrap による係数表を得る。
+--   [English]: A model with a bootstrap coefficient summary. Call
+--   @coefSummaryBoot seed B model@ to get a coefficient table from B rounds
+--   of case bootstrap.
 class HasCoefBoot m where
-  -- | @coefSummaryBoot seed B model@: 乱数 seed と replicate 回数 B からサマリ。
+  -- | [日本語]: @coefSummaryBoot seed B model@: 乱数 seed と replicate 回数 B からサマリ。
+  --   [English]: @coefSummaryBoot seed B model@: a summary from the random
+  --   seed and the replicate count B.
   coefSummaryBoot :: Word32 -> Int -> m -> [CoefRow]
 
--- | seed → B → n から、 B 個の「@n@ 個の @[0, n)@ 一様乱数 index リスト」 を作る。
+-- | [日本語]: seed → B → n から、 B 個の「@n@ 個の @[0, n)@ 一様乱数 index リスト」 を作る。
 --   case (行) bootstrap の再標本化 index。 ST + MWC で純粋・seed 固定で再現可能。
+--   [English]: From seed → B → n, builds B lists of "n uniform random
+--   indices in @[0, n)@". These are the resampling indices for case (row)
+--   bootstrap. Pure and reproducible for a fixed seed, via ST + MWC.
 resampleRows :: Word32 -> Int -> Int -> [[Int]]
 resampleRows seed b n
   | n <= 0 || b <= 0 = []
@@ -249,7 +299,9 @@ resampleRows seed b n
       g <- initialize (V.singleton seed)
       replicateM b (replicateM n (uniformR (0, n - 1) g))
 
--- | numpy.percentile (type-7・線形補間) 互換。 @q@ は 0〜100。
+-- | [日本語]: numpy.percentile (type-7・線形補間) 互換。 @q@ は 0〜100。
+--   [English]: Compatible with numpy.percentile (type-7, linear
+--   interpolation). @q@ ranges over 0-100.
 percentileT7 :: [Double] -> Double -> Double
 percentileT7 xs q =
   let sorted = sort xs
@@ -266,13 +318,17 @@ percentileT7 xs q =
 clamp01 :: Double -> Double
 clamp01 = max 0 . min 1
 
--- | (係数名, 点推定 β̂, B 個の replicate β) から係数表を作る。
+-- | [日本語]: (係数名, 点推定 β̂, B 個の replicate β) から係数表を作る。
 --   各係数 j について SE = 標本 SD (n−1 除算・要素 1 未満は 0)、
 --   p 値 = @clamp01 (2 · min(#{<0}\/B, #{>0}\/B))@、 CI = percentile [2.5, 97.5]。
+--   [English]: Builds a coefficient table from (coefficient names, point
+--   estimates β̂, B replicate βs). For each coefficient j: SE = sample SD
+--   (n−1 divisor; 0 for fewer than 1 element), p value =
+--   @clamp01 (2 · min(#{<0}\/B, #{>0}\/B))@, CI = percentile [2.5, 97.5].
 bootCoefRows
-  :: [Text]      -- ^ 係数名。
-  -> [Double]    -- ^ 点推定 β̂ (長さ = 係数数)。
-  -> [[Double]]  -- ^ B 個の replicate β (各長さ = 係数数)。
+  :: [Text]      -- ^ [日本語]: 係数名。 [English]: Coefficient names.
+  -> [Double]    -- ^ [日本語]: 点推定 β̂ (長さ = 係数数)。 [English]: Point estimates β̂ (length = number of coefficients).
+  -> [[Double]]  -- ^ [日本語]: B 個の replicate β (各長さ = 係数数)。 [English]: B replicate βs (each of length = number of coefficients).
   -> [CoefRow]
 bootCoefRows names point reps =
   [ let ests   = [ rep !! j | rep <- reps ]
@@ -301,11 +357,11 @@ tauLabel tau = " (τ=" <> T.pack (showFFloat (Just 2) tau "") <> ")"
 -- τ リスト・係数名 (intercept 込み) から、 τ ごとに行 (係数 × τ) を並べた表。
 quantileBootRows
   :: Word32 -> Int
-  -> LA.Matrix Double          -- ^ 設計行列 X (= [1, x..])。
-  -> LA.Vector Double          -- ^ 応答 y。
-  -> [Double]                  -- ^ τ リスト。
-  -> [(Double, LA.Vector Double)]  -- ^ (τ, 点推定 qfBeta)。
-  -> [Text]                    -- ^ 係数名 (intercept 込み)。
+  -> LA.Matrix Double          -- ^ [日本語]: 設計行列 X (= [1, x..])。 [English]: Design matrix X (= [1, x..]).
+  -> LA.Vector Double          -- ^ [日本語]: 応答 y。 [English]: Response y.
+  -> [Double]                  -- ^ [日本語]: τ リスト。 [English]: List of τ.
+  -> [(Double, LA.Vector Double)]  -- ^ [日本語]: (τ, 点推定 qfBeta)。 [English]: (τ, point estimate qfBeta).
+  -> [Text]                    -- ^ [日本語]: 係数名 (intercept 込み)。 [English]: Coefficient names (including intercept).
   -> [CoefRow]
 quantileBootRows seed b xMat y taus pointBetas names =
   let n        = LA.rows xMat
@@ -357,28 +413,46 @@ instance HasCoefBoot MultiQuantileModel where
 --   * Spline (罰則なし OLS) は **厳密** nested F (曲線 vs 定数)。
 -- ===========================================================================
 
--- | 平滑項 1 つの近似有意性。 'teEdf' は有効自由度、 'teStat' は近似 F、
+-- | [日本語]: 平滑項 1 つの近似有意性。 'teEdf' は有効自由度、 'teStat' は近似 F、
 --   'tePValue' は上側 @F(r, dfRes)@ の確率。
 --   注: フィールド prefix は @te@ (term)。 @tr@ は 'Hanalyze.Stat.Test'
 --   の @TestResult@ が占有しており、 plot umbrella での再 export 衝突を避けるため。
+--   [English]: Approximate significance of one smooth term. 'teEdf' is the
+--   effective degrees of freedom, 'teStat' the approximate F, and
+--   'tePValue' the upper-tail probability of @F(r, dfRes)@.
+--   Note: the field prefix is @te@ (term); @tr@ is already taken by
+--   'Hanalyze.Stat.Test''s @TestResult@, and this avoids a
+--   re-export clash in the plot umbrella.
 data TermRow = TermRow
-  { teTerm   :: !Text    -- ^ 平滑項名 (@\"s(x)\"@ / @\"s(<name>)\"@)。
-  , teEdf    :: !Double  -- ^ 有効自由度 edf。
-  , teStat   :: !Double  -- ^ 近似 F 統計量。
-  , tePValue :: !Double  -- ^ 上側確率 (近似 p 値)。
+  { teTerm   :: !Text    -- ^ [日本語]: 平滑項名 (@\"s(x)\"@ / @\"s(<name>)\"@)。 [English]: Smooth term name (@\"s(x)\"@ \/ @\"s(<name>)\"@).
+  , teEdf    :: !Double  -- ^ [日本語]: 有効自由度 edf。 [English]: Effective degrees of freedom (edf).
+  , teStat   :: !Double  -- ^ [日本語]: 近似 F 統計量。 [English]: Approximate F statistic.
+  , tePValue :: !Double  -- ^ [日本語]: 上側確率 (近似 p 値)。 [English]: Upper-tail probability (approximate p value).
   } deriving (Show, Eq)
 
--- | fit 済の平滑モデルの「項単位」 近似有意性。 @termSummary model@ で各平滑項の
+-- | [日本語]: fit 済の平滑モデルの「項単位」 近似有意性。 @termSummary model@ で各平滑項の
 --   edf + 近似 F + p 値の表を得る。
+--   [English]: Approximate "per-term" significance of a fitted smooth model.
+--   Call @termSummary model@ to get a table of edf + approximate F + p value
+--   for each smooth term.
 class HasTermSummary m where
   termSummary :: m -> [TermRow]
 
--- | GAM の項単位サマリ (mgcv 流 edf + rank-r 擬似逆 Wald 近似 F)。
+-- | [日本語]: GAM の項単位サマリ (mgcv 流 edf + rank-r 擬似逆 Wald 近似 F)。
 --   名前は呼び出し側が与える (@length = length gamBetas@)。
 --
 --   設計列レイアウト: intercept=0、 項 j は @starts!!j .. starts!!j+mSizes!!j-1@。
 --   ★基底の再評価は不要 — 'GAMFit' に格納済の @gamBetas \/ gamCov \/ gamEdf \/
 --   gamLambda \/ gamResid@ のみから算出する。
+--   [English]: GAM's per-term summary (mgcv-style edf + rank-r
+--   pseudoinverse Wald approximate F). Names are supplied by the caller
+--   (@length = length gamBetas@).
+--
+--   Design column layout: intercept=0, term j is
+--   @starts!!j .. starts!!j+mSizes!!j-1@.
+--   Note: no need to re-evaluate the basis — computed solely from what's
+--   already stored in 'GAMFit' (@gamBetas \/ gamCov \/ gamEdf \/
+--   gamLambda \/ gamResid@).
 gamTermRows :: GAMFit -> [Text] -> [TermRow]
 gamTermRows fit names =
   let resid  = gamResid fit
@@ -404,9 +478,13 @@ gamTermRows fit names =
            edfJ  = sum [ fDiag !! k | k <- cols ]
            vBlock = (cov LA.¿ cols) LA.? cols ]   -- cols×cols 共分散ブロック
 
--- | 1 項の rank-r 擬似逆 Wald 統計量から 'TermRow' を作る (mgcv Wood 2013 流)。
+-- | [日本語]: 1 項の rank-r 擬似逆 Wald 統計量から 'TermRow' を作る (mgcv Wood 2013 流)。
 --   r = clamp (round edf) 1 (dim β_j)。 V_j を対称固有分解し上位 r 固有対で
 --   Vr⁻ = Σ_{i≤r} (u_i u_iᵀ)/λ_i。 Tr = β_jᵀ Vr⁻ β_j、 F = Tr / r。
+--   [English]: Builds a 'TermRow' from one term's rank-r pseudoinverse Wald
+--   statistic (mgcv Wood 2013 style). r = clamp (round edf) 1 (dim β_j).
+--   V_j is symmetrically eigendecomposed and, using the top r eigenpairs,
+--   Vr⁻ = Σ_{i≤r} (u_i u_iᵀ)/λ_i. Tr = β_jᵀ Vr⁻ β_j, F = Tr / r.
 termRowFromBlock :: Text -> LA.Vector Double -> LA.Matrix Double -> Double -> Int -> TermRow
 termRowFromBlock nm beta vBlock edf dfResI =
   let mj   = LA.size beta
@@ -460,22 +538,27 @@ instance HasTermSummary SplineModel where
 -- ===========================================================================
 -- 統一玄関 (.summary() 風) — Phase 72.3
 --
--- 既存の 'coefSummary' (Wald・'HasCoefSummary')・'coefSummaryBoot' (bootstrap・
+-- 既存の @coefSummary@ (Wald・'HasCoefSummary')・@coefSummaryBoot@ (bootstrap・
 -- 'HasCoefBoot')・'termSummary' (項有意性・'HasTermSummary') を **1 つのタグ付き
 -- 直和** 'ModelReport' でラップし、 モデル型ごとに適切な診断へディスパッチする
 -- 玄関。 statsmodels の @.summary()@ に相当する「とりあえずこれを呼べば要約が出る」
 -- 入口を提供する (どの診断が該当するかをモデル型側が知っている)。
 -- ===========================================================================
 
--- | モデル要約レポート。 係数表 (Wald も bootstrap も同じ箱) / 平滑項有意性 /
+-- | [日本語]: モデル要約レポート。 係数表 (Wald も bootstrap も同じ箱) / 平滑項有意性 /
 --   該当なし (理由文付き) のタグ付き直和。
+--   [English]: Model summary report. A tagged sum of: a coefficient table
+--   (Wald and bootstrap share the same box) \/ smooth-term significance \/
+--   not applicable (with a reason string).
 data ModelReport
-  = CoefReport [CoefRow]   -- ^ 係数表 (Wald 'coefSummary' か bootstrap 'coefSummaryBoot')。
-  | TermReport [TermRow]   -- ^ GAM\/spline の平滑項有意性 'termSummary'。
-  | NoReport   Text        -- ^ 係数診断が非該当 (理由文)。
+  = CoefReport [CoefRow]   -- ^ [日本語]: 係数表 (Wald 'coefSummary' か bootstrap 'coefSummaryBoot')。 [English]: Coefficient table (either Wald 'coefSummary' or bootstrap 'coefSummaryBoot').
+  | TermReport [TermRow]   -- ^ [日本語]: GAM\/spline の平滑項有意性 'termSummary'。 [English]: GAM\/spline smooth-term significance 'termSummary'.
+  | NoReport   Text        -- ^ [日本語]: 係数診断が非該当 (理由文)。 [English]: Coefficient diagnostics not applicable (reason string).
   deriving (Show, Eq)
 
--- | fit 済モデルの統一要約玄関。 @modelReport model@ で型に応じた 'ModelReport' を得る。
+-- | [日本語]: fit 済モデルの統一要約玄関。 @modelReport model@ で型に応じた 'ModelReport' を得る。
+--   [English]: Unified summary entry point for a fitted model. Call
+--   @modelReport model@ to get a 'ModelReport' appropriate to the type.
 class HasReport m where
   modelReport :: m -> ModelReport
 
@@ -491,12 +574,18 @@ padR w s = T.pack (replicate (max 0 (w - length s)) ' ' <> s)
 padL :: Int -> String -> Text
 padL w s = T.pack (s <> replicate (max 0 (w - length s)) ' ')
 
--- | 'ModelReport' を @.summary()@ 風のテキスト表へ整形する。
+-- | [日本語]: 'ModelReport' を @.summary()@ 風のテキスト表へ整形する。
 --
 --   * 'CoefReport': ヘッダ @term \/ estimate \/ std.err \/ stat \/ p.value \/ [2.5%, 97.5%]@
 --     + 各 'CoefRow' を固定幅で整列 (4 桁)。
 --   * 'TermReport': ヘッダ @term \/ edf \/ F \/ p.value@ + 各 'TermRow'。
 --   * 'NoReport': 理由文をそのまま返す。
+--   [English]: Formats a 'ModelReport' into a @.summary()@-style text table.
+--
+--   * 'CoefReport': header @term \/ estimate \/ std.err \/ stat \/ p.value \/
+--     [2.5%, 97.5%]@ + each 'CoefRow' aligned at fixed width (4 digits).
+--   * 'TermReport': header @term \/ edf \/ F \/ p.value@ + each 'TermRow'.
+--   * 'NoReport': returns the reason string as-is.
 showReport :: ModelReport -> Text
 showReport (NoReport msg) = msg
 showReport (CoefReport rows) =

@@ -63,8 +63,9 @@ saveSVGBound "out.svg" $ df |>> layer (scatter "x" "y") <> toPlot fit
 
 ## アーキテクチャ
 
-`toPlot` / `Plottable` は cabal flag `plot-integration` 配下 (既定 off = standalone・
-upstream portable / on = `Hanalyze.Plot` が `hgg-core` 等に依存)。 依存は
-**一方向 `analyze → plot-core`**。 詳細は [visualization/03-plot-integration](../visualization/03-plot-integration.ja.md)。
+`toPlot` / `Plottable` は別パッケージ `hanalyze-plot` に分離 (`cabal build
+--project-file=cabal.project.plot` でビルド、 メインパッケージは standalone・upstream
+portable のまま = `Hanalyze.Plot` が `hgg-core` 等に依存するのは分離パッケージ側のみ)。
+依存は**一方向 `analyze → plot-core`**。 詳細は [visualization/03-plot-integration](../visualization/03-plot-integration.ja.md)。
 
 → 描画文法の全体: [hgg API リファレンス](../../../hgg/docs/api-guide/README.ja.md)

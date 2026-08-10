@@ -8,7 +8,7 @@
 -- License     : BSD-3-Clause
 --
 -- Safe extraction of numeric / Text vectors from a Hackage @dataframe@
--- ('DXD.DataFrame'). Used widely across @Model.*@ and @Viz.*@.
+-- (@DXD.DataFrame@). Used widely across @Model.*@ and @Viz.*@.
 --
 --   * 'getDoubleVec' — normalize Double / Int / Integer / Maybe Double /
 --     Maybe Int / Maybe Integer / Text columns to @V.Vector Double@. Text values are parsed; if any
@@ -62,12 +62,19 @@ getMaybeTextVec name df =
       Just xs -> Just (V.fromList (map Just xs))
       Nothing -> Nothing
 
--- | 'DX.columnAsList' を例外セーフに呼び出す。型不一致 / null 要素アクセス
--- (Hackage が内部で 'error "fromMaybeVec: Nothing slot"' を投げるケース等)
--- でも 'Nothing' を返す。
+-- | [日本語]: 'DX.columnAsList' を例外セーフに呼び出す。型不一致 / null 要素アクセス
+--   (Hackage が内部で 'error "fromMaybeVec: Nothing slot"' を投げるケース等)
+--   でも 'Nothing' を返す。
 --
--- 重要: 'evaluate' は WHNF までしか評価しないので、リスト要素に潜む 'error'
--- が逃げてくる。'force' を挟んで NF まで詰めてから捕捉する。
+--   重要: 'evaluate' は WHNF までしか評価しないので、リスト要素に潜む 'error'
+--   が逃げてくる。'force' を挟んで NF まで詰めてから捕捉する。
+--   [English]: Calls 'DX.columnAsList' exception-safely. Returns 'Nothing'
+--   even on a type mismatch or a null-element access (e.g. the case where
+--   Hackage internally throws @error "fromMaybeVec: Nothing slot"@).
+--
+--   Important: 'evaluate' only forces to WHNF, so an 'error' lurking inside
+--   a list element can still escape. 'force' is inserted to reduce to NF
+--   before catching it.
 tryColumnAsList
   :: forall a. (DXC.Columnable a, NFData a)
   => Text -> DXD.DataFrame -> Maybe [a]

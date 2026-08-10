@@ -7,7 +7,7 @@
 -- CMA-ES (Covariance Matrix Adaptation Evolution Strategy) — Hansen 2001.
 --
 -- The de-facto state of the art for non-convex continuous optimization.
--- This module implements a **simplified single-stage** version of the
+-- This module implements a __simplified single-stage__ version of the
 -- @(μ/μ_w, λ)@-rank-μ + rank-1 update.
 --
 -- Spec (simplified):
@@ -128,7 +128,8 @@ runCMAESWith cfg fUser m0 gen = do
               Left _   -> pure res
     else pure res
 
--- | 反復本体。
+-- | [日本語]: 反復本体。
+--   [English]: The iteration body.
 loop :: CMAESConfig
      -> ([Double] -> Double)
      -> MWC.GenIO
@@ -180,7 +181,8 @@ loop cfg f gen iter m sigma diag ws lam mu bestV hist
     transposeZs :: [[Double]] -> Int -> [[Double]]
     transposeZs zss j = [ [zs !! j] | zs <- zss ]
 
--- | 重み付きベクトル平均。
+-- | [日本語]: 重み付きベクトル平均。
+--   [English]: Weighted vector average.
 avgWeighted :: [Double] -> [[Double]] -> [Double]
 avgWeighted ws xs =
   let dim = length (head xs)

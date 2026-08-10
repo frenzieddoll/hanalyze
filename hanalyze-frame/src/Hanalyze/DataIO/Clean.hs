@@ -176,7 +176,7 @@ liftCellRule
   :: Text                           -- ^ Info code.
   -> Text                           -- ^ Rule name (for the log).
   -> (Text -> Maybe Double)         -- ^ Cell converter.
-  -> Text                           -- ^ 列名
+  -> Text                           -- ^ [日本語]: 列名。 [English]: Column name.
   -> DXD.DataFrame
   -> (DXD.DataFrame, LogReport)
 liftCellRule code rule fn name df = case getMaybeTextVec name df of
@@ -232,10 +232,15 @@ cleanPipeline ((n, r):rs) df0 =
 -- DataFrame レベル操作
 -- ---------------------------------------------------------------------------
 
--- | Disambiguate duplicate column names by appending @_2@, @_3@, ...
--- (Hackage の DataFrame は重複列を後勝ちでマージするため、ロード前に
--- 行いたい場合は CSV テキスト側で。本関数はロード後の DataFrame に対して
--- 行う suffix 付与で、新しい DataFrame を返す。)
+-- | [日本語]: 重複列名に @_2@, @_3@, ... のサフィックスを付けて曖昧さを解消する
+--   (Hackage の DataFrame は重複列を後勝ちでマージするため、ロード前に
+--   行いたい場合は CSV テキスト側で。本関数はロード後の DataFrame に対して
+--   行う suffix 付与で、新しい DataFrame を返す。)
+--   [English]: Disambiguate duplicate column names by appending @_2@, @_3@, ...
+--   (Hackage's DataFrame merges duplicate columns last-write-wins, so do
+--   this on the CSV text side if you want it done before loading. This
+--   function applies the suffixing after loading and returns a new
+--   DataFrame.)
 dedupeColumns :: DXD.DataFrame -> (DXD.DataFrame, LogReport)
 dedupeColumns df =
   let names = DX.columnNames df
@@ -261,7 +266,8 @@ dedupeColumns df =
                        [ a <> " → " <> b | (a, b) <- changed ])
                 Nothing))
 
--- | 空列名を col0 / col1 / ... で埋める。
+-- | [日本語]: 空列名を col0 / col1 / ... で埋める。
+--   [English]: Fills blank column names with col0 / col1 / ...
 fillBlankNames :: DXD.DataFrame -> (DXD.DataFrame, LogReport)
 fillBlankNames df =
   let names = DX.columnNames df

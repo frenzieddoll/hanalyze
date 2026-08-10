@@ -4,14 +4,26 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- hgg 連携層 — **ロバスト・分位点回帰族** の図化 instance (Phase 71.5)。
+-- [日本語]: hgg 連携層 — __ロバスト・分位点回帰族__ の図化 instance。
 --
--- ⚠ 親 'Hanalyze.Plot' と同じ cabal flag @plot-integration@ (既定 off) を
--- on にしたときのみ build される。 共通基盤 (class / ModelSpec / grid 評価核) は
+-- ⚠ 親 'Hanalyze.Plot' と同じく別パッケージ @hanalyze-plot@ に属し、
+-- @cabal build --project-file=cabal.project.plot@ で build される。 共通基盤 (class / ModelSpec / grid 評価核) は
 -- 'Hanalyze.Plot.Core' を import して取り込む (orphan instance を許容)。
 --
 -- 担当する型 (= M 推定ロバスト回帰・分位点回帰):
 --   RobustModel / MultiRobustModel / QuantileModel / MultiQuantileModel。
+--
+-- [English]: hgg integration layer — plotting instances for the
+-- __robust and quantile regression family__.
+--
+-- ⚠ Lives in the same separate package @hanalyze-plot@ as the parent
+-- 'Hanalyze.Plot', built via @cabal build --project-file=cabal.project.plot@.
+-- It imports the common
+-- foundation (class \/ ModelSpec \/ grid evaluation core) from
+-- 'Hanalyze.Plot.Core' (permitting orphan instances).
+--
+-- Types covered (M-estimator robust regression and quantile regression):
+--   RobustModel \/ MultiRobustModel \/ QuantileModel \/ MultiQuantileModel.
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -66,7 +78,7 @@ instance MultiVarModel MultiRobustModel where
 -- ロバスト回帰 (描画可能)
 --
 -- 'RobustFit' (Hanalyze.Model.Robust) は M-estimator IRLS の係数 'rfCoef' / fitted
--- 'rfFitted' / 最終重み 'rfWeights' (≤ 1、 外れ値ほど小) を持つ。 代表図 ('toPlot') は
+-- 'rfFitted' / 最終重み 'rfWeights' (≤ 1、 外れ値ほど小) を持つ。 代表図 (@toPlot@) は
 -- ロバスト直線 + サンドイッチ CI 帯。 「どの点がダウンウェイトされたか」 は
 -- 'diagnosticPlots' 側で **点サイズ = IRLS 重み** の散布図に encode して見せる。
 -- ===========================================================================
@@ -99,9 +111,14 @@ instance Plottable RobustModel where
        , layer (scatter (inline xs) (inline ys) <> sizeBy (inline ws))
        ]
 
--- | ロバスト回帰の CI 帯。 M 推定量 β̂ の漸近共分散 ('robustCovBeta'・サンドイッチ・
--- statsmodels RLM 一致) から、 評価点 x での @se(ŷ) = √([1,x]·Cov·[1,x]ᵀ)@、
--- 帯 = @μ̂ ∓ z·se@ (z = 正規分位点・RLM は正規で Wald CI)。
+-- | [日本語]: ロバスト回帰の CI 帯。 M 推定量 β̂ の漸近共分散 ('robustCovBeta'・サンドイッチ・
+--   statsmodels RLM 一致) から、 評価点 x での @se(ŷ) = √([1,x]·Cov·[1,x]ᵀ)@、
+--   帯 = @μ̂ ∓ z·se@ (z = 正規分位点・RLM は正規で Wald CI)。
+--   [English]: The robust regression CI band. From the M-estimator β̂'s
+--   asymptotic covariance ('robustCovBeta'; sandwich estimator, matching
+--   statsmodels RLM), compute @se(ŷ) = √([1,x]·Cov·[1,x]ᵀ)@ at evaluation
+--   point x; the band is @μ̂ ∓ z·se@ (z = the normal quantile; RLM uses the
+--   normal distribution for its Wald CI).
 robustBand :: RobustModel -> Double -> [Double] -> ([Double], [Double])
 robustBand m level gxs =
   let fit  = rmFit m
@@ -117,8 +134,11 @@ robustBand m level gxs =
   in ( [ muAt gx - z * seAt gx | gx <- gxs ]
      , [ muAt gx + z * seAt gx | gx <- gxs ] )
 
--- | grid 評価 (Phase 16 C1)。 grid x で β̂·[1, x] を評価しロバスト直線を滑らかに描く。
--- band は 'robustBand' (サンドイッチ CI) を返す (LM と揃えた)。
+-- | [日本語]: grid 評価。 grid x で β̂·[1, x] を評価しロバスト直線を滑らかに描く。
+--   band は 'robustBand' (サンドイッチ CI) を返す (LM と揃えた)。
+--   [English]: Grid evaluation. Evaluates β̂·[1, x] at grid x to draw a
+--   smooth robust regression line. The band comes from 'robustBand'
+--   (sandwich CI), consistent with LM.
 instance SingleVarModel RobustModel where
   svRange m = let xs = LA.toList (rmXraw m) in (minimum xs, maximum xs)
   svGrid m level gxs =
@@ -157,9 +177,15 @@ instance Plottable QuantileModel where
                       <> color (fromHex col))
     in foldMap mkLine (zip [0 ..] (qmFits m))
 
--- | 多変量分位点回帰の代表図 = **第 1 予測子に沿った effect plot** (他予測子は訓練平均に
---   固定)。 各 τ を 1 本の線で色分け重畳する (単変量 'QuantileModel' の τ 別線群の一般化)。
---   分位点回帰は閉形式 CI を持たないため帯はなし。
+-- | [日本語]: 多変量分位点回帰の代表図 = __第 1 予測子に沿った effect plot__ (他予測子は
+--   訓練平均に固定)。 各 τ を 1 本の線で色分け重畳する (単変量 'QuantileModel' の τ 別
+--   線群の一般化)。 分位点回帰は閉形式 CI を持たないため帯はなし。
+--   [English]: The representative plot for multivariate quantile regression
+--   = __an effect plot along the first predictor__ (other predictors held
+--   fixed at their training mean). Each τ is overlaid as a separate
+--   color-coded line (a generalization of the single-variable
+--   'QuantileModel''s per-τ line group). Quantile regression has no
+--   closed-form CI, so there is no band.
 instance Plottable MultiQuantileModel where
   toPlot m =
     case LA.toColumns (mqmX m) of                    -- [1, x₁, …, xₚ]

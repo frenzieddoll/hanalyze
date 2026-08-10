@@ -29,8 +29,8 @@ TASKSET_BIN="$(command -v taskset || echo /usr/sbin/taskset)"
 if [ -x "$TASKSET_BIN" ]; then PIN="$TASKSET_BIN -c 0"; else PIN=""; fi
 
 echo "==[1/4]== hanalyze (haskell) — データ生成 + サンプリング"
-# bench executable は flag benches ガード配下 (既定 off) ゆえ -f benches 必須。
-$PIN cabal run -v0 -f benches bench-hbm-scaling -- ${SUITE_ARG}
+# bench executable は hanalyze-demos package (opt-in project file) 配下 (Phase 109)。
+$PIN cabal run -v0 --project-file=cabal.project.demos bench-hbm-scaling -- ${SUITE_ARG}
 
 echo "==[2/4]== PyMC (PyTensor default)"
 BENCH_NUTS_SAMPLER=pymc $PIN $PY bench/python/bench_hbm_scaling.py ${SUITE_ARG}

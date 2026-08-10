@@ -19,17 +19,23 @@ import Hanalyze.Viz.Core     (PlotConfig (..), OutputFormat, writeSpec)
 import Data.Text    (Text)
 import Graphics.Vega.VegaLite
 
--- | GP 予測プロットを構築する。
+-- | [日本語]: GP 予測プロットを構築する。
 --
--- 描画要素:
---   - 散布点: 訓練データ (trainData)
---   - 青い曲線: 事後平均
---   - 青い帯: 平均 ± 2σ (≈95% 信用区間)
+--   描画要素:
+--     - 散布点: 訓練データ (trainData)
+--     - 青い曲線: 事後平均
+--     - 青い帯: 平均 ± 2σ (≈95% 信用区間)
+--   [English]: Builds the GP prediction plot.
+--
+--   Rendered elements:
+--     - Scatter points: training data (trainData)
+--     - Blue curve: posterior mean
+--     - Blue band: mean ± 2σ (≈95% credible interval)
 gpPlot
   :: PlotConfig
-  -> Text              -- ^ x 軸の列名ラベル
-  -> Text              -- ^ y 軸の列名ラベル
-  -> [(Double, Double)] -- ^ 訓練データ (x, y)
+  -> Text              -- ^ [日本語]: x 軸の列名ラベル。 [English]: X-axis column-name label.
+  -> Text              -- ^ [日本語]: y 軸の列名ラベル。 [English]: Y-axis column-name label.
+  -> [(Double, Double)] -- ^ [日本語]: 訓練データ (x, y)。 [English]: Training data (x, y).
   -> GPResult
   -> VegaLite
 gpPlot cfg xCol yCol trainData res =
@@ -87,7 +93,8 @@ gpPlot cfg xCol yCol trainData res =
           $ []
       ]
 
--- | ファイルに書き出す。
+-- | [日本語]: ファイルに書き出す。
+--   [English]: Writes the plot to a file.
 gpPlotFile
   :: OutputFormat
   -> FilePath

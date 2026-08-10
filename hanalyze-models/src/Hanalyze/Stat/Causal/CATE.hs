@@ -4,7 +4,7 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Conditional Average Treatment Effect (CATE) meta-learners (Phase 30-A4)。
+-- [日本語]: Conditional Average Treatment Effect (CATE) meta-learners。
 --
 -- Künzel et al. (2019) の 3 meta-learner を実装:
 --
@@ -17,6 +17,32 @@
 -- ときは新 constructor を加える。
 --
 -- ## 使い方
+--
+-- @
+--   gen <- MWC.create
+--   r   <- fitCATE TLearner CATELM x t y gen
+--   print (cateATE r)   -- average of cateEstimates
+-- @
+--
+-- Reference:
+--   Künzel, Sekhon, Bickel, Yu (2019) "Metalearners for estimating
+--   heterogeneous treatment effects using machine learning".
+--   PNAS 116:4156-4165.
+--
+-- [English]: Conditional Average Treatment Effect (CATE) meta-learners.
+--
+-- Implements the 3 meta-learners from Künzel et al. (2019):
+--
+-- - 'SLearner': a single model @μ̂(X, T)@, @τ̂(X) = μ̂(X, 1) - μ̂(X, 0)@
+-- - 'TLearner': two models @μ̂_1(X)@ \/ @μ̂_0(X)@, @τ̂(X) = μ̂_1(X) - μ̂_0(X)@
+-- - 'XLearner': regresses the T-learner's residuals again, then averages
+--   with propensity-score weighting
+--
+-- The base learner is chosen from 'CATELM' (= 'Hanalyze.Model.LM')
+-- and 'CATERF' (= 'Hanalyze.Model.RandomForest'). When adding
+-- Causal Forest or similar in the future, add a new constructor.
+--
+-- ## Usage
 --
 -- @
 --   gen <- MWC.create
@@ -50,11 +76,12 @@ import qualified System.Random.MWC          as MWC
 -- 型
 -- ---------------------------------------------------------------------------
 
--- | base learner 選択。 LM は OLS、 RF は Random Forest。
+-- | [日本語]: base learner 選択。 LM は OLS、 RF は Random Forest。
+--   [English]: Base learner selection. LM is OLS, RF is Random Forest.
 data CATEBaseLearner = CATELM | CATERF RF.RFConfig
   deriving (Show)
 
--- | meta-learner 選択。
+-- | [日本語]: meta-learner 選択。 [English]: Meta-learner selection.
 data CATELearner = SLearner | TLearner | XLearner
   deriving (Show, Eq)
 

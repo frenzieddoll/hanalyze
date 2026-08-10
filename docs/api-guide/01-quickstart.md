@@ -26,9 +26,9 @@ Use the universal verb `df |-> lm` to fit, and `toPlot` to overlay a regression 
 {-# LANGUAGE OverloadedStrings #-}
 import qualified Data.Vector              as V
 import           Hanalyze.Plot     (lm, (|->), toPlot)
-import           Hgg.Plot.Spec        (ColData (..), layer, scatter)
-import           Hgg.Plot.Frame       ((|>>))
-import           Hgg.Plot.Backend.SVG (saveSVGBound)
+import           Graphics.Hgg.Spec        (ColData (..), layer, scatter)
+import           Graphics.Hgg.Frame       ((|>>))
+import           Graphics.Hgg.Backend.SVG (saveSVGBound)
 
 main :: IO ()
 main = do
@@ -58,7 +58,7 @@ The left side of `|->` / `|>>` accepts any **`ColumnSource`**. If you can look u
 | `Map Text ColData` | `Map.fromList [("x", NumData …), …]` |
 
 `ColData` has two constructors: numeric column `NumData (V.Vector Double)` and string (categorical) column
-`TxtData (V.Vector Text)` (from [`Hgg.Plot.Spec`](../../src/Hanalyze/Plot.hs)). For plots without data (HBM forest etc.),
+`TxtData (V.Vector Text)` (from [`Graphics.Hgg.Spec`](../../hanalyze-plot/src/Hanalyze/Plot.hs)). For plots without data (HBM forest etc.),
 pass empty source `noDf = [] :: [(Text, ColData)]` ([03 bayesian-hbm](03-bayesian-hbm.md)).
 
 ---

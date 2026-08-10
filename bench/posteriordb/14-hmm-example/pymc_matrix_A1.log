@@ -21,9 +21,9 @@ NUTS[nutpie]: [mu_1, gap, theta1, theta2]
 nutpie+jax     wall=   3331.2ms  ess_bulk(mu_1)= 1165.0  ess/s=  349.72  rhat=1.000
 NUTS[blackjax]: [mu_1, gap, theta1, theta2]
 Traceback (most recent call last):
-  File "<repo>/bench/posteriordb/14-hmm-example/run_pymc_matrix.py", line 49, in <module>
+  File "bench/posteriordb/14-hmm-example/run_pymc_matrix.py", line 49, in <module>
     main()
-  File "<repo>/bench/posteriordb/14-hmm-example/run_pymc_matrix.py", line 37, in main
+  File "bench/posteriordb/14-hmm-example/run_pymc_matrix.py", line 37, in main
     idata = pm.sample(draws=1000, tune=1000, chains=4, cores=1,
             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/home/toshiaki/.virtualenvs/pymc312/lib/python3.12/site-packages/pymc/sampling/mcmc.py", line 995, in sample

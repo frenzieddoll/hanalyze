@@ -5,7 +5,7 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Custom Design の region moment matrix (Phase 28-4)。
+-- [日本語]: Custom Design の region moment matrix。
 --
 -- JMP 同等 I-criterion を実装するための region 積分 M_R を解析的に構築する。
 --
@@ -17,14 +17,38 @@
 --
 -- ## region 規約 (JMP 既定と整合)
 --
---   * Continuous: coded @z ∈ U[-1, 1]@ 独立 (raw range は coded 後の前提で無視)
---   * DiscreteNum xs: xs から等確率に抽出 (有限サポート)
---   * Categorical / Ordinal (K 水準): 等確率
---   * Mixture: 非対応 (Phase 28-4a スコープ外、 簡plex 上の積分は 28-9/28-10
---     候補。 'regionMomentMatrixAnalytic' は Left を返す)
+--   - Continuous: coded @z ∈ U[-1, 1]@ 独立 (raw range は coded 後の前提で無視)
+--   - DiscreteNum xs: xs から等確率に抽出 (有限サポート)
+--   - Categorical / Ordinal (K 水準): 等確率
+--   - Mixture: 非対応 (現状スコープ外、 simplex 上の積分は将来対応予定。
+--     'regionMomentMatrixAnalytic' は Left を返す)
 --
--- 「Compare / Coordinate のどちらからも import される」 ため、 'CustomDesign'
+-- 「Compare / Coordinate のどちらからも import される」 ため、 @CustomDesign@
 -- には依存しない (Factor + Model + Optimal のみ依存)。
+--
+-- [English]: Region moment matrix for Custom Design.
+--
+-- Analytically constructs the region integral M_R needed to implement a
+-- JMP-equivalent I-criterion.
+--
+-- @
+--   I(X) = ∫_R f(z)' (X'X)⁻¹ f(z) dz / vol(R)
+--        = trace( (X'X)⁻¹ · M_R )
+--   M_R = ∫_R f(z) f(z)' dz / vol(R)
+-- @
+--
+-- ## Region conventions (aligned with JMP defaults)
+--
+--   - Continuous: independent coded @z ∈ U[-1, 1]@ (the raw range is
+--     ignored under the assumption of coded values)
+--   - DiscreteNum xs: sampled with equal probability from xs (finite support)
+--   - Categorical \/ Ordinal (K levels): equal probability
+--   - Mixture: not supported (out of scope for now; integration over the
+--     simplex is planned for a future phase. 'regionMomentMatrixAnalytic'
+--     returns Left)
+--
+-- Since this is imported by both Compare and Coordinate, it does not
+-- depend on @CustomDesign@ (only on Factor + Model + Optimal).
 module Hanalyze.Design.Custom.RegionMoment
   ( regionMomentMatrixAnalytic
   , regionMomentMatrixMC
@@ -54,18 +78,27 @@ import qualified Hanalyze.Stat.QuasiRandom as QR
 -- 列構造記述
 -- ---------------------------------------------------------------------------
 
--- | 1 因子分の expand 後寄与。 連続因子なら指数 k (≥ 1)、 categorical/ordinal
--- なら treatment coding の level index l (1..K-1)。
+-- | [日本語]: 1 因子分の expand 後寄与。 連続因子なら指数 k (≥ 1)、 categorical/ordinal
+--   なら treatment coding の level index l (1..K-1)。
+--   [English]: The expanded contribution of a single factor. For a
+--   continuous factor, the exponent k (≥ 1); for categorical\/ordinal, the
+--   treatment-coding level index l (1..K-1).
 data FactorContrib
-  = ContPow  !Int   -- ^ @z_i^k@、 k ≥ 1
-  | CatLevel !Int   -- ^ indicator at level l (1..K-1)
+  = ContPow  !Int   -- ^ [日本語]: @z_i^k@、 k ≥ 1 [English]: @z_i^k@, k ≥ 1
+  | CatLevel !Int   -- ^ [日本語]: level l (1..K-1) の indicator [English]: indicator at level l (1..K-1)
   deriving (Eq, Show)
 
--- | expand 後 1 列の構造記述: 因子 index → 寄与。 map に無い因子は「無寄与 = 1」。
+-- | [日本語]: expand 後 1 列の構造記述: 因子 index → 寄与。 map に無い因子は「無寄与 = 1」。
+--   [English]: Structural description of a single expanded column: factor
+--   index → contribution. A factor absent from the map means "no
+--   contribution = 1".
 type ColDesc = M.Map Int FactorContrib
 
--- | 因子と Model から expand 後の各列の構造記述を 'expandDesignMatrix' と同順で生成。
--- Mixture / TNested は Left。
+-- | [日本語]: 因子と Model から expand 後の各列の構造記述を 'expandDesignMatrix' と同順で生成。
+--   Mixture / TNested は Left。
+--   [English]: Generates the structural description of each expanded
+--   column from the factors and Model, in the same order as
+--   'expandDesignMatrix'. Mixture \/ TNested yield Left.
 columnDescriptors :: [Factor] -> Model -> Either Text [ColDesc]
 columnDescriptors fs model =
   concat <$> traverse (termDescriptors fs) (mTerms model)
@@ -88,8 +121,11 @@ termDescriptors fs (TInter ns)
 termDescriptors _ (TNested _ _) =
   Left (T.pack "regionMomentMatrixAnalytic: TNested not supported (Phase 28-1 候補)")
 
--- | 主効果 (= TMain) 相当の寄与記述。 連続 → 1 個 (ContPow 1)、
--- Categorical K 水準 → K-1 個 (CatLevel 1..K-1)、 Mixture → Left。
+-- | [日本語]: 主効果 (= TMain) 相当の寄与記述。 連続 → 1 個 (ContPow 1)、
+--   Categorical K 水準 → K-1 個 (CatLevel 1..K-1)、 Mixture → Left。
+--   [English]: The contribution description corresponding to a main
+--   effect (= TMain). Continuous → 1 entry (ContPow 1); Categorical with K
+--   levels → K-1 entries (CatLevel 1..K-1); Mixture → Left.
 mainDescs :: [Factor] -> Text -> Either Text [ColDesc]
 mainDescs fs n = do
   (i, f) <- findFactorIdx fs n
@@ -115,8 +151,12 @@ findFactorIdx fs n = case elemIndex n (map fName fs) of
 -- 解析積分 + I-criterion
 -- ---------------------------------------------------------------------------
 
--- | region moment matrix を解析的に構築。 列順は 'expandDesignMatrix' と一致。
--- Mixture / TNested を含むモデルは Left。 categorical 1 水準等で列数 0 のときは 0×0。
+-- | [日本語]: region moment matrix を解析的に構築。 列順は 'expandDesignMatrix' と一致。
+--   Mixture / TNested を含むモデルは Left。 categorical 1 水準等で列数 0 のときは 0×0。
+--   [English]: Analytically constructs the region moment matrix. Column
+--   order matches 'expandDesignMatrix'. Models containing Mixture \/
+--   TNested yield Left. When the column count is 0 (e.g. a categorical
+--   factor with 1 level), returns a 0×0 matrix.
 regionMomentMatrixAnalytic
   :: [Factor] -> Model -> Either Text (LA.Matrix Double)
 regionMomentMatrixAnalytic fs model = do
@@ -134,7 +174,9 @@ regionMomentMatrixAnalytic fs model = do
       in Right (LA.fromLists
                   [ [ ent i j | j <- [0 .. p - 1] ] | i <- [0 .. p - 1] ])
 
--- | 単一因子分の期待値 @E[part_a(z) · part_b(z)]@。
+-- | [日本語]: 単一因子分の期待値 @E[part_a(z) · part_b(z)]@。
+--   [English]: The expectation for a single factor, @E[part_a(z) ·
+--   part_b(z)]@.
 expectFactorProduct
   :: FactorKind -> Maybe FactorContrib -> Maybe FactorContrib -> Double
 expectFactorProduct kind ma mb = case kind of
@@ -184,10 +226,10 @@ catExp k (Just la) (Just lb)
 --   * Categorical / Ordinal (K 水準): 等確率
 
 regionMomentMatrixMC
-  :: Int              -- ^ 希望サンプル数 N (採用後、 採用率次第で短くなる場合あり)
+  :: Int              -- ^ [日本語]: 希望サンプル数 N (採用後、 採用率次第で短くなる場合あり) [English]: Desired sample count N (after acceptance, may end up shorter depending on the acceptance rate)
   -> [Factor]
   -> Model
-  -> [Constraint]     -- ^ rejection sampling filter
+  -> [Constraint]     -- ^ [日本語]: rejection sampling の filter [English]: rejection sampling filter
   -> Either Text (LA.Matrix Double)
 regionMomentMatrixMC nWant fs model cons
   | nWant < 1 = Left (T.pack "regionMomentMatrixMC: N must be >= 1")
@@ -212,8 +254,11 @@ regionMomentMatrixMC nWant fs model cons
                     let nAccD = fromIntegral nAcc :: Double
                     in Right (LA.scale (1 / nAccD) (LA.tr x LA.<> x))
 
--- | Halton 1 次元値 u ∈ [0, 1] を 1 因子の raw 値に写像
--- ('Custom.Compare.mapU01ToFactor' と同等、 module cycle 回避で再実装)。
+-- | [日本語]: Halton 1 次元値 u ∈ [0, 1] を 1 因子の raw 値に写像
+--   ('Custom.Compare.mapU01ToFactor' と同等、 module cycle 回避で再実装)。
+--   [English]: Maps a 1-dimensional Halton value u ∈ [0, 1] to the raw
+--   value of a single factor (equivalent to 'Custom.Compare.mapU01ToFactor';
+--   reimplemented here to avoid a module cycle).
 mapU01ToFactorLocal :: Factor -> Double -> Double
 mapU01ToFactorLocal f u = case fKind f of
   Continuous _ _ -> -1 + 2 * u
@@ -231,8 +276,11 @@ mapU01ToFactorLocal f u = case fKind f of
     in if k <= 0 then 0
                  else fromIntegral (min (k - 1) (floor (u * fromIntegral k)))
 
--- | 1 row が全制約を満たすか
--- ('Custom.Coordinate.rowFeasible' と同等、 module cycle 回避で再実装)。
+-- | [日本語]: 1 row が全制約を満たすか
+--   ('Custom.Coordinate.rowFeasible' と同等、 module cycle 回避で再実装)。
+--   [English]: Whether a single row satisfies all constraints
+--   (equivalent to 'Custom.Coordinate.rowFeasible'; reimplemented here to
+--   avoid a module cycle).
 rowFeasibleLocal :: [Factor] -> [Constraint] -> [Double] -> Bool
 rowFeasibleLocal fs cons row =
   let mkFV f x = case fKind f of
@@ -249,8 +297,11 @@ rowFeasibleLocal fs cons row =
         [ (fName f, mkFV f v) | (f, v) <- zip fs row ]
   in all (checkRowAgainst rowMap) cons
 
--- | region moment matrix を用いた I-criterion: @trace((X'X)⁻¹ · M_R)@。
--- 設計行列が rank-deficient (det(X'X) ≈ 0) なら ∞ を返す (minimize 方向)。
+-- | [日本語]: region moment matrix を用いた I-criterion: @trace((X'X)⁻¹ · M_R)@。
+--   設計行列が rank-deficient (det(X'X) ≈ 0) なら ∞ を返す (minimize 方向)。
+--   [English]: The I-criterion using the region moment matrix:
+--   @trace((X'X)⁻¹ · M_R)@. Returns ∞ (in the minimize direction) if the
+--   design matrix is rank-deficient (det(X'X) ≈ 0).
 iValueRegionM :: LA.Matrix Double -> LA.Matrix Double -> Double
 iValueRegionM mR x
   | LA.rows x == 0 = 1 / 0
@@ -264,14 +315,24 @@ iValueRegionM mR x
 -- IOpt → IOptRegion 解決 (Phase 28-4b)
 -- ---------------------------------------------------------------------------
 
--- | OptCriterion 木を走査し、 'IOpt' を 'IOptRegion mR' に置換する。
--- 'IOptRegion' は once-only に「凍結された M_R」 を持つので、 'Compound' で
--- 入れ子になっていても 1 回 M_R を作って全 IOpt を共有して置換する。
+-- | [日本語]: OptCriterion 木を走査し、 'IOpt' を 'IOptRegion mR' に置換する。
+--   'IOptRegion' は once-only に「凍結された M_R」 を持つので、 'Compound' で
+--   入れ子になっていても 1 回 M_R を作って全 IOpt を共有して置換する。
 --
--- Phase 28-4c: 制約有り (cons 非空) または Mixture 因子を含むとき、
--- 'regionMomentMatrixAnalytic' は Left を返すため自動で
--- 'regionMomentMatrixMC' (Halton quasi-random、 N=10000) に fallback する。
--- IOpt を含まない criterion は M_R 構築をスキップして Right で原型を返す。
+--   制約有り (cons 非空) または Mixture 因子を含むとき、
+--   'regionMomentMatrixAnalytic' は Left を返すため自動で
+--   'regionMomentMatrixMC' (Halton quasi-random、 N=10000) に fallback する。
+--   IOpt を含まない criterion は M_R 構築をスキップして Right で原型を返す。
+--   [English]: Walks the OptCriterion tree and replaces 'IOpt' with
+--   'IOptRegion mR'. Since 'IOptRegion' holds a "frozen M_R" computed
+--   once, even when nested inside 'Compound' the M_R is built a single
+--   time and shared across all IOpt occurrences.
+--
+--   When constraints are present (cons is non-empty) or a Mixture factor
+--   is involved, 'regionMomentMatrixAnalytic' returns Left, so this
+--   automatically falls back to 'regionMomentMatrixMC' (Halton
+--   quasi-random, N=10000). Criteria containing no IOpt skip the M_R
+--   construction and return the original unchanged via Right.
 resolveIOptRegion
   :: [Factor] -> Model -> [Constraint] -> OptCriterion
   -> Either Text OptCriterion
@@ -332,7 +393,9 @@ isPotentialTerm (TInter ns)    = length ns >= 2
 isPotentialTerm (TPower _ k)   = k >= 2
 isPotentialTerm (TNested _ _)  = True
 
--- | 各 term の expand 後 column index 範囲 (Power.termColumnIndices の再実装)。
+-- | [日本語]: 各 term の expand 後 column index 範囲 (Power.termColumnIndices の再実装)。
+--   [English]: The expanded column-index range for each term
+--   (a reimplementation of Power.termColumnIndices).
 termColumnIndicesLocal :: [Factor] -> Model -> [(ModelTerm, [Int])]
 termColumnIndicesLocal fs model = go (mTerms model) 0
   where

@@ -5,7 +5,7 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- JMP \"Fit Y by X\" platform 相当の wrapper。
+-- [日本語]: JMP \"Fit Y by X\" platform 相当の wrapper。
 --
 -- X / Y それぞれが連続 (Continuous) か カテゴリ (Categorical) かで
 -- 適切な解析を自動 dispatch する:
@@ -18,6 +18,21 @@
 -- @
 --
 -- canvas frontend で 「変数 2 つドラッグ → 自動分析」 を支える backend wrapper。
+--
+-- [English]: A wrapper equivalent to JMP's \"Fit Y by X\" platform.
+--
+-- Automatically dispatches to the appropriate analysis depending on
+-- whether X \/ Y are each continuous or categorical:
+--
+-- @
+--   X \\ Y  | Continuous           | Categorical
+--   --------+----------------------+---------------------
+--   Cont    | simple regression (LM) | logistic GLM
+--   Cat     | one-way ANOVA        | chi-square independence
+-- @
+--
+-- The backend wrapper behind the canvas frontend's "drag 2 variables →
+-- auto-analyze".
 module Hanalyze.Model.FitYByX
   ( VarType (..)
   , FitYByXResult (..)
@@ -45,7 +60,7 @@ data VarType
 
 data FitYByXResult
   = FitContCont !Core.FitResult
-    -- ^ 単回帰: y = β₀ + β₁ x
+    -- ^ [日本語]: 単回帰: y = β₀ + β₁ x。 [English]: Simple regression: y = β₀ + β₁ x.
   | FitCatCont  !ST.TestResult ![Double]
     -- ^ one-way ANOVA + group means (group order = sort.nub of x)
   | FitContCat  !Core.FitResult
@@ -58,9 +73,13 @@ data FitYByXResult
 -- 公開 API
 -- ===========================================================================
 
--- | X / Y の型に応じて適切な解析を dispatch する。
+-- | [日本語]: X / Y の型に応じて適切な解析を dispatch する。
 --   入力は両方とも Double Vector。 Categorical の場合は整数値を Double 化
 --   して渡す前提 (例: 0, 1, 2, ...)。
+--   [English]: Dispatches to the appropriate analysis depending on the
+--   types of X \/ Y. Both inputs are Double Vectors; for Categorical,
+--   integer values are assumed to be passed converted to Double (e.g.
+--   0, 1, 2, ...).
 fitYByX
   :: VarType -> VarType
   -> LA.Vector Double      -- ^ X

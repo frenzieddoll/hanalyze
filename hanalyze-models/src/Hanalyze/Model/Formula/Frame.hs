@@ -6,17 +6,38 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Formula DSL — ModelFrame (A16)。 'Formula' AST + 'DataFrame' を突合し、
+-- [日本語]: Formula DSL — ModelFrame (A16)。 'Formula' AST + @DataFrame@ を突合し、
 --   各名前に役割 (応答 / 連続データ変数 / factor) を割り当て、 推定パラメータを分離する。
 --
---   ★設計の要点 (実測で確定): 「factor かどうか」 は **列の型ではなく formula 内の
---   使われ方** で決まる。 すなわち @bg ! group@ のように Index の右オペランドに現れた
+--   ★設計の要点 (実測で確定): 「factor かどうか」 は __formula 内の使われ方__ で決まる
+--   (列の型ではない)。 すなわち @bg ! group@ のように Index の右オペランドに現れた
 --   データ変数を factor とみなす (numeric コードの factor も拾える)。 算術中にのみ現れる
 --   データ変数は連続。 左辺で宣言されていない右辺の自由名 = 推定パラメータ。
 --
 --   基底展開 (@bs ! bspline(x,k)@) の設計行列化や係数ベクトル長の確定は A17
---   ('designMatrixF') に委ねる。 本モジュールは「役割の割り当てとパラメータ抽出」 まで。
+--   (@designMatrixF@) に委ねる。 本モジュールは「役割の割り当てとパラメータ抽出」 まで。
 --   DataFrame 依存ゆえ Formula.hs (純 AST) とは分離 (portable 区分は維持)。
+--
+-- [English]: Formula DSL — ModelFrame (A16). Matches the 'Formula' AST
+--   against a @DataFrame@, assigns each name a role (response \/ continuous
+--   data variable \/ factor), and separates out the parameters to be
+--   estimated.
+--
+--   ★Key design point (confirmed empirically): whether something is a factor
+--   is determined by __how it is used inside the formula__ (not by the
+--   column's type). Namely, a data variable that appears as the right
+--   operand of an Index, such as @bg ! group@, is treated as a factor (this
+--   also catches factors coded as numerics). A data variable that appears
+--   only inside arithmetic is continuous. Free names on the right-hand side
+--   that are not declared on the left-hand side are the parameters to be
+--   estimated.
+--
+--   Building the design matrix for basis expansions (@bs ! bspline(x,k)@)
+--   and fixing the coefficient vector length is left to A17
+--   (@designMatrixF@). This module only goes as far as "role assignment and
+--   parameter extraction." Because it depends on DataFrame, it is kept
+--   separate from Formula.hs (the pure AST) (the portable\/non-portable
+--   split is preserved).
 module Hanalyze.Model.Formula.Frame
   ( VarRole (..)
   , ModelFrame (..)
@@ -47,35 +68,48 @@ import           Hanalyze.Model.Formula  (Formula (..), Term (..))
 -- 役割付き列と ModelFrame
 -- ============================================================================
 
--- | データ変数 (応答含む) の役割。
+-- | [日本語]: データ変数 (応答含む) の役割。
+--   [English]: The role of a data variable (including the response).
 data VarRole
-  = RoleResponse   (V.Vector Double)        -- ^ 応答 y (数値)
-  | RoleContinuous (V.Vector Double)        -- ^ 連続説明変数 (数値)
-  | RoleFactor     [Text] (V.Vector Int)    -- ^ factor: 水準ラベル (昇順) + 行ごとの水準 index
+  = RoleResponse   (V.Vector Double)        -- ^ [日本語]: 応答 y (数値)。 [English]: Response y (numeric).
+  | RoleContinuous (V.Vector Double)        -- ^ [日本語]: 連続説明変数 (数値)。 [English]: Continuous predictor (numeric).
+  | RoleFactor     [Text] (V.Vector Int)    -- ^ [日本語]: factor: 水準ラベル (昇順) + 行ごとの水準 index。 [English]: Factor: level labels (ascending) plus a per-row level index.
   deriving (Eq, Show)
 
--- | AST + data を突合した結果。
+-- | [日本語]: AST + data を突合した結果。
+--   [English]: The result of matching the AST against the data.
 data ModelFrame = ModelFrame
-  { mfRoles  :: [(Text, VarRole)]  -- ^ 応答 + データ変数 → 役割 (応答が先頭、 以降は宣言順)
-  , mfParams :: [Text]             -- ^ 推定パラメータ (右辺自由名 − データ変数、 出現順)
-  , mfNRows  :: Int                -- ^ 行数 (応答列の長さ)
+  { mfRoles  :: [(Text, VarRole)]  -- ^ [日本語]: 応答 + データ変数 → 役割 (応答が先頭、 以降は宣言順)。 [English]: Response + data variables → roles (response first, then declaration order).
+  , mfParams :: [Text]             -- ^ [日本語]: 推定パラメータ (右辺自由名 − データ変数、 出現順)。 [English]: Parameters to estimate (right-hand-side free names minus data variables, in order of appearance).
+  , mfNRows  :: Int                -- ^ [日本語]: 行数 (応答列の長さ)。 [English]: Row count (the response column's length).
   }
   deriving (Eq, Show)
 
--- | 欠損値の扱い方。 NA 検出・除去・補完は ModelFrame の **単一責務点** (spec §2.2)。
+-- | [日本語]: 欠損値の扱い方。 NA 検出・除去・補完は ModelFrame の __単一責務点__ (spec §2.2)。
 --   policy で整形した DataFrame を 'buildFrame' に通すことで、 各 fit 関数に
 --   NA 検出を散らさず一元化する。
+--   [English]: How missing values are handled. NA detection\/removal\/imputation
+--   is ModelFrame's __single point of responsibility__ (spec §2.2). Feeding
+--   the DataFrame shaped by the policy into 'buildFrame' centralizes NA
+--   detection instead of scattering it across each fit function.
 data MissingPolicy
-  = DropRows           -- ^ NA を含む行を全関与列から除外 (listwise deletion、 既定・後方互換)。
-  | Pairwise           -- ^ 線形 OLS では設計行列が成立しないので DropRows に縮退する
-                       --   (相関等の別用途のために policy 値としては保持。 'fitLMF' 等は警告)。
-  | Impute ImputeKind  -- ^ 連続説明変数を平均/中央値で補完。 応答・factor の NA は
+  = DropRows           -- ^ [日本語]: NA を含む行を全関与列から除外 (listwise deletion、 既定・後方互換)。 [English]: Excludes rows containing NA across all involved columns (listwise deletion; default, for backward compatibility).
+  | Pairwise           -- ^ [日本語]: 線形 OLS では設計行列が成立しないので DropRows に縮退する
+                       --   (相関等の別用途のために policy 値としては保持。 @fitLMF@ 等は警告)。
+                       --   [English]: For linear OLS the design matrix cannot be formed, so this
+                       --   degrades to DropRows (kept as a policy value for other uses such as
+                       --   correlation; @fitLMF@ etc. warn).
+  | Impute ImputeKind  -- ^ [日本語]: 連続説明変数を平均/中央値で補完。 応答・factor の NA は
                        --   別 policy 併用が要る (Impute では埋めない)。
-  | TreatAsCategory    -- ^ factor 列の NA を独立水準 @"<NA>"@ として扱う。
-  | ErrorOnMissing     -- ^ 関与列に NA があれば 'Left' (列名 + 件数つき)。
+                       --   [English]: Imputes continuous predictors with the mean\/median. NA in
+                       --   the response\/factors needs a combined additional policy (Impute does
+                       --   not fill them).
+  | TreatAsCategory    -- ^ [日本語]: factor 列の NA を独立水準 @"<NA>"@ として扱う。 [English]: Treats NA in factor columns as its own level, @"<NA>"@.
+  | ErrorOnMissing     -- ^ [日本語]: 関与列に NA があれば 'Left' (列名 + 件数つき)。 [English]: 'Left' (with column name and count) if any involved column has NA.
   deriving (Eq, Show)
 
--- | 'Impute' の補完方式。
+-- | [日本語]: 'Impute' の補完方式。
+--   [English]: The imputation method for 'Impute'.
 data ImputeKind = ImputeMean | ImputeMedian
   deriving (Eq, Show)
 
@@ -83,9 +117,14 @@ data ImputeKind = ImputeMean | ImputeMedian
 -- 解析ヘルパ (AST 走査)
 -- ============================================================================
 
--- | 右辺に現れる全 Ref 名 (出現順、 重複あり)。
---   contrast 注釈 @C(g, Sum)@ は **factor 名 g のみ** を拾う (coding 名 "Sum" は
+-- | [日本語]: 右辺に現れる全 Ref 名 (出現順、 重複あり)。
+--   contrast 注釈 @C(g, Sum)@ は __factor 名 g のみ__ を拾う (coding 名 "Sum" は
 --   推定パラメータでもデータ変数でもないので除外)。
+--   [English]: All Ref names appearing on the right-hand side (in order of
+--   appearance, with duplicates). For a contrast annotation @C(g, Sum)@,
+--   only the __factor name g__ is picked up (the coding name "Sum" is
+--   excluded since it is neither a parameter to estimate nor a data
+--   variable).
 refNames :: Term -> [Text]
 refNames t = case t of
   Ref x               -> [x]
@@ -96,9 +135,14 @@ refNames t = case t of
   Neg a               -> refNames a
   Bin _ a b           -> refNames a ++ refNames b
 
--- | Index の右オペランドに factor として現れた名前 (= factor 候補)。
+-- | [日本語]: Index の右オペランドに factor として現れた名前 (= factor 候補)。
 --   右が @Ref g@ (無注釈 = treatment) または @C(g, coding)@ (contrast 注釈) なら g を拾う。
 --   右が基底展開 App (bspline / poly 等) の場合は factor でない (A17 が扱う) ので拾わない。
+--   [English]: Names appearing as factors in the right operand of an Index
+--   (= factor candidates). If the right side is @Ref g@ (unannotated =
+--   treatment) or @C(g, coding)@ (contrast annotation), g is picked up. If
+--   the right side is a basis-expansion App (bspline \/ poly etc.), it is
+--   not a factor (handled by A17) so it is not picked up.
 indexedVars :: Term -> [Text]
 indexedVars = nub . go
   where
@@ -116,12 +160,17 @@ indexedVars = nub . go
 -- modelFrame
 -- ============================================================================
 
--- | 既定 policy ('DropRows') で 'ModelFrame' を構築する (後方互換: NA 無しデータでは不変)。
+-- | [日本語]: 既定 policy ('DropRows') で 'ModelFrame' を構築する (後方互換: NA 無しデータでは不変)。
+--   [English]: Builds a 'ModelFrame' with the default policy ('DropRows')
+--   (backward compatible: unchanged for data with no NA).
 modelFrame :: Formula -> DX.DataFrame -> Either String ModelFrame
 modelFrame = modelFrameWith DropRows
 
--- | 欠損 'MissingPolicy' を指定して 'ModelFrame' を構築する。
+-- | [日本語]: 欠損 'MissingPolicy' を指定して 'ModelFrame' を構築する。
 --   policy で整形した DataFrame を 'buildFrame' に通す (NA 検出・除去・補完を一元化)。
+--   [English]: Builds a 'ModelFrame' with a given 'MissingPolicy' for
+--   missing values. The DataFrame shaped by the policy is fed into
+--   'buildFrame' (centralizing NA detection\/removal\/imputation).
 modelFrameWith :: MissingPolicy -> Formula -> DX.DataFrame -> Either String ModelFrame
 modelFrameWith policy fml@(Formula resp dvars rhs) df = do
   let involved = resp : dvars
@@ -149,7 +198,9 @@ modelFrameWith policy fml@(Formula resp dvars rhs) df = do
                      <> show stillBad <> " は DropRows か Impute を併用してください"
   buildFrame fml df'
 
--- | 連続列群を平均/中央値で補完。 数値列でなければ 'Left'。
+-- | [日本語]: 連続列群を平均/中央値で補完。 数値列でなければ 'Left'。
+--   [English]: Imputes a set of continuous columns with the mean\/median.
+--   'Left' if a column is not numeric.
 imputeCols :: ImputeKind -> [Text] -> DX.DataFrame -> Either String DX.DataFrame
 imputeCols kind = go
   where
@@ -159,8 +210,12 @@ imputeCols kind = go
       Just d' -> go cs d'
       Nothing -> Left $ "連続変数 '" <> T.unpack c <> "' を数値列として補完できません"
 
--- | factor 列の NA を独立水準 @"<NA>"@ に置換した Text 列で上書きする。
+-- | [日本語]: factor 列の NA を独立水準 @"<NA>"@ に置換した Text 列で上書きする。
 --   非 NA 値は 'showNum' で文字列化 ('columnAsText' の数値→文字列と同形)。
+--   [English]: Overwrites a factor column with a Text column where NA has
+--   been replaced by its own level, @"<NA>"@. Non-NA values are stringified
+--   with 'showNum' (the same form as the numeric-to-string conversion in
+--   'columnAsText').
 naToCategory :: Text -> DX.DataFrame -> DX.DataFrame
 naToCategory c = deriveText c toLbl
   where
@@ -169,7 +224,9 @@ naToCategory c = deriveText c toLbl
       Just (VNum d)                       -> T.pack (showNum d)
       _                                   -> "<NA>"
 
--- | 'Formula' と (policy 適用済) 'DataFrame' を突合して 'ModelFrame' を構築する。
+-- | [日本語]: 'Formula' と (policy 適用済) @DataFrame@ を突合して 'ModelFrame' を構築する。
+--   [English]: Matches a 'Formula' against a (policy-applied) @DataFrame@ to
+--   build a 'ModelFrame'.
 buildFrame :: Formula -> DX.DataFrame -> Either String ModelFrame
 buildFrame (Formula resp dvars rhs) df = do
   -- 応答列 (数値必須)
@@ -196,7 +253,9 @@ buildFrame (Formula resp dvars rhs) df = do
     , mfNRows  = n
     }
 
--- | データ変数 1 つを役割に解決する。 factors に含まれれば factor、 さもなくば連続。
+-- | [日本語]: データ変数 1 つを役割に解決する。 factors に含まれれば factor、 さもなくば連続。
+--   [English]: Resolves a single data variable to its role. Factor if it is
+--   in factors, otherwise continuous.
 resolveVar :: [Text] -> DX.DataFrame -> Text -> Either String VarRole
 resolveVar factors df name
   | name `elem` factors = factorRole name df
@@ -204,8 +263,11 @@ resolveVar factors df name
       maybe (Left $ "連続変数 '" <> T.unpack name <> "' が数値列として見つかりません")
             (Right . RoleContinuous) (getDoubleVec name df)
 
--- | factor 列を水準ラベル (昇順) + 行ごとの水準 index に。
+-- | [日本語]: factor 列を水準ラベル (昇順) + 行ごとの水準 index に。
 --   text 列を優先、 無ければ数値列を文字列化 (numeric コードの factor)。
+--   [English]: Turns a factor column into level labels (ascending) plus a
+--   per-row level index. Prefers a text column; if absent, stringifies a
+--   numeric column (factors coded as numerics).
 factorRole :: Text -> DX.DataFrame -> Either String VarRole
 factorRole name df =
   case columnAsText name df of
@@ -216,19 +278,26 @@ factorRole name df =
           idx    = V.map idxOf col
       in Right (RoleFactor levels idx)
 
--- | 列を [Text] 表現で取得 (factor 水準列挙用)。 text 列優先、 無ければ数値を文字列化。
+-- | [日本語]: 列を [Text] 表現で取得 (factor 水準列挙用)。 text 列優先、 無ければ数値を文字列化。
+--   [English]: Gets a column as a [Text] representation (for enumerating
+--   factor levels). Prefers a text column; if absent, stringifies the
+--   numeric values.
 columnAsText :: Text -> DX.DataFrame -> Maybe (V.Vector Text)
 columnAsText name df =
       getTextVec name df
   <|> (V.map (T.pack . showNum) <$> getDoubleVec name df)
 
--- | 数値を factor 水準ラベル用に文字列化 (整数は小数点なし)。
+-- | [日本語]: 数値を factor 水準ラベル用に文字列化 (整数は小数点なし)。
+--   [English]: Stringifies a number for use as a factor level label
+--   (integers have no decimal point).
 showNum :: Double -> String
 showNum d
   | d == fromIntegral i = show i
   | otherwise           = show d
   where i = round d :: Integer
 
--- | リスト差 (左の出現順を保ち、 右に含まれる要素を除く)。
+-- | [日本語]: リスト差 (左の出現順を保ち、 右に含まれる要素を除く)。
+--   [English]: List difference (preserves the left list's order of
+--   appearance, removing elements contained in the right list).
 minus :: Eq a => [a] -> [a] -> [a]
 minus xs ys = foldl' (\acc x -> if x `elem` ys || x `elem` acc then acc else acc ++ [x]) [] xs

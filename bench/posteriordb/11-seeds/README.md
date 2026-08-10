@@ -23,7 +23,7 @@ BUGS 古典例「種子発芽実験」(Crowder 1978・I=21プレート・2種の
 `tau ~ Gamma(1e-3,1e-3)` は Stan 原典どおりそのまま移植できた。hanalyze の
 `Gamma` は `PositiveT` 変換 (exp系) を持つため、10-rats で発見した
 「`Uniform(0,X)` を SD/precision パラメータに直接使うと HMC が全 warmup
-で発散する罠」(既知の一様事前 sd パラメータ発散パターン) には
+で発散する罠」(`hanalyze-uniform-sd-parameter-trap` memory 参照) には
 該当しない。実測でも初手から正常にサンプリングできた (発散なし)。
 
 ## ファイル
@@ -133,10 +133,8 @@ I=21 プレート規模の小さな階層モデル。当初 Binomial の n が g
 
 ### 図
 
-`figures/hs_dashboard_full.png` /
-`figures/py_dashboard_full.svg`
-
-(図はベンチ実行後に `figures/` へ生成される。リポジトリには含めていない)
+[hs_dashboard_full.png](./figures/hs_dashboard_full.png) /
+[py_dashboard_full.svg](./figures/py_dashboard_full.svg)
 
 ### 既知の課題 (Phase 94 で①②を解消)
 

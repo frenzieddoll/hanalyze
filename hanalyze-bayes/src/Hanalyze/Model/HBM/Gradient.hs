@@ -11,8 +11,8 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Phase 58.8: AD 勾配コンパイラ層を 'Hanalyze.Model.HBM' 本体から分離。
--- IR (中間表現) 層の **上層** であり、 NUTS per-draw の本経路 (compileGradUV →
+-- [日本語]: AD 勾配コンパイラ層を 'Hanalyze.Model.HBM' 本体から分離。
+-- IR (中間表現) 層の __上層__ であり、 NUTS per-draw の本経路 (compileGradUV →
 -- gradVecIR / hybridGradClosure) を担う最ホット モジュール。 unconstrained 空間の
 -- log-joint・解析閉形式勾配 (Gaussian LM ブロック)・ハイブリッド勾配クロージャ・
 -- 定数 prior 解析勾配・制約変換 (invTransformF/logJacF) を含む。
@@ -21,6 +21,21 @@
 -- (gradAD/gradADU/compileGradU/compileGradUV/compileLogPU/compileLogPUV/
 -- getTransforms/logJointUnconstrained/invTransformF/logJacF) は facade
 -- 'Hanalyze.Model.HBM' の export list 経由で再エクスポートされる。
+--
+-- [English]: Splits the AD gradient compiler layer out from the
+-- 'Hanalyze.Model.HBM' main body. It sits __above__ the IR
+-- (intermediate representation) layer, and is the hottest module,
+-- responsible for the main NUTS per-draw path (compileGradUV →
+-- gradVecIR / hybridGradClosure). It contains the log-joint in
+-- unconstrained space, analytic closed-form gradients (Gaussian LM
+-- blocks), hybrid gradient closures, analytic gradients for constant
+-- priors, and constraint transforms (invTransformF/logJacF).
+--
+-- All top-level bindings are exported ('module ... where' means
+-- everything is implicitly public); the public API
+-- (gradAD/gradADU/compileGradU/compileGradUV/compileLogPU/compileLogPUV/
+-- getTransforms/logJointUnconstrained/invTransformF/logJacF) is
+-- re-exported via the facade 'Hanalyze.Model.HBM''s export list.
 module Hanalyze.Model.HBM.Gradient where
 
 import Control.DeepSeq (NFData (..), force)
@@ -94,7 +109,9 @@ instance TrackTag (ADRD.ReverseDouble s)
 -- AD 勾配
 -- ---------------------------------------------------------------------------
 
--- | AD で勾配を計算する。@names@ の順で各パラメータに対する偏微分を返す。
+-- | [日本語]: AD で勾配を計算する。@names@ の順で各パラメータに対する偏微分を返す。
+--   [English]: Computes the gradient with AD. Returns the partial
+--   derivative for each parameter, in the order given by @names@.
 gradAD :: ModelP r -> [Text] -> [Double] -> [Double]
 gradAD m names xs0 = grad f xs0
   where
@@ -102,33 +119,59 @@ gradAD m names xs0 = grad f xs0
       let params = Map.fromList (zip names xs)
       in logJoint m params
 
--- | unconstrained 空間で AD 勾配を計算する (HMC 用)。
+-- | [日本語]: unconstrained 空間で AD 勾配を計算する (HMC 用)。
 -- 各パラメータに制約変換を適用し、Jacobian 補正項込みの log-joint を微分する。
 --
--- Phase 54.4a-54.6: モデルが **Gaussian-恒等リンクの 'ObserveLM' ブロック** を
+-- モデルが __Gaussian-恒等リンクの 'ObserveLM' ブロック__ を
 -- 含む場合、 そのブロックの観測尤度勾配 (= 規模 n に比例する支配項) を解析
 -- 閉形式 (∂β=Xᵀr/σ² 等) で計算し、 prior / jacobian / scalar observe /
--- 非 Gaussian LM は従来 `ad` で計算してから成分加算する (ハイブリッド)。
--- Gaussian LM を含まないモデルは従来通り全体を `ad` で微分 (後方互換)。
+-- 非 Gaussian LM は従来 @ad@ で計算してから成分加算する (ハイブリッド)。
+-- Gaussian LM を含まないモデルは従来通り全体を @ad@ で微分 (後方互換)。
+--   [English]: Computes the AD gradient in unconstrained space (for HMC).
+--   Applies the constraint transform to each parameter and differentiates
+--   the log-joint including the Jacobian correction term.
+--
+--   If the model contains a __Gaussian identity-link 'ObserveLM' block__,
+--   that block's observation-likelihood gradient (the dominant term,
+--   proportional to sample size n) is computed as an analytic closed
+--   form (@∂β=Xᵀr/σ²@ etc.), while the prior / jacobian / scalar observe /
+--   non-Gaussian LM parts are still computed with @ad@ and then added
+--   componentwise (a hybrid approach). A model without any Gaussian LM
+--   block is differentiated in its entirety with @ad@ as before (for
+--   backward compatibility).
 gradADU :: ModelP r -> [Text] -> [Transform] -> [Double] -> [Double]
 gradADU m names trans = compileGradU m names trans
 
--- | 'compileGradUV' の list wrapper (後方互換 API)。 NUTS は vector-native の
+-- | [日本語]: 'compileGradUV' の list wrapper (後方互換 API)。 NUTS は vector-native の
 -- 'compileGradUV' を直接使う。
+--   [English]: A list wrapper around 'compileGradUV' (for backward
+--   compatibility). NUTS uses the vector-native 'compileGradUV' directly.
 compileGradU :: forall r. ModelP r -> [Text] -> [Transform] -> ([Double] -> [Double])
 compileGradU m names trans =
   let gv = compileGradUV m names trans
   in VS.toList . gv . VS.fromList
 
--- | 'compileGradUV' が実際に選ぶ勾配経路のラベル (診断表示用・Phase 91 A4)。
+-- | [日本語]: 'compileGradUV' が実際に選ぶ勾配経路のラベル (診断表示用)。
 -- 'compileGradUV' 本体の分岐順 (gaussLMBlocksAuto → synthVecIR → 全体 ad) を
 -- そのまま反映する唯一の分類子。
 --
--- ★**束縛済モデル** ('hbmModelSpec' 経由) を渡すこと。 生の未束縛モデル
+-- ★__束縛済モデル__ (@hbmModelSpec@ 経由) を渡すこと。 生の未束縛モデル
 -- ('dataNamed*' の既定 @[]@ のまま) を渡すと data 行が空になり、 Gaussian LM
--- 合成も 'collectSymRows' も 0 行となって経路判定が狂う (Phase 91 A4 実測:
+-- 合成も 'collectSymRows' も 0 行となって経路判定が狂う (実測:
 -- 17-nes/12-ark は実際は Gaussian LM 閉形式経路なのに、 生モデルを渡した
 -- 診断が @synthVecIR = Nothing@ と誤表示していた)。
+--   [English]: The label for the gradient path that 'compileGradUV'
+--   actually selects (for diagnostic display). The single classifier
+--   that directly mirrors 'compileGradUV''s own branch order
+--   (gaussLMBlocksAuto → synthVecIR → full ad).
+--
+--   ★Pass a __bound model__ (via @hbmModelSpec@). Passing a raw,
+--   unbound model (still with the default @[]@ for @dataNamed*@) leaves
+--   the data rows empty, so the Gaussian LM synthesis and
+--   'collectSymRows' both see 0 rows and the path decision goes wrong
+--   (measured: 17-nes/12-ark actually take the Gaussian LM closed-form
+--   path, but diagnostics on the raw model misreported
+--   @synthVecIR = Nothing@).
 gradPathLabel :: ModelP r -> String
 gradPathLabel m = case gaussLMBlocksAuto m of
   ([], _) -> case synthVecIR m of
@@ -139,9 +182,15 @@ gradPathLabel m = case gaussLMBlocksAuto m of
     Just _  -> "vecIR (ベクトル式 IR 高速経路)"
   _       -> "Gaussian LM 閉形式ブロック (解析勾配)"
 
--- | Phase 92: 'gradPathLabel' 用の軽量構造判定 — 尤度が単一 'HmmForwardNormal'
+-- | [日本語]: 'gradPathLabel' 用の軽量構造判定 — 尤度が単一 'HmmForwardNormal'
 -- observe か。 param 値は不要 (latent へ 0 を給餌・分布値は強制しない)。
--- 実際の経路選択は 'gradValPlan' 内の 'hmmAnalyticVG' (probe 同型) が行う。
+-- 実際の経路選択は 'gradValPlan' 内の @hmmAnalyticVG@ (probe 同型) が行う。
+--   [English]: A lightweight structural check for 'gradPathLabel' —
+--   whether the likelihood is a single 'HmmForwardNormal' observe.
+--   Parameter values are not needed (0 is fed to the latents; the
+--   distribution values are not forced). The actual path selection is
+--   done by @hmmAnalyticVG@ inside 'gradValPlan' (structurally identical
+--   probe).
 hasHmmObserve :: ModelP r -> Bool
 hasHmmObserve m = case go m of
     Just [HmmForwardNormal {}] -> True
@@ -159,8 +208,11 @@ hasHmmObserve m = case go m of
     go (Free (PlateBegin _ _ next)) = go next
     go (Free (PlateEnd next))       = go next
 
--- | Phase 101: 'gradPathLabel' 用の軽量構造判定 — 尤度が単一 'ArmaNormal'
--- observe か。 実際の経路選択は 'gradValPlan' 内の 'armaAnalyticVG' が行う。
+-- | [日本語]: 'gradPathLabel' 用の軽量構造判定 — 尤度が単一 'ArmaNormal'
+-- observe か。 実際の経路選択は 'gradValPlan' 内の @armaAnalyticVG@ が行う。
+--   [English]: A lightweight structural check for 'gradPathLabel' —
+--   whether the likelihood is a single 'ArmaNormal' observe. The actual
+--   path selection is done by @armaAnalyticVG@ inside 'gradValPlan'.
 hasArmaObserve :: ModelP r -> Bool
 hasArmaObserve m = case go m of
     Just [ArmaNormal {}] -> True
@@ -178,9 +230,13 @@ hasArmaObserve m = case go m of
     go (Free (PlateBegin _ _ next)) = go next
     go (Free (PlateEnd next))       = go next
 
--- | Phase 101: 'gradPathLabel' 用の軽量構造判定 — 尤度が単一
+-- | [日本語]: 'gradPathLabel' 用の軽量構造判定 — 尤度が単一
 -- 'GradedResponseIrt' observe か。 実際の経路選択は 'gradValPlan' 内の
--- 'gradedIrtAnalyticVG' が行う。
+-- @gradedIrtAnalyticVG@ が行う。
+--   [English]: A lightweight structural check for 'gradPathLabel' —
+--   whether the likelihood is a single 'GradedResponseIrt' observe. The
+--   actual path selection is done by @gradedIrtAnalyticVG@ inside
+--   'gradValPlan'.
 hasGradedIrtObserve :: ModelP r -> Bool
 hasGradedIrtObserve m = case go m of
     Just [GradedResponseIrt {}] -> True
@@ -202,16 +258,17 @@ hasGradedIrtObserve m = case go m of
 -- Phase 95 A6: dense MvNormal observe の解析随伴 (detach) 経路
 -- ---------------------------------------------------------------------------
 
--- | Phase 95 A6: 尤度が **単一 'MvNormal' observe** のモデル (GP 回帰・
--- dense-MvNormal) の value+grad を **解析随伴 (detach トリック)** で計算する
+-- | [日本語]: 尤度が __単一 'MvNormal' observe__ のモデル (GP 回帰・
+-- dense-MvNormal) の value+grad を __解析随伴 (detach トリック)__ で計算する
 -- クロージャを構築する。 'mvNormalObserveOf' が 'Just' のとき (= 適格) のみ
 -- 'Just' を返し、 非適格なら 'Nothing' (呼び出し側は従来 walk+ad へ)。
 --
 -- === なぜ速いか
--- 現行 walk+ad は N×N Cholesky + solve + logdet を **毎 leapfrog で reverse-AD
--- tape 上に丸ごと展開**する (O(N³) のスカラー演算が各々 boxed AD ノードを alloc)。
+-- 現行 walk+ad は N×N Cholesky + solve + logdet を毎 leapfrog で
+-- __reverse-AD tape 上に丸ごと展開__する (O(N³) のスカラー演算が各々 boxed AD
+-- ノードを alloc)。
 -- 大 N で壊滅的 (§A4: N=50 で対 PyMC 62×)。 本経路は PyMC/Stan と同じく
--- **Cholesky を AD tape に載せず** Σ⁻¹/logdet を LAPACK で 1 度だけ Double 計算し、
+-- __Cholesky を AD tape に載せず__ Σ⁻¹/logdet を LAPACK で 1 度だけ Double 計算し、
 -- @G = ∂logp/∂Σ@・@h = ∂logp/∂μ@ を定数化して surrogate @<G,Σ(θ)>+<h,μ(θ)>@ の
 -- 軽量 ad (O(N²)・cholesky 無し) だけを微分する。
 --
@@ -227,9 +284,51 @@ hasGradedIrtObserve m = case go m of
 --
 -- === 常時 ON (次元しきい値なし)
 -- 解析随伴は近似でなく厳密ゆえ正しさゲート不要。 PyMC/Stan も Cholesky Op の
--- 解析随伴を **常時**使う (次元しきい値を持たない)。 小 N (N≲40) では list 往復の
+-- 解析随伴を __常時__使う (次元しきい値を持たない)。 小 N (N≲40) では list 往復の
 -- 定数倍で ad-through と拮抗〜僅遅だが (§A3-proto crossover ≈N40-50)、 該当する
--- shipping モデルは無い。 その帯の overhead 除去 (surrogate 配列化) は TODO (§A6)。
+-- shipping モデルは無い。 その帯の overhead 除去 (surrogate 配列化) は TODO。
+--
+--   [English]: For a model whose likelihood is a
+--   __single 'MvNormal' observe__ (GP regression / dense MvNormal),
+--   builds a closure that computes the value+grad via an
+--   __analytic adjoint (the detach trick)__. Returns 'Just' only when
+--   'mvNormalObserveOf' returns 'Just' (i.e., the model qualifies);
+--   otherwise 'Nothing' (the caller falls back to the usual walk+ad).
+--
+--   === Why it's fast
+--   The current walk+ad approach
+--   __unrolls the N×N Cholesky + solve + logdet entirely onto the reverse-AD tape on every leapfrog step__
+--   (its O(N³) scalar operations each allocate a boxed AD node). This is
+--   devastating for large N (§A4: at N=50, 62x slower than PyMC). This
+--   path, like PyMC/Stan, __never puts the Cholesky on the AD tape__:
+--   it computes Σ⁻¹/logdet as plain Doubles exactly once via LAPACK,
+--   treats @G = ∂logp/∂Σ@ and @h = ∂logp/∂μ@ as constants, and
+--   differentiates only the lightweight surrogate
+--   @<G,Σ(θ)>+<h,μ(θ)>@ (O(N²), no Cholesky).
+--
+--   === Math (detach)
+--   For one observation (a k-vector), given
+--   @logp = -k/2·log2π - 0.5·log|Σ| - 0.5·(y-μ)ᵀΣ⁻¹(y-μ)@, let
+--   @α = Σ⁻¹(y-μ)@, @∂logp/∂Σ = 0.5(ααᵀ - Σ⁻¹)@, @∂logp/∂μ = α@. For
+--   multiple chunks, @G = 0.5(Σ_m α_mα_mᵀ - nCh·Σ⁻¹)@,
+--   @h = Σ_m α_m@. By the chain rule, the θ-gradient of the surrogate
+--   @<G,Σ(θ)>+<h,μ(θ)>@ matches @∂logp/∂θ@ exactly (prototype: finite
+--   difference 2.8e-9, ad-through 2.2e-15). Since @θ=invTransform(u)@
+--   is built into the surrogate, @∂/∂u@ is obtained directly.
+--
+--   Total gradient = @grad(logPrior+logJac)@ (scalar, cheap) +
+--   @detach(observe)@. Value = @(logPrior+logJac)@ + @logp_MvNormal@
+--   (from the same LAPACK factorization).
+--
+--   === Always on (no dimension threshold)
+--   The analytic adjoint is exact, not an approximation, so no
+--   correctness gate is needed. PyMC/Stan also use the Cholesky op's
+--   analytic adjoint __unconditionally__ (with no dimension threshold).
+--   For small N (N≲40) the constant overhead of round-tripping through
+--   lists makes it roughly on par with, or marginally slower than,
+--   ad-through (§A3-proto crossover ≈N40-50), but no shipping model
+--   falls in that range. Removing that overhead (by arraying the
+--   surrogate) is a follow-up TODO.
 mvNormalAnalyticVG
   :: forall r. ModelP r -> [Text] -> [Transform]
   -> Maybe (VS.Vector Double -> (Double, VS.Vector Double))
@@ -328,9 +427,14 @@ mvNormalAnalyticVG m names trans =
 -- Phase 95 B-dsl: GP (RBF) 尤度の閉形式随伴 (Cholesky を AD tape に載せない)
 -- ---------------------------------------------------------------------------
 
--- | Phase 95 B-dsl: 尤度が **単一 'MvNormalGpRBF' observe** のモデルから
+-- | [日本語]: 尤度が __単一 @MvNormalGpRBF@ observe__ のモデルから
 -- @(x, α, ρ, σ, ys)@ を現在の param 値で抽出する。 それ以外 (他 Observe/
 -- ObserveLM 混在・非 GpRBF) は 'Nothing'。 walk は 'mvNormalObserveOf' と同型。
+--   [English]: For a model whose likelihood is a
+--   __single @MvNormalGpRBF@ observe__, extracts @(x, α, ρ, σ, ys)@
+--   at the current parameter values. Otherwise (other Observe/ObserveLM
+--   mixed in, or not GpRBF) returns 'Nothing'. The walk has the same
+--   shape as 'mvNormalObserveOf'.
 gpRBFObserveOf :: (Floating a, Ord a)
                => Model a r -> Map Text a -> Maybe ([a], a, a, a, [Double])
 gpRBFObserveOf model params =
@@ -352,24 +456,54 @@ gpRBFObserveOf model params =
     go (Free (PlateBegin _ _ next)) = go next
     go (Free (PlateEnd next))       = go next
 
--- | Phase 95 B-dsl: 'MvNormalGpRBF' 尤度の value+grad を **閉形式随伴**で計算する
+-- | [日本語]: @MvNormalGpRBF@ 尤度の value+grad を __閉形式随伴__で計算する
 -- クロージャを構築する。 適格 (単一 GpRBF observe) のときのみ 'Just'。
 --
 -- === A案 (汎用 detach) との差 = 84% の除去
--- A案 (§mvNormalAnalyticVG) は surrogate @<G,Σ(θ)>@ を **AD で微分**するため、
+-- A案 (§mvNormalAnalyticVG) は surrogate @<G,Σ(θ)>@ を __AD で微分__するため、
 -- 毎 leaf で Σ(θ) を @[[a]]@ で組み直し (profile: gpExpQuadCov 55%) その全 N²
 -- ノードを reverse-AD tape に載せていた (reifyTypeable+partials 29%)。 本経路は:
 --
---   1. カーネル役割 (x/α/ρ/σ) が 'MvNormalGpRBF' の型で明示されているので、
---      **∂Σ/∂θ を閉形式** (@∂Σ/∂α=2K'/α@・@∂Σ/∂ρ=K'∘d²/ρ³@・@∂Σ/∂σ=I@) で書ける。
---   2. G=∂logp/∂Σ・K'・d² は **hmatrix Matrix** (脱リスト) で計算し、
---      @g_θ = <G,∂Σ/∂θ>@ を要素積 + trace で Double 算出 (**AD tape ゼロ**)。
---   3. u への連鎖律は **軽量 surrogate** @g_α·α(u)+g_ρ·ρ(u)+g_σ·σ(u)@ を ad。
---      ad は α/ρ/σ の **3 scalar 抽出のみ** (cov は非展開・lazy)。 これで
+--   1. カーネル役割 (x/α/ρ/σ) が @MvNormalGpRBF@ の型で明示されているので、
+--      __∂Σ/∂θ を閉形式__ (@∂Σ/∂α=2K'/α@・@∂Σ/∂ρ=K'∘d²/ρ³@・@∂Σ/∂σ=I@) で書ける。
+--   2. G=∂logp/∂Σ・K'・d² は __hmatrix Matrix__ (脱リスト) で計算し、
+--      @g_θ = <G,∂Σ/∂θ>@ を要素積 + trace で Double 算出 (__AD tape ゼロ__)。
+--   3. u への連鎖律は __軽量 surrogate__ @g_α·α(u)+g_ρ·ρ(u)+g_σ·σ(u)@ を ad。
+--      ad は α/ρ/σ の __3 scalar 抽出のみ__ (cov は非展開・lazy)。 これで
 --      「どの u が α/ρ/σ か」の対応付けを AD が自動処理する (名前直書き不要)。
 --   4. 値 logp と Σ⁻¹/logdet は同じ LAPACK 分解 (@invlndet@) から。
 --
--- 距離行列 d² は x (data・定数) から **build 時に 1 度だけ**作り、全 leaf で再利用。
+-- 距離行列 d² は x (data・定数) から __build 時に 1 度だけ__作り、全 leaf で再利用。
+--
+--   [English]: Builds a closure that computes the value+grad of the
+--   @MvNormalGpRBF@ likelihood via a __closed-form adjoint__. Returns
+--   'Just' only when the model qualifies (a single GpRBF observe).
+--
+--   === Difference from plan A (generic detach) = 84% removed
+--   Plan A (§mvNormalAnalyticVG)
+--   __differentiates the surrogate @<G,Σ(θ)>@ with AD__, so at every
+--   leaf it rebuilds Σ(θ) as
+--   @[[a]]@ (profile: gpExpQuadCov 55%) and puts all of its N² nodes
+--   on the reverse-AD tape (reifyTypeable+partials 29%). This path
+--   instead:
+--
+--   1. Since the kernel's roles (x/α/ρ/σ) are made explicit by
+--      'MvNormalGpRBF''s type, __∂Σ/∂θ can be written in closed form__
+--      (@∂Σ/∂α=2K'/α@, @∂Σ/∂ρ=K'∘d²/ρ³@, @∂Σ/∂σ=I@).
+--   2. G=∂logp/∂Σ, K', and d² are computed as __hmatrix Matrix__
+--      values (delisted), and @g_θ = <G,∂Σ/∂θ>@ is obtained as a
+--      Double via elementwise product + trace (__zero AD tape__).
+--   3. The chain rule into u is applied by ad-differentiating a
+--      __lightweight surrogate__ @g_α·α(u)+g_ρ·ρ(u)+g_σ·σ(u)@; ad
+--      only has to extract __3 scalars__ (α/ρ/σ; the covariance is
+--      never expanded, staying lazy). This lets AD automatically
+--      handle "which u corresponds to α/ρ/σ" (no hardcoded names
+--      needed).
+--   4. The value logp and Σ⁻¹/logdet come from the same LAPACK
+--      factorization (@invlndet@).
+--
+--   The squared-distance matrix d² is built __once, at build time__,
+--   from x (data, a constant), and reused across all leaves.
 gpRBFAnalyticVG
   :: forall r. ModelP r -> [Text] -> [Transform]
   -> Maybe (VS.Vector Double -> (Double, VS.Vector Double))
@@ -478,9 +612,14 @@ gpRBFAnalyticVG m names trans =
 -- Phase 92 A2: HMM forward 尤度の閉形式随伴 (forward-backward・AD tape ゼロ)
 -- ---------------------------------------------------------------------------
 
--- | Phase 92 A2: 尤度が **単一 'HmmForwardNormal' observe** のモデルから
+-- | [日本語]: 尤度が __単一 'HmmForwardNormal' observe__ のモデルから
 -- @(π_0, trans, μs, σ, ys)@ を現在の param 値で抽出する。 それ以外 (他 Observe/
 -- ObserveLM 混在・非 HMM) は 'Nothing'。 walk は 'gpRBFObserveOf' と同型。
+--   [English]: For a model whose likelihood is a
+--   __single 'HmmForwardNormal' observe__, extracts
+--   @(π_0, trans, μs, σ, ys)@ at the current parameter values.
+--   Otherwise (other Observe/ObserveLM mixed in, or not HMM) returns
+--   'Nothing'. The walk has the same shape as 'gpRBFObserveOf'.
 hmmObserveOf :: (Floating a, Ord a)
              => Model a r -> Map Text a -> Maybe ([a], [[a]], [a], a, [Double])
 hmmObserveOf model params =
@@ -502,23 +641,51 @@ hmmObserveOf model params =
     go (Free (PlateBegin _ _ next)) = go next
     go (Free (PlateEnd next))       = go next
 
--- | Phase 92 A2: 'HmmForwardNormal' 尤度の value+grad を **forward-backward の
--- 閉形式随伴**で計算するクロージャを構築する。 適格 (単一 HMM observe) のとき
--- のみ 'Just'。 構成は 'gpRBFAnalyticVG' と同じ 3 段:
+-- | [日本語]: 'HmmForwardNormal' 尤度の value+grad を
+-- __forward-backward の閉形式随伴__で計算するクロージャを構築する。
+-- 適格 (単一 HMM observe) のときのみ 'Just'。 構成は @gpRBFAnalyticVG@ と同じ 3 段:
 --
---   1. forward α / backward β を **Double 空間** (AD tape 外) で 1 回ずつ回し、
+--   1. forward α / backward β を __Double 空間__ (AD tape 外) で 1 回ずつ回し、
 --      値 @logL = logSumExp_k α_T[k]@ と閉形式随伴
 --      @∂logL/∂μ_k = Σ_t γ_t[k]·(y_t-μ_k)/σ²@ (γ_t[k]=exp(α_t+β_t-logL))・
 --      @∂logL/∂T_ij = Σ_t exp(α_t[i]+emit_{t+1}[j]+β_{t+1}[j]-logL)@ (ξ 集計)・
 --      @∂logL/∂π_k = γ_0[k]/π_k@・σ も同様、 を Double で算出する。
---   2. u への連鎖律は **軽量 surrogate** @Σ g_θ·θ(u)@ を ad。 ad は
---      π/T/μ/σ の **O(K²) scalar 抽出のみ** (T 長の forward loop は非展開)。
+--   2. u への連鎖律は __軽量 surrogate__ @Σ g_θ·θ(u)@ を ad。 ad は
+--      π/T/μ/σ の __O(K²) scalar 抽出のみ__ (T 長の forward loop は非展開)。
 --      dirichlet の棒折り deterministic 等の合成は AD が自動処理する。
 --   3. prior + logJac は 'logPrior' ベースの fRest (走査対象から尤度を除外)。
 --
 -- 従来 walk+ad は T×K² 個の logSumExp/logDensity を毎 leapfrog boxed AD で
--- 再評価していた (Phase 92 A1d: 数値密度系 84% + AD 6%・alloc 23.7GB/5s)。
+-- 再評価していた (数値密度系 84% + AD 6%・alloc 23.7GB/5s)。
 -- 本経路は同じ O(TK²) を unboxed Double で 2 パス回すだけで tape に載せない。
+--
+--   [English]: Builds a closure that computes the value+grad of the
+--   'HmmForwardNormal' likelihood via a
+--   __closed-form forward-backward adjoint__. Returns 'Just' only when
+--   the model qualifies (a single HMM observe). The construction has
+--   the same 3 stages as @gpRBFAnalyticVG@:
+--
+--   1. Run forward α / backward β once each in __Double space__
+--      (outside the AD tape), and compute the value
+--      @logL = logSumExp_k α_T[k]@ along with the closed-form adjoints
+--      @∂logL/∂μ_k = Σ_t γ_t[k]·(y_t-μ_k)/σ²@ (where
+--      γ_t[k]=exp(α_t+β_t-logL)),
+--      @∂logL/∂T_ij = Σ_t exp(α_t[i]+emit_{t+1}[j]+β_{t+1}[j]-logL)@
+--      (a ξ aggregate), and @∂logL/∂π_k = γ_0[k]/π_k@ (σ likewise), all
+--      in Double.
+--   2. The chain rule into u is applied by ad-differentiating a
+--      __lightweight surrogate__ @Σ g_θ·θ(u)@; ad only has to extract
+--      __O(K²) scalars__ for π/T/μ/σ (the length-T forward loop is
+--      never expanded). AD automatically handles compositions such as
+--      the Dirichlet stick-breaking deterministic.
+--   3. The prior + logJac term is 'logPrior'-based fRest (excluding the
+--      likelihood from the traversal).
+--
+--   The previous walk+ad approach re-evaluated T×K² logSumExp/logDensity
+--   calls with boxed AD on every leapfrog step (numerical density
+--   family 84% + AD 6%, alloc 23.7GB/5s). This path instead runs the
+--   same O(TK²) work as two passes over unboxed Doubles, never touching
+--   the tape.
 hmmAnalyticVG
   :: forall r. ModelP r -> [Text] -> [Transform]
   -> Maybe (VS.Vector Double -> (Double, VS.Vector Double))
@@ -630,7 +797,7 @@ hmmAnalyticVG m names trans =
     safeLog :: Double -> Double
     safeLog x = if x <= 0 then negInf else log x
 
-    -- prior + logJac (尤度除く) — 'gpRBFAnalyticVG' と同じ。
+    -- prior + logJac (尤度除く) — @gpRBFAnalyticVG@ と同じ。
     fRestA :: (Floating a, Ord a, TrackTag a) => [a] -> a
     fRestA us = logPrior m (paramMapOf us)
                   + sum [ logJacF t u | (t, u) <- zip trans us ]
@@ -656,9 +823,14 @@ hmmAnalyticVG m names trans =
 -- Phase 101 A2: ARMA(1,1) 尤度の閉形式随伴 (逆向き随伴再帰・AD tape ゼロ)
 -- ---------------------------------------------------------------------------
 
--- | Phase 101 A2: 尤度が **単一 'ArmaNormal' observe** のモデルから
+-- | [日本語]: 尤度が __単一 'ArmaNormal' observe__ のモデルから
 -- @(μ, φ, θ, σ, ys)@ を現在の param 値で抽出する。 それ以外 (他 Observe 混在・
 -- 非 ARMA) は 'Nothing'。 walk は 'hmmObserveOf' と同型。
+--   [English]: For a model whose likelihood is a
+--   __single 'ArmaNormal' observe__, extracts @(μ, φ, θ, σ, ys)@ at
+--   the current parameter values. Otherwise (other Observe mixed in,
+--   or not ARMA) returns 'Nothing'. The walk has the same shape as
+--   'hmmObserveOf'.
 armaObserveOf :: (Floating a, Ord a)
               => Model a r -> Map Text a -> Maybe (a, a, a, a, [Double])
 armaObserveOf model params =
@@ -680,25 +852,53 @@ armaObserveOf model params =
     go (Free (PlateBegin _ _ next)) = go next
     go (Free (PlateEnd next))       = go next
 
--- | Phase 101 A2: 'ArmaNormal' 尤度の value+grad を **逆向き 1 パスの閉形式
--- 随伴**で計算するクロージャを構築する。 適格 (単一 ArmaNormal observe) の
--- ときのみ 'Just'。 構成は 'hmmAnalyticVG' と同じ 3 段:
+-- | [日本語]: 'ArmaNormal' 尤度の value+grad を
+-- __逆向き 1 パスの閉形式随伴__で計算するクロージャを構築する。
+-- 適格 (単一 ArmaNormal observe) のときのみ 'Just'。 構成は @hmmAnalyticVG@ と同じ 3 段:
 --
 --   1. err 前向き再帰 (@e_1 = y_1 − (μ+φμ)@・@e_t = y_t − μ − φ·y_{t−1} −
 --      θ·e_{t−1}@) と随伴の逆向き再帰 (@ē_t = −e_t/σ² − θ·ē_{t+1}@・
---      @ē_T = −e_T/σ²@) を **Double 空間** (AD tape 外) で 1 回ずつ回し、
+--      @ē_T = −e_T/σ²@) を __Double 空間__ (AD tape 外) で 1 回ずつ回し、
 --      値 @logL = Σ_t log N(e_t; 0, σ)@ と閉形式随伴
 --      @∂logL/∂μ = ē_1·(−(1+φ)) − Σ_{t≥2} ē_t@・
 --      @∂logL/∂φ = ē_1·(−μ) − Σ_{t≥2} ē_t·y_{t−1}@・
 --      @∂logL/∂θ = −Σ_{t≥2} ē_t·e_{t−1}@・
 --      @∂logL/∂σ = −T/σ + (Σ_t e_t²)/σ³@ を算出する。
---   2. u への連鎖律は **軽量 surrogate** @Σ g_θ·θ(u)@ を ad (μ/φ/θ/σ の
+--   2. u への連鎖律は __軽量 surrogate__ @Σ g_θ·θ(u)@ を ad (μ/φ/θ/σ の
 --      4 scalar 抽出のみ・T 長の再帰は非展開)。
---   3. prior + logJac は 'logDensityRD' 注入の fRestRD (Phase 92 B3 と同じ)。
+--   3. prior + logJac は 'logDensityRD' 注入の fRestRD (前述の @hmmAnalyticVG@
+--      と同じ手法)。
 --
--- 従来 walk+ad は T 本の 'logDensity' + mapAccumL 再帰を毎 leapfrog boxed AD
--- で再評価していた (Phase 101 A1: logDensity 31.2% + armaModel 20.9%・
+-- 従来 walk+ad は T 本の @logDensity@ + mapAccumL 再帰を毎 leapfrog boxed AD
+-- で再評価していた (logDensity 31.2% + armaModel 20.9%・
 -- alloc 72%)。 本経路は同じ O(T) を unboxed Double で 2 パス回すだけ。
+--
+--   [English]: Builds a closure that computes the value+grad of the
+--   'ArmaNormal' likelihood via a
+--   __closed-form, single reverse-pass adjoint__. Returns 'Just' only
+--   when the model qualifies (a single ArmaNormal observe). The
+--   construction has the same 3 stages as @hmmAnalyticVG@:
+--
+--   1. Run the err forward recursion (@e_1 = y_1 − (μ+φμ)@,
+--      @e_t = y_t − μ − φ·y_{t−1} − θ·e_{t−1}@) and the adjoint's
+--      backward recursion (@ē_t = −e_t/σ² − θ·ē_{t+1}@,
+--      @ē_T = −e_T/σ²@) once each in __Double space__ (outside the AD
+--      tape), and compute the value @logL = Σ_t log N(e_t; 0, σ)@
+--      along with the closed-form adjoints
+--      @∂logL/∂μ = ē_1·(−(1+φ)) − Σ_{t≥2} ē_t@,
+--      @∂logL/∂φ = ē_1·(−μ) − Σ_{t≥2} ē_t·y_{t−1}@,
+--      @∂logL/∂θ = −Σ_{t≥2} ē_t·e_{t−1}@, and
+--      @∂logL/∂σ = −T/σ + (Σ_t e_t²)/σ³@.
+--   2. The chain rule into u is applied by ad-differentiating a
+--      __lightweight surrogate__ @Σ g_θ·θ(u)@ (extracting only the 4
+--      scalars μ/φ/θ/σ; the length-T recursion is never expanded).
+--   3. The prior + logJac term is the 'logDensityRD'-injected fRestRD
+--      (the same technique used earlier in @hmmAnalyticVG@).
+--
+--   The previous walk+ad approach re-evaluated T calls to @logDensity@
+--   plus a mapAccumL recursion with boxed AD on every leapfrog step
+--   (logDensity 31.2% + armaModel 20.9%, alloc 72%). This path instead
+--   runs the same O(T) work as two passes over unboxed Doubles.
 armaAnalyticVG
   :: forall r. ModelP r -> [Text] -> [Transform]
   -> Maybe (VS.Vector Double -> (Double, VS.Vector Double))
@@ -772,7 +972,7 @@ armaAnalyticVG m names trans =
                  in ( (vComb - surrAtUs) + logL
                     , VS.fromList gComb )
 
-    -- prior + logJac (尤度除く)・'logDensityRD' 注入 — 'hmmAnalyticVG' と同じ。
+    -- prior + logJac (尤度除く)・'logDensityRD' 注入 — @hmmAnalyticVG@ と同じ。
     fRestRD :: forall s. Reifies s ADRD.Tape
             => [ADRD.ReverseDouble s] -> ADRD.ReverseDouble s
     fRestRD us = logPriorWith logDensityRD m (paramMapOf us)
@@ -789,9 +989,13 @@ armaAnalyticVG m names trans =
 -- Phase 101 A3: graded response IRT 尤度の解析勾配 (AD tape ゼロ)
 -- ---------------------------------------------------------------------------
 
--- | Phase 101 A3: 尤度が **単一 'GradedResponseIrt' observe** のモデルから
+-- | [日本語]: 尤度が __単一 'GradedResponseIrt' observe__ のモデルから
 -- @(θs, ncats, δs, γs, ys)@ を現在の param 値で抽出する。 walk は
 -- 'armaObserveOf' と同型。
+--   [English]: For a model whose likelihood is a
+--   __single 'GradedResponseIrt' observe__, extracts
+--   @(θs, ncats, δs, γs, ys)@ at the current parameter values. The
+--   walk has the same shape as 'armaObserveOf'.
 gradedIrtObserveOf :: (Floating a, Ord a)
                    => Model a r -> Map Text a
                    -> Maybe ([a], [Int], [Double], [[Double]], [Double])
@@ -814,21 +1018,44 @@ gradedIrtObserveOf model params =
     go (Free (PlateBegin _ _ next)) = go next
     go (Free (PlateEnd next))       = go next
 
--- | Phase 101 A3: 'GradedResponseIrt' 尤度の value+grad を **解析勾配**で
+-- | [日本語]: 'GradedResponseIrt' 尤度の value+grad を __解析勾配__で
 -- 計算するクロージャを構築する。 適格 (単一 GradedResponseIrt observe) の
--- ときのみ 'Just'。 構成は 'armaAnalyticVG' と同じ 3 段:
+-- ときのみ 'Just'。 構成は @armaAnalyticVG@ と同じ 3 段:
 --
 --   1. 各 (child i, item j, grade≠−1) の @Q_k = invlogit(δ_j(θ_i−γ_jk))@ と
---      カテゴリ確率 p (隣接差) を **Double 空間**で評価し、 値
+--      カテゴリ確率 p (隣接差) を __Double 空間__で評価し、 値
 --      @logL = Σ log p@ と解析勾配 @∂logL/∂θ_i = Σ_j (dp/dθ)/p@
 --      (@dQ/dθ = δ·Q(1−Q)@ の隣接差) を算出する。
---   2. u への連鎖律は **軽量 surrogate** @Σ g_i·θ_i(u)@ を ad
+--   2. u への連鎖律は __軽量 surrogate__ @Σ g_i·θ_i(u)@ を ad
 --      (θs の nChild scalar 抽出のみ)。
 --   3. prior + logJac は 'logDensityRD' 注入の fRestRD。
 --
 -- 従来 walk+ad は nChild×nItem×ncat の Q/p リスト構築 (`!!` 索引込) を毎
--- leapfrog boxed AD で再評価していた (Phase 101 A1: logCatProb 64.8% time /
+-- leapfrog boxed AD で再評価していた (logCatProb 64.8% time /
 -- 73.2% alloc)。 本経路は同じ O(Σ ncat) を Double で 1 パス回すだけ。
+--
+--   [English]: Builds a closure that computes the value+grad of the
+--   'GradedResponseIrt' likelihood via an __analytic gradient__. Returns
+--   'Just' only when the model qualifies (a single GradedResponseIrt
+--   observe). The construction has the same 3 stages as
+--   @armaAnalyticVG@:
+--
+--   1. For each (child i, item j, grade≠−1), evaluate
+--      @Q_k = invlogit(δ_j(θ_i−γ_jk))@ and the category probability p
+--      (an adjacent difference) in __Double space__, and compute the
+--      value @logL = Σ log p@ and the analytic gradient
+--      @∂logL/∂θ_i = Σ_j (dp/dθ)/p@ (an adjacent difference of
+--      @dQ/dθ = δ·Q(1−Q)@).
+--   2. The chain rule into u is applied by ad-differentiating a
+--      __lightweight surrogate__ @Σ g_i·θ_i(u)@ (extracting only the
+--      nChild scalars of θs).
+--   3. The prior + logJac term is the 'logDensityRD'-injected fRestRD.
+--
+--   The previous walk+ad approach re-evaluated the nChild×nItem×ncat
+--   Q/p list construction (including @!!@ indexing) with boxed AD on
+--   every leapfrog step (logCatProb 64.8% time / 73.2% alloc). This
+--   path instead runs the same O(Σ ncat) work as a single pass over
+--   Doubles.
 gradedIrtAnalyticVG
   :: forall r. ModelP r -> [Text] -> [Transform]
   -> Maybe (VS.Vector Double -> (Double, VS.Vector Double))
@@ -888,7 +1115,7 @@ gradedIrtAnalyticVG m names trans =
                  in ( (vComb - surrAtUs) + logL
                     , VS.fromList gComb )
 
-    -- prior + logJac (尤度除く)・'logDensityRD' 注入 — 'armaAnalyticVG' と同じ。
+    -- prior + logJac (尤度除く)・'logDensityRD' 注入 — @armaAnalyticVG@ と同じ。
     fRestRD :: forall s. Reifies s ADRD.Tape
             => [ADRD.ReverseDouble s] -> ADRD.ReverseDouble s
     fRestRD us = logPriorWith logDensityRD m (paramMapOf us)
@@ -901,17 +1128,33 @@ gradedIrtAnalyticVG m names trans =
     gradFullA :: [Double] -> [Double]
     gradFullA = grad fFullA
 
--- | Phase 54.4b/54.6: 'gradADU' の **静的部分** (Gaussian LM ブロック抽出・
--- 設計列のベクトル化・名前→index 解決・`ad` クロージャ構築) を 1 度だけ行い、
--- unconstrained ベクトルを受けて勾配ベクトルを返すクロージャを構築する。
--- NUTS / HMC は draw ループの**外**で 1 度呼び、 全 leapfrog で再利用する。
+-- | [日本語]: 'gradADU' の __静的部分__ (Gaussian LM ブロック抽出・
+--   設計列のベクトル化・名前→index 解決・@ad@ クロージャ構築) を 1 度だけ行い、
+--   unconstrained ベクトルを受けて勾配ベクトルを返すクロージャを構築する。
+--   NUTS / HMC は draw ループの __外__ で 1 度呼び、 全 leapfrog で再利用する。
 --
--- Phase 54.6: per-op 計測 (prof-nuts-54.4e.prof) で per-call の Text-key
--- `Map.fromList` 組立 + `Map.fromListWith` 勾配集約 (compileGradU self 17.9%) と
--- vec-tape の演算毎ベクトル割当 (~52%) が残ボトルネックと確定 → 名前は compile
--- 時に index へ解決し、 勾配は ST mutable vector に解析閉形式で直接集約する
--- (Gaussian LM の勾配は ∂β_k=X_kᵀr/σ²・∂u_j=Σ_{i∈g_j}r_i/σ²・∂σ=-n/σ+sumR2/σ³
--- の閉形式ゆえ汎用 tape 不要)。
+--   per-op 計測 (prof-nuts-54.4e.prof) で per-call の Text-key
+--   `Map.fromList` 組立 + `Map.fromListWith` 勾配集約 (compileGradU self 17.9%) と
+--   vec-tape の演算毎ベクトル割当 (~52%) が残ボトルネックと確定 → 名前は compile
+--   時に index へ解決し、 勾配は ST mutable vector に解析閉形式で直接集約する
+--   (Gaussian LM の勾配は ∂β_k=X_kᵀr/σ²・∂u_j=Σ_{i∈g_j}r_i/σ²・∂σ=-n/σ+sumR2/σ³
+--   の閉形式ゆえ汎用 tape 不要)。
+--   [English]: Builds, once only, the __static part__ of 'gradADU'
+--   (Gaussian LM block extraction, design-column vectorization,
+--   name→index resolution, @ad@ closure construction), producing a
+--   closure that takes an unconstrained vector and returns a gradient
+--   vector. NUTS / HMC calls this once, __outside__ the draw loop, and
+--   reuses it across all leapfrog steps.
+--
+--   Per-op measurement (prof-nuts-54.4e.prof) established that the
+--   remaining bottleneck was the per-call Text-key `Map.fromList`
+--   assembly + `Map.fromListWith` gradient aggregation (compileGradU
+--   self 17.9%) and the per-operation vector allocation in the
+--   vec-tape (~52%); so names are resolved to indices at compile time,
+--   and gradients are aggregated directly, in closed analytic form,
+--   into an ST mutable vector (the Gaussian LM gradient has the closed
+--   form ∂β_k=X_kᵀr/σ², ∂u_j=Σ_{i∈g_j}r_i/σ², ∂σ=-n/σ+sumR2/σ³, so no
+--   generic tape is needed).
 compileGradUV :: forall r. ModelP r -> [Text] -> [Transform]
               -> (VS.Vector Double -> VS.Vector Double)
 compileGradUV m names trans =
@@ -1020,13 +1263,23 @@ compileGradUV m names trans =
           logJac  = sum [ logJacF t u | (t, u) <- zip trans us ]
       in residualExcl mcr excl m paramsC + logJac
 
--- | Phase 87.2b: 'compileGradUV' の value-and-grad 融合版 (JAX @value_and_grad@
--- 相当)。 返り値 = (logπ(u) (logJac 込・'compileLogPUV' と同値)・∇logπ(u)
--- ('compileGradUV' と同値))。 NUTS の葉は leapfrog 最終勾配とエネルギー (logπ)
--- を同一点で別々に評価していた (prof 実測で葉 logPi が全体の 19%) — 本閉包は
--- forward pass を 1 度だけ走らせて両方を返す。 経路分岐・fallback 意味論は
--- 'compileGradUV' / 'compileLogPUV' と対 (vecIR guard 違反 = 値 -∞ +
--- 勾配 walk+ad fallback)。
+-- | [日本語]: 'compileGradUV' の value-and-grad 融合版 (JAX @value_and_grad@
+--   相当)。 返り値 = (logπ(u) (logJac 込・'compileLogPUV' と同値)・∇logπ(u)
+--   ('compileGradUV' と同値))。 NUTS の葉は leapfrog 最終勾配とエネルギー (logπ)
+--   を同一点で別々に評価していた (prof 実測で葉 logPi が全体の 19%) — 本閉包は
+--   forward pass を 1 度だけ走らせて両方を返す。 経路分岐・fallback 意味論は
+--   'compileGradUV' / 'compileLogPUV' と対 (vecIR guard 違反 = 値 -∞ +
+--   勾配 walk+ad fallback)。
+--   [English]: A value-and-grad fused version of 'compileGradUV'
+--   (equivalent to JAX's @value_and_grad@). Returns
+--   (logπ(u) (including logJac; equal to 'compileLogPUV'),
+--   ∇logπ(u) (equal to 'compileGradUV')). NUTS's leaf nodes used to
+--   evaluate the final leapfrog gradient and the energy (logπ)
+--   separately at the same point (profiling measured leaf logPi at
+--   19% of the total) — this closure instead runs the forward pass
+--   once and returns both. The branch selection and fallback semantics
+--   mirror 'compileGradUV' / 'compileLogPUV' (a vecIR guard violation
+--   means value = -∞ plus a walk+ad gradient fallback).
 compileGradValUV :: forall r. ModelP r -> [Text] -> [Transform]
                  -> (VS.Vector Double -> (Double, VS.Vector Double))
 compileGradValUV m names trans =
@@ -1040,13 +1293,24 @@ compileGradValUV m names trans =
             core ar adj pc
       in finish uv pc mvg
 
--- | Phase 90 A11-4①: 'compileGradValUV' の monadic 版。 vecIR 経路の作業
--- バッファ (forward arena + 随伴 arena・13-traffic 実測で 34k セル × 2 =
--- 葉勾配 0.139ms 中の確保 0.031ms + GC churn) を **閉包生成時に 1 度だけ**
--- 確保し、 全 leapfrog 呼出で再利用する。 閉包は chain ごとに生成される
--- ('nutsStream' 内) ため、 chain 横断 spark 並列 ('nutsChainsPure') とも
--- 干渉しない。 返る値/勾配は毎回 fresh に freeze されるので alias しない。
--- 非 vecIR 経路 (walk+ad / ハイブリッド) は従来 pure 閉包をそのまま包む。
+-- | [日本語]: 'compileGradValUV' の monadic 版。 vecIR 経路の作業
+--   バッファ (forward arena + 随伴 arena・13-traffic 実測で 34k セル × 2 =
+--   葉勾配 0.139ms 中の確保 0.031ms + GC churn) を __閉包生成時に 1 度だけ__
+--   確保し、 全 leapfrog 呼出で再利用する。 閉包は chain ごとに生成される
+--   (@nutsStream@ 内) ため、 chain 横断 spark 並列 (@nutsChainsPure@) とも
+--   干渉しない。 返る値/勾配は毎回 fresh に freeze されるので alias しない。
+--   非 vecIR 経路 (walk+ad / ハイブリッド) は従来 pure 閉包をそのまま包む。
+--   [English]: A monadic version of 'compileGradValUV'. Allocates the
+--   vecIR path's working buffers (the forward arena + adjoint arena —
+--   measured on 13-traffic at 34k cells × 2, with 0.031ms of the
+--   0.139ms leaf-gradient time spent on allocation plus GC churn)
+--   __only once, at closure-creation time__, and reuses them across
+--   all leapfrog calls. Since the closure is created per chain (inside
+--   @nutsStream@), this does not interfere with cross-chain spark
+--   parallelism (@nutsChainsPure@) either. The returned value/gradient
+--   are freshly frozen on every call, so there is no aliasing. The
+--   non-vecIR paths (walk+ad / hybrid) simply wrap the usual pure
+--   closure as before.
 compileGradValUVM :: forall m r. PrimMonad m
                   => ModelP r -> [Text] -> [Transform]
                   -> m (VS.Vector Double -> m (Double, VS.Vector Double))
@@ -1061,24 +1325,33 @@ compileGradValUVM m names trans =
         mvg <- stToPrim (core ar adj pc)
         pure (finish uv pc mvg)
 
--- | Phase 90 A11-4①: 'compileGradValUV' / 'compileGradValUVM' が共有する
--- 静的解析結果。 vecIR 経路のみ per-call の arena/adj 確保をバッファ注入
--- (prep / core / finish の 3 分割) に分離し、 pure 版 (毎回確保・従来意味論)
--- と monadic 版 (chain 閉包で 1 回確保) が同一 per-call コードを共有する。
+-- | [日本語]: 'compileGradValUV' / 'compileGradValUVM' が共有する
+--   静的解析結果。 vecIR 経路のみ per-call の arena/adj 確保をバッファ注入
+--   (prep / core / finish の 3 分割) に分離し、 pure 版 (毎回確保・従来意味論)
+--   と monadic 版 (chain 閉包で 1 回確保) が同一 per-call コードを共有する。
+--   [English]: The static analysis result shared by 'compileGradValUV'
+--   and 'compileGradValUVM'. Only the vecIR path separates out the
+--   per-call arena/adj allocation as an injectable buffer (split into
+--   prep / core / finish), so that the pure version (allocates every
+--   call, the previous semantics) and the monadic version (allocates
+--   once per chain closure) share the same per-call code.
 data GradValPlan
   = GVPure (VS.Vector Double -> (Double, VS.Vector Double))
-    -- ^ walk+ad fallback / ハイブリッド経路 (arena 非使用・従来 pure 閉包)。
+    -- ^ [日本語]: walk+ad fallback / ハイブリッド経路 (arena 非使用・従来 pure 閉包)。
+    --   [English]: The walk+ad fallback / hybrid path (no arena, the usual pure closure).
   | GVVecIR
-      !Int                                    -- ^ arena/adj サイズ ('vpSize')
+      !Int                                    -- ^ [日本語]: arena/adj サイズ ('vpSize')。 [English]: The arena/adj size ('vpSize').
       (VS.Vector Double -> VS.Vector Double)  -- ^ prep: uv → pc (invTransform)
       (forall s. VSM.MVector s Double -> VSM.MVector s Double
                  -> VS.Vector Double
                  -> ST s (Maybe (Double, VS.Vector Double)))
-        -- ^ core: ar adj pc → (値, constrained 勾配)。 guard 違反 = Nothing。
+        -- ^ [日本語]: core: ar adj pc → (値, constrained 勾配)。 guard 違反 = Nothing。
+        --   [English]: core: ar adj pc → (value, constrained gradient). A guard violation is Nothing.
       (VS.Vector Double -> VS.Vector Double
                  -> Maybe (Double, VS.Vector Double)
                  -> (Double, VS.Vector Double))
-        -- ^ finish: uv pc mvg → 最終 (logπ, ∇logπ) (chain rule + fallback)。
+        -- ^ [日本語]: finish: uv pc mvg → 最終 (logπ, ∇logπ) (chain rule + fallback)。
+        --   [English]: finish: uv pc mvg → the final (logπ, ∇logπ) (chain rule + fallback).
 
 gradValPlan :: forall r. ModelP r -> [Text] -> [Transform] -> GradValPlan
 gradValPlan m names trans =
@@ -1208,9 +1481,14 @@ gradValPlan m names trans =
           logJac  = sum [ logJacF t u | (t, u) <- zip trans us ]
       in residualExcl mcr excl m paramsC + logJac
 
--- | Phase 87.2b: 'hybridGradClosure' の value-and-grad 融合版。 解析勾配
--- (@gradC@) に加えて解析**値** (@valC@ = 'compileLogPUV' ハイブリッド経路の
--- analytic と同一) を計算し、 (値 (logJac 込)・勾配) を返す。
+-- | [日本語]: 'hybridGradClosure' の value-and-grad 融合版。 解析勾配
+--   (@gradC@) に加えて解析__値__ (@valC@ = 'compileLogPUV' ハイブリッド経路の
+--   analytic と同一) を計算し、 (値 (logJac 込)・勾配) を返す。
+--   [English]: A value-and-grad fused version of 'hybridGradClosure'.
+--   In addition to the analytic gradient (@gradC@), computes the
+--   analytic __value__ (@valC@ = the same as the analytic term in
+--   'compileLogPUV''s hybrid path), and returns (value, including
+--   logJac, and gradient).
 hybridGradValClosure
   :: Int -> BV.Vector Transform -> [Transform]
   -> (forall s. VS.Vector Double -> VSM.MVector s Double -> ST s ())
@@ -1243,10 +1521,16 @@ hybridGradValClosure nP transB trans gradC valC mPrior = \uv ->
                        (zip pg (zip trans us)) ]
          in (aVal + priorVal us, g)
 
--- | 'compileGradUV' の per-call 本体 (Phase 54.11 で affine 経路と IR 経路の
--- 共有部を関数化): unconstrained ベクトル → constrained 値 → 解析/ベクトル
--- 経路の constrained 勾配 (@gradC@ が mutable ベクトルへ加算) → chain rule。
--- @mPriorGrad@ = 残差 ad クロージャ ('Nothing' = 密度項が残らず logJac も解析)。
+-- | [日本語]: 'compileGradUV' の per-call 本体 (affine 経路と IR 経路の
+--   共有部を関数化): unconstrained ベクトル → constrained 値 → 解析/ベクトル
+--   経路の constrained 勾配 (@gradC@ が mutable ベクトルへ加算) → chain rule。
+--   @mPriorGrad@ = 残差 ad クロージャ ('Nothing' = 密度項が残らず logJac も解析)。
+--   [English]: The per-call body of 'compileGradUV' (factored out as
+--   the part shared by the affine path and the IR path): unconstrained
+--   vector → constrained value → the analytic/vectorized path's
+--   constrained gradient (@gradC@ adds into the mutable vector) →
+--   chain rule. @mPriorGrad@ is the residual ad closure ('Nothing'
+--   means no density term remains, and logJac is analytic too).
 hybridGradClosure
   :: Int -> BV.Vector Transform -> [Transform]
   -> (forall s. VS.Vector Double -> VSM.MVector s Double -> ST s ())
@@ -1272,13 +1556,25 @@ hybridGradClosure nP transB trans gradC mPriorGrad = \uv ->
               | (i, (p, (t, u))) <- zip [0 :: Int ..]
                   (zip pg (zip trans (VS.toList uv))) ]
 
--- | Phase 54.4e: **定数パラメタ prior** の解析勾配 @d logDensity(d, θ)/dθ@
--- (constrained 空間)。 @Nothing@ = 未対応分布 (従来 `ad` に fallback)。
+-- | [日本語]: __定数パラメタ prior__ の解析勾配 @d logDensity(d, θ)/dθ@
+--   (constrained 空間)。 @Nothing@ = 未対応分布 (従来 @ad@ に fallback)。
 --
--- prior のパラメタが他 latent に依存しない (extractDeps で deps ∅) latent に
--- のみ使う前提 (パラメタを定数として θ でだけ微分する)。 各分岐は 'logDensity'
--- の実装・ガードと対にしてある: ガード違反域では 'logDensity' が定数 negInf を
--- 返し `ad` の勾配は 0 になるので、 ここでも 0 を返して一致させる。
+--   prior のパラメタが他 latent に依存しない (extractDeps で deps ∅) latent に
+--   のみ使う前提 (パラメタを定数として θ でだけ微分する)。 各分岐は @logDensity@
+--   の実装・ガードと対にしてある: ガード違反域では @logDensity@ が定数 negInf を
+--   返し @ad@ の勾配は 0 になるので、 ここでも 0 を返して一致させる。
+--   [English]: The analytic gradient @d logDensity(d, θ)/dθ@
+--   (in constrained space) for a __constant-parameter prior__.
+--   @Nothing@ means an unsupported distribution (falls back to @ad@
+--   as before).
+--
+--   Assumes this is used only for latents whose prior parameters do
+--   not depend on any other latent (deps ∅ via extractDeps), i.e. the
+--   parameters are treated as constants and only θ is differentiated.
+--   Each branch is paired with 'logDensity''s implementation and
+--   guards: in a guard-violation region, @logDensity@ returns the
+--   constant negInf and @ad@'s gradient becomes 0, so this returns 0
+--   there too, to match.
 constPriorGradD :: Distribution Double -> Double -> Maybe Double
 constPriorGradD d x = case d of
   Normal mu sig
@@ -1328,18 +1624,29 @@ constPriorGradD d x = case d of
     | otherwise          -> Just (negate (alpha + 1) / x)
   _ -> Nothing
 
--- | 'logJacF' の u 微分 (Phase 54.4e: ad 省略時に解析で加算)。 'logJacF' と対。
+-- | [日本語]: 'logJacF' の u 微分 (ad 省略時に解析で加算)。 'logJacF' と対。
+--   [English]: The u-derivative of 'logJacF' (added analytically when
+--   ad is skipped). Paired with 'logJacF'.
 dLogJacU :: Transform -> Double -> Double
 dLogJacU UnconstrainedT _ = 0
 dLogJacU PositiveT      _ = 1
 dLogJacU UnitIntervalT  u = let s = 1 / (1 + exp (-u)) in 1 - 2 * s
 
--- | Phase 54.4e: @excl@ 除外後の walk に log-density 寄与が残らないか。
--- 残らなければ 'compileGradU' は `ad` クロージャを丸ごと省略でき
--- (reflection tape 生成 = profile の 18.9% がゼロに)、 'compileLogPU' は
--- Free walk 自体を省略できる。 scalar 'Observe' は名前が @excl@ になければ
--- False (Phase 54.8: 自動合成で吸収済みの Observe は除外扱い)。
--- 'Potential' があれば常に False (従来 ad / walk 経路に fallback・正しさ担保)。
+-- | [日本語]: @excl@ 除外後の walk に log-density 寄与が残らないか。
+--   残らなければ 'compileGradU' は @ad@ クロージャを丸ごと省略でき
+--   (reflection tape 生成 = profile の 18.9% がゼロに)、 'compileLogPU' は
+--   Free walk 自体を省略できる。 scalar 'Observe' は名前が @excl@ になければ
+--   False (自動合成で吸収済みの Observe は除外扱い)。
+--   'Potential' があれば常に False (従来 ad / walk 経路に fallback・正しさ担保)。
+--   [English]: Whether any log-density contribution remains in the
+--   walk after excluding @excl@. If none remains, 'compileGradU' can
+--   skip the @ad@ closure entirely (reflection tape generation, 18.9%
+--   of profile, drops to zero), and 'compileLogPU' can skip the Free
+--   walk itself. A scalar 'Observe' is False unless its name is in
+--   @excl@ (an Observe already absorbed by automatic synthesis is
+--   treated as excluded). If a 'Potential' is present, this is always
+--   False (falls back to the usual ad / walk path, to guarantee
+--   correctness).
 residualFreeOfDensity :: Set Text -> Model Double r -> Bool
 residualFreeOfDensity excl = go
   where
@@ -1355,11 +1662,18 @@ residualFreeOfDensity excl = go
     go (Free (PlateBegin _ _ next)) = go next
     go (Free (PlateEnd next)) = go next
 
--- | Phase 54.4e: 'compileGradU' / 'compileLogPU' 共通の静的解析。
--- Gaussian LM ブロック群から (ブロック名, 解析 u-prior, 定数パラメタ prior,
--- 除外集合, 前処理済みブロック, residual 空フラグ) を 1 度だけ求める。
--- @synthObs@ (Phase 54.8) = 自動合成ブロックに吸収済みの scalar 'Observe' 名
--- (除外集合に合流させ、 residual walk で二重加算しない)。
+-- | [日本語]: 'compileGradU' / 'compileLogPU' 共通の静的解析。
+--   Gaussian LM ブロック群から (ブロック名, 解析 u-prior, 定数パラメタ prior,
+--   除外集合, 前処理済みブロック, residual 空フラグ) を 1 度だけ求める。
+--   @synthObs@ = 自動合成ブロックに吸収済みの scalar 'Observe' 名
+--   (除外集合に合流させ、 residual walk で二重加算しない)。
+--   [English]: The static analysis shared by 'compileGradU' and
+--   'compileLogPU'. From the Gaussian LM blocks, computes, once only,
+--   (block names, analytic u-priors, constant-parameter priors, the
+--   exclusion set, preprocessed blocks, and the residual-empty flag).
+--   @synthObs@ is the set of scalar 'Observe' names already absorbed
+--   by automatically synthesized blocks (merged into the exclusion
+--   set so the residual walk doesn't double-count them).
 analyzeGaussModel
   :: ModelP r
   -> [(Text, [Text], [[Double]], [REff], Text, [Double])]
@@ -1390,9 +1704,13 @@ analyzeGaussModel m gbs synthObs =
       noResid   = residualFreeOfDensity exclNames m
   in (priorREs, cps, exclNames, cblocks, hierGroups, noResid)
 
--- | 定数パラメタ prior の抽出 (Phase 54.4e): extractDeps で親 latent 無し
--- (deps ∅) かつ解析勾配対応分布の latent。 @exclSet@ = 別経路 (REff 族 /
--- 54.11 IR 族) で扱う latent は除く。 54.4e/54.11 で共有。
+-- | [日本語]: 定数パラメタ prior の抽出: extractDeps で親 latent 無し
+--   (deps ∅) かつ解析勾配対応分布の latent。 @exclSet@ = 別経路 (REff 族 /
+--   IR 族) で扱う latent は除く。 複数の呼び出し元で共有する。
+--   [English]: Extracts constant-parameter priors: latents with no
+--   parent latent (deps ∅ via extractDeps) whose distribution has an
+--   analytic gradient. @exclSet@ excludes latents handled by another
+--   path (the REff family / the IR family). Shared across call sites.
 constPriorsOf :: ModelP r -> Set Text -> [(Text, Distribution Double)]
 constPriorsOf m exclSet =
   let (depNodes, _) = extractDeps m
@@ -1404,31 +1722,59 @@ constPriorsOf m exclSet =
      , Just deps <- [Map.lookup n latentDeps], Set.null deps
      , Just _ <- [constPriorGradD dist 0.5] ]
 
--- | Phase 54.4d: logp **値** 評価のコンパイル ('compileGradU' の値版)。
+-- | [日本語]: logp __値__ 評価のコンパイル ('compileGradU' の値版)。
 --
--- NUTS は tree node ごとにエネルギー (logp の値) を評価する。 54.4c 時点の
--- cost-centre profile で、 勾配は vec 化済みなのに値評価が Free walk +
--- per-obs スカラ 'logDensityObs' のままで per-draw の 46% を占めると判明
--- (`prof-nuts-54.4c.prof`)。 本関数は 'compileGradU' と同じ静的前処理
--- ('CompiledLMBlock') を 1 度だけ行い、 unconstrained ベクトルを受けて
--- log-joint + log-jacobian を返すクロージャを構築する:
+--   NUTS は tree node ごとにエネルギー (logp の値) を評価する。 ある時点の
+--   cost-centre profile で、 勾配は vec 化済みなのに値評価が Free walk +
+--   per-obs スカラ 'logDensityObs' のままで per-draw の 46% を占めると判明
+--   (`prof-nuts-54.4c.prof`)。 本関数は 'compileGradU' と同じ静的前処理
+--   ('CompiledLMBlock') を 1 度だけ行い、 unconstrained ベクトルを受けて
+--   log-joint + log-jacobian を返すクロージャを構築する:
 --
---   * Gaussian-恒等リンク 'ObserveLM' ブロックの観測尤度値 → 素な Double
---     ベクトル演算 ('valueCompiledLMBlock'・tape 不要)
---   * @REff (Just scale)@ の u-prior 値 → 解析式 ('reffPriorValue')
---   * 残り (他 prior / scalar observe / 非 Gauss LM / jacobian)
+--   - Gaussian-恒等リンク 'ObserveLM' ブロックの観測尤度値 → 素な Double
+--     ベクトル演算 (@valueCompiledLMBlock@・tape 不要)
+--   - @REff (Just scale)@ の u-prior 値 → 解析式 (@reffPriorValue@)
+--   - 残り (他 prior / scalar observe / 非 Gauss LM / jacobian)
 --     → 'logJointExclBlocks' の Double walk
 --
--- Gaussian LM を含まないモデルは従来 'logJointUnconstrained' 相当に fallback
--- (後方互換)。 数値は 'logJointUnconstrained' と一致 (test で担保)。
+--   Gaussian LM を含まないモデルは従来 'logJointUnconstrained' 相当に fallback
+--   (後方互換)。 数値は 'logJointUnconstrained' と一致 (test で担保)。
+--   [English]: Compiles the __value__ evaluation of logp (the value
+--   counterpart of 'compileGradU').
+--
+--   NUTS evaluates the energy (the value of logp) for every tree node.
+--   A cost-centre profile found that, even though the gradient had
+--   already been vectorized, the value evaluation still went through
+--   a Free walk plus per-observation scalar 'logDensityObs' calls,
+--   accounting for 46% of per-draw time (`prof-nuts-54.4c.prof`). This
+--   function performs the same static preprocessing as 'compileGradU'
+--   ('CompiledLMBlock') once, and builds a closure that takes an
+--   unconstrained vector and returns log-joint + log-jacobian:
+--
+--   - The observation-likelihood value of a Gaussian identity-link
+--     'ObserveLM' block → plain Double vector arithmetic
+--     (@valueCompiledLMBlock@, no tape needed).
+--   - The u-prior value of @REff (Just scale)@ → an analytic formula
+--     (@reffPriorValue@).
+--   - Everything else (other priors / scalar observe / non-Gaussian
+--     LM / jacobian) → a Double walk via 'logJointExclBlocks'.
+--
+--   A model without any Gaussian LM falls back to the equivalent of
+--   'logJointUnconstrained' as before (for backward compatibility).
+--   The numeric value matches 'logJointUnconstrained' (guaranteed by
+--   tests).
 compileLogPU :: forall r. ModelP r -> [Text] -> [Transform] -> ([Double] -> Double)
 compileLogPU m names trans =
   let lv = compileLogPUV m names trans
   in lv . VS.fromList
 
--- | 'compileLogPU' の vector-native 版 (Phase 54.6)。 NUTS のエネルギー評価が
--- 直接使う。 名前は compile 時に index へ解決し、 per-call は Storable vector
--- 上の素な Double 演算のみ (Text-key Map 組立なし)。
+-- | [日本語]: 'compileLogPU' の vector-native 版。 NUTS のエネルギー評価が
+--   直接使う。 名前は compile 時に index へ解決し、 per-call は Storable vector
+--   上の素な Double 演算のみ (Text-key Map 組立なし)。
+--   [English]: A vector-native version of 'compileLogPU', used
+--   directly by NUTS's energy evaluation. Names are resolved to
+--   indices at compile time, and each call does plain Double
+--   arithmetic over a Storable vector only (no Text-key Map assembly).
 compileLogPUV :: forall r. ModelP r -> [Text] -> [Transform]
               -> (VS.Vector Double -> Double)
 compileLogPUV m names trans =
@@ -1490,9 +1836,14 @@ compileLogPUV m names trans =
           logJac  = sum [ logJacF t u | (t, u) <- zip trans us ]
       in logJoint m paramsC + logJac
 
--- | 'compileLogPUV' の per-call 本体 (Phase 54.11 で affine 経路と IR 経路の
--- 共有部を関数化): unconstrained ベクトル → constrained 値 → 解析/ベクトル
--- 経路の log-density 値 (@analytic@) + 残差 walk (@mResid@) + log-jacobian。
+-- | [日本語]: 'compileLogPUV' の per-call 本体 (affine 経路と IR 経路の
+--   共有部を関数化): unconstrained ベクトル → constrained 値 → 解析/ベクトル
+--   経路の log-density 値 (@analytic@) + 残差 walk (@mResid@) + log-jacobian。
+--   [English]: The per-call body of 'compileLogPUV' (factored out as
+--   the part shared by the affine path and the IR path): unconstrained
+--   vector → constrained value → the analytic/vectorized path's
+--   log-density value (@analytic@) + the residual walk (@mResid@) +
+--   log-jacobian.
 hybridLogPClosure
   :: Int -> BV.Vector Transform -> [Text]
   -> (VS.Vector Double -> Double)
@@ -1508,14 +1859,20 @@ hybridLogPClosure nP transB names analytic mResid = \uv ->
         Just rv -> rv (Map.fromList (zip names (VS.toList pc)))
   in residV + analytic pc + logJac
 
--- | invTransform の導関数 dθ/du (chain rule 用)。 'invTransformF' と対。
+-- | [日本語]: invTransform の導関数 dθ/du (chain rule 用)。 'invTransformF' と対。
+--   [English]: The derivative dθ/du of invTransform (for the chain
+--   rule). Paired with 'invTransformF'.
 dInvTransform :: Transform -> Double -> Double
 dInvTransform UnconstrainedT _ = 1
 dInvTransform PositiveT      u = exp u
 dInvTransform UnitIntervalT  u = let s = 1 / (1 + exp (-u)) in s * (1 - s)
 
--- | モデル中の Gaussian-恒等リンク 'ObserveLM' ブロックを収集する
--- (ブロック名 / β 名 / 設計行列 / ランダム効果 / σ 名 / 観測 ys)。 非 Gaussian は除外。
+-- | [日本語]: モデル中の Gaussian-恒等リンク 'ObserveLM' ブロックを収集する
+--   (ブロック名 / β 名 / 設計行列 / ランダム効果 / σ 名 / 観測 ys)。 非 Gaussian は除外。
+--   [English]: Collects the Gaussian identity-link 'ObserveLM' blocks
+--   in the model (block name / β names / design matrix / random
+--   effects / σ name / observations ys). Non-Gaussian blocks are
+--   excluded.
 gaussLMBlocks :: ModelP r -> [(Text, [Text], [[Double]], [REff], Text, [Double])]
 gaussLMBlocks m = go m []
   where
@@ -1534,9 +1891,14 @@ gaussLMBlocks m = go m []
       PlateBegin _ _ next -> go next acc
       PlateEnd next       -> go next acc
 
--- | 'gaussLMBlocks' + Phase 54.8 自動合成。 明示 'ObserveLM' ブロックに、
--- per-obs scalar 'Observe' から自動合成したブロックを連結して返す
--- (合成に吸収した scalar Observe 名集合も返す → 'analyzeGaussModel' で除外)。
+-- | [日本語]: 'gaussLMBlocks' + 自動合成。 明示 'ObserveLM' ブロックに、
+--   per-obs scalar 'Observe' から自動合成したブロックを連結して返す
+--   (合成に吸収した scalar Observe 名集合も返す → 'analyzeGaussModel' で除外)。
+--   [English]: 'gaussLMBlocks' plus automatic synthesis. Returns the
+--   explicit 'ObserveLM' blocks concatenated with blocks automatically
+--   synthesized from per-observation scalar 'Observe's (also returns
+--   the set of scalar Observe names absorbed by the synthesis, so
+--   'analyzeGaussModel' can exclude them).
 gaussLMBlocksAuto
   :: ModelP r
   -> ([(Text, [Text], [[Double]], [REff], Text, [Double])], Set Text)
@@ -1545,14 +1907,27 @@ gaussLMBlocksAuto m =
   in (gaussLMBlocks m ++ sblocks, sObs)
 
 
--- | 'logJoint' と同じだが、 名前が @excl@ に含まれる項を **加算しない**:
+-- | [日本語]: 'logJoint' と同じだが、 名前が @excl@ に含まれる項を __加算しない__:
 --
---   * @excl@ に含まれる 'ObserveLM' ブロックの観測尤度 (vec-tape 経路で別計算)
---   * @excl@ に含まれる scalar 'Observe' の観測尤度
---     (Phase 54.8: 'synthGaussLMBlocks' が合成ブロックへ吸収済みのもの)
---   * @excl@ に含まれる 'Sample' ノードの prior log-density
---     (Phase 54.4c: 群効果 @u_j@ の prior を解析勾配経路で別計算するため)。
+--   - @excl@ に含まれる 'ObserveLM' ブロックの観測尤度 (vec-tape 経路で別計算)
+--   - @excl@ に含まれる scalar 'Observe' の観測尤度
+--     ('synthGaussLMBlocks' が合成ブロックへ吸収済みのもの)
+--   - @excl@ に含まれる 'Sample' ノードの prior log-density
+--     (群効果 @u_j@ の prior を解析勾配経路で別計算するため)。
 --     値は継続に必要なので 'Sample' 自体は walk するが log-density は足さない。
+--   [English]: The same as 'logJoint', except terms whose name is in
+--   @excl@ are __not added__:
+--
+--   - The observation likelihood of an 'ObserveLM' block in @excl@
+--     (computed separately by the vec-tape path).
+--   - The observation likelihood of a scalar 'Observe' in @excl@
+--     (already absorbed into a synthesized block by
+--     'synthGaussLMBlocks').
+--   - The prior log-density of a 'Sample' node in @excl@ (because the
+--     prior of a group effect @u_j@ is computed separately via the
+--     analytic gradient path). The value is still needed for the
+--     continuation, so 'Sample' itself is still walked, but its
+--     log-density is not added.
 logJointExclBlocks :: (Floating a, Ord a)
                    => Set Text -> Model a r -> Map Text a -> a
 logJointExclBlocks excl model params = go model 0
@@ -1580,32 +1955,49 @@ logJointExclBlocks excl model params = go model 0
     go (Free (PlateBegin _ _ next)) acc = go next acc
     go (Free (PlateEnd next))       acc = go next acc
 
--- | Phase 98 A2: excl 吸収後の残余 log-density。 'compileResidual' が成功すれば
--- flat 畳み込み ('residualValueA'・Free walk 無し)、 失敗すれば従来の
--- 'logJointExclBlocks' walk に fallback する。 呼び出し側は @mcr@ を 1 度だけ
--- ('compileResidual' で) 構築して値/勾配の両クロージャに渡す ('CompiledResidual'
--- は 'SExp' 保持の純データなので型非依存で共有できる)。
+-- | [日本語]: excl 吸収後の残余 log-density。 'compileResidual' が成功すれば
+--   flat 畳み込み ('residualValueA'・Free walk 無し)、 失敗すれば従来の
+--   'logJointExclBlocks' walk に fallback する。 呼び出し側は @mcr@ を 1 度だけ
+--   ('compileResidual' で) 構築して値/勾配の両クロージャに渡す ('CompiledResidual'
+--   は 'SExp' 保持の純データなので型非依存で共有できる)。
+--   [English]: The residual log-density remaining after excl
+--   absorption. If 'compileResidual' succeeds, a flat fold
+--   ('residualValueA', no Free walk); otherwise falls back to the
+--   usual 'logJointExclBlocks' walk. The caller builds @mcr@ once
+--   (via 'compileResidual') and passes it to both the value and
+--   gradient closures ('CompiledResidual' is plain data holding an
+--   'SExp', so it can be shared regardless of type).
 residualExcl :: (Floating a, Ord a)
              => Maybe CompiledResidual -> Set Text -> Model a r -> Map Text a -> a
 residualExcl (Just cr) _    _ params = residualValueA cr params
 residualExcl Nothing   excl m params = logJointExclBlocks excl m params
 
--- | Phase 54.4b: Gaussian-恒等リンク 'ObserveLM' ブロックの **静的部分**を 1 度
--- だけ前処理した中間表現。 NUTS の draw ループの外で構築し全 leapfrog で再利用する
--- ことで、 設計列のベクトル化 (@row !! k@ = O(n·p²)) や群 id の unbox 変換・ys の
--- Storable 化といった「値に依らず draw 間で不変な仕事」 を毎勾配評価から外す。
+-- | [日本語]: Gaussian-恒等リンク 'ObserveLM' ブロックの __静的部分__を 1 度
+--   だけ前処理した中間表現。 NUTS の draw ループの外で構築し全 leapfrog で再利用する
+--   ことで、 設計列のベクトル化 (@row !! k@ = O(n·p²)) や群 id の unbox 変換・ys の
+--   Storable 化といった「値に依らず draw 間で不変な仕事」 を毎勾配評価から外す。
+--   [English]: An intermediate representation that preprocesses the
+--   __static part__ of a Gaussian identity-link 'ObserveLM' block
+--   once. Built outside NUTS's draw loop and reused across all
+--   leapfrog steps, so that "work that is invariant across draws and
+--   independent of the value" — vectorizing the design columns
+--   (@row !! k@ = O(n·p²)), unboxing group ids, and converting ys to
+--   Storable — is removed from every gradient evaluation.
 data CompiledLMBlock = CompiledLMBlock
-  { clbBetas :: ![Text]                          -- ^ β パラメタ名 (列順)
-  , clbCols  :: ![VS.Vector Double]              -- ^ 設計列 (p 本・各 length n)
+  { clbBetas :: ![Text]                          -- ^ [日本語]: β パラメタ名 (列順)。 [English]: The β parameter names (column order).
+  , clbCols  :: ![VS.Vector Double]              -- ^ [日本語]: 設計列 (p 本・各 length n)。 [English]: The design columns (p of them, each length n).
   , clbReff  :: ![([Text], Int, VU.Vector Int, Maybe (VS.Vector Double))]
-    -- ^ (u 名, nG, gids, per-row 重み) のランダム効果 (重み Nothing = 全 1)
-  , clbSname :: !Text                            -- ^ σ パラメタ名
-  , clbYs    :: !(VS.Vector Double)              -- ^ 観測 (length n)
+    -- ^ [日本語]: (u 名, nG, gids, per-row 重み) のランダム効果 (重み Nothing = 全 1)。
+    --   [English]: A random effect as (u names, nG, gids, per-row weights); weights Nothing means all 1.
+  , clbSname :: !Text                            -- ^ [日本語]: σ パラメタ名。 [English]: The σ parameter name.
+  , clbYs    :: !(VS.Vector Double)              -- ^ [日本語]: 観測 (length n)。 [English]: The observations (length n).
   , clbN     :: !Int
   , clbP     :: !Int
   }
 
--- | 'gaussLMBlocks' の 1 ブロックを 'CompiledLMBlock' に前処理する (静的・1 回)。
+-- | [日本語]: 'gaussLMBlocks' の 1 ブロックを 'CompiledLMBlock' に前処理する (静的・1 回)。
+--   [English]: Preprocesses one block from 'gaussLMBlocks' into a
+--   'CompiledLMBlock' (static, done once).
 compileLMBlock :: ([Text], [[Double]], [REff], Text, [Double]) -> CompiledLMBlock
 compileLMBlock (betaNames, designX, reffs, sName, ys) =
   let p    = length betaNames
@@ -1615,23 +2007,32 @@ compileLMBlock (betaNames, designX, reffs, sName, ys) =
              | REff uNames gids _ mw _ <- reffs ]
   in CompiledLMBlock betaNames cols reff sName (VS.fromList ys) n p
 
--- | Phase 54.6: 'CompiledLMBlock' の名前参照を param index に解決した形。
--- compile 時に 1 度だけ作り、 per-call は Storable vector への index 参照のみ
--- (Text-key Map lookup なし)。
+-- | [日本語]: 'CompiledLMBlock' の名前参照を param index に解決した形。
+--   compile 時に 1 度だけ作り、 per-call は Storable vector への index 参照のみ
+--   (Text-key Map lookup なし)。
+--   [English]: The form of 'CompiledLMBlock' with name references
+--   resolved to param indices. Built once at compile time; each call
+--   only does index lookups into a Storable vector (no Text-key Map
+--   lookup).
 data CompiledLMBlockIx = CompiledLMBlockIx
-  { cliBetaIx :: !(VU.Vector Int)                       -- ^ β の param index (列順)
-  , cliXMat   :: !(VS.Vector Double)                    -- ^ 設計行列 row-major (n×p・X[i*p+k])
-  , cliCols   :: !(BV.Vector (VS.Vector Double))        -- ^ 設計列 (∂β dot 用・O(1) 添字)
+  { cliBetaIx :: !(VU.Vector Int)                       -- ^ [日本語]: β の param index (列順)。 [English]: The param indices of β (column order).
+  , cliXMat   :: !(VS.Vector Double)                    -- ^ [日本語]: 設計行列 row-major (n×p・X[i*p+k])。 [English]: The design matrix, row-major (n×p, X[i*p+k]).
+  , cliCols   :: !(BV.Vector (VS.Vector Double))        -- ^ [日本語]: 設計列 (∂β dot 用・O(1) 添字)。 [English]: The design columns (for the ∂β dot product; O(1) indexing).
   , cliReff   :: ![(VU.Vector Int, Int, VU.Vector Int, Maybe (VS.Vector Double))]
-    -- ^ (u indices, nG, gids, per-row 重み)。 重み Nothing = 全 1 (Phase 54.10)
-  , cliSIx    :: !Int                                   -- ^ σ の param index
-  , cliYs     :: !(VS.Vector Double)                    -- ^ 観測 (length n)
+    -- ^ [日本語]: (u indices, nG, gids, per-row 重み)。 重み Nothing = 全 1。
+    --   [English]: (u indices, nG, gids, per-row weights). Weights Nothing means all 1.
+  , cliSIx    :: !Int                                   -- ^ [日本語]: σ の param index。 [English]: The param index of σ.
+  , cliYs     :: !(VS.Vector Double)                    -- ^ [日本語]: 観測 (length n)。 [English]: The observations (length n).
   , cliN      :: !Int
   , cliP      :: !Int
   }
 
--- | 'CompiledLMBlock' の名前を index に解決する (静的・1 回)。 Phase 54.7a で
--- row-major 設計行列も前計算 (残差ループのキャッシュ局所性 + リスト走査排除)。
+-- | [日本語]: 'CompiledLMBlock' の名前を index に解決する (静的・1 回)。
+--   row-major 設計行列も前計算する (残差ループのキャッシュ局所性 + リスト走査排除)。
+--   [English]: Resolves 'CompiledLMBlock''s names to indices (static,
+--   done once). Also precomputes the row-major design matrix (for
+--   cache locality in the residual loop, and to eliminate list
+--   traversal).
 resolveLMBlock :: Map Text Int -> CompiledLMBlock -> CompiledLMBlockIx
 resolveLMBlock ixOf clb =
   let n = clbN clb
@@ -1651,8 +2052,11 @@ resolveLMBlock ixOf clb =
     , cliP      = p
     }
 
--- | Phase 93: 階層 Normal 群 (uNames, μ名, τ名) の名前を param index に解決する
--- ('resolveLMBlock' と同様に compile 時 1 回)。
+-- | [日本語]: 階層 Normal 群 (uNames, μ名, τ名) の名前を param index に解決する
+--   ('resolveLMBlock' と同様に compile 時 1 回)。
+--   [English]: Resolves the names of a hierarchical Normal group
+--   (uNames, mean name, scale name) to param indices (once at compile
+--   time, same as 'resolveLMBlock').
 resolveHierNormal :: Map Text Int -> ([Text], Text, Text) -> HierNormalIx
 resolveHierNormal ixOf (uNames, meanName, scaleName) = HierNormalIx
   { hniUIx     = VU.fromList [ ixOf Map.! nm | nm <- uNames ]
@@ -1660,11 +2064,19 @@ resolveHierNormal ixOf (uNames, meanName, scaleName) = HierNormalIx
   , hniScaleIx = ixOf Map.! scaleName
   }
 
--- | 残差 @r_i = y_i - Σ_k β_k X_ik - Σ_re u^{re}[gid_i]@ と @Σr²@ を
--- **1 パスの手動ループ** で計算する (Phase 54.7a: (a)-0 実測で per-call
--- ~48-82KB の割当が本物と確定 — `VS.generate` 内のリスト fold・`zip`/`toList`
--- の毎回再構築・dot/sumR2 の中間ベクトルが原因。 unboxed アキュムレータの
--- 明示ループ + row-major X で割当を r 1 本に削減)。
+-- | [日本語]: 残差 @r_i = y_i - Σ_k β_k X_ik - Σ_re u^{re}[gid_i]@ と @Σr²@ を
+--   __1 パスの手動ループ__ で計算する ((a)-0 実測で per-call
+--   ~48-82KB の割当が本物と確定 — `VS.generate` 内のリスト fold・`zip`/@toList@
+--   の毎回再構築・dot/sumR2 の中間ベクトルが原因。 unboxed アキュムレータの
+--   明示ループ + row-major X で割当を r 1 本に削減)。
+--   [English]: Computes the residual
+--   @r_i = y_i - Σ_k β_k X_ik - Σ_re u^{re}[gid_i]@ and @Σr²@ with a
+--   __single hand-written pass__ (measurement (a)-0 established that
+--   the ~48-82KB per-call allocation was real — caused by the list
+--   fold inside `VS.generate`, the per-call rebuilding of `zip`/
+--   @toList@, and intermediate vectors for dot/sumR2. An explicit
+--   loop with unboxed accumulators plus a row-major X reduces the
+--   allocation to a single r vector).
 lmResidualS :: CompiledLMBlockIx -> VS.Vector Double -> (VS.Vector Double, Double)
 lmResidualS blk pc = runST $ do
   let n   = cliN blk
@@ -1695,16 +2107,29 @@ lmResidualS blk pc = runST $ do
   r <- VS.unsafeFreeze mr
   pure (r, sumR2)
 
--- | 前処理済みブロックの観測尤度 @Σ_i logDensityObs(Normal η_i σ) y_i@ の
--- **constrained 空間**での勾配を解析閉形式で mutable 勾配ベクトルに加算する
--- (Phase 54.6: Gaussian-恒等リンクは閉形式が書けるので汎用 tape 不要):
+-- | [日本語]: 前処理済みブロックの観測尤度 @Σ_i logDensityObs(Normal η_i σ) y_i@ の
+--   __constrained 空間__での勾配を解析閉形式で mutable 勾配ベクトルに加算する
+--   (Gaussian-恒等リンクは閉形式が書けるので汎用 tape 不要):
 --
--- > ∂/∂β_k = X_kᵀ r / σ²
--- > ∂/∂u_j = (Σ_{i: gid_i=j} w_i·r_i) / σ²   (scatter・O(n)・重み無しは w_i=1)
--- > ∂/∂σ   = -n/σ + (Σ r²)/σ³
+--   > ∂/∂β_k = X_kᵀ r / σ²
+--   > ∂/∂u_j = (Σ_{i: gid_i=j} w_i·r_i) / σ²   (scatter・O(n)・重み無しは w_i=1)
+--   > ∂/∂σ   = -n/σ + (Σ r²)/σ³
 --
--- Phase 54.7a: dot / scatter とも unboxed アキュムレータの明示ループ
--- (中間ベクトル・`VU.convert`・`accumulate` 割当なし)。
+--   dot / scatter とも unboxed アキュムレータの明示ループを使う
+--   (中間ベクトル・`VU.convert`・@accumulate@ 割当なし)。
+--   [English]: Adds the __constrained-space__ gradient of the
+--   preprocessed block's observation likelihood
+--   @Σ_i logDensityObs(Normal η_i σ) y_i@ into the mutable gradient
+--   vector, in closed analytic form (a Gaussian identity link has a
+--   closed form, so no generic tape is needed):
+--
+--   > ∂/∂β_k = X_kᵀ r / σ²
+--   > ∂/∂u_j = (Σ_{i: gid_i=j} w_i·r_i) / σ²   (scatter, O(n); w_i=1 when unweighted)
+--   > ∂/∂σ   = -n/σ + (Σ r²)/σ³
+--
+--   Both dot and scatter use an explicit loop with unboxed
+--   accumulators (no intermediate vectors, `VU.convert`, or
+--   @accumulate@ allocation).
 gradLMBlockIx :: CompiledLMBlockIx -> VS.Vector Double
               -> VSM.MVector s Double -> ST s ()
 gradLMBlockIx blk pc mg = do
@@ -1739,10 +2164,15 @@ gradLMBlockIx blk pc mg = do
       VSM.modify mg (+ (gj / s2)) (uix `VU.unsafeIndex` j)
   VSM.modify mg (+ (negate n' / sigma + sumR2 / (s2 * sigma))) (cliSIx blk)
 
--- | 前処理済みブロックの観測尤度の **値**
--- @-n/2·log2π - n·logσ - Σr²/(2σ²)@。 Phase 54.7a: r を materialize せず
--- sumR2 だけを 1 パスの明示ループで累積 (割当ゼロ)。
--- guard (σ≤0 → -∞) は 'logDensityObs' の Normal 分岐と一致させる。
+-- | [日本語]: 前処理済みブロックの観測尤度の __値__
+--   @-n/2·log2π - n·logσ - Σr²/(2σ²)@。 r を materialize せず
+--   sumR2 だけを 1 パスの明示ループで累積する (割当ゼロ)。
+--   guard (σ≤0 → -∞) は 'logDensityObs' の Normal 分岐と一致させる。
+--   [English]: The __value__ of the preprocessed block's observation
+--   likelihood, @-n/2·log2π - n·logσ - Σr²/(2σ²)@. Does not
+--   materialize r; accumulates only sumR2 in a single explicit-loop
+--   pass (zero allocation). The guard (σ≤0 → -∞) matches
+--   'logDensityObs''s Normal branch.
 valueLMBlockIx :: CompiledLMBlockIx -> VS.Vector Double -> Double
 valueLMBlockIx blk pc
   | sigma <= 0 = negInf
@@ -1776,21 +2206,34 @@ valueLMBlockIx blk pc
               ri  = ys `VS.unsafeIndex` i - goK 0 0 - reS
           in goObs (i + 1) (acc + ri * ri)
 
--- | Phase 54.4c/54.6: 群効果 prior @u_j ~ Normal(0, τ)@ の index 解決形。
+-- | [日本語]: 群効果 prior @u_j ~ Normal(0, τ)@ の index 解決形。
+--   [English]: The index-resolved form of the group-effect prior
+--   @u_j ~ Normal(0, τ)@.
 data ReffPriorIx = ReffPriorIx
-  { rpiUIx     :: !(VU.Vector Int)   -- ^ u_j の param index (長さ nG)
-  , rpiScaleIx :: !Int               -- ^ τ の param index
+  { rpiUIx     :: !(VU.Vector Int)   -- ^ [日本語]: u_j の param index (長さ nG)。 [English]: The param indices of u_j (length nG).
+  , rpiScaleIx :: !Int               -- ^ [日本語]: τ の param index。 [English]: The param index of τ.
   }
 
--- | 群効果 prior の **constrained 空間**での解析勾配を mutable 勾配ベクトルに
--- 加算する (`ad` のスカラ tape を回避):
+-- | [日本語]: 群効果 prior の __constrained 空間__での解析勾配を mutable 勾配ベクトルに
+--   加算する (@ad@ のスカラ tape を回避):
 --
--- > log p(u | τ) = -nG/2·log(2π) - nG·log τ - (Σ u_j²)/(2τ²)
--- > ∂/∂u_j = -u_j / τ²
--- > ∂/∂τ   = -nG/τ + (Σ u_j²)/τ³
+--   > log p(u | τ) = -nG/2·log(2π) - nG·log τ - (Σ u_j²)/(2τ²)
+--   > ∂/∂u_j = -u_j / τ²
+--   > ∂/∂τ   = -nG/τ + (Σ u_j²)/τ³
 --
--- τ 成分は τ 自身の prior (解析 or `ad` 経路) と加算合流する。 unconstrained への
--- chain rule ('dInvTransform') は呼出側で適用する。
+--   τ 成分は τ 自身の prior (解析 or @ad@ 経路) と加算合流する。 unconstrained への
+--   chain rule ('dInvTransform') は呼出側で適用する。
+--   [English]: Adds the analytic gradient of the group-effect prior,
+--   in __constrained space__, into the mutable gradient vector
+--   (avoiding a scalar @ad@ tape):
+--
+--   > log p(u | τ) = -nG/2·log(2π) - nG·log τ - (Σ u_j²)/(2τ²)
+--   > ∂/∂u_j = -u_j / τ²
+--   > ∂/∂τ   = -nG/τ + (Σ u_j²)/τ³
+--
+--   The τ component is merged additively with τ's own prior (analytic
+--   or @ad@ path). The chain rule into unconstrained space
+--   ('dInvTransform') is applied by the caller.
 gradReffPriorIx :: ReffPriorIx -> VS.Vector Double -> VSM.MVector s Double -> ST s ()
 gradReffPriorIx (ReffPriorIx uix six) pc mg = do
   let tau  = pc `VS.unsafeIndex` six
@@ -1802,8 +2245,11 @@ gradReffPriorIx (ReffPriorIx uix six) pc mg = do
                         pure (acc + u * u)) 0 uix
   VSM.modify mg (+ (negate (fromIntegral nG) / tau + sumU2 / (tau2 * tau))) six
 
--- | 群効果 prior の log-density 和の **値** ('gradReffPriorIx' の値版)。
--- guard (τ≤0 → -∞) は 'logDensity' の Normal 分岐と一致させる。
+-- | [日本語]: 群効果 prior の log-density 和の __値__ ('gradReffPriorIx' の値版)。
+--   guard (τ≤0 → -∞) は @logDensity@ の Normal 分岐と一致させる。
+--   [English]: The __value__ of the sum of the group-effect prior's
+--   log-density (the value counterpart of 'gradReffPriorIx'). The
+--   guard (τ≤0 → -∞) matches 'logDensity''s Normal branch.
 valueReffPriorIx :: ReffPriorIx -> VS.Vector Double -> Double
 valueReffPriorIx (ReffPriorIx uix six) pc
   | tau <= 0  = negInf
@@ -1816,25 +2262,42 @@ valueReffPriorIx (ReffPriorIx uix six) pc
     sumU2 = VU.foldl' (\ !acc i -> let u = pc `VS.unsafeIndex` i
                                    in acc + u * u) 0 uix
 
--- | Phase 93: **非ゼロ latent 平均**の階層 Normal prior の解析勾配経路。
--- 'ReffPriorIx' (mean-0 専用) の一般化で、 平均 μ・スケール τ とも latent の
--- @u_i ~ Normal(μ, τ)@ 群を扱う (rats の @alpha[i]~Normal(muAlpha,sigmaAlpha)@ 等)。
+-- | [日本語]: __非ゼロ latent 平均__の階層 Normal prior の解析勾配経路。
+--   'ReffPriorIx' (mean-0 専用) の一般化で、 平均 μ・スケール τ とも latent の
+--   @u_i ~ Normal(μ, τ)@ 群を扱う (rats の @alpha[i]~Normal(muAlpha,sigmaAlpha)@ 等)。
+--   [English]: The analytic-gradient path for a hierarchical Normal
+--   prior with a __non-zero latent mean__. A generalization of
+--   'ReffPriorIx' (which is mean-0 only): handles a group
+--   @u_i ~ Normal(μ, τ)@ where both the mean μ and the scale τ are
+--   latent (e.g. rats' @alpha[i]~Normal(muAlpha,sigmaAlpha)@).
 data HierNormalIx = HierNormalIx
-  { hniUIx     :: !(VU.Vector Int)   -- ^ u_i の param index (長さ nG)
-  , hniMeanIx  :: !Int               -- ^ μ の param index
-  , hniScaleIx :: !Int               -- ^ τ の param index
+  { hniUIx     :: !(VU.Vector Int)   -- ^ [日本語]: u_i の param index (長さ nG)。 [English]: The param indices of u_i (length nG).
+  , hniMeanIx  :: !Int               -- ^ [日本語]: μ の param index。 [English]: The param index of μ.
+  , hniScaleIx :: !Int               -- ^ [日本語]: τ の param index。 [English]: The param index of τ.
   }
 
--- | 'HierNormalIx' の **constrained 空間**での解析勾配を mutable 勾配ベクトルに
--- 加算する (`ad` のスカラ tape を回避):
+-- | [日本語]: 'HierNormalIx' の __constrained 空間__での解析勾配を mutable 勾配ベクトルに
+--   加算する (@ad@ のスカラ tape を回避):
 --
--- > log p(u | μ, τ) = -nG/2·log(2π) - nG·log τ - (Σ (u_i-μ)²)/(2τ²)
--- > ∂/∂u_i = -(u_i - μ) / τ²
--- > ∂/∂μ   =  (Σ (u_i - μ)) / τ²
--- > ∂/∂τ   = -nG/τ + (Σ (u_i-μ)²)/τ³
+--   > log p(u | μ, τ) = -nG/2·log(2π) - nG·log τ - (Σ (u_i-μ)²)/(2τ²)
+--   > ∂/∂u_i = -(u_i - μ) / τ²
+--   > ∂/∂μ   =  (Σ (u_i - μ)) / τ²
+--   > ∂/∂τ   = -nG/τ + (Σ (u_i-μ)²)/τ³
 --
--- μ・τ 成分は各自の prior (解析 or `ad` 経路) と加算合流する。 unconstrained への
--- chain rule ('dInvTransform') は呼出側で適用する。
+--   μ・τ 成分は各自の prior (解析 or @ad@ 経路) と加算合流する。 unconstrained への
+--   chain rule ('dInvTransform') は呼出側で適用する。
+--   [English]: Adds 'HierNormalIx''s analytic gradient, in
+--   __constrained space__, into the mutable gradient vector (avoiding
+--   a scalar @ad@ tape):
+--
+--   > log p(u | μ, τ) = -nG/2·log(2π) - nG·log τ - (Σ (u_i-μ)²)/(2τ²)
+--   > ∂/∂u_i = -(u_i - μ) / τ²
+--   > ∂/∂μ   =  (Σ (u_i - μ)) / τ²
+--   > ∂/∂τ   = -nG/τ + (Σ (u_i-μ)²)/τ³
+--
+--   The μ and τ components are merged additively with their own
+--   priors (analytic or @ad@ path). The chain rule into unconstrained
+--   space ('dInvTransform') is applied by the caller.
 gradHierNormalIx :: HierNormalIx -> VS.Vector Double -> VSM.MVector s Double -> ST s ()
 gradHierNormalIx (HierNormalIx uix mIx sIx) pc mg = do
   let mu   = pc `VS.unsafeIndex` mIx
@@ -1850,8 +2313,11 @@ gradHierNormalIx (HierNormalIx uix mIx sIx) pc mg = do
   VSM.modify mg (+ (sumD / tau2)) mIx
   VSM.modify mg (+ (negate (fromIntegral nG) / tau + sumD2 / (tau2 * tau))) sIx
 
--- | 'HierNormalIx' の log-density 和の **値** ('gradHierNormalIx' の値版)。
--- guard (τ≤0 → -∞) は 'logDensity' の Normal 分岐と一致させる。
+-- | [日本語]: 'HierNormalIx' の log-density 和の __値__ ('gradHierNormalIx' の値版)。
+--   guard (τ≤0 → -∞) は @logDensity@ の Normal 分岐と一致させる。
+--   [English]: The __value__ of the sum of 'HierNormalIx''s
+--   log-density (the value counterpart of 'gradHierNormalIx'). The
+--   guard (τ≤0 → -∞) matches 'logDensity''s Normal branch.
 valueHierNormalIx :: HierNormalIx -> VS.Vector Double -> Double
 valueHierNormalIx (HierNormalIx uix mIx sIx) pc
   | tau <= 0  = negInf
@@ -1871,12 +2337,15 @@ valueHierNormalIx (HierNormalIx uix mIx sIx) pc
 -- @a_i ~ LogNormal(μ, σ)@ 群 (μ = 定数 or 単一 latent・σ = 単一 latent) の値/勾配を
 -- 解析式で扱い、 vecIR 経路の残余 reverse-AD tape (irt-2pl で ~30%time/~85%alloc) を消す。
 
--- | 'collectLogNormalGroups' の結果を param index へ解決した中間表現。
--- μ が定数なら @hlnMeanIx = Left c@、 latent なら @Right ix@。
+-- | [日本語]: 'collectLogNormalGroups' の結果を param index へ解決した中間表現。
+--   μ が定数なら @hlnMeanIx = Left c@、 latent なら @Right ix@。
+--   [English]: An intermediate representation with
+--   'collectLogNormalGroups''s result resolved to param indices. If μ
+--   is constant, @hlnMeanIx = Left c@; if it is latent, @Right ix@.
 data LogNormalIx = LogNormalIx
-  { hlnUIx     :: !(VU.Vector Int)     -- ^ a_i の param index (長さ nG)
-  , hlnMeanIx  :: !(Either Double Int) -- ^ μ (定数 or param index)
-  , hlnScaleIx :: !Int                 -- ^ σ の param index
+  { hlnUIx     :: !(VU.Vector Int)     -- ^ [日本語]: a_i の param index (長さ nG)。 [English]: The param indices of a_i (length nG).
+  , hlnMeanIx  :: !(Either Double Int) -- ^ [日本語]: μ (定数 or param index)。 [English]: μ (a constant, or a param index).
+  , hlnScaleIx :: !Int                 -- ^ [日本語]: σ の param index。 [English]: The param index of σ.
   }
 
 resolveLogNormal :: Map Text Int -> ([Text], Either Double Text, Text) -> LogNormalIx
@@ -1886,15 +2355,26 @@ resolveLogNormal ixOf (uNames, mean, scaleName) = LogNormalIx
   , hlnScaleIx = ixOf Map.! scaleName
   }
 
--- | 'LogNormalIx' の **constrained 空間**での解析勾配を mutable 勾配ベクトルに
--- 加算する (`ad` のスカラ tape を回避)。 L_i = log a_i, d_i = L_i - μ として:
+-- | [日本語]: 'LogNormalIx' の __constrained 空間__での解析勾配を mutable 勾配ベクトルに
+--   加算する (@ad@ のスカラ tape を回避)。 L_i = log a_i, d_i = L_i - μ として:
 --
--- > log p(a | μ, σ) = -nG/2·log(2π) - nG·log σ - Σ L_i - (Σ d_i²)/(2σ²)
--- > ∂/∂a_i = -(1 + d_i/σ²) / a_i
--- > ∂/∂μ   =  (Σ d_i) / σ²          (μ が latent のときのみ)
--- > ∂/∂σ   = -nG/σ + (Σ d_i²)/σ³
+--   > log p(a | μ, σ) = -nG/2·log(2π) - nG·log σ - Σ L_i - (Σ d_i²)/(2σ²)
+--   > ∂/∂a_i = -(1 + d_i/σ²) / a_i
+--   > ∂/∂μ   =  (Σ d_i) / σ²          (μ が latent のときのみ)
+--   > ∂/∂σ   = -nG/σ + (Σ d_i²)/σ³
 --
--- unconstrained への chain rule ('dInvTransform') は呼出側で適用する。
+--   unconstrained への chain rule ('dInvTransform') は呼出側で適用する。
+--   [English]: Adds 'LogNormalIx''s analytic gradient, in
+--   __constrained space__, into the mutable gradient vector (avoiding
+--   a scalar @ad@ tape). Writing L_i = log a_i, d_i = L_i - μ:
+--
+--   > log p(a | μ, σ) = -nG/2·log(2π) - nG·log σ - Σ L_i - (Σ d_i²)/(2σ²)
+--   > ∂/∂a_i = -(1 + d_i/σ²) / a_i
+--   > ∂/∂μ   =  (Σ d_i) / σ²          (only when μ is latent)
+--   > ∂/∂σ   = -nG/σ + (Σ d_i²)/σ³
+--
+--   The chain rule into unconstrained space ('dInvTransform') is
+--   applied by the caller.
 gradLogNormalIx :: LogNormalIx -> VS.Vector Double -> VSM.MVector s Double -> ST s ()
 gradLogNormalIx (LogNormalIx uix meanIx sIx) pc mg = do
   let mu   = either id (pc `VS.unsafeIndex`) meanIx
@@ -1912,9 +2392,14 @@ gradLogNormalIx (LogNormalIx uix meanIx sIx) pc mg = do
     Left _    -> pure ()
   VSM.modify mg (+ (negate (fromIntegral nG) / sig + sumD2 / (sig2 * sig))) sIx
 
--- | 'LogNormalIx' の log-density 和の **値** ('gradLogNormalIx' の値版)。
--- guard (σ≤0 / a_i≤0 → -∞) は 'logDensity' の LogNormal 分岐と一致させる
--- (a は PositiveT 変換で a>0 だが安全のため一致させる)。
+-- | [日本語]: 'LogNormalIx' の log-density 和の __値__ ('gradLogNormalIx' の値版)。
+--   guard (σ≤0 / a_i≤0 → -∞) は @logDensity@ の LogNormal 分岐と一致させる
+--   (a は PositiveT 変換で a>0 だが安全のため一致させる)。
+--   [English]: The __value__ of the sum of 'LogNormalIx''s
+--   log-density (the value counterpart of 'gradLogNormalIx'). The
+--   guard (σ≤0 / a_i≤0 → -∞) matches 'logDensity''s LogNormal branch
+--   (a>0 is guaranteed by the PositiveT transform, but this matches
+--   the guard anyway for safety).
 valueLogNormalIx :: LogNormalIx -> VS.Vector Double -> Double
 valueLogNormalIx (LogNormalIx uix meanIx sIx) pc
   | sig <= 0                      = negInf
@@ -1936,17 +2421,25 @@ valueLogNormalIx (LogNormalIx uix meanIx sIx) pc
 -- 制約変換 (Floating 多相版)
 -- ---------------------------------------------------------------------------
 
--- | unconstrained → constrained 変換 (Floating 多相)。
+-- | [日本語]: unconstrained → constrained 変換 (Floating 多相)。
 --
--- > UnconstrainedT: θ = u
--- > PositiveT:      θ = exp(u)
--- > UnitIntervalT:  θ = sigmoid(u) = 1/(1+exp(-u))
+--   > UnconstrainedT: θ = u
+--   > PositiveT:      θ = exp(u)
+--   > UnitIntervalT:  θ = sigmoid(u) = 1/(1+exp(-u))
+--   [English]: The unconstrained → constrained transform (polymorphic
+--   in Floating).
+--
+--   > UnconstrainedT: θ = u
+--   > PositiveT:      θ = exp(u)
+--   > UnitIntervalT:  θ = sigmoid(u) = 1/(1+exp(-u))
 invTransformF :: Floating a => Transform -> a -> a
 invTransformF UnconstrainedT u = u
 invTransformF PositiveT      u = exp u
 invTransformF UnitIntervalT  u = 1 / (1 + exp (-u))
 
--- | log |∂θ/∂u| — Jacobian 行列式の対数 (Floating 多相)。
+-- | [日本語]: log |∂θ/∂u| — Jacobian 行列式の対数 (Floating 多相)。
+--   [English]: log |∂θ/∂u| — the log of the Jacobian determinant
+--   (polymorphic in Floating).
 logJacF :: Floating a => Transform -> a -> a
 logJacF UnconstrainedT _ = 0
 logJacF PositiveT      u = u                       -- log(exp u) = u
@@ -1954,9 +2447,14 @@ logJacF UnitIntervalT  u =
   let p = 1 / (1 + exp (-u))
   in log p + log (1 - p)                           -- log σ(u)(1-σ(u))
 
--- | 各 latent 変数の事前分布から制約変換を自動検出する。 分布名→変換の表は
--- 'nameToTransform' (@HBM.Distribution@) に一元化 (probe 側 'vecIRProbeOK' と
--- 同一 source)。
+-- | [日本語]: 各 latent 変数の事前分布から制約変換を自動検出する。 分布名→変換の表は
+--   'nameToTransform' (@HBM.Distribution@) に一元化されている (probe 側
+--   'vecIRProbeOK' と同一 source)。
+--   [English]: Auto-detects the constraint transform for each latent
+--   variable from its prior distribution. The distribution-name →
+--   transform table is centralized in 'nameToTransform'
+--   (@HBM.Distribution@), the same source used by the probe-side
+--   'vecIRProbeOK'.
 getTransforms :: ModelP r -> Map Text Transform
 getTransforms m = Map.fromList
   [ (nodeName n, nameToTransform (nodeDist n))
@@ -1964,13 +2462,16 @@ getTransforms m = Map.fromList
   , nodeKind n == LatentN
   ]
 
--- | unconstrained 空間における log-joint (Jacobian 補正込み)。
--- Jacobian 補正で確率密度の積分を保存する。
+-- | [日本語]: unconstrained 空間における log-joint (Jacobian 補正込み)。
+--   Jacobian 補正で確率密度の積分を保存する。
+--   [English]: The log-joint in unconstrained space (including the
+--   Jacobian correction). The Jacobian correction preserves the
+--   integral of the probability density.
 logJointUnconstrained :: forall a r. (Floating a, Ord a)
                       => Model a r
-                      -> [Text]      -- ^ パラメータ順序
-                      -> [Transform] -- ^ 各パラメータの変換種別
-                      -> Map Text a  -- ^ unconstrained パラメータ値
+                      -> [Text]      -- ^ [日本語]: パラメータ順序。 [English]: The parameter order.
+                      -> [Transform] -- ^ [日本語]: 各パラメータの変換種別。 [English]: The transform kind for each parameter.
+                      -> Map Text a  -- ^ [日本語]: unconstrained パラメータ値。 [English]: The unconstrained parameter values.
                       -> a
 logJointUnconstrained m names trans paramsU =
   let paramsC = Map.fromList

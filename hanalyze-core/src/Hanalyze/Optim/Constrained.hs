@@ -4,7 +4,7 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Constrained optimization via the **Augmented Lagrangian** method.
+-- Constrained optimization via the __Augmented Lagrangian__ method.
 --
 -- Internalizes equality constraints @g_i(x) = 0@ and inequality constraints
 -- @h_j(x) ≤ 0@ via Lagrange multipliers + a quadratic penalty, exposing an
@@ -143,7 +143,7 @@ boxToIneq bs = concat
     , \xs -> (xs !! i) - hi ]
   | (i, (lo, hi)) <- zip [0 ..] bs ]
 
--- | The simpler **penalty method** — a stripped-down Augmented Lagrangian
+-- | The simpler __penalty method__ — a stripped-down Augmented Lagrangian
 -- that omits the multiplier updates and only grows the penalty. Easy to
 -- implement and lightweight, but prone to ill-conditioning.
 penaltyMethod

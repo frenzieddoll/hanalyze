@@ -47,32 +47,34 @@ import Hanalyze.Viz.GP    (gpPlot)
 -- ---------------------------------------------------------------------------
 
 data GPReportConfig = GPReportConfig
-  { gpReportTitle :: Text   -- ^ レポートタイトル
-  , gpXLabel      :: Text   -- ^ X 軸ラベル
-  , gpYLabel      :: Text   -- ^ Y 軸ラベル
+  { gpReportTitle :: Text   -- ^ [日本語]: レポートタイトル。 [English]: Report title.
+  , gpXLabel      :: Text   -- ^ [日本語]: X 軸ラベル。 [English]: X-axis label.
+  , gpYLabel      :: Text   -- ^ [日本語]: Y 軸ラベル。 [English]: Y-axis label.
   } deriving (Show)
 
 defaultGPReportConfig :: Text -> GPReportConfig
 defaultGPReportConfig t = GPReportConfig t "x" "y"
 
--- | 1つのカーネルに対するフィット結果。
+-- | [日本語]: 1つのカーネルに対するフィット結果。
+--   [English]: Fit result for a single kernel.
 data GPModelFit = GPModelFit
-  { fLabel    :: Text        -- ^ 表示ラベル (例: "RBF")
+  { fLabel    :: Text        -- ^ [日本語]: 表示ラベル (例: "RBF")。 [English]: Display label (e.g. "RBF").
   , fKernel   :: Kernel
   , fParams   :: GPParams
   , fResult   :: GPResult
-  , fLML      :: Double      -- ^ 対数周辺尤度
-  , fPredData :: GPPredData  -- ^ JS 対話予測用データ
+  , fLML      :: Double      -- ^ [日本語]: 対数周辺尤度。 [English]: Log marginal likelihood.
+  , fPredData :: GPPredData  -- ^ [日本語]: JS 対話予測用データ。 [English]: Data for the JS interactive prediction.
   } deriving (Show)
 
--- | フィット結果を計算してまとめる。
+-- | [日本語]: フィット結果を計算してまとめる。
+--   [English]: Computes and assembles the fit result.
 makeGPFit
-  :: Text          -- ^ ラベル
+  :: Text          -- ^ [日本語]: ラベル。 [English]: Label.
   -> Kernel
-  -> GPParams      -- ^ 最適化済みハイパーパラメータ
-  -> [Double]      -- ^ 訓練 X
-  -> [Double]      -- ^ 訓練 Y
-  -> [Double]      -- ^ テスト X (予測グリッド)
+  -> GPParams      -- ^ [日本語]: 最適化済みハイパーパラメータ。 [English]: Optimized hyperparameters.
+  -> [Double]      -- ^ [日本語]: 訓練 X。 [English]: Training X.
+  -> [Double]      -- ^ [日本語]: 訓練 Y。 [English]: Training Y.
+  -> [Double]      -- ^ [日本語]: テスト X (予測グリッド)。 [English]: Test X (prediction grid).
   -> GPModelFit
 makeGPFit lbl ker params trainX trainY testX =
   let model    = GPModel ker params
@@ -88,7 +90,7 @@ makeGPFit lbl ker params trainX trainY testX =
 writeGPReport
   :: FilePath
   -> GPReportConfig
-  -> [(Double, Double)]  -- ^ 訓練データ (x, y)
+  -> [(Double, Double)]  -- ^ [日本語]: 訓練データ (x, y)。 [English]: Training data (x, y).
   -> [GPModelFit]
   -> IO ()
 writeGPReport path cfg trainData fits =
@@ -723,7 +725,8 @@ jsMatrix rows = "[" <> T.intercalate "," (map jsDoubleArray rows) <> "]"
 -- Formatting helpers
 -- ---------------------------------------------------------------------------
 
--- | Double を JavaScript 数値リテラルに変換 (10桁精度)。
+-- | [日本語]: Double を JavaScript 数値リテラルに変換 (10桁精度)。
+--   [English]: Converts a Double to a JavaScript numeric literal (10-digit precision).
 fmtJS :: Double -> Text
 fmtJS v
   | isNaN v      = "0"

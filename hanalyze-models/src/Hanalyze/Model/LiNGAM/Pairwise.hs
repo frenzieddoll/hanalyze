@@ -6,7 +6,7 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Pairwise LiNGAM: 2 変数間の因果方向 (x → y か y → x か) 推定。
+-- [日本語]: Pairwise LiNGAM: 2 変数間の因果方向 (x → y か y → x か) 推定。
 --
 -- ## アルゴリズム (Hyvärinen-Smith 2013)
 --
@@ -16,11 +16,11 @@
 --
 -- の符号で方向を決定する近似的測度 (LIM, likelihood ratio approximation)。
 --
--- * R > 0 → x → y
--- * R < 0 → y → x
--- * |R| 小 → 判定不能 (ガウシアン近接 or 弱依存)
+-- - R > 0 → x → y
+-- - R < 0 → y → x
+-- - |R| 小 → 判定不能 (ガウシアン近接 or 弱依存)
 --
--- 軽量で 2 変数の方向推定に直接使える。 3 変数以上には 'DirectLiNGAM' を使う。
+-- 軽量で 2 変数の方向推定に直接使える。 3 変数以上には @DirectLiNGAM@ を使う。
 --
 -- ## リファレンス
 --
@@ -28,6 +28,32 @@
 -- estimation of non-Gaussian structural equation models", JMLR 14.
 -- Python 実装は cdt15/lingam の `lingam/lim.py` (LIM = Likelihood-based
 -- Independence Measure)。
+--
+-- [English]: Pairwise LiNGAM: estimates the causal direction between two
+-- variables (x → y or y → x).
+--
+-- ## Algorithm (Hyvärinen-Smith 2013)
+--
+-- For standardized (x, y), based on non-Gaussian independence:
+--
+--   R(x → y) = - Cov(x³, y) · sign(Cov(x, y)) + Cov(x, y³)
+--
+-- is an approximate measure (LIM, likelihood ratio approximation) whose
+-- sign determines direction.
+--
+-- - R > 0 → x → y.
+-- - R < 0 → y → x.
+-- - |R| small → inconclusive (near-Gaussian or weak dependence).
+--
+-- Lightweight and usable directly for two-variable direction estimation.
+-- Use @DirectLiNGAM@ for three or more variables.
+--
+-- ## Reference
+--
+-- Hyvärinen, A. & Smith, S. M. (2013) "Pairwise likelihood ratios for
+-- estimation of non-Gaussian structural equation models", JMLR 14. The
+-- Python implementation is cdt15/lingam's `lingam/lim.py` (LIM =
+-- Likelihood-based Independence Measure).
 module Hanalyze.Model.LiNGAM.Pairwise
   ( PairwiseDirection (..)
   , PairwiseResult (..)
@@ -42,22 +68,24 @@ import qualified Numeric.LinearAlgebra as LA
 -- ===========================================================================
 
 data PairwiseDirection
-  = XtoY        -- ^ x → y
-  | YtoX        -- ^ y → x
-  | Inconclusive  -- ^ |score| < threshold
+  = XtoY          -- ^ [日本語]: x → y。 [English]: x → y.
+  | YtoX          -- ^ [日本語]: y → x。 [English]: y → x.
+  | Inconclusive  -- ^ [日本語]: |score| < threshold。 [English]: |score| < threshold.
   deriving (Show, Eq)
 
 data PairwiseResult = PairwiseResult
-  { prScore     :: !Double             -- ^ R(x → y) の値、 符号で方向決定
+  { prScore     :: !Double             -- ^ [日本語]: R(x → y) の値、 符号で方向決定。 [English]: The value of R(x → y); its sign determines the direction.
   , prDirection :: !PairwiseDirection
-  , prMagnitude :: !Double             -- ^ |score|、 confidence の代理
+  , prMagnitude :: !Double             -- ^ [日本語]: |score|、 confidence の代理。 [English]: |score|, a proxy for confidence.
   } deriving (Show)
 
 -- ===========================================================================
 -- 実装
 -- ===========================================================================
 
--- | Pairwise LiNGAM の主関数。 threshold 未満は Inconclusive。
+-- | [日本語]: Pairwise LiNGAM の主関数。 threshold 未満は Inconclusive。
+--   [English]: The main Pairwise LiNGAM function. Below the threshold,
+--   returns Inconclusive.
 pairwiseLiNGAM
   :: Double               -- threshold (default 0.0 = 符号だけで判定)
   -> LA.Vector Double     -- x
@@ -72,8 +100,10 @@ pairwiseLiNGAM thr x y =
         | otherwise = YtoX
   in PairwiseResult { prScore = s, prDirection = dir, prMagnitude = mag }
 
--- | スコア R = -Cov(x³, y)·sign(Cov(x,y)) + Cov(x, y³)
+-- | [日本語]: スコア R = -Cov(x³, y)·sign(Cov(x,y)) + Cov(x, y³)
 --   x, y は内部で標準化される (zero-mean、 unit-variance)。
+--   [English]: The score R = -Cov(x³, y)·sign(Cov(x,y)) + Cov(x, y³). x, y
+--   are standardized internally (zero-mean, unit-variance).
 pairwiseScore :: LA.Vector Double -> LA.Vector Double -> Double
 pairwiseScore xRaw yRaw =
   let !x = standardize xRaw

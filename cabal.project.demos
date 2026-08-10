@@ -1,0 +1,12 @@
+-- | demo/bench executable 群 (hanalyze-demos) の opt-in build root。
+-- |
+-- | plot 連携構成 (cabal.project.plot) に demos package を足しただけ。
+-- | 既定 build (cabal.project / cabal.project.plot の `build all`) には demos を
+-- | 含めない = 27 exe のビルド/リンクは demo を使う時だけ払う (Phase 106.4)。
+-- |
+-- |   cabal build --project-file=cabal.project.demos hanalyze-demos
+-- |   cabal run   --project-file=cabal.project.demos posteriordb-radon
+import: cabal.project.plot
+
+packages:
+  hanalyze-demos

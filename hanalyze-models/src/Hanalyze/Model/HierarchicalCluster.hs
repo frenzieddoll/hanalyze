@@ -6,19 +6,35 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- 凝集型階層クラスタリング (Agglomerative Hierarchical Clustering)。
+-- [日本語]: 凝集型階層クラスタリング (Agglomerative Hierarchical Clustering)。
 --
 -- Lance-Williams update formula による O(n²) アルゴリズム。
 -- 各ステップで最近接クラスタ対をマージし、 新クラスタへの距離を再計算する。
 --
 -- 対応 linkage:
 --
---   * 'Single'   : d(i∪j, k) = min(d(i,k), d(j,k))
---   * 'Complete' : d(i∪j, k) = max(d(i,k), d(j,k))
---   * 'Average'  : (|i|·d(i,k) + |j|·d(j,k)) / (|i|+|j|)
---   * 'Ward'     : Lance-Williams 係数で分散最小化
+--   - 'Single'   : d(i∪j, k) = min(d(i,k), d(j,k))
+--   - 'Complete' : d(i∪j, k) = max(d(i,k), d(j,k))
+--   - 'Average'  : (|i|·d(i,k) + |j|·d(j,k)) / (|i|+|j|)
+--   - 'Ward'     : Lance-Williams 係数で分散最小化
 --
 -- 距離は Euclidean のみサポート (X の各行をサンプルとして二乗ユークリッド距離)。
+--
+-- [English]: Agglomerative Hierarchical Clustering.
+--
+-- An O(n²) algorithm using the Lance-Williams update formula. At each step,
+-- the nearest pair of clusters is merged and the distances to the new
+-- cluster are recomputed.
+--
+-- Supported linkages:
+--
+--   - 'Single'   : d(i∪j, k) = min(d(i,k), d(j,k))
+--   - 'Complete' : d(i∪j, k) = max(d(i,k), d(j,k))
+--   - 'Average'  : (|i|·d(i,k) + |j|·d(j,k)) / (|i|+|j|)
+--   - 'Ward'     : minimizes variance via the Lance-Williams coefficients
+--
+-- Only Euclidean distance is supported (squared Euclidean distance treating
+-- each row of X as a sample).
 module Hanalyze.Model.HierarchicalCluster
   ( Linkage (..)
   , HClusterFit (..)
@@ -44,26 +60,35 @@ data Linkage = Single | Complete | Average | Ward
              deriving (Show, Eq)
 
 data HClusterFit = HClusterFit
-  { hcMerges       :: ![(Int, Int)]  -- ^ マージ列 (n-1 個)。 ID は 0..n-1 が元サンプル、
-                                     --   以降 n, n+1, ... が新クラスタ
-  , hcHeights      :: ![Double]      -- ^ マージ時点での距離 (linkage に応じた値)
+  { hcMerges       :: ![(Int, Int)]  -- ^ [日本語]: マージ列 (n-1 個)。 ID は 0..n-1 が元サンプル、
+                                     --   以降 n, n+1, ... が新クラスタ。 [English]: The
+                                     --   merge sequence (n-1 entries). IDs 0..n-1 are the
+                                     --   original samples; n, n+1, ... onward are new clusters.
+  , hcHeights      :: ![Double]      -- ^ [日本語]: マージ時点での距離 (linkage に応じた値)。
+                                     --   [English]: The distance at the time of each merge
+                                     --   (a value dependent on the linkage).
   , hcLinkage      :: !Linkage
-  , hcNumOriginals :: !Int           -- ^ n_samples
+  , hcNumOriginals :: !Int           -- ^ [日本語]: n_samples。 [English]: n_samples.
   } deriving (Show)
 
 -- ===========================================================================
 -- fit
 -- ===========================================================================
 
--- | 階層クラスタリングを fit する。 X は n × p 行列、 各行が 1 サンプル。
+-- | [日本語]: 階層クラスタリングを fit する。 X は n × p 行列、 各行が 1 サンプル。
+--   [English]: Fits hierarchical clustering. X is an n × p matrix, with each
+--   row a sample.
 fitHierarchical :: Linkage -> LA.Matrix Double -> HClusterFit
 fitHierarchical link xs =
   let n = LA.rows xs
       d0 = initialDistance link xs
   in agglomerate link n d0
 
--- | 樹形図を K クラスタに切り、 各サンプルのクラスタ ID を返す。
+-- | [日本語]: 樹形図を K クラスタに切り、 各サンプルのクラスタ ID を返す。
 --   K = 1 → 全サンプル ID 0; K = n → 全サンプル別 ID。
+--   [English]: Cuts the dendrogram into K clusters and returns each sample's
+--   cluster ID. K = 1 → all samples get ID 0; K = n → every sample gets a
+--   distinct ID.
 cutTree :: HClusterFit -> Int -> V.Vector Int
 cutTree fit k
   | k <= 0 = V.replicate (hcNumOriginals fit) 0
@@ -98,8 +123,11 @@ cutTree fit k
 -- 内部: 距離行列の構築
 -- ===========================================================================
 
--- | 初期距離行列 (n × n)。 二乗ユークリッド距離。
+-- | [日本語]: 初期距離行列 (n × n)。 二乗ユークリッド距離。
 --   Ward は二乗距離を使うのが定義どおり。 他 linkage は √ を取って通常距離にする。
+--   [English]: The initial distance matrix (n × n). Squared Euclidean
+--   distance. Ward uses the squared distance as defined; other linkages
+--   take the √ to get the ordinary distance.
 initialDistance :: Linkage -> LA.Matrix Double -> LA.Matrix Double
 initialDistance link xs =
   let n = LA.rows xs
@@ -193,7 +221,9 @@ agglomerate link n d0 = runST $ do
     reportHeight Ward h = sqrt (max 0 h)
     reportHeight _    h = h
 
--- | Lance-Williams recurrence:
+-- | [日本語]: Lance-Williams recurrence:
+--   d(i∪j, k) = α_i d(i,k) + α_j d(j,k) + β d(i,j) + γ |d(i,k) − d(j,k)|
+--   [English]: The Lance-Williams recurrence:
 --   d(i∪j, k) = α_i d(i,k) + α_j d(j,k) + β d(i,j) + γ |d(i,k) − d(j,k)|
 lanceWilliams :: Linkage
               -> (Int, Int, Int)   -- sizes (n_a, n_b, n_k)

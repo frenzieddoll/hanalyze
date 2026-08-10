@@ -67,10 +67,16 @@ type Fold = ([Int], [Int])
 -- Split strategies
 -- ---------------------------------------------------------------------------
 
--- | Random k-fold split. 'PrimMonad' 汎用 (mwc は 'PrimMonad' 汎用) ゆえ ST/IO 両経路で
--- 同コード。 IO 呼び出しは従来どおり。 純粋 (seed) 経路は呼び出し側で
--- @runST (MWC.initialize (V.singleton seed) >>= kFold k n)@ で完結 (Phase 70.7 = 罰則回帰
--- の λ CV 純粋化に使う・[[selectLambdaCV]])。
+-- | [日本語]: Random k-fold split. 'PrimMonad' 汎用 (mwc は 'PrimMonad' 汎用) ゆえ ST/IO 両経路で
+--   同コード。 IO 呼び出しは従来どおり。 純粋 (seed) 経路は呼び出し側で
+--   @runST (MWC.initialize (V.singleton seed) >>= kFold k n)@ で完結 (罰則回帰
+--   の λ CV 純粋化に使う・[[selectLambdaCV]])。
+--   [English]: Random k-fold split. Since it is polymorphic over
+--   'PrimMonad' (mwc is itself polymorphic over 'PrimMonad'), the same
+--   code serves both the ST and IO paths. IO calls work as before. The
+--   pure (seed-based) path is self-contained on the caller's side via
+--   @runST (MWC.initialize (V.singleton seed) >>= kFold k n)@ (used for
+--   the pure λ CV in penalized regression; see [[selectLambdaCV]]).
 kFold
   :: PrimMonad m
   => Int            -- ^ Number of folds @k@.
@@ -247,7 +253,9 @@ gridSearchCV folds grid fp sf d = do
 allIdx :: Int -> [Int]
 allIdx n = [0 .. n - 1]
 
--- | Fisher-Yates shuffle producing a list of indices. 'PrimMonad' 汎用 (ST/IO 両用)。
+-- | [日本語]: Fisher-Yates shuffle producing a list of indices. 'PrimMonad' 汎用 (ST/IO 両用)。
+--   [English]: Fisher-Yates shuffle producing a list of indices.
+--   Polymorphic over 'PrimMonad' (usable from both ST and IO).
 shuffleIndices :: PrimMonad m => Int -> MWC.Gen (PrimState m) -> m [Int]
 shuffleIndices n gen = do
   v <- V.thaw (V.fromList [0 .. n - 1])
@@ -259,7 +267,9 @@ shuffleIndices n gen = do
     VM.write v j a
   V.toList <$> V.freeze v
 
--- | Shuffle an arbitrary list. 'PrimMonad' 汎用 (ST/IO 両用)。
+-- | [日本語]: Shuffle an arbitrary list. 'PrimMonad' 汎用 (ST/IO 両用)。
+--   [English]: Shuffle an arbitrary list. Polymorphic over 'PrimMonad'
+--   (usable from both ST and IO).
 shuffleList :: PrimMonad m => [a] -> MWC.Gen (PrimState m) -> m [a]
 shuffleList xs gen = do
   let n = length xs

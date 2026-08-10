@@ -6,24 +6,36 @@
 --
 -- Polymorphic Hierarchical Bayesian Model (HBM) DSL.
 --
--- Phase 58 で責務別 submodule に分割済み。 本モジュールは **facade**:
--- 下位 8 module (Util/Distribution/Sampling/Model/Track/Eval/IR/Gradient) を
--- import し、 従来の公開 API を export list 経由でそのまま再公開する。
--- 既存 importer (18 src module + test) は無改修で従来通り使える。
+-- [日本語]: 責務別 submodule に分割済み。 本モジュールは __facade__:
+--   下位 8 module (Util/Distribution/Sampling/Model/Track/Eval/IR/Gradient) を
+--   import し、 従来の公開 API を export list 経由でそのまま再公開する。
+--   既存 importer (18 src module + test) は無改修で従来通り使える。
+--   [English]: Split into responsibility-scoped submodules; this module is
+--   the __facade__: it imports the 8 lower-layer modules
+--   (Util/Distribution/Sampling/Model/Track/Eval/IR/Gradient) and re-exports
+--   the original public API unchanged via the export list. Existing
+--   importers (18 src modules + tests) work without any modification.
 --
 -- A free-monad embedded language for probabilistic programs. The
 -- continuation type is left polymorphic so that a single model term can
 -- be reinterpreted as:
 --
---   * a structural inspector (parameter / observation graph),
---   * a log-joint density,
---   * an automatically-differentiated log-joint
---     (via @Numeric.AD.Mode.Reverse.Double@ — Double 特化の reverse モードゆえ
---      勾配は latent 数 p に依らず ~1 sweep。 Phase 53 で forward から切替:
---      forward は勾配 1 本に p 回評価が要り階層モデルで線形悪化していた。
---      generic Reverse は tape boxing で低次元が遅く、 Reverse.Double が全 p で
---      forward/generic を上回ると実測),
---   * a dependency tracker (the 'Track' interpretation, used by
+--   - a structural inspector (parameter / observation graph),
+--   - a log-joint density,
+--   - an automatically-differentiated log-joint
+--     (via @Numeric.AD.Mode.Reverse.Double@ —
+--     [日本語]: Double 特化の reverse モードゆえ勾配は latent 数 p に依らず
+--     ~1 sweep。 forward 実装から切替: forward は勾配 1 本に p 回評価が要り
+--     階層モデルで線形悪化していた。 generic Reverse は tape boxing で
+--     低次元が遅く、 Reverse.Double が全 p で forward/generic を上回ると実測。
+--     [English]: specializing to @Double@ makes the reverse-mode gradient
+--     cost ~1 sweep independent of the number of latent parameters p. The
+--     previous forward-mode implementation needed p evaluations per
+--     gradient and degraded linearly for hierarchical models; the generic
+--     @Reverse@ mode is slow at low dimension due to tape boxing, and
+--     measurements show @Reverse.Double@ beats both forward-mode and
+--     generic @Reverse@ across all p.),
+--   - a dependency tracker (the 'Track' interpretation, used by
 --     @Hanalyze.Viz.ModelGraph@ to build a Mermaid DAG).
 --
 -- See @docs/bayesian/02-probabilistic-model.md@ for an extended
@@ -36,12 +48,15 @@
 --   deriving Functor
 -- @
 --
--- ユーザーは @forall a. (Floating a, Ord a) => Model a r@ という
--- 「型に多相なモデル」を一度だけ書き、解釈時に @a@ を選ぶことで
--- 同じモデルから複数の解釈 (サンプリング・log joint・AD 勾配・依存抽出)
--- を取り出せる。
+-- [日本語]: ユーザーは @forall a. (Floating a, Ord a) => Model a r@ という
+--   「型に多相なモデル」を一度だけ書き、 解釈時に @a@ を選ぶことで同じモデル
+--   から複数の解釈 (サンプリング・log joint・AD 勾配・依存抽出) を取り出せる。
+--   [English]: Users write a "type-polymorphic model" —
+--   @forall a. (Floating a, Ord a) => Model a r@ — just once, and choosing
+--   @a@ at interpretation time lets the same model yield multiple readings
+--   (sampling, log-joint, AD gradient, dependency extraction).
 --
--- == 使い方
+-- == 使い方 / Usage
 --
 -- @
 -- import Hanalyze.Model.HBM
@@ -99,7 +114,7 @@ module Hanalyze.Model.HBM
   , orderedCuts
   , dpStickBreaking
   , hmmLatent
-  -- ** Phase 40 plate notation
+  -- ** plate notation
   , plate
   , plateI
   , plateI_
@@ -165,7 +180,7 @@ module Hanalyze.Model.HBM
   , synthGaussLMBlocks
   , synthVecIR
   , gradPathLabel
-    -- * Numeric utilities (test 用・Phase 56.1)
+    -- * Numeric utilities (test 用)
   , lgammaApprox
   , digamma
     -- * Constraint transforms (for HMC)

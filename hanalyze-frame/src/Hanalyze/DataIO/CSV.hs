@@ -6,7 +6,7 @@
 -- License     : BSD-3-Clause
 --
 -- CSV / TSV / SSV loaders that return Hackage @dataframe@'s
--- 'DataFrame.Internal.DataFrame.DataFrame' directly.
+-- @DataFrame.Internal.DataFrame.DataFrame@ directly.
 --
 --   * CSV / TSV — delegated to Hackage's 'DX.readCsv' / 'DX.readTsv'
 --     (improved type inference, missing-bitmap support).
@@ -80,11 +80,11 @@ loadHackage reader path = do
     Right df -> Right df
 
 -- ---------------------------------------------------------------------------
--- SSV: cassava で読み、Hackage 'DataFrame' に詰め替える
+-- SSV: cassava で読み、Hackage @DataFrame@ に詰め替える
 -- ---------------------------------------------------------------------------
 
 -- | Load a space-separated value file via @cassava@; the result is
--- repackaged into a Hackage 'DXD.DataFrame'.
+-- repackaged into a Hackage @DXD.DataFrame@.
 loadSSV :: FilePath -> IO (Either ParseError DXD.DataFrame)
 loadSSV path = do
   content <- BL.readFile path
@@ -100,7 +100,9 @@ toHackageDF hdr rows =
   where
     insert df (name, col) = DX.insertColumn name col df
 
--- | 列の値を全て読み 'Double' として parse できれば数値列、そうでなければ Text 列。
+-- | [日本語]: 列の値を全て読み 'Double' として parse できれば数値列、そうでなければ Text 列。
+--   [English]: If every value in the column can be parsed as 'Double',
+--   it's a numeric column; otherwise it's a Text column.
 classifyCells :: BS.ByteString -> V.Vector NamedRecord -> DX.Column
 classifyCells key rows =
   let cells = V.map (TE.decodeUtf8 . HM.lookupDefault "" key) rows
@@ -129,8 +131,11 @@ loadAuto path
 -- ログを返せる (現状はパス情報のみ、A3 で W コードが付き始める)。
 -- ---------------------------------------------------------------------------
 
--- | ファイルを行ベクトルで先読みして、空 / ヘッダのみを検出する。
--- Right に返るのは「行リスト (改行で split, 空行は除く)」。
+-- | [日本語]: ファイルを行ベクトルで先読みして、空 / ヘッダのみを検出する。
+--   Right に返るのは「行リスト (改行で split, 空行は除く)」。
+--   [English]: Pre-reads the file as a vector of lines to detect
+--   empty-file / header-only cases. What's returned on 'Right' is "the
+--   line list (split on newline, empty lines removed)".
 preflight :: FilePath -> IO (Either ParseError [BS.ByteString])
 preflight path = do
   e <- tryIOError (BS.readFile path)
@@ -151,7 +156,8 @@ stripCR bs
   | BS.last bs == fromIntegral (ord '\r') = BS.init bs
   | otherwise                   = bs
 
--- | UTF-8 BOM (EF BB BF) を取り除く。
+-- | [日本語]: UTF-8 BOM (EF BB BF) を取り除く。
+--   [English]: Strips a UTF-8 BOM (EF BB BF).
 stripBOM :: BS.ByteString -> BS.ByteString
 stripBOM bs
   | BS.length bs >= 3
@@ -160,7 +166,8 @@ stripBOM bs
   , BS.index bs 2 == 0xBF = BS.drop 3 bs
   | otherwise             = bs
 
--- | Hackage @readCsv@ / @readTsv@ を例外捕捉付きで呼ぶ。
+-- | [日本語]: Hackage @readCsv@ / @readTsv@ を例外捕捉付きで呼ぶ。
+--   [English]: Calls Hackage's @readCsv@ / @readTsv@ with exceptions caught.
 runHackageSafe
   :: (FilePath -> IO DXD.DataFrame)
   -> FilePath
@@ -171,7 +178,9 @@ runHackageSafe reader path = do
     Right df -> Right df
     Left  e  -> Left (cleanError (show e))
 
--- | call-stack 行を取り除き、ユーザに見せる 1 行メッセージに整形する。
+-- | [日本語]: call-stack 行を取り除き、ユーザに見せる 1 行メッセージに整形する。
+--   [English]: Strips call-stack lines and formats the message into a
+--   single line to show the user.
 cleanError :: String -> String
 cleanError = takeWhile (/= '\n')
 
@@ -209,7 +218,8 @@ loadSsvSafe path = do
         Left  e  -> Left e
         Right df -> Right (df, inspectWithPreview (previewBytes rs) df)
 
--- | 先頭 8 KB 程度を健全性検査のプレビュー用に切り出す。
+-- | [日本語]: 先頭 8 KB 程度を健全性検査のプレビュー用に切り出す。
+--   [English]: Slices out roughly the first 8 KB for use as a health-check preview.
 previewBytes :: [BS.ByteString] -> BS.ByteString
 previewBytes rs =
   let joined = BS.intercalate "\n" rs
@@ -244,19 +254,34 @@ data LoadOpts = LoadOpts
 defaultLoadOpts :: LoadOpts
 defaultLoadOpts = LoadOpts 0 Nothing False False True Nothing
 
--- | Run 'loadAutoSafe' with the given @LoadOpts@. When @skip@,
--- @comment@ and @noHeader@ are all unset the file is read directly;
--- otherwise the request is realized by writing to a temporary file
--- 前処理結果を書き出してから読む。
+-- | [日本語]: 指定された @LoadOpts@ で 'loadAutoSafe' を実行する。@skip@ /
+--   @comment@ / @noHeader@ が全て未指定ならファイルを直接読む。それ以外は
+--   一時ファイルに前処理結果を書き出してから読む。
 --
--- 'loSniff' が True (デフォルト) のときは、ユーザ未指定の項目に限り
--- 'Hanalyze.DataIO.Sniff.sniffBytes' の結果で自動補完する:
+--   'loSniff' が True (デフォルト) のときは、ユーザ未指定の項目に限り
+--   'Hanalyze.DataIO.Sniff.sniffBytes' の結果で自動補完する:
 --
--- * 'loSkip == 0' なら sniff の skip 値で上書き
--- * 'loComment == Nothing' なら sniff のコメント文字で上書き
--- * 'loNoHeader == False' で sniff が「ヘッダ無し」を強く示唆したら上書き
+--   * 'loSkip == 0' なら sniff の skip 値で上書き
+--   * 'loComment == Nothing' なら sniff のコメント文字で上書き
+--   * 'loNoHeader == False' で sniff が「ヘッダ無し」を強く示唆したら上書き
 --
--- 自動推論で値が変わったときは I013 (Info コード) として LogReport に残す。
+--   自動推論で値が変わったときは I013 (Info コード) として LogReport に残す。
+--   [English]: Runs 'loadAutoSafe' with the given @LoadOpts@. When
+--   @skip@, @comment@ and @noHeader@ are all unset the file is read
+--   directly; otherwise the request is realized by writing the
+--   preprocessed result to a temporary file and reading that.
+--
+--   When 'loSniff' is True (the default), only the items the user left
+--   unspecified are auto-filled from 'Hanalyze.DataIO.Sniff.sniffBytes''s
+--   result:
+--
+--   * If 'loSkip == 0', overwritten by sniff's skip value.
+--   * If 'loComment == Nothing', overwritten by sniff's comment character.
+--   * If 'loNoHeader == False' and sniff strongly suggests "no header",
+--     overwritten.
+--
+--   When auto-inference changes a value, it's recorded in the
+--   LogReport as an I013 (Info code).
 loadAutoSafeWith
   :: LoadOpts -> FilePath
   -> IO (Either ParseError (Loaded DXD.DataFrame))
@@ -289,7 +314,9 @@ loadAutoSafeWith opts0 path = do
                          <> " 件)。--strict を外すか、--skip / --comment / --no-header / --no-sniff で対処してください。")
                else return (Right (df, lg'))
 
--- | 指定 delimiter で CSV を読み、loadAutoSafe 同等の Loaded を返す。
+-- | [日本語]: 指定 delimiter で CSV を読み、loadAutoSafe 同等の Loaded を返す。
+--   [English]: Reads a CSV with the given delimiter, returning a
+--   'Loaded' equivalent to loadAutoSafe's.
 loadCsvWithDelim
   :: Char -> FilePath -> IO (Either ParseError (Loaded DXD.DataFrame))
 loadCsvWithDelim c path = do
@@ -304,9 +331,13 @@ loadCsvWithDelim c path = do
         Left  e  -> Left (cleanError (show e))
         Right df -> Right (df, inspectWithPreview (previewBytes rs) df)
 
--- | sniff 結果を @LoadOpts@ に反映する。ユーザ指定がある項目 (>0 / Just /
--- True) は尊重し、未指定のところだけ書き換える。書き換えた項目は
--- I013 ログに残す。
+-- | [日本語]: sniff 結果を @LoadOpts@ に反映する。ユーザ指定がある項目 (>0 / Just /
+--   True) は尊重し、未指定のところだけ書き換える。書き換えた項目は
+--   I013 ログに残す。
+--   [English]: Reflects the sniff result into @LoadOpts@. Items the
+--   user explicitly specified (@>0@ / @Just@ / @True@) are respected;
+--   only unspecified ones are rewritten. Rewritten items are recorded
+--   in the I013 log.
 applySniff :: LoadOpts -> Sniff.Sniff -> (LoadOpts, LogReport)
 applySniff o s =
   let (skip', noteSkip)   =
@@ -341,8 +372,11 @@ needRewrite o = loSkip o > 0
              || loComment o /= Nothing
              || loNoHeader o
 
--- | 前処理 (skip / comment / no-header) を施した一時ファイルを作って
--- アクションに渡す。withSystemTempFile で自動クリーンアップ。
+-- | [日本語]: 前処理 (skip / comment / no-header) を施した一時ファイルを作って
+--   アクションに渡す。withSystemTempFile で自動クリーンアップ。
+--   [English]: Creates a temporary file with preprocessing (skip /
+--   comment / no-header) applied and passes it to the action.
+--   Automatically cleaned up via withSystemTempFile.
 withRewritten
   :: LoadOpts -> FilePath
   -> (FilePath -> LogReport -> IO (Either ParseError (Loaded DXD.DataFrame)))
@@ -355,7 +389,9 @@ withRewritten opts path act = do
     hClose h
     act tmp plog
 
--- | LoadOpts に従ってバイト列を変換し、変換ログを返す。
+-- | [日本語]: LoadOpts に従ってバイト列を変換し、変換ログを返す。
+--   [English]: Transforms the byte string according to LoadOpts and
+--   returns the transformation log.
 rewriteContent :: LoadOpts -> BS.ByteString -> (BS.ByteString, LogReport)
 rewriteContent opts bs0 =
   let nl       = fromIntegral (ord '\n')

@@ -118,9 +118,13 @@ renderDelim c    = "'" <> T.singleton c <> "'"
 -- delimiter 推論
 -- ---------------------------------------------------------------------------
 
--- | 候補 delimiter ('`,;\t|`') について各行での出現数を取り、
--- 「行ごとの分散が小さい」 + 「中央値の出現数が多い」を優先する。
--- そもそも空入力やシングル行の場合は ',' を返す。
+-- | [日本語]: 候補 delimiter ('`,;\t|`') について各行での出現数を取り、
+--   「行ごとの分散が小さい」 + 「中央値の出現数が多い」を優先する。
+--   そもそも空入力やシングル行の場合は ',' を返す。
+--   [English]: For each candidate delimiter (@,;\t|@), takes the
+--   per-line occurrence count, preferring "low variance across lines"
+--   + "high median occurrence count". Returns ',' for empty input or a
+--   single line to begin with.
 detectDelimiter :: [BS.ByteString] -> Char
 detectDelimiter [] = ','
 detectDelimiter ls =
@@ -147,7 +151,9 @@ median xs =
       n = length s
   in if n == 0 then 0 else s !! (n `div` 2)
 
--- | 整数除算で潰さない分散 (Double で計算)。
+-- | [日本語]: 整数除算で潰さない分散 (Double で計算)。
+--   [English]: Variance computed in 'Double' so integer division doesn't
+--   truncate it to zero.
 varianceD :: [Int] -> Double
 varianceD xs =
   let n = length xs
@@ -159,9 +165,13 @@ varianceD xs =
 -- ヘッダ有無の推論
 -- ---------------------------------------------------------------------------
 
--- | 1 行目の各セルが全て numeric token なら「ヘッダ無し」と判断する。
--- それ以外 (text を含む) は「ヘッダ有り」。空入力は True を返す
--- (Hackage が空 CSV を弾くため、あとはそちら側で扱う)。
+-- | [日本語]: 1 行目の各セルが全て numeric token なら「ヘッダ無し」と判断する。
+--   それ以外 (text を含む) は「ヘッダ有り」。空入力は True を返す
+--   (Hackage が空 CSV を弾くため、あとはそちら側で扱う)。
+--   [English]: If every cell in the first line is a numeric token,
+--   judges the file to have "no header". Otherwise (containing text)
+--   it's judged to "have a header". Empty input returns True (Hackage
+--   rejects empty CSVs, so that case is handled on that side).
 detectHasHeader :: Char -> [BS.ByteString] -> Bool
 detectHasHeader _      []       = True
 detectHasHeader delim (l:_) =
@@ -178,8 +188,12 @@ detectHasHeader delim (l:_) =
 -- 先頭 skip / コメント文字の推論
 -- ---------------------------------------------------------------------------
 
--- | 先頭から「コメント文字」で始まる行が連続する数を skip 候補とする。
--- コメント文字は @#@ / @!@ / @;@ / @\/\/@ のどれか。検出文字も返す。
+-- | [日本語]: 先頭から「コメント文字」で始まる行が連続する数を skip 候補とする。
+--   コメント文字は @#@ / @!@ / @;@ / @\/\/@ のどれか。検出文字も返す。
+--   [English]: The number of consecutive lines from the top starting
+--   with a "comment character" is taken as the skip candidate. The
+--   comment character is one of @#@ / @!@ / @;@ / @\/\/@. The detected
+--   character is also returned.
 detectSkip :: [BS.ByteString] -> (Int, Maybe Char)
 detectSkip ls =
   let candidates = ['#', '!']
@@ -198,7 +212,9 @@ startsWith c bs =
        Just (h, _) -> h == fromIntegral (ord c)
        Nothing     -> False
 
--- | 'detectSkip' の結果からコメント文字だけ取り出すラッパ。
+-- | [日本語]: 'detectSkip' の結果からコメント文字だけ取り出すラッパ。
+--   [English]: A wrapper that extracts just the comment character from
+--   'detectSkip''s result.
 detectCommentChar :: [BS.ByteString] -> Maybe Char
 detectCommentChar = snd . detectSkip
 

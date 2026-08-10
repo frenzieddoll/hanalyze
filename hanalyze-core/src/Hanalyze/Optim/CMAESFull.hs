@@ -121,7 +121,8 @@ data CMAESParams = CMAESParams
   , pEN     :: !Double
   }
 
--- | 反復本体。
+-- | [日本語]: 反復本体。
+--   [English]: The iteration body.
 loop :: CMAESFConfig
      -> ([Double] -> Double)
      -> MWC.GenIO

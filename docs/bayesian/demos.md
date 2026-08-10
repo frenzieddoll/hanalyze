@@ -5,7 +5,7 @@
 > A short guide to the hierarchical-model demos under
 > `Hanalyze.Model.HBM` / `Hanalyze.Model.GLMM`, focused on "what each demo
 > does" and "what to look at". The actual source for each demo lives under
-> `demo/bayesian/`.
+> `hanalyze-demos/demo/bayesian/`.
 >
 > For the DSL itself, see
 > [`02-probabilistic-model.md`](02-probabilistic-model.md); for comparison
@@ -13,7 +13,7 @@
 
 ## `hbm-example` — hierarchical normal model + 4-chain NUTS
 
-Source: [`demo/bayesian/HBMExample.hs`](../../demo/bayesian/HBMExample.hs)
+Source: [`hanalyze-demos/demo/bayesian/HBMExample.hs`](../../hanalyze-demos/demo/bayesian/HBMExample.hs)
 
 **Purpose**: Infer a Form-A (per-group data) hierarchical normal model
 with NUTS, and emit a 4-chain aggregated report (model graph + posterior
@@ -39,7 +39,7 @@ cabal run hbm-example
 
 ## `hbm-random-slope` — random intercept vs +random slope
 
-Source: [`demo/bayesian/HBMRandomSlopeDemo.hs`](../../demo/bayesian/HBMRandomSlopeDemo.hs)
+Source: [`hanalyze-demos/demo/bayesian/HBMRandomSlopeDemo.hs`](../../hanalyze-demos/demo/bayesian/HBMRandomSlopeDemo.hs)
 
 **Purpose**: For data where the effect of x differs by group, compare a
 random-intercept-only model (M1: shared β) and a random-intercept +
@@ -68,7 +68,7 @@ cabal run hbm-random-slope
 
 ## `simpson-paradox` — three-way comparison of LM / GLMM / HBM
 
-Source: [`demo/bayesian/SimpsonParadoxDemo.hs`](../../demo/bayesian/SimpsonParadoxDemo.hs)
+Source: [`hanalyze-demos/demo/bayesian/SimpsonParadoxDemo.hs`](../../hanalyze-demos/demo/bayesian/SimpsonParadoxDemo.hs)
 
 **Purpose**: Analyse Simpson's paradox (negative slope within groups,
 appears positive if groups are ignored) with three methods, showing that
@@ -97,7 +97,7 @@ cabal run simpson-paradox
 
 ## `glmm-demo` — GLMM (LME) maximum likelihood estimation
 
-Source: [`demo/Demo.hs`](../../demo/Demo.hs)
+Source: [`hanalyze-demos/demo/Demo.hs`](../../hanalyze-demos/demo/Demo.hs)
 (executable name `glmm-demo`)
 
 **Purpose**: Demonstrate the use of **classical GLMM (EM / Laplace)**
@@ -132,7 +132,7 @@ when to use which).
 
 ## `phase37-a0-verify` — execution check of sample code in the docs
 
-Source: [`demo/bayesian/Phase37A0VerifyDemo.hs`](../../demo/bayesian/Phase37A0VerifyDemo.hs)
+Source: [`hanalyze-demos/demo/bayesian/Phase37A0VerifyDemo.hs`](../../hanalyze-demos/demo/bayesian/Phase37A0VerifyDemo.hs)
 
 **Purpose**: Collect the sample code added in
 [`02-probabilistic-model.md`](02-probabilistic-model.md) for pattern 4

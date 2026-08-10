@@ -4,7 +4,7 @@
 >
 > `Hanalyze.Model.HBM` / `Hanalyze.Model.GLMM` の階層モデル関連 demo を
 > 「何をしているか」「何を見るか」 で短く解説したガイド。 各 demo の
-> ソースコード自体は `demo/bayesian/` 配下にあります。
+> ソースコード自体は `hanalyze-demos/demo/bayesian/` 配下にあります。
 >
 > モデルの DSL 書き方そのものは
 > [`02-probabilistic-model.ja.md`](02-probabilistic-model.ja.md) を、
@@ -13,7 +13,7 @@
 
 ## `hbm-example` — 階層正規モデル + 4 chain NUTS
 
-ソース: [`demo/bayesian/HBMExample.hs`](../../demo/bayesian/HBMExample.hs)
+ソース: [`hanalyze-demos/demo/bayesian/HBMExample.hs`](../../hanalyze-demos/demo/bayesian/HBMExample.hs)
 
 **目的**: 形式 A (群ごとデータ) の階層正規モデルを NUTS で推論し、 4 chain
 の集約レポート (model graph + posterior summary + trace + autocorr + pair) を
@@ -39,7 +39,7 @@ cabal run hbm-example
 
 ## `hbm-random-slope` — ランダム切片 vs +ランダム傾き
 
-ソース: [`demo/bayesian/HBMRandomSlopeDemo.hs`](../../demo/bayesian/HBMRandomSlopeDemo.hs)
+ソース: [`hanalyze-demos/demo/bayesian/HBMRandomSlopeDemo.hs`](../../hanalyze-demos/demo/bayesian/HBMRandomSlopeDemo.hs)
 
 **目的**: 群によって x の効き方が違うデータに対し、 ランダム切片だけのモデル
 (M1: β 共通) と ランダム切片 + ランダム傾き (M2: β_j 群別) を WAIC / LOO で
@@ -66,7 +66,7 @@ cabal run hbm-random-slope
 
 ## `simpson-paradox` — LM / GLMM / HBM の三段比較
 
-ソース: [`demo/bayesian/SimpsonParadoxDemo.hs`](../../demo/bayesian/SimpsonParadoxDemo.hs)
+ソース: [`hanalyze-demos/demo/bayesian/SimpsonParadoxDemo.hs`](../../hanalyze-demos/demo/bayesian/SimpsonParadoxDemo.hs)
 
 **目的**: シンプソンのパラドックス (群内では負の傾き、 群を無視すると正に
 見える) を 3 手法で解析し、 群構造を無視すると誤った結論になることを示す。
@@ -92,7 +92,7 @@ cabal run simpson-paradox
 
 ## `glmm-demo` — GLMM (LME) 最尤推定
 
-ソース: [`demo/Demo.hs`](../../demo/Demo.hs)
+ソース: [`hanalyze-demos/demo/Demo.hs`](../../hanalyze-demos/demo/Demo.hs)
 (executable 名 `glmm-demo`)
 
 **目的**: HBM (完全ベイズ) ではなく **古典 GLMM (EM / Laplace)** の使い方を
@@ -122,7 +122,7 @@ HBM パターン 4 形式 A になる。 GLMM は速いが Wald 近似 SE、 HBM
 
 ## `phase37-a0-verify` — doc 内 sample コードの実行確認
 
-ソース: [`demo/bayesian/Phase37A0VerifyDemo.hs`](../../demo/bayesian/Phase37A0VerifyDemo.hs)
+ソース: [`hanalyze-demos/demo/bayesian/Phase37A0VerifyDemo.hs`](../../hanalyze-demos/demo/bayesian/Phase37A0VerifyDemo.hs)
 
 **目的**: [`02-probabilistic-model.ja.md`](02-probabilistic-model.ja.md) に
 追加した パターン 4 (形式 A/B/C) / 5 (random slope) / 6 (multi-level) /

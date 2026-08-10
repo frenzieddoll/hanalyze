@@ -8,8 +8,11 @@
 --
 -- Implements Hoffman & Gelman (2014) Algorithm 3, with Nesterov dual
 -- averaging for step-size adaptation (Stan's strategy). Gradients are
--- exact, computed via 'Numeric.AD.Mode.Reverse.Double' (Phase 53: reverse モードで
--- 勾配を latent 数非依存の ~1 sweep に。 旧 forward は O(p) だった).
+-- exact, computed via 'Numeric.AD.Mode.Reverse.Double' ([日本語]: reverse
+-- モードで勾配を latent 数非依存の ~1 sweep に。 旧 forward は O(p) だった。
+-- [English]: reverse-mode autodiff makes the gradient cost ~1 sweep
+-- independent of the number of latent parameters; the previous
+-- forward-mode implementation was O(p)).
 --
 -- Constrained parameters (@PositiveT@, @UnitIntervalT@) are detected
 -- automatically from the prior distribution.
@@ -70,7 +73,7 @@ data NUTSConfig = NUTSConfig
   , nutsAdaptStepSize :: Bool    -- ^ Enable Nesterov dual-averaging step-size adaptation.
   , nutsTargetAccept  :: Double  -- ^ Target acceptance rate (0.8 typical, 0.95 for hard problems).
   , nutsWarmupInitMaxDepth :: Maybe Int
-                                 -- ^ Phase 85.6: 質量行列の**初回更新前** (init
+                                 -- ^ [日本語]: 質量行列の__初回更新前__ (init
                                  --   buffer + 第 1 window・M=I 期間) に適用する
                                  --   tree depth 上限 (opt-in・既定 'Nothing' =
                                  --   無効)。 M=I では幾何が合わず dual averaging
@@ -80,16 +83,46 @@ data NUTSConfig = NUTSConfig
                                  --   (Stan/PyMC) に無いヒューリスティックゆえ
                                  --   既定 OFF — 原理側の対策は 'nutsInitEpsSearch'。
                                  --   'nutsAdaptMass' が False のときは不適用。
-  , nutsInitEpsSearch :: Bool    -- ^ Phase 85.6c/86: Stan (Hoffman–Gelman
+                                 --   [English]: The tree-depth cap applied
+                                 --   __before the mass matrix's first update__
+                                 --   (during the init buffer + first window,
+                                 --   the M=I period; opt-in, default
+                                 --   'Nothing' = disabled). Under M=I the
+                                 --   geometry doesn't match, so dual
+                                 --   averaging's ε saws back and forth,
+                                 --   digging depth-7-10 trees; radon
+                                 --   measurements showed this wastes 68% of
+                                 --   warmup leapfrogs, which can be curbed
+                                 --   with e.g. 'Just 6'. However, since this
+                                 --   heuristic has no counterpart in the
+                                 --   reference implementations (Stan/PyMC),
+                                 --   it defaults to OFF — the principled fix
+                                 --   is 'nutsInitEpsSearch'. Not applied when
+                                 --   'nutsAdaptMass' is False.
+  , nutsInitEpsSearch :: Bool    -- ^ [日本語]: Stan (Hoffman–Gelman
                                  --   Algorithm 4) の ε 倍加探索を (i) サンプリング
                                  --   開始前と (ii) 質量行列の各 window 末更新直後
-                                 --   (Phase 86・Stan adapt_diag_e_nuts の
+                                 --   (Stan adapt_diag_e_nuts の
                                  --   init_stepsize+restart と同順) に行う (既定
                                  --   True)。 DA anchor (μ = log 10ε) が幾何と
                                  --   乖離すると ε が鋸歯振動して深い木を掘るため、
                                  --   ε を 1 step leapfrog の受容率 ~1/2 になる値へ
                                  --   都度較正する (Stan と同じ標準機構)。
                                  --   'nutsAdaptStepSize' が True のときのみ有効。
+                                 --   [English]: Runs Stan's (Hoffman–Gelman
+                                 --   Algorithm 4) ε doubling search
+                                 --   (i) before sampling starts and
+                                 --   (ii) right after each mass-matrix window
+                                 --   ends (in the same order as Stan's
+                                 --   @adapt_diag_e_nuts@ @init_stepsize@ +
+                                 --   restart; default True). If the DA
+                                 --   anchor (μ = log 10ε) drifts away from the
+                                 --   geometry, ε oscillates and digs deep
+                                 --   trees, so ε is recalibrated each time to
+                                 --   the value that gives a ~1/2 acceptance
+                                 --   rate for one leapfrog step (the same
+                                 --   standard mechanism as Stan). Only takes
+                                 --   effect when 'nutsAdaptStepSize' is True.
   , nutsAdaptMass     :: Bool    -- ^ Enable diagonal mass-matrix adaptation (B11).
                                  --   Stan-style multi-window: init buffer (15% /
                                  --   ≥75 iter, M=I) → doubling windows
@@ -98,13 +131,25 @@ data NUTSConfig = NUTSConfig
                                  --   (10% / ≥50 iter, M frozen, ε converges).
                                  --   Recommended for posteriors with strongly
                                  --   varying scales across parameters.
-  , nutsInitJitter    :: Double  -- ^ Phase 94 A4-2: 各 chain の初期位置 (unconstrained)
+  , nutsInitJitter    :: Double  -- ^ [日本語]: 各 chain の初期位置 (unconstrained)
                                  --   に加える一様 jitter 半幅 (PyMC jitter+adapt_diag
                                  --   相当)。 chain ごとに独立に @U(-j, +j)@ を各成分へ
                                  --   加算し、 funnel 首での whole-chain 崩壊 (全 chain
                                  --   同一 init 由来) を減らす。 @0@ = 無操作 (= 従来
                                  --   挙動・単一 chain 再現性テスト非影響)。 多 chain
-                                 --   経路 ('hbmNutsConfig') で 1.0 を設定。
+                                 --   経路 (@hbmNutsConfig@) で 1.0 を設定。
+                                 --   [English]: The half-width of the uniform
+                                 --   jitter added to each chain's initial
+                                 --   position (unconstrained space; the same
+                                 --   idea as PyMC's @jitter+adapt_diag@). An
+                                 --   independent @U(-j, +j)@ is added to each
+                                 --   coordinate per chain, reducing
+                                 --   whole-chain collapse at a funnel's neck
+                                 --   (which happens when all chains share the
+                                 --   same init). @0@ = no-op (= the previous
+                                 --   behavior; does not affect single-chain
+                                 --   reproducibility tests). The multi-chain
+                                 --   path (@hbmNutsConfig@) sets this to 1.0.
   } deriving (Show)
 
 -- | Default NUTS configuration: 2000 post-burn-in draws, 500 burn-in
@@ -148,23 +193,40 @@ initDualAvg eps0 = DualAvgState
   , daM         = 0
   }
 
--- | Phase 85.6c/86: Stan (@base_hmc::init_stepsize@) 準拠の ε 探索。
+-- | [日本語]: Stan (@base_hmc::init_stepsize@) 準拠の ε 探索。
 -- 与えられた ε を起点に、 1 step leapfrog の受容比が 0.8 を跨ぐまで倍加/半減
 -- する (運動量は試行ごとに再サンプル)。 dual averaging の anchor μ = log(10 ε₀)
 -- が幾何に合った値になり、 ε 鋸歯振動 (radon で depth 7-10 の深掘り) を防ぐ。
 -- ★Hoffman–Gelman 2014 Alg.4 (起点 1.0・閾値 1/2・運動量 1 本固定) でなく
 -- Stan 実装 (起点 = 現在 ε・閾値 0.8・毎試行再サンプル) に合わせる —
--- window 末の再較正 (Phase 86) では既適応の ε 近傍から保守的に探す必要がある
+-- window 末の再較正では既適応の ε 近傍から保守的に探す必要がある
 -- (起点 1.0/閾値 0.5 は radon 実測で新 M 下の trajectory が支えない大きな ε を
 -- 返し、 次 window の深掘りを招いた)。 非有限 (発散) は比 −∞ 扱い = 半減方向。
 -- 反復と ε は安全側に有界。
+--
+-- [English]: An ε search following Stan's @base_hmc::init_stepsize@.
+-- Starting from a given ε, it doubles or halves until one leapfrog
+-- step's acceptance ratio crosses 0.8 (momentum is resampled on every
+-- trial). This brings dual averaging's anchor μ = log(10 ε₀) into line
+-- with the geometry, preventing ε sawtooth oscillation (which digs
+-- depth-7-10 trees, per radon measurements). ★This follows Stan's
+-- implementation (starting point = the current ε, threshold 0.8,
+-- resampling momentum on every trial), not Hoffman–Gelman 2014's
+-- Algorithm 4 (starting point 1.0, threshold 1/2, a single fixed
+-- momentum draw) — the recalibration at a window's end needs to search
+-- conservatively near the already-adapted ε (a starting point of 1.0 /
+-- threshold of 0.5 returned, per radon measurements, an ε too large for
+-- the trajectory to sustain under the new M, triggering deep digging in
+-- the next window). Non-finite (divergent) is treated as a ratio of
+-- −∞, i.e. the halving direction. Both the iteration count and ε are
+-- bounded on the safe side.
 findReasonableEpsilon
   :: PrimMonad m
-  => (VS.Vector Double -> VS.Vector Double)   -- ^ gradFn (−∇ logπ・NUTS と同じ向き)
+  => (VS.Vector Double -> VS.Vector Double)   -- ^ [日本語]: gradFn (−∇ logπ・NUTS と同じ向き)。 [English]: gradFn (−∇ logπ; same sign convention as NUTS).
   -> (VS.Vector Double -> Double)             -- ^ logπ (unconstrained)
-  -> VS.Vector Double                          -- ^ M⁻¹ 対角
-  -> Double                                    -- ^ 探索起点 ε (現在の nominal ε)
-  -> VS.Vector Double                          -- ^ 初期位置 θ (unconstrained)
+  -> VS.Vector Double                          -- ^ [日本語]: M⁻¹ 対角。 [English]: The diagonal of M⁻¹.
+  -> Double                                    -- ^ [日本語]: 探索起点 ε (現在の nominal ε)。 [English]: The search's starting ε (the current nominal ε).
+  -> VS.Vector Double                          -- ^ [日本語]: 初期位置 θ (unconstrained)。 [English]: The initial position θ (unconstrained).
   -> Gen (PrimState m)
   -> m Double
 findReasonableEpsilon gradFn logPiFn mInv eps0 theta gen = do
@@ -221,23 +283,35 @@ data NUTSTree = NUTSTree
   { ntThMinus :: VS.Vector Double
   , ntRMinus  :: VS.Vector Double
   , ntGMinus  :: VS.Vector Double
-    -- ^ Phase 87.2b: minus 端点の ∇U = −∇logπ (leapfrog 勾配キャッシュ)。
+    -- ^ [日本語]: minus 端点の ∇U = −∇logπ (leapfrog 勾配キャッシュ)。
     --   同方向の次の葉が始点勾配を再計算せずに済む (Stan の z_.g と同じ)。
+    --   [English]: The ∇U = −∇logπ at the minus endpoint (a leapfrog
+    --   gradient cache). This lets the next leaf in the same direction
+    --   avoid recomputing the starting gradient (same idea as Stan's z_.g).
   , ntThPlus  :: VS.Vector Double
   , ntRPlus   :: VS.Vector Double
   , ntGPlus   :: VS.Vector Double
-    -- ^ Phase 87.2b: plus 端点の ∇U (同上)。
+    -- ^ [日本語]: plus 端点の ∇U (同上)。
+    --   [English]: The ∇U at the plus endpoint (same idea as above).
   , ntThPrime :: VS.Vector Double
   , ntN       :: Int
   , ntS       :: Bool
   , ntDiv     :: Bool
-    -- ^ サブツリー中で divergent (|ΔH| > deltaMax) が発生したか
+    -- ^ [日本語]: サブツリー中で divergent (|ΔH| > deltaMax) が発生したか
+    --   [English]: Whether a divergence (|ΔH| > deltaMax) occurred anywhere
+    --   in the subtree.
   , ntASum    :: !Double
-    -- ^ Phase 87.2: Σ min(1, exp(H0 − H_leaf)) — Stan の accept_stat 蓄積。
+    -- ^ [日本語]: Σ min(1, exp(H0 − H_leaf)) — Stan の accept_stat 蓄積。
     --   dual averaging はこの平均 ᾱ を学習する (旧: 1-step probe = 毎 draw
     --   余分な leapfrog+エネルギー評価を払う非標準の独自実装だった)。
+    --   [English]: The accumulated Σ min(1, exp(H0 − H_leaf)) — Stan's
+    --   accept_stat. Dual averaging learns from the mean ᾱ of this (the
+    --   previous 1-step probe was a non-standard bespoke implementation that
+    --   paid for an extra leapfrog + energy evaluation on every draw).
   , ntANum    :: !Int
-    -- ^ Phase 87.2: ᾱ の分母 (サブツリーの葉数・棄却葉も含む)。
+    -- ^ [日本語]: ᾱ の分母 (サブツリーの葉数・棄却葉も含む)。
+    --   [English]: The denominator of ᾱ (the number of leaves in the
+    --   subtree, including rejected leaves).
   }
 
 deltaMax :: Double
@@ -246,10 +320,16 @@ deltaMax = 1000.0
 -- | U-turn check on Storable Vectors. @(θ⁺ − θ⁻) · r⁻ < 0@ or
 -- @(θ⁺ − θ⁻) · r⁺ < 0@ ⇒ trajectory has begun to retrace itself.
 --
--- Phase 90 A11-4①: 旧実装は @delta@ の共有 binding で stream fusion が切れ
--- delta ベクトルを毎回実体化していた (prof 実測: nuts_uturn が総 alloc の
+-- [日本語]: 旧実装は @delta@ の共有 binding で stream fusion が切れ delta
+-- ベクトルを毎回実体化していた (prof 実測: nuts_uturn が総 alloc の
 -- 23.5%)。 2 つの内積を単一パス・確保なしで融合する。 加算順序は旧
 -- 'VS.sum' (左畳み込み) と同一 = ビット同一。
+-- [English]: The previous implementation lost stream fusion at a shared
+-- @delta@ binding and materialized the delta vector on every call
+-- (profiling showed nuts_uturn accounted for 23.5% of total allocation).
+-- This version fuses the two dot products into a single pass with no
+-- allocation. The summation order is identical to the previous 'VS.sum'
+-- (left fold), so results are bit-identical.
 uTurnVS
   :: VS.Vector Double -> VS.Vector Double
   -> VS.Vector Double -> VS.Vector Double -> Bool
@@ -283,15 +363,18 @@ sampleMomentum mInv gen = do
 buildTree
   :: forall m. PrimMonad m
   => (VS.Vector Double -> m (Double, VS.Vector Double))
-     -- ^ 融合評価 (Phase 87.2b): θ ↦ (logπ(θ), ∇U(θ) = −∇logπ(θ))。 Phase 90
-     --   A11-4①: chain 閉包に確保した arena/adj を再利用するため monadic。
+     -- ^ [日本語]: 融合評価: θ ↦ (logπ(θ), ∇U(θ) = −∇logπ(θ))。 chain 閉包に
+     --   確保した arena/adj を再利用するため monadic。
+     --   [English]: A fused evaluation: θ ↦ (logπ(θ), ∇U(θ) = −∇logπ(θ)).
+     --   Monadic so it can reuse the arena/adjoint buffers allocated in the
+     --   chain's closure.
   -> VS.Vector Double                         -- ^ Diagonal M⁻¹.
   -> Double                                   -- ^ Step size @ε@.
   -> VS.Vector Double                         -- ^ Position.
   -> VS.Vector Double                         -- ^ Momentum.
-  -> VS.Vector Double                         -- ^ ∇U at position (キャッシュ)。
+  -> VS.Vector Double                         -- ^ [日本語]: position での ∇U (キャッシュ)。 [English]: ∇U at position (cached).
   -> Double                                   -- ^ @log u@ slice.
-  -> Double                                   -- ^ 初期エネルギー @H0@ (ᾱ 用)。
+  -> Double                                   -- ^ [日本語]: 初期エネルギー @H0@ (ᾱ 用)。 [English]: The initial energy @H0@ (used for ᾱ).
   -> Int                                      -- ^ Direction (±1).
   -> Int                                      -- ^ Recursion depth.
   -> Gen (PrimState m)
@@ -376,14 +459,14 @@ buildTree gradValU mInv eps theta r gU logU h0 dir depth gen
 -- Streaming hook
 -- ---------------------------------------------------------------------------
 
--- | Per-iteration sample event emitted by 'nutsStream'.
+-- | Per-iteration sample event emitted by @nutsStream@.
 --
 -- Used by callers that want to observe MCMC progress as it happens
 -- (e.g. live trace plots, real-time R-hat / ESS updates over the wire).
 -- The callback receives one event per iteration of the outer loop,
 -- including burn-in iterations (distinguished by 'seIsBurnIn').
 --
--- The 'seParams' values are in the **constrained** parameter space,
+-- The 'seParams' values are in the __constrained__ parameter space,
 -- matching the convention used in 'chainSamples'. Burn-in events are
 -- /not/ included in 'chainSamples', but are still streamed via the
 -- callback so the UI can show warmup progress and adaptation.
@@ -397,11 +480,19 @@ data SampleEvent = SampleEvent
   , seAccepted  :: !Bool     -- ^ Whether the proposal was accepted
                               --   (@proposedU /= currentU@).
   , seStepSize  :: !Double   -- ^ Current ε (after this iteration's adaptation).
-  , seTreeDepth :: !Int      -- ^ Phase 85.6: この draw で実行された doubling 回数
+  , seTreeDepth :: !Int      -- ^ [日本語]: この draw で実行された doubling 回数
                               --   (leapfrog 数 ≈ 2^depth・warmup 固定費の診断用)。
-  , seAcceptStat :: !Double  -- ^ Phase 87.1: この draw の mean accept-stat α
+                              --   [English]: The number of doublings performed
+                              --   for this draw (leapfrog count ≈ 2^depth;
+                              --   used to diagnose fixed warmup cost).
+  , seAcceptStat :: !Double  -- ^ [日本語]: この draw の mean accept-stat α
                               --   (dual averaging が target と比較する統計・
                               --   'seAccepted' の bool とは別物)。ε̄ 収束診断用。
+                              --   [English]: This draw's mean accept-stat α
+                              --   (the statistic dual averaging compares
+                              --   against the target — distinct from the
+                              --   'seAccepted' bool). Used to diagnose ε̄
+                              --   convergence.
   }
 
 -- ---------------------------------------------------------------------------
@@ -409,10 +500,12 @@ data SampleEvent = SampleEvent
 -- ---------------------------------------------------------------------------
 
 -- | NUTS sampler for a polymorphic HBM model ('ModelP').
--- 軌道長は U-Turn 判定で自動決定。
+-- [日本語]: 軌道長は U-Turn 判定で自動決定。
+-- [English]: The trajectory length is determined automatically by the
+-- U-turn check.
 --
--- This is a thin wrapper around 'nutsStream' with a no-op callback.
--- Use 'nutsStream' directly if you want per-iteration progress
+-- This is a thin wrapper around @nutsStream@ with a no-op callback.
+-- Use @nutsStream@ directly if you want per-iteration progress
 -- (e.g. for live UI updates over a WebSocket / SSE channel).
 nuts :: PrimMonad m => ModelP r -> NUTSConfig -> Params -> Gen (PrimState m) -> m Chain
 {-# SPECIALIZE nuts :: ModelP r -> NUTSConfig -> Params -> Gen RealWorld -> IO Chain #-}
@@ -459,7 +552,7 @@ nutsStream m cfg initC gen onSample = do
       logPiFn = compileLogPUV m names transList
 
       -- Vector-native gradient. Phase 54.4b/54.6: モデル構造は draw 間で不変
-      -- ゆえ 'compileGradUV' で静的部分を **1 度だけ**前処理し、 返った
+      -- ゆえ @compileGradUV@ で静的部分を **1 度だけ**前処理し、 返った
       -- vector-native クロージャを全 leapfrog で再利用する (VS↔list 変換なし)。
       gradV :: VS.Vector Double -> VS.Vector Double
       gradV = compileGradUV m names transList
@@ -475,8 +568,8 @@ nutsStream m cfg initC gen onSample = do
   -- leapfrog 最終勾配とエネルギーを同一点で二重評価していた重複を除去。
   -- Phase 90 A11-4①: 'compileGradValUVM' は forward/随伴 arena を **この chain
   -- 閉包生成時に 1 度だけ**確保して全 leapfrog で再利用する (per-call 34k×2
-  -- セル確保 + GC churn を除去)。 chain ごとに別 'nutsStream' 呼出 = 別バッファ
-  -- ゆえ chain 横断並列 ('nutsChainsPure'/'nutsChainsStream') と非干渉。
+  -- セル確保 + GC churn を除去)。 chain ごとに別 @nutsStream@ 呼出 = 別バッファ
+  -- ゆえ chain 横断並列 (@nutsChainsPure@/'nutsChainsStream') と非干渉。
   -- Phase 94 A4-2: 各 chain の初期位置に一様 jitter (funnel 首の whole-chain 崩壊対策)。
   -- j=0 なら initUV0 をそのまま (従来挙動)。 gen は chain 固有ゆえ chain ごと独立。
   initUV <- let j = nutsInitJitter cfg
@@ -801,40 +894,64 @@ nutsChains m cfg numChains initC baseGen = do
 -- ---------------------------------------------------------------------------
 -- Phase 50: 純粋 (ST + seed) ラッパ
 --
--- 'nuts' を 'ST' で走らせ 'runST' で閉じることで、 **seed → 確定 'Chain'** の
+-- 'nuts' を @ST@ で走らせ 'runST' で閉じることで、 **seed → 確定 'Chain'** の
 -- 純粋関数にする (同 seed → ビット同一・IO 不要)。 mwc は 'PrimMonad' 汎用ゆえ
 -- ロジックは 50.2 で一般化した 'nuts' をそのまま使う。
 -- ---------------------------------------------------------------------------
 
--- | 純粋・決定的な単一 NUTS chain。 同じ @seed@ なら必ず同じ 'Chain' を返す。
+-- | [日本語]: 純粋・決定的な単一 NUTS chain。 同じ @seed@ なら必ず同じ 'Chain' を返す。
+--   [English]: A pure, deterministic single NUTS chain. The same @seed@
+--   always returns the same 'Chain'.
 nutsPure :: ModelP r -> NUTSConfig -> Params -> Word32 -> Chain
 nutsPure m cfg initC seed =
   runST (initialize (V.singleton seed) >>= nuts m cfg initC)
 
--- | 親 @seed@ から chain ごとの child seed 列を純粋に導出する (Phase 61.1 で
--- 'nutsChainsPure' から抽出)。 pure 経路と IO 経路 ('nutsChainsStream') が
--- **同じ seed 列**を共有することで両経路のビット一致を保証する (複製すると drift)。
+-- | [日本語]: 親 @seed@ から chain ごとの child seed 列を純粋に導出する
+--   (@nutsChainsPure@ から抽出)。 pure 経路と IO 経路 ('nutsChainsStream') が
+--   __同じ seed 列__を共有することで両経路のビット一致を保証する (複製すると drift)。
+--   [English]: Purely derives a per-chain child seed sequence from a parent
+--   @seed@ (factored out of @nutsChainsPure@). The pure path and the IO
+--   path ('nutsChainsStream') sharing the __same seed sequence__ guarantees
+--   bit-identical results between the two paths (duplicating the logic
+--   would let them drift apart).
 chainSeeds :: Word32 -> Int -> [Word32]
 chainSeeds seed numChains = runST $ do
   g <- initialize (V.singleton seed)
   replicateM numChains (uniform g)
 
--- | 純粋・決定的な multi-chain。 親 @seed@ から子 seed を純粋に導出 (各 chain は
--- 別 'runST') し、 chain 横断を @parList rdeepseq@ で**最初から**並列評価する
--- (純粋性と並列性は直交。 @+RTS -N@ でマルチコア。 結果は spark/コア数に依らずビット同一)。
+-- | [日本語]: 純粋・決定的な multi-chain。 親 @seed@ から子 seed を純粋に導出
+--   (各 chain は別 'runST') し、 chain 横断を @parList rdeepseq@ で__最初から__
+--   並列評価する (純粋性と並列性は直交。 @+RTS -N@ でマルチコア。 結果は
+--   spark/コア数に依らずビット同一)。
+--   [English]: A pure, deterministic multi-chain run. Child seeds are
+--   derived purely from the parent @seed@ (each chain gets its own
+--   'runST'), and the chains are evaluated in parallel __from the start__
+--   via @parList rdeepseq@ (purity and parallelism are orthogonal here;
+--   @+RTS -N@ enables multiple cores. The result is bit-identical
+--   regardless of spark count / core count).
 nutsChainsPure :: ModelP r -> NUTSConfig -> Int -> Params -> Word32 -> [Chain]
 nutsChainsPure m cfg numChains initC seed =
   let chains = [ nutsPure m cfg initC s | s <- chainSeeds seed numChains ]
   in chains `using` parList rdeepseq
 
--- | 'nutsChainsPure' の IO 版 (Phase 61.1): 同じ child seed 規約
--- ('chainSeeds') で chain ごとに 'nutsStream' を回し、 chain index 付き
--- callback で進捗を観測できるようにする。 chain 横断は 'mapConcurrently'
--- (既存 'nutsChains' と同様・実 OS スレッド並列には @-threaded +RTS -N@)。
+-- | [日本語]: @nutsChainsPure@ の IO 版: 同じ child seed 規約
+--   (@chainSeeds@) で chain ごとに @nutsStream@ を回し、 chain index 付き
+--   callback で進捗を観測できるようにする。 chain 横断は 'mapConcurrently'
+--   (既存 'nutsChains' と同様・実 OS スレッド並列には @-threaded +RTS -N@)。
 --
--- mwc の 'PrimMonad' 汎用性 + Phase 50 で実証済の ST/IO ビット同一により、
--- no-op callback なら結果は @nutsChainsPure m cfg n initC seed@ と
--- **ビット一致**する (回帰テストで固定)。
+--   mwc の 'PrimMonad' 汎用性 + 実証済の ST/IO ビット同一により、
+--   no-op callback なら結果は @nutsChainsPure m cfg n initC seed@ と
+--   __ビット一致__する (回帰テストで固定)。
+--   [English]: The IO counterpart of @nutsChainsPure@: runs @nutsStream@
+--   per chain under the same child-seed convention (@chainSeeds@), and lets
+--   progress be observed via a chain-index-aware callback. Chains run in
+--   parallel via 'mapConcurrently' (same as the existing 'nutsChains'; use
+--   @-threaded +RTS -N@ for true OS-thread parallelism).
+--
+--   Thanks to mwc's 'PrimMonad' polymorphism plus the proven bit-identity
+--   of the ST and IO paths, a no-op callback makes the result
+--   __bit-identical__ to @nutsChainsPure m cfg n initC seed@ (pinned down
+--   by a regression test).
 nutsChainsStream :: ModelP r -> NUTSConfig -> Int -> Params -> Word32
                  -> (Int -> SampleEvent -> IO ())
                  -> IO [Chain]

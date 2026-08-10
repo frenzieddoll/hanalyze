@@ -109,7 +109,7 @@ main = do
   -- RF フィット
   gen <- createSystemRandom
   let rows = [[x] | x <- xs]
-  rf <- RF.fitRF RF.defaultRFConfig rows ys gen
+  rf <- RF.fitRF RF.defaultRandomForest rows ys gen
   let rfYhat = [ RF.predictRF rf row | row <- rows ]
       rfRMSE = rmseOf ys rfYhat
       rfR2   = r2Of ys rfYhat

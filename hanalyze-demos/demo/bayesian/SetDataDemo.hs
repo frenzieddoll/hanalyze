@@ -42,10 +42,12 @@ testData = [1.6, 1.4, 1.5, 1.7, 1.3, 1.5, 1.55, 1.45, 1.48, 1.52]
 -- としても保存しておく (構造分析時に「この観測は y という名前」と判明する)。
 mkModel :: [Double] -> ModelP ()
 mkModel ys = do
-  yObs <- dataNamed "y" ys
-  mu   <- sample "mu"    (Normal 0 5)
-  sig  <- sample "sigma" (HalfNormal 2)
-  observe "y" (Normal mu sig) yObs
+  -- dataNamed の返り値は model 数値型の [a] (AD 多相化)。observe の観測値引数は
+  -- 生の [Double] を取るので ys をそのまま渡す (プレースホルダ登録は維持)。
+  _yObs <- dataNamed "y" ys
+  mu    <- sample "mu"    (Normal 0 5)
+  sig   <- sample "sigma" (HalfNormal 2)
+  observe "y" (Normal mu sig) ys
 
 main :: IO ()
 main = do

@@ -7,13 +7,13 @@
 --
 -- Factorial designs.
 --
---   * 'fullFactorial'        — full factorial with @k@ factors each at
+--   - 'fullFactorial'        — full factorial with @k@ factors each at
 --     @levels[i]@ levels.
---   * 'twoLevelFactorial'    — @2^k@ design (each factor at @±1@).
---   * 'threeLevelFactorial'  — @3^k@ design (each factor at @-1, 0, +1@).
---   * 'fractionalFactorial'  — @2^(k-p)@ fractional design (specified
+--   - 'twoLevelFactorial'    — @2^k@ design (each factor at @±1@).
+--   - 'threeLevelFactorial'  — @3^k@ design (each factor at @-1, 0, +1@).
+--   - 'fractionalFactorial'  — @2^(k-p)@ fractional design (specified
 --     defining relation).
---   * 'mixedFactorial'       — mixed-level design (e.g. @2² × 3¹@).
+--   - 'mixedFactorial'       — mixed-level design (e.g. @2² × 3¹@).
 --
 -- All designs are returned as @[[Double]]@. Use 'Hanalyze.Design.Quality' to
 -- evaluate orthogonality and other criteria.
@@ -62,8 +62,8 @@ threeLevelFactorial k = fullFactorial (replicate k [-1, 0, 1])
 --
 -- @fractionalFactorial k generators@:
 --
---   * @k@         — total number of factors.
---   * @generators@ — defining relations for the added factors
+--   - @k@         — total number of factors.
+--   - @generators@ — defining relations for the added factors
 --     @k-p+1, …, k@. Each generator is a set of base-factor indices
 --     (1-based, in @1..k-p@); the corresponding column is their product.
 --

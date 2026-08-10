@@ -334,7 +334,7 @@ rlm :: RobustEstimator -> Text -> Text -> RobustSpec
 
 `RobustModel` も **CI 帯を持つ** (Phase 70.C)。 M 推定量 β̂ の漸近共分散 (サンドイッチ・
 statsmodels `RLM` cov="H1" と一致) から Wald 信頼区間を出す。 帯は既定で出る。 下図は外れ値の
-影響を OLS と対比 (`statColor`/`statFill` で色分け・`statLabel` で凡例。 色は `Hgg.Plot.Color.Named`
+影響を OLS と対比 (`statColor`/`statFill` で色分け・`statLabel` で凡例。 色は `Graphics.Hgg.Color.Named`
 の名前付き色 `red` / `blue` 等が使える):
 
 ```haskell

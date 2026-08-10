@@ -6,12 +6,12 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Kernel regression — Nadaraya-Watson and kernel ridge regression.
+-- [日本語]: Kernel regression — Nadaraya-Watson and kernel ridge regression.
 --
---   * 'Kernel'        — RBF / Matérn / triangular / Epanechnikov kernel
+--   - 'Kernel'        — RBF / Matérn / triangular / Epanechnikov kernel
 --     functions.
---   * 'nwRegression'  — Nadaraya-Watson (kernel-weighted moving average).
---   * 'kernelRidge'   — kernel ridge regression
+--   - 'nwRegression'  — Nadaraya-Watson (kernel-weighted moving average).
+--   - 'kernelRidge'   — kernel ridge regression
 --     @ŷ(x*) = k(x*)ᵀ (K + λI)⁻¹ y@.
 --
 -- Both are non-parametric smooth nonlinear regressors. Unlike 'Hanalyze.Model.GP',
@@ -19,7 +19,24 @@
 --
 -- NB: この 'Kernel' は回帰スムージング用 (Gaussian/Epanechnikov/…)。
 -- GP/SVM 族の共有カーネル (RBF/Matérn5/2/Periodic/Linear/Poly) は別モジュール
--- 'Hanalyze.Model.Kernel' (Phase 75.18 で分離)。
+-- 'Hanalyze.Model.Kernel' として分離されている。
+--
+-- [English]: Kernel regression — Nadaraya-Watson and kernel ridge
+-- regression.
+--
+--   - 'Kernel'        — RBF / Matérn / triangular / Epanechnikov kernel
+--     functions.
+--   - 'nwRegression'  — Nadaraya-Watson (kernel-weighted moving average).
+--   - 'kernelRidge'   — kernel ridge regression
+--     @ŷ(x*) = k(x*)ᵀ (K + λI)⁻¹ y@.
+--
+-- Both are non-parametric smooth nonlinear regressors. Unlike
+-- 'Hanalyze.Model.GP', they do not produce uncertainty estimates.
+--
+-- NB: this 'Kernel' is for regression smoothing (Gaussian \/ Epanechnikov \/
+-- …). The shared kernel family used by the GP\/SVM group (RBF \/ Matérn5\/2 \/
+-- Periodic \/ Linear \/ Poly) has been split out into a separate module,
+-- 'Hanalyze.Model.Kernel'.
 module Hanalyze.Model.KernelRegression
   ( Kernel (..)
   , kernelEval
@@ -314,11 +331,16 @@ r2Multi ys yhat =
         in if sst == 0 then 0 else 1 - sse / sst
   in V.fromList [ colR2 j | j <- [0 .. q - 1] ]
 
--- | Joint @(h, λ)@ grid search using the closed-form LOOCV. Computes the
--- hat-matrix diagonal once per
--- 全 q 出力の LOO 残差を一括評価。
+-- | [日本語]: @(h, λ)@ の joint grid search を closed-form LOOCV で行う。
+-- 各 (h, λ) 候補につき hat 行列の対角を 1 回だけ計算し、 全 q 出力の LOO 残差を
+-- 一括評価する。
 --
 -- 戻り値: (best fit, best h, best λ, best mean LOO MSE)
+--   [English]: A joint @(h, λ)@ grid search using the closed-form LOOCV.
+-- Computes the hat-matrix diagonal once per (h, λ) candidate and evaluates
+-- the LOO residuals for all q outputs in one batch.
+--
+-- Returns: (best fit, best h, best λ, best mean LOO MSE)
 autoTuneKernelRidgeMulti
   :: Kernel
   -> V.Vector Double      -- xs (n)

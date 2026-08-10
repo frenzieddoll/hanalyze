@@ -1,14 +1,14 @@
 -- |
 -- Module      : Hanalyze.Model.RegularizedAdvanced
--- Description : 高度な罰則項回帰 (Phase 31) — Adaptive Lasso / MCP / SCAD / Group Lasso
+-- Description : 高度な罰則項回帰 — Adaptive Lasso / MCP / SCAD / Group Lasso
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- 高度な罰則項回帰 (Phase 31): Adaptive Lasso / MCP / SCAD / Group Lasso。
+-- [日本語]: 高度な罰則項回帰: Adaptive Lasso / MCP / SCAD / Group Lasso。
 --
--- 既存 'Hanalyze.Model.Regularized' (Lasso/Ridge/Elastic Net + CV λ 選択、
--- Phase 4 で実装) を補完する変数選択型の罰則項群。 JMP "Generalized
--- Regression" platform / R `ncvreg` / `grpreg` / `glmnet` (adaptive オプション)
+-- 既存 'Hanalyze.Model.Regularized' (Lasso/Ridge/Elastic Net + CV λ 選択)
+-- を補完する変数選択型の罰則項群。 JMP "Generalized
+-- Regression" platform / R @ncvreg@ / @grpreg@ / @glmnet@ (adaptive オプション)
 -- 相当。
 --
 -- ## 共通の前提
@@ -18,6 +18,29 @@
 -- - 内部 CD は 'Hanalyze.Model.Regularized.cdLoop' を流用 (Adaptive Lasso は
 --   列再重み付け、 MCP / SCAD は per-coord non-convex threshold)
 -- - Group Lasso は block CD で別ループ (Yuan-Lin 2006 algorithm)
+--
+-- Reference:
+--   Zou (2006), Zhang (2010), Fan-Li (2001), Yuan-Lin (2006),
+--   Breheny-Huang (2011) "Coordinate descent algorithms for non-convex
+--   penalized regression". Ann. Appl. Stat. 5:232-253.
+--
+-- [English]: Advanced penalized regression: Adaptive Lasso \/ MCP \/ SCAD \/
+-- Group Lasso.
+--
+-- A family of variable-selection penalties that complements the existing
+-- 'Hanalyze.Model.Regularized' (Lasso\/Ridge\/Elastic Net + CV λ
+-- selection). Equivalent to JMP's "Generalized Regression" platform \/ R's
+-- @ncvreg@ \/ @grpreg@ \/ @glmnet@ (adaptive option).
+--
+-- ## Shared assumptions
+--
+-- - Like Lasso, these penalties are sensitive to the column scale of X.
+--   Callers should apply 'Hanalyze.Model.Regularized.standardize'
+--   first
+-- - The inner CD reuses 'Hanalyze.Model.Regularized.cdLoop' (Adaptive
+--   Lasso via column reweighting, MCP \/ SCAD via per-coord non-convex
+--   thresholding)
+-- - Group Lasso uses a separate loop with block CD (Yuan-Lin 2006 algorithm)
 --
 -- Reference:
 --   Zou (2006), Zhang (2010), Fan-Li (2001), Yuan-Lin (2006),
@@ -44,7 +67,7 @@ import           Hanalyze.Model.Regularized
 -- 31-A1: Adaptive Lasso
 -- ---------------------------------------------------------------------------
 
--- | Adaptive Lasso (Zou 2006): @argmin (1/2n)|y - Xβ|² + λ Σ w_j |β_j|@。
+-- | [日本語]: Adaptive Lasso (Zou 2006): @argmin (1/2n)|y - Xβ|² + λ Σ w_j |β_j|@。
 --
 -- 解法: column reweighting trick — @x_j' = x_j / w_j@ で変形すると標準
 -- Lasso になり、 解 @β_j' = β_j · w_j@ から @β_j = β_j' / w_j@ で復元できる。
@@ -55,9 +78,23 @@ import           Hanalyze.Model.Regularized
 -- 注意: @w_j = 0@ は "罰則ゼロ" ではなく実装上 "@β_j = 0@ 強制" として扱う
 -- (列 j を 0 vector に潰すため)。 罰則ゼロにしたい場合は @w_j@ を非常に
 -- 小さい正値にする。
+--
+-- [English]: Adaptive Lasso (Zou 2006): @argmin (1/2n)|y - Xβ|² + λ Σ w_j |β_j|@.
+--
+-- Solved via the column reweighting trick — transforming with
+-- @x_j' = x_j / w_j@ turns it into standard Lasso, and the original-space
+-- solution @β_j = β_j' / w_j@ is recovered from @β_j' = β_j · w_j@. Since
+-- this reuses the existing 'fitLasso' directly, no extra CD loop is needed.
+--
+-- @w_j@ is typically built from an OLS pilot estimate ('adaptiveWeightsFromOLS').
+--
+-- Note: @w_j = 0@ is not treated as "zero penalty" but rather, in this
+-- implementation, as "force @β_j = 0@" (since it collapses column j to a
+-- zero vector). To get a truly zero penalty, use a very small positive
+-- value for @w_j@ instead.
 fitAdaptiveLasso
   :: Double                -- ^ @λ@
-  -> LA.Vector Double      -- ^ weights @w@ (length @p@、 全 @≥ 0@)
+  -> LA.Vector Double      -- ^ [日本語]: weights @w@ (length @p@、 全 @≥ 0@)。 [English]: weights @w@ (length @p@, all @≥ 0@).
   -> LA.Matrix Double      -- ^ X (n × p)
   -> LA.Vector Double      -- ^ y
   -> Int                   -- ^ max CD iterations
@@ -74,10 +111,16 @@ fitAdaptiveLasso lambda w x y maxIter tol =
       r      = y - yHat
   in mkRegFit beta yHat r y (L1 lambda) (rfIters lassoF)
 
--- | OLS pilot 推定値から Adaptive Lasso 重み @w_j = 1 / |β̂_j^OLS|^γ@ を構築。
+-- | [日本語]: OLS pilot 推定値から Adaptive Lasso 重み @w_j = 1 / |β̂_j^OLS|^γ@ を構築。
 -- 典型値 @γ = 1@。 OLS が定義できないケース (@n < p@) では事前に Ridge pilot
 -- に切り替えるなど呼び出し側で工夫する。 0 除算回避のため @|β̂| ≤ 1e-8@ の
 -- 場合は floor @1e-8@ を使う。
+--
+-- [English]: Builds Adaptive Lasso weights @w_j = 1 / |β̂_j^OLS|^γ@ from an
+-- OLS pilot estimate. Typical value @γ = 1@. When OLS is undefined
+-- (@n < p@), it's up to the caller to work around it, e.g. by switching to
+-- a Ridge pilot beforehand. To avoid division by zero, a floor of @1e-8@ is
+-- applied when @|β̂| ≤ 1e-8@.
 adaptiveWeightsFromOLS
   :: Double                -- ^ @γ@ (typical 1.0)
   -> LA.Matrix Double -> LA.Vector Double -> LA.Vector Double
@@ -89,7 +132,7 @@ adaptiveWeightsFromOLS gamma x y =
 -- 31-A2: MCP (Minimax Concave Penalty、 Zhang 2010)
 -- ---------------------------------------------------------------------------
 
--- | MCP non-convex 罰則:
+-- | [日本語]: MCP non-convex 罰則:
 --
 -- @
 --   p_{λ,γ}(β) = λ |β| - β²/(2γ)   if |β| ≤ γλ
@@ -110,9 +153,32 @@ adaptiveWeightsFromOLS gamma x y =
 -- 前提: @cSq > 1/γ@ (= 罰則項の凹性を局所凸性が上回る)。 標準化 @X@ (cSq ≈ 1)
 -- で @γ > 1@ なら自動的に満たす。 違反時は inner CD が発散する可能性があり、
 -- 呼び出し側で @standardize@ + @γ ≥ 3@ を推奨。
+--
+-- [English]: MCP non-convex penalty:
+--
+-- @
+--   p_{λ,γ}(β) = λ |β| - β²/(2γ)   if |β| ≤ γλ
+--              = γλ²/2              if |β| > γλ
+-- @
+--
+-- As @γ → ∞@ it degenerates to Lasso; as @γ → 1@ it leans toward
+-- hard-thresholding. Typical value @γ ∈ [2, 5]@.
+--
+-- Coordinate descent update (Breheny-Huang 2011, with column-norm @cSq@):
+--
+-- @
+--   z = ρ_j
+--   β_j = S(z, λ) / (cSq - 1/γ)   if |z| ≤ γλ·cSq
+--       = z / cSq                  if |z| > γλ·cSq
+-- @
+--
+-- Assumes @cSq > 1/γ@ (i.e. local convexity outweighs the penalty's
+-- concavity). With standardized @X@ (cSq ≈ 1), this is automatically
+-- satisfied when @γ > 1@. If violated, the inner CD may diverge; callers
+-- are recommended to use @standardize@ + @γ ≥ 3@.
 fitMCP
   :: Double                -- ^ @λ@
-  -> Double                -- ^ @γ@ (concavity、 推奨 @≥ 3@)
+  -> Double                -- ^ [日本語]: @γ@ (concavity、 推奨 @≥ 3@)。 [English]: @γ@ (concavity; recommended @≥ 3@).
   -> LA.Matrix Double      -- ^ X
   -> LA.Vector Double      -- ^ y
   -> Int                   -- ^ max CD iterations
@@ -138,7 +204,7 @@ fitMCP lambda gamma x y maxIter tol =
 -- 31-A3: SCAD (Smoothly Clipped Absolute Deviation、 Fan-Li 2001)
 -- ---------------------------------------------------------------------------
 
--- | SCAD non-convex 罰則 (区分三次):
+-- | [日本語]: SCAD non-convex 罰則 (区分三次):
 --
 -- @
 --   p'_{λ,a}(|β|) = λ                    if |β| ≤ λ
@@ -156,9 +222,28 @@ fitMCP lambda gamma x y maxIter tol =
 --   elif |z| ≤ a·λ·cSq :          β_j = S(z, aλ/(a-1)) / (cSq - 1/(a-1))
 --   else :                         β_j = z / cSq               -- OLS 領域
 -- @
+--
+-- [English]: SCAD non-convex penalty (piecewise cubic):
+--
+-- @
+--   p'_{λ,a}(|β|) = λ                    if |β| ≤ λ
+--                 = (aλ - |β|)/(a-1)     if λ < |β| ≤ aλ
+--                 = 0                    if |β| > aλ
+-- @
+--
+-- Typical value @a = 3.7@ (recommended by Fan-Li 2001).
+--
+-- Coordinate descent update (Breheny-Huang 2011):
+--
+-- @
+--   z = ρ_j
+--   if |z| ≤ λ·(1 + cSq) :        β_j = S(z, λ) / cSq        -- Lasso region
+--   elif |z| ≤ a·λ·cSq :          β_j = S(z, aλ/(a-1)) / (cSq - 1/(a-1))
+--   else :                         β_j = z / cSq               -- OLS region
+-- @
 fitSCAD
   :: Double                -- ^ @λ@
-  -> Double                -- ^ @a@ (= 3.7 推奨)
+  -> Double                -- ^ [日本語]: @a@ (= 3.7 推奨)。 [English]: @a@ (recommended @= 3.7@).
   -> LA.Matrix Double
   -> LA.Vector Double
   -> Int -> Double
@@ -186,7 +271,7 @@ fitSCAD lambda a x y maxIter tol =
 -- 31-A4: Group Lasso (Yuan-Lin 2006)
 -- ---------------------------------------------------------------------------
 
--- | Group Lasso: @argmin (1/2n)|y - Xβ|² + λ Σ_g √|g| · |β_g|₂@
+-- | [日本語]: Group Lasso: @argmin (1/2n)|y - Xβ|² + λ Σ_g √|g| · |β_g|₂@
 -- (group ごと L2 ノルムの和で penalize、 group 全体を 0 / non-0 にする)。
 --
 -- 解法: block coordinate descent。 各 group @g@ について部分残差
@@ -203,9 +288,30 @@ fitSCAD lambda a x y maxIter tol =
 --
 -- @groups@ は @[[Int]]@ で、 各内側リストが列 index の集合 (重複・順不同可)。
 -- 列 index が複数 group に現れた場合は最初の group のみ扱われる。
+--
+-- [English]: Group Lasso: @argmin (1/2n)|y - Xβ|² + λ Σ_g √|g| · |β_g|₂@
+-- (penalizes the sum of L2 norms per group, driving whole groups to 0 or
+-- non-0).
+--
+-- Solved via block coordinate descent. For each group @g@, a partial
+-- residual @r_g = r + X_g β_g@ is formed, and the group is updated as
+--
+-- @
+--   z_g = X_gᵀ r_g / n
+--   β_g_new = (1 - λ √|g| / |z_g|₂)_+ · z_g / cSq_g
+-- @
+--
+-- where @cSq_g = |X_g|² / n@ (sum of within-group column norms, assumed
+-- @1@ in the simplified case) and @(·)_+@ is max(·, 0). This is the
+-- simplified version that works under Yuan-Lin 2006's
+-- uncorrelated-within-group assumption.
+--
+-- @groups@ is @[[Int]]@, where each inner list is a set of column indices
+-- (duplicates \/ any order allowed). If a column index appears in multiple
+-- groups, only the first group is used.
 fitGroupLasso
   :: Double                -- ^ @λ@
-  -> [[Int]]               -- ^ group 分割 (列 index)
+  -> [[Int]]               -- ^ [日本語]: group 分割 (列 index)。 [English]: group partitioning (column indices).
   -> LA.Matrix Double      -- ^ X (n × p)
   -> LA.Vector Double      -- ^ y
   -> Int                   -- ^ max iterations
@@ -255,8 +361,10 @@ fitGroupLasso lambda groups x y maxIter tol =
       r     = y - yHat
   in mkRegFit betaFinal yHat r y (L1 lambda) iters
 
--- | Vector の特定 index 群を新値で置き換える (immutable 経由)。 Group Lasso
+-- | [日本語]: Vector の特定 index 群を新値で置き換える (immutable 経由)。 Group Lasso
 -- 専用のため module 内部 helper。
+-- [English]: Replaces a specific set of vector indices with new values (via
+-- an immutable copy). An internal helper dedicated to Group Lasso.
 updateIndices :: LA.Vector Double -> [Int] -> [Double] -> LA.Vector Double
 updateIndices v idx vals =
   let xs = LA.toList v

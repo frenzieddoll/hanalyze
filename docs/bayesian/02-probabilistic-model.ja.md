@@ -3,11 +3,11 @@
 > 🌐 [English](02-probabilistic-model.md) | **日本語**
 
 > 関連デモ:
-> - [`hbm-example`](../../demo/bayesian/HBMExample.hs) — 階層正規モデル + 4 チェーン NUTS
-> - [`hbm-regression`](../../demo/bayesian/HBMRegressionDemo.hs) — ベイズ単回帰 (HTML レポート付き; legacy `Hanalyze.Viz.AnalysisReport` 経由)
-> - [`clinical-trial`](../../demo/bayesian/ClinicalTrial.hs) — Beta-Binomial A/B テスト
-> - [`simpson-paradox`](../../demo/bayesian/SimpsonParadoxDemo.hs) — シンプソン例で LM/GLMM/HBM 比較
-> - [`hbm-random-slope`](../../demo/bayesian/HBMRandomSlopeDemo.hs) — ランダム傾き拡張
+> - [`hbm-example`](../../hanalyze-demos/demo/bayesian/HBMExample.hs) — 階層正規モデル + 4 チェーン NUTS
+> - [`hbm-regression`](../../hanalyze-demos/demo/bayesian/HBMRegressionDemo.hs) — ベイズ単回帰 (HTML レポート付き; legacy `Hanalyze.Viz.AnalysisReport` 経由)
+> - [`clinical-trial`](../../hanalyze-demos/demo/bayesian/ClinicalTrial.hs) — Beta-Binomial A/B テスト
+> - [`simpson-paradox`](../../hanalyze-demos/demo/bayesian/SimpsonParadoxDemo.hs) — シンプソン例で LM/GLMM/HBM 比較
+> - [`hbm-random-slope`](../../hanalyze-demos/demo/bayesian/HBMRandomSlopeDemo.hs) — ランダム傾き拡張
 
 ## 概要
 
@@ -211,7 +211,7 @@ regModel xs ys = do
 ![ベイズ単回帰 — 事後平均と 94% HDI 帯](../images/hbm-epred.svg)
 
 > `plot-integration-demo` executable で生成
-> (`PlotIntegrationDemo.hs`・非公開)。
+> ([`PlotIntegrationDemo.hs`](../../hanalyze-demos/demo-plot/PlotIntegrationDemo.hs))。
 
 ---
 
@@ -224,7 +224,7 @@ regModel xs ys = do
 > **動作確認**: 本節 (および後続のパターン 6-8) の sample コードは
 > `phase37-a0-verify` executable で全てビルド + 実行確認済みです
 > (`cabal run phase37-a0-verify`、 ソース:
-> [`Phase37A0VerifyDemo.hs`](../../demo/bayesian/Phase37A0VerifyDemo.hs))。
+> [`Phase37A0VerifyDemo.hs`](../../hanalyze-demos/demo/bayesian/Phase37A0VerifyDemo.hs))。
 
 モデル構造 (`dagOf`) と群平均の事後 (縮約が見える・`forestOf`):
 
@@ -319,7 +319,7 @@ schoolModelC groupData = do
 chain 上の潜在変数名は `"theta_1_raw"` 等になり、 `θ_j` の実値は
 `augmentChainWithDeterministic` で復元できます (派生量扱い)。
 
-詳しい原理と BFMI 改善の実測は [`noncentered-demo`](../../demo/bayesian/NonCenteredDemo.hs)
+詳しい原理と BFMI 改善の実測は [`noncentered-demo`](../../hanalyze-demos/demo/bayesian/NonCenteredDemo.hs)
 を参照。
 
 ### 3 形式の使い分け
@@ -333,7 +333,7 @@ chain 上の潜在変数名は `"theta_1_raw"` 等になり、 `θ_j` の実値�
 ### 群列が文字列 (categorical) の場合 (Phase 41)
 
 上の形式 B の `gid :: Int` は整数コード前提ですが、 **DataFrame / ∀LIC∃Code DSL
-経由の HBM** (canvas backend → streaming bridge worker) では、 群列・観測列に
+経由の HBM** (canvas backend → `streaming bridge` worker) では、 群列・観測列に
 **文字列 (categorical) 列**をそのまま使えます。 `DataMap` の値型が
 `data Column = Numeric [Double] | Factor {facLevels, facCodes}` の sum 型で、
 backend が文字列列を **factor encode** (level を出現順に 0,1,2,… の code 化) して
@@ -356,7 +356,7 @@ backend が文字列列を **factor encode** (level を出現順に 0,1,2,… �
     多項ロジット (基準クラス η=0 固定)
   WAIC/PPC は内部 latent (`cut_d_*` / `pi_b*`) から cuts/π を再構築して評価します。
 
-詳細はフロントエンド app 側の HBM モデリング言語仕様を参照。
+詳細は canvas `specification/spec/hanalyze-code-hbm-modeling-language-spec.md` §3.4。
 raw hanalyze monad API (本ページの `sample` / `observe`) 自体は従来どおり
 `[Double]` / `Int` を扱い、 factor encode は data 投入層 (DSL/backend) の責務です。
 
@@ -388,7 +388,7 @@ randomSlope groupData = do
 
 群別の切片だけにする (α_j 階層 + β 共通) と **形式 A の random intercept**、
 傾きも階層化すると **random intercept + random slope** になります。
-WAIC / LOO で両者を比較した実例: [`hbm-random-slope`](../../demo/bayesian/HBMRandomSlopeDemo.hs)。
+WAIC / LOO で両者を比較した実例: [`hbm-random-slope`](../../hanalyze-demos/demo/bayesian/HBMRandomSlopeDemo.hs)。
 
 ---
 
@@ -581,7 +581,7 @@ data REff = REff [Text] [Int] (Maybe Text) (Maybe [Double])
 
 ### M1-M8 で見る: どの書き方がどの経路に乗るか
 
-性能ベンチ (`bench/haskell/BenchHBMScaling.hs` ↔ PyMC 同一モデル・同一データ) の
+性能ベンチ (`hanalyze-demos/bench/haskell/BenchHBMScaling.hs` ↔ PyMC 同一モデル・同一データ) の
 M1-M8 を題材に、 書き方 → 検出される構造 → 経路を示します。 **M2 以外は全部
 per-obs 手書き**ですが、 全モデルが自動で高速経路に乗ります。 per-draw 実測は
 `bench/results/HBM_SCALING.md` 参照 (HS/PyMC 比: M1 0.08× / M2 0.23× / M3 0.30× /
@@ -878,7 +878,7 @@ printPosteriorSummary ["mu", "sigma", "tau", "log_sigma", "snr"] [ch]
 
 派生量は `posteriorSummaryFile` / `tracePlotHDIFile` / `secMCMCDiagnostics` 等に
 そのまま流せます (latent と区別なくテーブル/トレースに並びます)。
-デモ: [`deterministic-demo`](../../demo/bayesian/DeterministicDemo.hs)。
+デモ: [`deterministic-demo`](../../hanalyze-demos/demo/bayesian/DeterministicDemo.hs)。
 
 > **PyMC との対応**: `tau = pm.Deterministic("tau", 1/sig**2)` ↔
 > `_ <- deterministic "tau" (1/(sig*sig))`。返り値は捨てても (`_ <-`)、

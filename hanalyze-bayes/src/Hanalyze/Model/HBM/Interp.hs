@@ -10,20 +10,39 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- HBM dialog DSL の評価系 (interpreter) + NUTS 設定 reader + 結果整形。
+-- [日本語]: HBM dialog DSL の評価系 (interpreter) + NUTS 設定 reader + 結果整形。
 --
--- Phase 27.5 (2026-05-31) step 1: canvas-backend @フロントエンド app.Analysis.HBM@
+-- (2026-05-31) step 1: canvas-backend @CanvasApp.Analysis.HBM@
 -- から eval/interp/curve コアを移設。 frontend が backend 統一 parser から得た
 -- @program_ast@ を streaming sidecar が直接 interpret して実モデルを構築できる
 -- よう、 DSL の評価系をライブラリ層 (hanalyze) に置く。
 --
--- 本 module は **canvas wire 型 (AnalysisRequest 等) にも text parser
--- (DSL frontend) にも依存しない**。 依存は 'Hanalyze.Model.HBM.Ast' (AST) +
+-- 本 module は __canvas wire 型 (AnalysisRequest 等) にも text parser (DSL frontend) にも依存しない__。
+-- 依存は 'Hanalyze.Model.HBM.Ast' (AST) +
 -- @Hanalyze.Model.HBM@ (ModelP/Distribution) + @Hanalyze.Stat.*@ /
 -- @Hanalyze.MCMC.*@ + aeson / hmatrix のみ。
 --
 -- text → AST 変換 (@parseHbmText@ 経路) と canvas 専用の @runHbm@ /
 -- @buildDataMap@ / @ProgramInfo@ 解決は canvas-backend 側に残す。
+--
+-- [English]: HBM dialog DSL evaluator (interpreter) + NUTS config reader +
+-- result formatting.
+--
+-- (2026-05-31) step 1: relocated the eval\/interp\/curve core from the
+-- canvas-backend @CanvasApp.Analysis.HBM@. So that a streaming sidecar
+-- can directly interpret the @program_ast@ obtained by the frontend from the
+-- backend's unified parser and build the actual model, the DSL's evaluator
+-- lives in the library layer (hanalyze).
+--
+-- This module depends on __neither the canvas wire types (AnalysisRequest etc.) nor the text parser (DSL frontend)__.
+-- Its only dependencies are
+-- 'Hanalyze.Model.HBM.Ast' (AST), @Hanalyze.Model.HBM@
+-- (ModelP\/Distribution), @Hanalyze.Stat.*@ \/ @Hanalyze.MCMC.*@,
+-- and aeson \/ hmatrix.
+--
+-- The text → AST conversion (the @parseHbmText@ path) and the
+-- canvas-specific @runHbm@ \/ @buildDataMap@ \/ @ProgramInfo@ resolution
+-- remain on the canvas-backend side.
 module Hanalyze.Model.HBM.Interp
   ( -- * core types
     DataMap
@@ -85,7 +104,7 @@ module Hanalyze.Model.HBM.Interp
   , computeObsDists
   , pointwiseLogLik
   , finitePointwiseLogLik
-    -- * Phase 44: multi-column observe (observeMV) WAIC / PPC
+    -- * multi-column observe (observeMV) WAIC / PPC
   , MvObsDistSet (..)
   , computeMvObsDists
   , pointwiseLogLikMv
@@ -130,7 +149,9 @@ import Hanalyze.Model.HBM.Ast
 -- Interpreter コア型
 -- ===========================================================================
 
--- | 列参照を含む式かどうか(observe の dist 引数に列が混じったら per-row 展開する)。
+-- | [日本語]: 列参照を含む式かどうか(observe の dist 引数に列が混じったら per-row 展開する)。
+--   [English]: Whether the expression contains a column reference (if a
+--   column is mixed into an observe's dist argument, expand it per-row).
 hasColRef :: Expr -> Bool
 hasColRef = go
   where
@@ -148,51 +169,76 @@ hasColRef = go
 
 -- 'Err' (= Either Text) は Hanalyze.Model.HBM.Ast から import。
 
--- | スカラ式評価。col 参照は許可されるなら row idx を指定。Nothing なら無効でエラー。
+-- | [日本語]: スカラ式評価。col 参照は許可されるなら row idx を指定。Nothing なら無効でエラー。
+--   [English]: Scalar expression evaluation. If column references are
+--   allowed, give the row index; 'Nothing' makes them invalid (an error).
 liftD :: Floating a => Double -> a
 liftD d = fromRational (toRational d)
 
--- | 環境: sample / let / top-level で束縛された値 (数値・真偽・関数)。
--- Phase 27 §F-3a で scalar から 'Value' に拡張 (ユーザ定義関数を持てる)。
+-- | [日本語]: 環境: sample / let / top-level で束縛された値 (数値・真偽・関数)。
+--   拡張時に scalar から 'Value' に拡張 (ユーザ定義関数を持てる)。
+--   [English]: Environment: values bound by sample \/ let \/ top-level
+--   (numbers, booleans, functions). Extended from scalar to 'Value' (so it
+--   can hold user-defined functions).
 type EnvA a = Map.Map Text (Value a)
 
--- | データ列の値 (Phase 41)。 数値列 (連続/整数) と categorical 列
--- (factor = level 辞書 + 整数 code) を区別する sum 型。 'Numeric' は従来の
--- @[Double]@ 相当で後方互換、 'Factor' は R の factor / PyMC coords 相当
--- (level 出現順に 0,1,2,... の code を振る)。
+-- | [日本語]: データ列の値。 数値列 (連続/整数) と categorical 列
+--   (factor = level 辞書 + 整数 code) を区別する sum 型。 'Numeric' は従来の
+--   @[Double]@ 相当で後方互換、 'Factor' は R の factor / PyMC coords 相当
+--   (level 出現順に 0,1,2,... の code を振る)。
+--   [English]: A data column's value. A sum type distinguishing numeric
+--   columns (continuous\/integer) from categorical columns (factor = level
+--   dictionary + integer code). 'Numeric' is backward-compatible with the
+--   previous @[Double]@ representation; 'Factor' corresponds to R's factor
+--   \/ PyMC coords (codes 0,1,2,... assigned in level appearance order).
 data Column
-  = Numeric ![Double]                                     -- ^ 連続 / 整数列
+  = Numeric ![Double]                                     -- ^ [日本語]: 連続 / 整数列 [English]: continuous \/ integer column
   | Factor  { facLevels :: ![Text], facCodes :: ![Int] }  -- ^ categorical
   deriving (Eq, Show)
 
--- | データ列の Map。 列名 → 'Column'。
+-- | [日本語]: データ列の Map。 列名 → 'Column'。
+--   [English]: A map of data columns. Column name → 'Column'.
 type DataMap = Map.Map Text Column
 
--- | 列を @[Double]@ として見る (群比較 / 数値 observe / mean-curve 用)。
--- 'Numeric' はそのまま、 'Factor' は code を Double 化 (0,1,2,...)。 既存の
--- 数値ロジックはこの accessor 経由で Factor も透過に扱える。
+-- | [日本語]: 列を @[Double]@ として見る (群比較 / 数値 observe / mean-curve 用)。
+--   'Numeric' はそのまま、 'Factor' は code を Double 化 (0,1,2,...)。 既存の
+--   数値ロジックはこの accessor 経由で Factor も透過に扱える。
+--   [English]: Views a column as @[Double]@ (used for group comparisons \/
+--   numeric observe \/ mean-curve computation). 'Numeric' passes through as
+--   is; for 'Factor', the codes are converted to Double (0,1,2,...). Existing
+--   numeric logic can transparently handle 'Factor' too via this accessor.
 colDoubles :: Column -> [Double]
 colDoubles (Numeric xs)  = xs
 colDoubles (Factor _ cs) = map fromIntegral cs
 
--- | 列長 (行数)。
+-- | [日本語]: 列長 (行数)。
+--   [English]: Column length (row count).
 colLength :: Column -> Int
 colLength (Numeric xs)  = length xs
 colLength (Factor _ cs) = length cs
 
--- | 'Factor' なら level 辞書 (出現順)、 'Numeric' なら Nothing。
+-- | [日本語]: 'Factor' なら level 辞書 (出現順)、 'Numeric' なら Nothing。
+--   [English]: For 'Factor', the level dictionary (in appearance order); for
+--   'Numeric', 'Nothing'.
 colLevels :: Column -> Maybe [Text]
 colLevels (Factor ls _) = Just ls
 colLevels (Numeric _)   = Nothing
 
--- | 列を @[Double]@ として引く (無ければ空)。 旧 @Map.findWithDefault [] k dm@ の
--- 'Column' 対応版。
+-- | [日本語]: 列を @[Double]@ として引く (無ければ空)。 旧 @Map.findWithDefault [] k dm@ の
+--   'Column' 対応版。
+--   [English]: Looks up a column as @[Double]@ (empty if absent). The
+--   'Column'-aware counterpart of the old @Map.findWithDefault [] k dm@.
 lookupDoubles :: Text -> DataMap -> [Double]
 lookupDoubles k = maybe [] colDoubles . Map.lookup k
 
--- | Phase 27 §F-3a: モデル本体評価中の値。 Double 閉の数値 + 真偽 +
--- 一階クロージャ (ユーザ定義関数 / lambda) + 組込関数マーカ + 遅延エラー
--- (top-level 値束縛の評価失敗を lookup まで遅延運搬する)。
+-- | [日本語]: モデル本体評価中の値。 Double 閉の数値 + 真偽 +
+--   一階クロージャ (ユーザ定義関数 / lambda) + 組込関数マーカ + 遅延エラー
+--   (top-level 値束縛の評価失敗を lookup まで遅延運搬する)。
+--   [English]: A value during model-body evaluation. Numbers closed over
+--   Double, booleans, first-order closures (user-defined functions \/
+--   lambdas), a builtin-function marker, and a deferred error (carries a
+--   top-level value binding's evaluation failure forward until it is looked
+--   up).
 data Value a
   = VNum a
   | VBool Bool
@@ -203,9 +249,13 @@ data Value a
   | VBuiltin Text Int              -- 組込関数 (名前, arity)。 適用時に builtinTable で解決
   | VErr Text                      -- 遅延エラー (top-level 値 thunk の評価失敗)
 
--- | Phase 27 §F-3a: 組込数学関数ホワイトリスト (name → (arity, impl))。
--- すべて Double 上で閉じる純関数 (IO/import なし)。 GLM リンク
--- (invLogit/logistic) もここに含む。 必要に応じ追加。
+-- | [日本語]: 組込数学関数ホワイトリスト (name → (arity, impl))。
+--   すべて Double 上で閉じる純関数 (IO/import なし)。 GLM リンク
+--   (invLogit/logistic) もここに含む。 必要に応じ追加。
+--   [English]: Whitelist of builtin math functions (name → (arity, impl)).
+--   All are pure functions closed over Double (no IO\/import). GLM link
+--   functions (invLogit\/logistic) are included here too. Add more as
+--   needed.
 builtinTable :: forall a. (Floating a, Ord a) => Map.Map Text (Int, [a] -> a)
 builtinTable = Map.fromList
   [ ("exp",      (1, \xs -> exp (head xs)))
@@ -225,14 +275,22 @@ builtinTable = Map.fromList
   , ("max",      (2, \xs -> max (xs !! 0) (xs !! 1)))
   ]
 
--- | Phase 43: list builtin (VList→VList) の名前集合。 スカラ 'builtinTable'
--- (= @[a] -> a@) には乗らないので別管理。 softmax 多項ロジット
--- (@Categorical (softmax [η₀, η₁, …])@) で多クラス線形予測子を確率に変換する。
+-- | [日本語]: list builtin (VList→VList) の名前集合。 スカラ 'builtinTable'
+--   (= @[a] -> a@) には乗らないので別管理。 softmax 多項ロジット
+--   (@Categorical (softmax [η₀, η₁, …])@) で多クラス線形予測子を確率に変換する。
+--   [English]: The set of list-builtin names (VList→VList). Managed
+--   separately since they don't fit the scalar 'builtinTable' (=
+--   @[a] -> a@). Used by the softmax multinomial logit
+--   (@Categorical (softmax [η₀, η₁, …])@) to convert multi-class linear
+--   predictors into probabilities.
 listBuiltins :: Set.Set Text
 listBuiltins = Set.fromList ["softmax"]
 
--- | 安定 softmax (= @exp(xₖ − max x) / Σ@)。 識別性のため基準クラスは η=0 を
--- 明示的に並べる前提 (例 @softmax [0, b₁·x, b₂·x]@)。 空リストはエラー。
+-- | [日本語]: 安定 softmax (= @exp(xₖ − max x) / Σ@)。 識別性のため基準クラスは η=0 を
+--   明示的に並べる前提 (例 @softmax [0, b₁·x, b₂·x]@)。 空リストはエラー。
+--   [English]: Numerically stable softmax (= @exp(xₖ − max x) / Σ@). For
+--   identifiability, assumes the reference class is explicitly listed with
+--   η=0 (e.g. @softmax [0, b₁·x, b₂·x]@). An empty list is an error.
 softmaxList :: forall a. (Floating a, Ord a) => [a] -> Err [a]
 softmaxList [] = Left "softmax: 空リストには適用できません (クラス数 ≥ 1 の [..] が必要です)"
 softmaxList xs =
@@ -241,7 +299,9 @@ softmaxList xs =
       s  = sum es
   in Right (map (/ s) es)
 
--- | Value を数値に落とす (= 親切な日本語エラー)。
+-- | [日本語]: Value を数値に落とす (= 親切な日本語エラー)。
+--   [English]: Coerces a Value down to a number (with a friendly Japanese
+--   error message).
 asNum :: Value a -> Err a
 asNum (VNum x)     = Right x
 asNum (VBool _)    = Left "真偽値が数値の位置に現れました (比較式を算術に混ぜていませんか)"
@@ -250,7 +310,8 @@ asNum (VBuiltin n _) = Left ("組込関数 " <> n <> " が数値の位置に現�
 asNum (VList _)    = Left "リストが数値の位置に現れました (list 引数はスカラとして使えません)"
 asNum (VErr msg)   = Left msg
 
--- | Value を真偽に落とす。
+-- | [日本語]: Value を真偽に落とす。
+--   [English]: Coerces a Value down to a boolean.
 asBool :: Value a -> Err Bool
 asBool (VBool b)    = Right b
 asBool (VNum _)     = Left "数値が真偽の位置に現れました (if の条件は比較式である必要があります)"
@@ -259,8 +320,11 @@ asBool (VBuiltin n _) = Left ("組込関数 " <> n <> " が真偽の位置に現
 asBool (VList _)    = Left "リストが真偽の位置に現れました"
 asBool (VErr msg)   = Left msg
 
--- | Value を list に落とす (Phase 42: 多値分布の list 引数評価)。 各要素は
--- 'asNum' でスカラに落とせる前提。
+-- | [日本語]: Value を list に落とす (多値分布の list 引数評価)。 各要素は
+--   'asNum' でスカラに落とせる前提。
+--   [English]: Coerces a Value down to a list (for evaluating multi-valued
+--   distributions' list arguments). Assumes each element can be coerced to
+--   a scalar via 'asNum'.
 asList :: Value a -> Err [Value a]
 asList (VList xs)    = Right xs
 asList (VNum _)      = Left "数値がリストの位置に現れました (list 引数には [..] を渡してください)"
@@ -269,11 +333,18 @@ asList (VClosure{})  = Left "関数がリストの位置に現れました"
 asList (VBuiltin n _) = Left ("組込関数 " <> n <> " がリストの位置に現れました")
 asList (VErr msg)    = Left msg
 
--- | Value を行列 ([[a]]) に落とす (Phase 44: MvNormal の cov / lkjCorrCholesky の
--- 行列値を評価する用途)。 VList-of-VList を期待し、 各内側 VList の長さ一致と
--- 数値性を検査する。 list 操作で書くのは DSL スカラ値 'Value' 上の小さい構造
--- 変換のためで、 hmatrix Matrix 経路ではない (density 計算側の choleskyL /
--- forwardSub は既存実装を流用)。
+-- | [日本語]: Value を行列 ([[a]]) に落とす (MvNormal の cov / lkjCorrCholesky の
+--   行列値を評価する用途)。 VList-of-VList を期待し、 各内側 VList の長さ一致と
+--   数値性を検査する。 list 操作で書くのは DSL スカラ値 'Value' 上の小さい構造
+--   変換のためで、 hmatrix Matrix 経路ではない (density 計算側の choleskyL /
+--   forwardSub は既存実装を流用)。
+--   [English]: Coerces a Value down to a matrix ([[a]]) (for evaluating
+--   MvNormal's cov \/ lkjCorrCholesky's matrix values). Expects a
+--   VList-of-VList and checks each inner VList's length matches and is
+--   numeric. Written as list operations because it's a small structural
+--   conversion over the DSL's scalar 'Value', not the hmatrix Matrix path
+--   (the density computation's choleskyL \/ forwardSub reuse the existing
+--   implementation).
 asMatrix :: Value a -> Err [[a]]
 asMatrix v = do
   rows <- asList v
@@ -284,17 +355,25 @@ asMatrix v = do
       | all ((== length r0) . length) rs -> Right mat
       | otherwise -> Left "行列の各行の長さが揃っていません (cov は正方行列である必要があります)"
 
--- | スカラ式評価 (= 数値を返す)。 'evalValue' の薄いラッパ。 col 参照は
--- mi=Just i なら行 i、 Nothing なら不可。
+-- | [日本語]: スカラ式評価 (= 数値を返す)。 'evalValue' の薄いラッパ。 col 参照は
+--   mi=Just i なら行 i、 Nothing なら不可。
+--   [English]: Scalar expression evaluation (returns a number). A thin
+--   wrapper around 'evalValue'. For column references, mi=Just i means row
+--   i, and 'Nothing' means they are disallowed.
 evalScalar
   :: forall a. (Floating a, Ord a)
   => EnvA a -> DataMap -> Maybe Int -> Expr -> Err a
 evalScalar env dataMap mi e = evalValue env dataMap mi e >>= asNum
 
--- | Phase 27 §F-3a: 式を 'Value' に評価する interpreter 中核。
--- 適用 (EApp) / if (EIf) / 比較・論理 (EOp) / lambda (ELam) / let を解釈。
--- ユーザ定義関数 (一階・カリー化) と組込数学関数を呼べる。
--- 再帰なし (total) ・ IO/ADT/型クラスなし。
+-- | [日本語]: 式を 'Value' に評価する interpreter 中核。
+--   適用 (EApp) / if (EIf) / 比較・論理 (EOp) / lambda (ELam) / let を解釈。
+--   ユーザ定義関数 (一階・カリー化) と組込数学関数を呼べる。
+--   再帰なし (total) ・ IO/ADT/型クラスなし。
+--   [English]: The interpreter's core, evaluating an expression to a
+--   'Value'. Interprets application (EApp) \/ if (EIf) \/
+--   comparison-and-logic (EOp) \/ lambda (ELam) \/ let. Can call
+--   user-defined functions (first-order, curried) and builtin math
+--   functions. No recursion (total); no IO\/ADT\/type classes.
 evalValue
   :: forall a. (Floating a, Ord a)
   => EnvA a -> DataMap -> Maybe Int -> Expr -> Err (Value a)
@@ -415,18 +494,27 @@ evalValue env dataMap mi = go
 -- Phase 27 §F-3a: top-level 束縛環境
 -- ===========================================================================
 
--- | 1 つの top-level 値/関数束縛 (= ユーザが model と並べて書く
--- `tmpvar = 1` / `linkfunc x = log x`)。 model (= do-block 束縛) は含まない。
+-- | [日本語]: 1 つの top-level 値/関数束縛 (= ユーザが model と並べて書く
+--   `tmpvar = 1` / `linkfunc x = log x`)。 model (= do-block 束縛) は含まない。
+--   [English]: A single top-level value \/ function binding (i.e. what a
+--   user writes alongside the model, like `tmpvar = 1` \/
+--   `linkfunc x = log x`). Does not include the model (do-block bindings).
 data TopBind = TopBind
   { tbName   :: Text
   , tbParams :: [Text]
   , tbBody   :: Expr
   } deriving (Show)
 
--- | top-level 束縛から評価環境を組む。 値束縛 (引数なし) は env の中で
--- 遅延評価して 'Value' に (相互参照は laziness で解決、 再帰は無い前提)。
--- 関数束縛 (引数あり) は env を捕捉した 'VClosure' に。 評価失敗は 'VErr'
--- として運び、 実際に参照された時にエラーを出す。
+-- | [日本語]: top-level 束縛から評価環境を組む。 値束縛 (引数なし) は env の中で
+--   遅延評価して 'Value' に (相互参照は laziness で解決、 再帰は無い前提)。
+--   関数束縛 (引数あり) は env を捕捉した 'VClosure' に。 評価失敗は 'VErr'
+--   として運び、 実際に参照された時にエラーを出す。
+--   [English]: Builds the evaluation environment from top-level bindings.
+--   Value bindings (no arguments) are lazily evaluated to a 'Value' within
+--   the env (mutual references are resolved via laziness; no recursion is
+--   assumed). Function bindings (with arguments) become a 'VClosure'
+--   capturing the env. Evaluation failures are carried as 'VErr' and raised
+--   only when actually referenced.
 buildTopEnv :: forall a. (Floating a, Ord a) => DataMap -> [TopBind] -> EnvA a
 buildTopEnv dataMap binds = env
   where
@@ -451,7 +539,9 @@ buildTopEnv dataMap binds = env
 --   * lambda 引数 g は群値 (Double) に束縛 (式で使える)。
 --   * nest 可能 (forEachGroup の中に forEachGroup): suffix 連結 + 行積集合。
 
--- | plate 評価コンテキスト。 top-level は 'topCtx' = ("", 全行) で従来挙動を保つ。
+-- | [日本語]: plate 評価コンテキスト。 top-level は 'topCtx' = ("", 全行) で従来挙動を保つ。
+--   [English]: The plate evaluation context. At the top level, 'topCtx' =
+--   ("", all rows) preserves the previous behavior.
 data PlateCtx = PlateCtx
   { pcSuffix :: Text          -- sample/observe 名に付ける suffix (例 "_1_2")
   , pcRows   :: Maybe [Int]    -- observe 対象行 (Nothing = 全行)
@@ -460,19 +550,25 @@ data PlateCtx = PlateCtx
 topCtx :: PlateCtx
 topCtx = PlateCtx "" Nothing
 
--- | `forEachGroup "gcol" (\g -> do { … })` を検出し (群列, 引数名, 内部 stmts)。
+-- | [日本語]: `forEachGroup "gcol" (\g -> do { … })` を検出し (群列, 引数名, 内部 stmts)。
+--   [English]: Detects `forEachGroup "gcol" (\g -> do { … })` and returns
+--   (group column, parameter name, inner stmts).
 matchForEachGroup :: Expr -> Maybe (Text, Text, [DoStmt])
 matchForEachGroup e = case collectApp e of
   Right ("forEachGroup", [ELit (LText gcol), ELam param body]) ->
     Just (gcol, param, lamBodyToStmts body)
   _ -> Nothing
 
--- | lambda 本体を DoStmt 列に。 do なら stmts + 末尾式、 それ以外は単一 DoExpr。
+-- | [日本語]: lambda 本体を DoStmt 列に。 do なら stmts + 末尾式、 それ以外は単一 DoExpr。
+--   [English]: Converts a lambda body into a DoStmt list. For a do-block,
+--   stmts plus the trailing expression; otherwise, a single DoExpr.
 lamBodyToStmts :: Expr -> [DoStmt]
 lamBodyToStmts (EDo stmts ret) = stmts ++ retToStmts ret
 lamBodyToStmts other           = [DoExpr other]
 
--- | do-block 末尾式: pure/return は捨て、 それ以外 (observe 等) は DoExpr に。
+-- | [日本語]: do-block 末尾式: pure/return は捨て、 それ以外 (observe 等) は DoExpr に。
+--   [English]: The do-block's trailing expression: pure\/return is dropped;
+--   anything else (e.g. observe) becomes a DoExpr.
 retToStmts :: Expr -> [DoStmt]
 retToStmts r = case r of
   EApp (EVar "pure") _   -> []
@@ -480,48 +576,69 @@ retToStmts r = case r of
   ELit (LBool _)         -> []
   _                      -> [DoExpr r]
 
--- | ctx の対象行に限定した群列の distinct 値 (昇順)。
+-- | [日本語]: ctx の対象行に限定した群列の distinct 値 (昇順)。
+--   [English]: The group column's distinct values, restricted to ctx's
+--   target rows (ascending order).
 groupValsIn :: DataMap -> Text -> Maybe [Int] -> [Double]
 groupValsIn dm gcol mrows =
   let col  = lookupDoubles gcol dm
       idxs = fromMaybe [0 .. length col - 1] mrows
   in sort (nub [ col !! i | i <- idxs, i >= 0, i < length col ])
 
--- | ctx の対象行のうち 群列 == gval の行 index。
+-- | [日本語]: ctx の対象行のうち 群列 == gval の行 index。
+--   [English]: The row indices, among ctx's target rows, where the group
+--   column equals gval.
 rowsForGroup :: DataMap -> Text -> Double -> Maybe [Int] -> [Int]
 rowsForGroup dm gcol gval mrows =
   let col  = lookupDoubles gcol dm
       idxs = fromMaybe [0 .. length col - 1] mrows
   in [ i | i <- idxs, i >= 0, i < length col, col !! i == gval ]
 
--- | 群値を name suffix に (整数なら "_3"、 非整数なら小数表記)。
--- 群列は整数コード前提なので通常は整数 suffix。
+-- | [日本語]: 群値を name suffix に (整数なら "_3"、 非整数なら小数表記)。
+--   群列は整数コード前提なので通常は整数 suffix。
+--   [English]: Turns a group value into a name suffix (an integer value
+--   like "_3"; otherwise, decimal notation). Group columns are assumed to
+--   be integer codes, so the suffix is normally an integer.
 groupSuffix :: Double -> Text
 groupSuffix g
   | g == fromIntegral (round g :: Integer) = "_" <> T.pack (show (round g :: Integer))
   | otherwise                              = "_" <> T.pack (show g)
 
--- | 群 suffix (Phase 41.4)。 群列が 'Factor' で code が level を指し、 その
--- level が安全な識別子 (先頭英字/下線 + 英数字/下線のみ) なら可読 suffix
--- "_<level>" (例 "_setosa")、 それ以外は 'groupSuffix' (数値 code suffix) に
--- フォールバック。 charset / 衝突安全のため不安全な level は code に落とす。
--- interpStmts / collectObsInstances / plateRenameMap の 3 経路で同一規律を使う
--- 必要がある (node 名が一致しないと観測値/グラフが噛み合わない)。
+-- | [日本語]: 群 suffix。 群列が 'Factor' で code が level を指し、 その
+--   level が安全な識別子 (先頭英字/下線 + 英数字/下線のみ) なら可読 suffix
+--   "_<level>" (例 "_setosa")、 それ以外は 'groupSuffix' (数値 code suffix) に
+--   フォールバック。 charset / 衝突安全のため不安全な level は code に落とす。
+--   interpStmts / collectObsInstances / plateRenameMap の 3 経路で同一規律を使う
+--   必要がある (node 名が一致しないと観測値/グラフが噛み合わない)。
+--   [English]: The group suffix. If the group column is 'Factor' and the
+--   code points to a level, and that level is a safe identifier (leading
+--   alpha\/underscore, then alphanumerics\/underscore only), the readable
+--   suffix "_<level>" (e.g. "_setosa") is used; otherwise it falls back to
+--   'groupSuffix' (a numeric-code suffix). For charset\/collision safety,
+--   unsafe levels fall back to the code. The same rule must be shared across
+--   the three code paths interpStmts \/ collectObsInstances \/
+--   plateRenameMap (if the node names don't match, observed values and the
+--   graph fall out of sync).
 groupSuffixFor :: Maybe Column -> Double -> Text
 groupSuffixFor (Just (Factor levels _)) g
   | i >= 0, i < length levels, isSafeIdent (levels !! i) = "_" <> (levels !! i)
   where i = round g :: Int
 groupSuffixFor _ g = groupSuffix g
 
--- | node 名 suffix に使える安全な識別子か (先頭英字/下線、 以降英数字/下線)。
+-- | [日本語]: node 名 suffix に使える安全な識別子か (先頭英字/下線、 以降英数字/下線)。
+--   [English]: Whether this is a safe identifier usable as a node-name
+--   suffix (leading alpha\/underscore, then alphanumerics\/underscore).
 isSafeIdent :: Text -> Bool
 isSafeIdent t = case T.uncons t of
   Nothing          -> False
   Just (c0, rest)  -> (isAlpha c0 || c0 == '_')
                         && T.all (\c -> isAlphaNum c || c == '_') rest
 
--- | Distribution AST を Hanalyze.Model.HBM.Distribution に変換。
--- mi が Nothing なら列参照不可。 mi=Just i なら行 i で評価。
+-- | [日本語]: Distribution AST を Hanalyze.Model.HBM.Distribution に変換。
+--   mi が Nothing なら列参照不可。 mi=Just i なら行 i で評価。
+--   [English]: Converts the Distribution AST to
+--   Hanalyze.Model.HBM.Distribution. If mi is Nothing, column
+--   references are disallowed; if mi=Just i, evaluation happens at row i.
 evalDist
   :: forall a. (Floating a, Ord a)
   => EnvA a -> DataMap -> Maybe Int -> Expr -> Err (HBM.Distribution a)
@@ -598,9 +715,13 @@ evalDist env dataMap mi expr = do
     mk2 f a b     = f <$> eval a <*> eval b
     mk3 f a b c   = f <$> eval a <*> eval b <*> eval c
 
--- | k-vector 観測を取る多変量分布か。 @observeMV@ (Phase 44) はこれらのみ
--- 受理し、 scalar 分布が渡されたら親切エラーにする。 obsLogSum
--- (HBM.hs:987) が chunk 処理する分布と対応する。
+-- | [日本語]: k-vector 観測を取る多変量分布か。 @observeMV@ はこれらのみ
+--   受理し、 scalar 分布が渡されたら親切エラーにする。 obsLogSum
+--   (HBM.hs:987) が chunk 処理する分布と対応する。
+--   [English]: Whether this is a multivariate distribution that takes a
+--   k-vector observation. @observeMV@ accepts only these, and gives a
+--   friendly error if a scalar distribution is passed. Corresponds to the
+--   distributions that obsLogSum (HBM.hs:987) chunk-processes.
 isMultivariateDist :: HBM.Distribution a -> Bool
 isMultivariateDist d = HBM.distName d `elem`
   [ "MvNormal", "MvNormalChol", "MvStudentT"
@@ -623,27 +744,40 @@ isMultivariateDist d = HBM.distName d `elem`
 -- probs が VList に束縛されるので Phase 42 の evalList (evalValue >>= asList >>=
 -- mapM asNum) がそのまま解決する (本機構の追加は **bind 側のみ**)。
 
--- | 検出した list 値 combinator 呼び出し (引数は評価済 = base 名 + 構築情報)。
+-- | [日本語]: 検出した list 値 combinator 呼び出し (引数は評価済 = base 名 + 構築情報)。
+--   [English]: A detected list-valued combinator call (arguments already
+--   evaluated = base name + construction info).
 -- 結果ベクトルの長さは引数から静的に決まる ('listCombLen')。
 data ListComb a
   = OrderedCutsComb Text Int a a   -- ^ name, nCuts (= K-1 ≥ 1), cMin, HalfNormal scale
-  | DirichletComb   Text [a]       -- ^ name, α 集中度ベクトル (長さ K ≥ 2)
+  | DirichletComb   Text [a]       -- ^ [日本語]: name, α 集中度ベクトル (長さ K ≥ 2) [English]: name, the α concentration vector (length K ≥ 2)
 
--- | combinator が返すベクトルの長さ (validateStmts の placeholder VList 長 /
--- interpStmts は実値から決まるので参照不要)。
+-- | [日本語]: combinator が返すベクトルの長さ (validateStmts の placeholder VList 長 /
+--   interpStmts は実値から決まるので参照不要)。
+--   [English]: The length of the vector the combinator returns (used for
+--   validateStmts's placeholder VList length; interpStmts derives it from
+--   the actual value, so it doesn't need to consult this).
 listCombLen :: ListComb a -> Int
 listCombLen (OrderedCutsComb _ n _ _) = n
 listCombLen (DirichletComb _ as)      = length as
 
--- | base 名に plate suffix を付ける (forEachGroup 内で群ごとに別 latent にする)。
+-- | [日本語]: base 名に plate suffix を付ける (forEachGroup 内で群ごとに別 latent にする)。
+--   [English]: Appends the plate suffix to the base name (so that
+--   forEachGroup gives each group a distinct latent).
 listCombSuffix :: Text -> ListComb a -> ListComb a
 listCombSuffix suf (OrderedCutsComb nm n cm sc) = OrderedCutsComb (nm <> suf) n cm sc
 listCombSuffix suf (DirichletComb nm as)        = DirichletComb (nm <> suf) as
 
--- | DoBind の RHS が list 値 combinator (orderedCuts / dirichlet) なら
--- 引数を評価して 'ListComb' に。 combinator でなければ 'Nothing' (= scalar
--- sample 経路へ)。 名前は文字列リテラル必須、 nCuts は数値リテラル必須
--- (静的に長さを決めるため。 Phase 43 当面の制約、 doc 想定リスク参照)。
+-- | [日本語]: DoBind の RHS が list 値 combinator (orderedCuts / dirichlet) なら
+--   引数を評価して 'ListComb' に。 combinator でなければ 'Nothing' (= scalar
+--   sample 経路へ)。 名前は文字列リテラル必須、 nCuts は数値リテラル必須
+--   (静的に長さを決めるため。 現状の制約、 doc 想定リスク参照)。
+--   [English]: If the DoBind's RHS is a list-valued combinator (orderedCuts
+--   \/ dirichlet), evaluates the arguments into a 'ListComb'; if it is not a
+--   combinator, returns 'Nothing' (falling through to the scalar sample
+--   path). The name must be a string literal, and nCuts must be a numeric
+--   literal (to determine the length statically; this is a current
+--   limitation — see the doc's noted risk).
 matchListComb
   :: forall a. (Floating a, Ord a)
   => EnvA a -> DataMap -> Expr -> Maybe (Err (ListComb a))
@@ -668,7 +802,9 @@ matchListComb env dataMap expr = case collectApp expr of
     intLit _ (ELit (LNumber d)) = Right (round d)
     intLit fn _ = Left (fn <> " のカット数引数 (第 2 引数) は数値リテラルである必要があります (変数経由は未対応)")
 
--- | 'ListComb' を実際の Model アクション (latent vector を sample) に。
+-- | [日本語]: 'ListComb' を実際の Model アクション (latent vector を sample) に。
+--   [English]: Turns a 'ListComb' into an actual Model action (sampling a
+--   latent vector).
 runListComb :: forall a. (Floating a, Ord a) => ListComb a -> HBM.Model a [a]
 runListComb (OrderedCutsComb nm n cm sc) = HBM.orderedCuts nm n cm sc
 runListComb (DirichletComb nm as)        = HBM.dirichlet nm as
@@ -684,21 +820,32 @@ runListComb (DirichletComb nm as)        = HBM.dirichlet nm as
 -- で解決する。 内部 latent (@L_pc*@ / @L_L*@ 等) は Model が自動登録する
 -- (DSL は latent を再実装しない)。
 
--- | 検出した行列値 combinator 呼び出し (引数評価済)。
+-- | [日本語]: 検出した行列値 combinator 呼び出し (引数評価済)。
+--   [English]: A detected matrix-valued combinator call (arguments already
+--   evaluated).
 data MatrixComb a
-  = LkjCholComb Text Int a   -- ^ name, dim k (≥ 2), eta (LKJ 集中度)
+  = LkjCholComb Text Int a   -- ^ [日本語]: name, dim k (≥ 2), eta (LKJ 集中度) [English]: name, dim k (≥ 2), eta (LKJ concentration)
 
--- | combinator が返す行列の次元 k (validateStmts の placeholder 用)。
+-- | [日本語]: combinator が返す行列の次元 k (validateStmts の placeholder 用)。
+--   [English]: The dimension k of the matrix the combinator returns (for
+--   validateStmts's placeholder).
 matrixCombDim :: MatrixComb a -> Int
 matrixCombDim (LkjCholComb _ k _) = k
 
--- | base 名に plate suffix を付ける (群ごとに別 latent にする)。
+-- | [日本語]: base 名に plate suffix を付ける (群ごとに別 latent にする)。
+--   [English]: Appends the plate suffix to the base name (giving each group
+--   a distinct latent).
 matrixCombSuffix :: Text -> MatrixComb a -> MatrixComb a
 matrixCombSuffix suf (LkjCholComb nm k eta) = LkjCholComb (nm <> suf) k eta
 
--- | DoBind の RHS が行列値 combinator (lkjCorrCholesky) なら引数を評価して
--- 'MatrixComb' に。 combinator でなければ 'Nothing'。 名前は文字列リテラル、
--- 次元 k は数値リテラル必須 (静的に行列サイズを決めるため)。
+-- | [日本語]: DoBind の RHS が行列値 combinator (lkjCorrCholesky) なら引数を評価して
+--   'MatrixComb' に。 combinator でなければ 'Nothing'。 名前は文字列リテラル、
+--   次元 k は数値リテラル必須 (静的に行列サイズを決めるため)。
+--   [English]: If the DoBind's RHS is a matrix-valued combinator
+--   (lkjCorrCholesky), evaluates the arguments into a 'MatrixComb'; if it is
+--   not a combinator, returns 'Nothing'. The name must be a string literal,
+--   and the dimension k must be a numeric literal (to determine the matrix
+--   size statically).
 matchMatrixComb
   :: forall a. (Floating a, Ord a)
   => EnvA a -> DataMap -> Expr -> Maybe (Err (MatrixComb a))
@@ -717,13 +864,19 @@ matchMatrixComb env dataMap expr = case collectApp expr of
     intLit (ELit (LNumber d)) = Right (round d)
     intLit _ = Left "lkjCorrCholesky の次元引数 (第 2 引数) は数値リテラルである必要があります (変数経由は未対応)"
 
--- | 'MatrixComb' を実際の Model アクション (latent 相関行列を sample) に。
+-- | [日本語]: 'MatrixComb' を実際の Model アクション (latent 相関行列を sample) に。
+--   [English]: Turns a 'MatrixComb' into an actual Model action (sampling a
+--   latent correlation matrix).
 runMatrixComb :: forall a. (Floating a, Ord a) => MatrixComb a -> HBM.Model a [[a]]
 runMatrixComb (LkjCholComb nm k eta) = HBM.lkjCorrCholesky nm k eta
 
--- | Phase 9.1d-5: stmts を walk して各 latent 変数(DoBind の左辺)に対する
--- Transform を返す。 constrained 空間で 0 初期化は PositiveT で log 0 = -∞
--- 発散するため、 streaming endpoint で transform 別に初期値を選ぶのに使う。
+-- | [日本語]: stmts を walk して各 latent 変数(DoBind の左辺)に対する
+--   Transform を返す。 constrained 空間で 0 初期化は PositiveT で log 0 = -∞
+--   発散するため、 streaming endpoint で transform 別に初期値を選ぶのに使う。
+--   [English]: Walks the stmts and returns the Transform for each latent
+--   variable (a DoBind's left-hand side). Initializing at 0 in constrained
+--   space diverges for PositiveT (log 0 = -∞), so this is used by the
+--   streaming endpoint to pick an initial value per transform.
 inferTransforms :: [DoStmt] -> Map.Map Text HD.Transform
 inferTransforms = Map.fromList . concatMap extract
   where
@@ -751,9 +904,14 @@ inferTransforms = Map.fromList . concatMap extract
 -- AST → Model モナド構築
 -- ===========================================================================
 
--- | EDo 内の各 stmt を Model モナドに翻訳。実装は 'forall a' のもとに
--- 動作する必要があるが、Err は Haskell の純粋値なので外側で先に検査して
--- Model 構築は失敗しない前提にする。エラーは事前検証で全部捕まえる方針。
+-- | [日本語]: EDo 内の各 stmt を Model モナドに翻訳。実装は 'forall a' のもとに
+--   動作する必要があるが、Err は Haskell の純粋値なので外側で先に検査して
+--   Model 構築は失敗しない前提にする。エラーは事前検証で全部捕まえる方針。
+--   [English]: Translates each stmt inside an EDo into the Model monad. The
+--   implementation must work under 'forall a', but since Err is a pure
+--   Haskell value, we check it up front on the outside and assume Model
+--   construction never fails from here on. The policy is to catch all
+--   errors during pre-validation.
 --
 -- ここでは「事前検証ありで、検証通過後に Model を直接組み上げる」設計。
 -- ModelP は forall を含む rank-1 polymorphic 型なので Either に直接乗らない
@@ -781,10 +939,15 @@ validateAst topBinds body0 dataMap = do
   validateStmts topBinds dataMap stmts
   pure stmts
 
--- | Phase 26.1 §A-2 alias 経路 (2026-05-27 王道方針に切替): Haskell の `let`
--- を syntactic alias として扱う pre-processing。 spec §4.2 と整合
--- (= ∀LIC∃Code は Haskell サブセット、 `let x = col "..."` で Expression
--- Language alias)。 詳細は streaming bridge/.../HbmAst.hs の同名関数 doc 参照。
+-- | [日本語]: alias 経路 (2026-05-27 王道方針に切替): Haskell の `let`
+--   を syntactic alias として扱う pre-processing。 spec §4.2 と整合
+--   (= ∀LIC∃Code は Haskell サブセット、 `let x = col "..."` で Expression
+--   Language alias)。 詳細は streaming bridge/.../HbmAst.hs の同名関数 doc 参照。
+--   [English]: The alias path (switched to the "orthodox" approach on
+--   2026-05-27): pre-processing that treats Haskell's `let` as a syntactic
+--   alias. Consistent with spec §4.2 (= ∀LIC∃Code is a Haskell subset;
+--   `let x = col "..."` is an Expression Language alias). See the
+--   like-named function's doc in streaming bridge/.../HbmAst.hs for details.
 preprocessAliases :: [DoStmt] -> [DoStmt]
 preprocessAliases = go Map.empty
   where
@@ -833,8 +996,11 @@ preprocessAliases = go Map.empty
         go' (EDo s r)    = EDo s r   -- 入れ子 do は触らない
         go' x            = x
 
--- | 静的検証(変数名スコープ / 列存在)。型は (Double, Double) 環境で一度評価して
--- 実行時エラーが起きないかを確認する。
+-- | [日本語]: 静的検証(変数名スコープ / 列存在)。型は (Double, Double) 環境で一度評価して
+--   実行時エラーが起きないかを確認する。
+--   [English]: Static validation (variable scoping \/ column existence).
+--   Evaluates once in a (Double, Double) environment to confirm no runtime
+--   error occurs.
 validateStmts :: [TopBind] -> DataMap -> [DoStmt] -> Err ()
 validateStmts topBinds dataMap stmts0 = go (buildTopEnv dataMap topBinds) stmts0
   where
@@ -921,8 +1087,11 @@ validateStmts topBinds dataMap stmts0 = go (buildTopEnv dataMap topBinds) stmts0
     requireColRef (ECol n) = Right n
     requireColRef _ = Left "observe's third argument must be a column reference 'colname'"
 
--- | 検証通過後の Model 構築(polymorphic in a)。エラーは想定外なので
--- error で落とす(validation で漏れたバグは fail-fast)。
+-- | [日本語]: 検証通過後の Model 構築(polymorphic in a)。エラーは想定外なので
+--   error で落とす(validation で漏れたバグは fail-fast)。
+--   [English]: Builds the Model after validation passes (polymorphic in a).
+--   Errors are unexpected at this point, so it fails via error (a bug that
+--   slipped past validation should fail fast).
 interpStmts :: [TopBind] -> DataMap -> [DoStmt] -> HBM.ModelP ()
 interpStmts topBinds dataMap stmts = goM topCtx (buildTopEnv dataMap topBinds) stmts
   where
@@ -1024,7 +1193,8 @@ interpStmts topBinds dataMap stmts = goM topCtx (buildTopEnv dataMap topBinds) s
 -- NUTS 設定 reader
 -- ===========================================================================
 
--- | extra から NUTS 設定を読む(欠落時はデフォルト)。
+-- | [日本語]: extra から NUTS 設定を読む(欠落時はデフォルト)。
+--   [English]: Reads the NUTS config from extra (defaults when absent).
 readChainCount :: A.Object -> Int
 readChainCount o = case KM.lookup (Key.fromText "hbmChains") o of
   Just (A.Number n) -> let v = floor (realToFrac n :: Double) in max 1 (min 16 v)
@@ -1055,9 +1225,13 @@ readNutsConfig o =
     , NUTS.nutsAdaptMass     = getBool' "hbmAdaptMass"
     }
 
--- | Phase 13 §9.3c-2: observe ノード名 → 観測列名 のマッピングを取り出す。
--- DSL 構文 @observe "NAME" DIST 'COL'@ から (NAME, COL) を抽出。
--- frontend で「observe ノード "y" の観測値はどの列か」 を解決する用途。
+-- | [日本語]: observe ノード名 → 観測列名 のマッピングを取り出す。
+--   DSL 構文 @observe "NAME" DIST @COL@@ から (NAME, COL) を抽出。
+--   frontend で「observe ノード "y" の観測値はどの列か」 を解決する用途。
+--   [English]: Extracts the observe-node-name → observed-column-name
+--   mapping. Extracts (NAME, COL) from the DSL syntax
+--   @observe "NAME" DIST @COL@@. Used by the frontend to resolve "which
+--   column is the observe node \"y\"'s observed value?".
 observeNodeMap :: [DoStmt] -> [(Text, Text)]
 observeNodeMap = concatMap step
   where
@@ -1081,8 +1255,11 @@ data ParamSummary = ParamSummary
   , psEss  :: !Double
   } deriving (Show)
 
--- | SC29: 複数 chain から事後統計を計算。R̂ は split-R̂ (hanalyze)、
--- ESS は Geyer initial monotone(全チェーン pool)。
+-- | [日本語]: SC29: 複数 chain から事後統計を計算。R̂ は split-R̂ (hanalyze)、
+--   ESS は Geyer initial monotone(全チェーン pool)。
+--   [English]: SC29: Computes posterior statistics from multiple chains. R̂
+--   is split-R̂ (hanalyze); ESS is Geyer's initial monotone sequence
+--   (pooled across all chains).
 paramSummaryMulti :: [MC.Chain] -> Text -> ParamSummary
 paramSummaryMulti chains name =
   let perChain = map (MC.chainVals name) chains
@@ -1109,7 +1286,8 @@ fmtSummary p = psName p <> "="
 round4 :: Double -> Double
 round4 x = fromIntegral (round (x * 10000) :: Int) / 10000
 
--- | thinning: stride 飛ばしに要素を取る。
+-- | [日本語]: thinning: stride 飛ばしに要素を取る。
+--   [English]: Thinning: takes elements while skipping by stride.
 takeEvery :: Int -> [a] -> [a]
 takeEvery _ []     = []
 takeEvery n (x:xs) = x : takeEvery n (drop (max 0 (n - 1)) xs)
@@ -1128,7 +1306,7 @@ summaryToJson p = A.object
 -- ---------------------------------------------------------------------------
 -- Phase NN §A (2026-05-27): HBM posterior predictive mean curves
 -- ---------------------------------------------------------------------------
--- DSL の observe 文の mean expression (= 例: `alpha + beta * 'x'`) を
+-- DSL の observe 文の mean expression (= 例: `alpha + beta * @x@`) を
 -- 直接評価して posterior predictive curve を計算する。 frontend の
 -- buildHbmOverlay 内 heuristic (= "alpha" / "beta_<x>" 等の名前推定) を
 -- 撤去するための backend AST driven 経路。
@@ -1158,7 +1336,9 @@ hbmMeanCurveToJson c = A.object
   , Key.fromText "groupVal"  A..= hmcGroupVal c
   ]
 
--- | stmts から各 observe の mean 式 (= Distribution の第 1 引数) を抽出。
+-- | [日本語]: stmts から各 observe の mean 式 (= Distribution の第 1 引数) を抽出。
+--   [English]: Extracts each observe's mean expression (= the
+--   Distribution's first argument) from the stmts.
 extractObserveMeans :: [DoStmt] -> [(Text, Expr)]
 extractObserveMeans = concatMap go
   where
@@ -1170,7 +1350,9 @@ extractObserveMeans = concatMap go
       _ -> []
     go _ = []
 
--- | 式中の全 ECol 列名を集める (重複排除)。
+-- | [日本語]: 式中の全 ECol 列名を集める (重複排除)。
+--   [English]: Collects all ECol column names appearing in the expression
+--   (deduplicated).
 collectCols :: Expr -> [Text]
 collectCols = nub . go
   where
@@ -1181,7 +1363,9 @@ collectCols = nub . go
     go (ELet bs body) = concatMap (\(Bind _ v) -> go v) bs <> go body
     go _           = []
 
--- | percentile (= 0..1) を sorted リストから線形補間で取る。
+-- | [日本語]: percentile (= 0..1) を sorted リストから線形補間で取る。
+--   [English]: Reads a percentile (= 0..1) from a sorted list via linear
+--   interpolation.
 percentileOf :: Double -> [Double] -> Double
 percentileOf q xs0 =
   let xs = sort xs0
@@ -1194,17 +1378,27 @@ percentileOf q xs0 =
             (v:_) -> v
             []    -> 0
 
--- | observe 1 個分の mean-curve 計算文脈 (top-level または per-group)。
--- Phase 27 GLMM overlay: `forEachGroup` 内の observe も拾えるよう、 plate
--- 展開を replay しながら集める ('collectObsInstances')。
--- | Phase 43: WAIC/PPC 再評価用、 list 値 combinator 由来の latent vector を
--- posterior サンプルから再構築する仕様。 stream worker は @sampleNames@
--- (= sample された latent のみ) を samples に載せ、 combinator の deterministic
--- (cut_c_*/pi_*) は載せないため、 再評価 env で sampled latent (cut_d_*/pi_b*) から
--- VList を組み直す ('reconstructComb')。
+-- | [日本語]: observe 1 個分の mean-curve 計算文脈 (top-level または per-group)。
+--   GLMM overlay: @forEachGroup@ 内の observe も拾えるよう、 plate
+--   展開を replay しながら集める ('collectObsInstances')。
+--   [English]: The mean-curve computation context for one observe
+--   (top-level or per-group). For the GLMM overlay: to also pick up
+--   observes inside @forEachGroup@, this replays the plate expansion while
+--   collecting them ('collectObsInstances').
+-- | [日本語]: WAIC/PPC 再評価用、 list 値 combinator 由来の latent vector を
+--   posterior サンプルから再構築する仕様。 stream worker は @sampleNames@
+--   (= sample された latent のみ) を samples に載せ、 combinator の deterministic
+--   (cut_c_*/pi_*) は載せないため、 再評価 env で sampled latent (cut_d_*/pi_b*) から
+--   VList を組み直す ('reconstructComb')。
+--   [English]: The spec for reconstructing a list-valued combinator's latent
+--   vector from posterior samples, for WAIC\/PPC re-evaluation. The stream
+--   worker puts only @sampleNames@ (= sampled latents) into samples and
+--   omits the combinator's deterministic quantities (cut_c_*\/pi_*), so the
+--   re-evaluation env rebuilds the VList from the sampled latents
+--   (cut_d_*\/pi_b*) via 'reconstructComb'.
 data ListCombSpec
-  = OCutsSpec Text Int Expr   -- ^ suffix 付き base 名, nCuts, cMin 式 (定数想定)
-  | DirSpec   Text Int        -- ^ suffix 付き base 名, K (= α ベクトル長)
+  = OCutsSpec Text Int Expr   -- ^ [日本語]: suffix 付き base 名, nCuts, cMin 式 (定数想定) [English]: suffixed base name, nCuts, the cMin expression (assumed constant)
+  | DirSpec   Text Int        -- ^ [日本語]: suffix 付き base 名, K (= α ベクトル長) [English]: suffixed base name, K (= the α vector length)
 
 data ObsInstance = ObsInstance
   { oiObsName  :: Text                  -- 表示名 (top="y"、 group="y_1")
@@ -1218,9 +1412,13 @@ data ObsInstance = ObsInstance
   , oiListCombs :: [(Text, ListCombSpec)]  -- Phase 43: list latent bind (cuts/probs) の再構築仕様
   }
 
--- | list 値 combinator の latent vector を 1 posterior サンプルから再構築する。
--- @base@ は cMin 定数評価用の env (sample 非依存)、 @sm@ は sampled latent の Map。
--- sampled latent (cut_d_*/pi_b*) が欠けていれば 'Nothing'。
+-- | [日本語]: list 値 combinator の latent vector を 1 posterior サンプルから再構築する。
+--   @base@ は cMin 定数評価用の env (sample 非依存)、 @sm@ は sampled latent の Map。
+--   sampled latent (cut_d_*/pi_b*) が欠けていれば 'Nothing'。
+--   [English]: Reconstructs a list-valued combinator's latent vector from
+--   one posterior sample. @base@ is the env for evaluating the cMin
+--   constant (sample-independent); @sm@ is the Map of sampled latents.
+--   Returns 'Nothing' if a sampled latent (cut_d_*\/pi_b*) is missing.
 reconstructComb
   :: EnvA Double -> DataMap -> Map.Map Text Double -> ListCombSpec -> Maybe [Double]
 reconstructComb base dataMap sm spec = case spec of
@@ -1236,8 +1434,11 @@ reconstructComb base dataMap sm spec = case spec of
     pure [ if j < length betas then (betas !! j) * (prods !! j) else prods !! j
          | j <- [0 .. k - 1] ]
 
--- | DoBind の RHS が list 値 combinator なら 'ListCombSpec' を返す (suffix 付き
--- base 名で。 'matchListComb' / 'listCombSuffix' と同じ命名規律)。
+-- | [日本語]: DoBind の RHS が list 値 combinator なら 'ListCombSpec' を返す (suffix 付き
+--   base 名で。 'matchListComb' / 'listCombSuffix' と同じ命名規律)。
+--   [English]: If the DoBind's RHS is a list-valued combinator, returns a
+--   'ListCombSpec' (with a suffixed base name, following the same naming
+--   rule as 'matchListComb' \/ 'listCombSuffix').
 matchListCombSpec :: Text -> Expr -> Maybe ListCombSpec
 matchListCombSpec suf rhs = case collectApp rhs of
   Right ("orderedCuts", [ELit (LText bn), ELit (LNumber d), cMinE, _scaleE]) ->
@@ -1246,7 +1447,9 @@ matchListCombSpec suf rhs = case collectApp rhs of
     Just (DirSpec (bn <> suf) (length alphas))
   _ -> Nothing
 
--- | observe 式から (名前, mean 式, distribution 式全体, 観測列名) を抽出。
+-- | [日本語]: observe 式から (名前, mean 式, distribution 式全体, 観測列名) を抽出。
+--   [English]: Extracts (name, mean expression, the whole distribution
+--   expression, observed column name) from an observe expression.
 -- mean 式 = Distribution の第 1 引数、 dist 式全体は WAIC/PPC で logDensity /
 -- sampleDist を回すために必要。 観測列名は第 3 引数 `col "y"` の列。
 observeFull :: Expr -> Maybe (Text, Expr, Expr, Text)
@@ -1257,11 +1460,19 @@ observeFull e = case collectApp e of
       _                -> Nothing
   _ -> Nothing
 
--- | stmts を plate 展開しながら observe instance を集める。 'interpStmts' と
--- 同じ suffix (groupSuffix) / 行 (rowsForGroup) / 群変数束縛の規律を replay し、
--- top-level observe は suffix=""・全行、 forEachGroup 内 observe は群ごとに
--- suffix 付き・群行で展開する。 latent 名は sample された scope の suffix で
--- samples のキーに対応づける (top latent="mu"、 群 latent="theta_1" 等)。
+-- | [日本語]: stmts を plate 展開しながら observe instance を集める。 'interpStmts' と
+--   同じ suffix (groupSuffix) / 行 (rowsForGroup) / 群変数束縛の規律を replay し、
+--   top-level observe は suffix=""・全行、 forEachGroup 内 observe は群ごとに
+--   suffix 付き・群行で展開する。 latent 名は sample された scope の suffix で
+--   samples のキーに対応づける (top latent="mu"、 群 latent="theta_1" 等)。
+--   [English]: Collects observe instances while plate-expanding the stmts.
+--   Replays the same suffix (groupSuffix) \/ rows (rowsForGroup) \/
+--   group-variable-binding rule as 'interpStmts': a top-level observe
+--   expands with suffix="" over all rows, while an observe inside
+--   forEachGroup expands per group with a suffix and that group's rows.
+--   Latent names are mapped to their samples key by the suffix of the scope
+--   in which they were sampled (top latent="mu", group latent="theta_1",
+--   etc.).
 collectObsInstances :: DataMap -> [DoStmt] -> [ObsInstance]
 collectObsInstances dm = go "" Nothing Map.empty Map.empty Nothing []
   where
@@ -1300,7 +1511,7 @@ collectObsInstances dm = go "" Nothing Map.empty Map.empty Nothing []
 -- model graph plate aggregation (Phase 27.5 後続 TODO3、 2026-06-02)
 -- ===========================================================================
 --
--- forEachGroup は群ごとに内部 do-block を展開するため、 'buildModelGraph' が
+-- forEachGroup は群ごとに内部 do-block を展開するため、 @buildModelGraph@ が
 -- 見る realized ModelP には alpha_1 / alpha_2 / alpha_3 … と群数ぶんの latent /
 -- observe ノードが並ぶ (3 群 × 数 latent で 40 ノード級に肥大)。 PyMC 流の
 -- plate 表記では「群コピーを 1 つの代表ノードに畳み、 箱のラベルに群数」 を
@@ -1314,18 +1525,27 @@ collectObsInstances dm = go "" Nothing Map.empty Map.empty Nothing []
 -- ('collapsePlateGraph')。 rename は interpStmts と同じ groupSuffix 規律を
 -- replay して作る total な対応なので、 文字列推測ではない。
 
--- | model graph 上の plate (= forEachGroup 1 サイト)。 frontend
+-- | [日本語]: model graph 上の plate (= forEachGroup 1 サイト)。 frontend
 --   hgg DAGPlate (label + member id 群) に対応。
+--   [English]: A plate in the model graph (= one forEachGroup site).
+--   Corresponds to the frontend hgg DAGPlate (label + set of
+--   member ids).
 data GraphPlate = GraphPlate
-  { gpLabel   :: Text     -- ^ "<群列> (<群数>)"
-  , gpMembers :: [Text]   -- ^ この plate 直下の base 名 (latent + observe)
+  { gpLabel   :: Text     -- ^ [日本語]: "<群列> (<群数>)" [English]: "<group column> (<group count>)"
+  , gpMembers :: [Text]   -- ^ [日本語]: この plate 直下の base 名 (latent + observe) [English]: the base names directly under this plate (latent + observe)
   } deriving (Show, Eq)
 
--- | realized node 名 (alpha_1 等) → base 名 (alpha) の rename map。
+-- | [日本語]: realized node 名 (alpha_1 等) → base 名 (alpha) の rename map。
 --   'collectObsInstances' / 'interpStmts' と同じ suffix (groupSuffix) /
 --   行 (rowsForGroup) 規律を replay し、 各 DoBind latent / observe を
 --   その出現 suffix 付き名 → base 名 で登録する。 top-level は suffix="" なので
 --   恒等 (alpha → alpha)。
+--   [English]: A rename map from realized node names (e.g. alpha_1) to base
+--   names (alpha). Replays the same suffix (groupSuffix) \/ rows
+--   (rowsForGroup) rule as 'collectObsInstances' \/ 'interpStmts', and
+--   registers each DoBind latent \/ observe under its occurrence's
+--   suffixed name → base name. At the top level, suffix="" so it's the
+--   identity (alpha → alpha).
 plateRenameMap :: DataMap -> [DoStmt] -> Map.Map Text Text
 plateRenameMap dm = go "" Nothing
   where
@@ -1344,7 +1564,7 @@ plateRenameMap dm = go "" Nothing
                   | gv <- gvals ]
             in inners `Map.union` go suf rows rest
         | Just (obsName, _meanE, distExpr, obsCol) <- observeFull e ->
-            -- observe は col 参照を含むと 'observeColumns' で per-row 展開され、
+            -- observe は col 参照を含むと @observeColumns@ で per-row 展開され、
             -- 実ノードは "<obsName><suf>_<j>" (j = 当該 plate 対象行の 0 始まり
             -- 連番、 = execObserve の規律) になる。 col 参照無しなら単一
             -- "<obsName><suf>"。 どちらも base 名 obsName に畳む。
@@ -1359,10 +1579,16 @@ plateRenameMap dm = go "" Nothing
                          (go suf rows rest)
         | otherwise -> go suf rows rest
 
--- | forEachGroup ごとに 1 plate を集める (群値ぶんは展開しない)。 ラベルは
+-- | [日本語]: forEachGroup ごとに 1 plate を集める (群値ぶんは展開しない)。 ラベルは
 --   "<群列> (<群数>)"、 member は当該 forEachGroup 直下の base 名 (latent +
 --   observe、 ネストした forEachGroup の中身は含めない = ネストは別 plate)。
 --   ネスト plate は代表 1 群の行で再帰的に拾う。
+--   [English]: Collects one plate per forEachGroup (not expanded per group
+--   value). The label is "<group column> (<group count>)", and the members
+--   are the base names directly under that forEachGroup (latent + observe;
+--   the contents of a nested forEachGroup are not included — a nest is a
+--   separate plate). Nested plates are collected recursively using one
+--   representative group's rows.
 collectGraphPlates :: DataMap -> [DoStmt] -> [GraphPlate]
 collectGraphPlates dm = go Nothing
   where
@@ -1387,9 +1613,13 @@ collectGraphPlates dm = go Nothing
       [ name | DoBind name _ <- stmts ]
       ++ [ obsName | DoExpr e <- stmts, Just (obsName, _, _, _) <- [observeFull e] ]
 
--- | realized 'HBM.ModelGraph' を plate 単位に collapse。 群展開ノードを base 名に
+-- | [日本語]: realized 'HBM.ModelGraph' を plate 単位に collapse。 群展開ノードを base 名に
 --   畳み (重複ノードは初出を残す)、 辺は両端を rename して自己ループ除去 + 重複
 --   除去。 併せて plate 一覧を返す。
+--   [English]: Collapses the realized 'HBM.ModelGraph' down to plate units.
+--   Folds group-expanded nodes into base names (keeping the first
+--   occurrence for duplicate nodes); renames both endpoints of each edge,
+--   removing self-loops and duplicates. Also returns the plate list.
 collapsePlateGraph
   :: DataMap -> [DoStmt] -> HBM.ModelGraph -> (HBM.ModelGraph, [GraphPlate])
 collapsePlateGraph dm stmts mg =
@@ -1414,14 +1644,28 @@ collapsePlateGraph dm stmts mg =
           | HBM.nodeName n `Set.member` seen = goD seen ns
           | otherwise = n : goD (Set.insert (HBM.nodeName n) seen) ns
 
--- | observe ごと × 列ごとに 64 点 curve を計算。 Phase 27 GLMM overlay:
--- top-level observe に加え forEachGroup 内の per-group observe も対象
--- ('collectObsInstances' が plate 展開)。
--- |   * 主 predictor = 当該列、 grid は (per-group なら群の) data min..max
--- |   * 他 predictor は (per-group なら群の) data median で固定
--- |   * 群 latent は suffix 付きキー (theta_1 等)、 群変数は定数として env に注入
--- |   * 各 sample × 各 grid 点で mean 式を Double 評価
--- |   * 各 grid 点で全 sample から median + 2.5% / 97.5% percentile
+-- | [日本語]: observe ごと × 列ごとに 64 点 curve を計算。 GLMM overlay:
+--   top-level observe に加え forEachGroup 内の per-group observe も対象
+--   ('collectObsInstances' が plate 展開)。
+--   [English]: Computes a 64-point curve per observe × per column. For the
+--   GLMM overlay: targets per-group observes inside forEachGroup in
+--   addition to top-level observes ('collectObsInstances' does the plate
+--   expansion).
+-- |   - [日本語]: 主 predictor = 当該列、 grid は (per-group なら群の) data min..max
+--     [English]: The primary predictor = this column; the grid spans the
+--     data's (per-group: that group's) min..max.
+-- |   - [日本語]: 他 predictor は (per-group なら群の) data median で固定
+--     [English]: Other predictors are held fixed at the data's (per-group:
+--     that group's) median.
+-- |   - [日本語]: 群 latent は suffix 付きキー (theta_1 等)、 群変数は定数として env に注入
+--     [English]: Group latents use their suffixed key (e.g. theta_1);
+--     group variables are injected into the env as constants.
+-- |   - [日本語]: 各 sample × 各 grid 点で mean 式を Double 評価
+--     [English]: The mean expression is evaluated as a Double at each
+--     sample × each grid point.
+-- |   - [日本語]: 各 grid 点で全 sample から median + 2.5% / 97.5% percentile
+--     [English]: At each grid point, the median + 2.5% \/ 97.5%
+--     percentiles are taken across all samples.
 computeMeanCurves
   :: [TopBind]                            -- top-level 値/関数束縛 (ユーザ定義リンク等)
   -> [DoStmt]
@@ -1493,16 +1737,22 @@ computeMeanCurves topBinds stmts dataMap samples =
 -- (PPC、 worker 側で sampleDist) の共通基盤を 1 度で作る。
 -- ---------------------------------------------------------------------------
 
--- | observe instance 1 個分の、 全 posterior sample × 対象行で評価した結果。
+-- | [日本語]: observe instance 1 個分の、 全 posterior sample × 対象行で評価した結果。
+--   [English]: The result of evaluating one observe instance across all
+--   posterior samples × target rows.
 data ObsDistSet = ObsDistSet
   { odsName     :: !Text                          -- observe ノード名 (suffix 付き)
   , odsObserved :: ![Double]                      -- 対象行の観測値 (= col の当該行)
   , odsDists    :: ![[HBM.Distribution Double]]   -- [sample][row] の Distribution
   }
 
--- | 各 observe instance について、 各 posterior sample × 各対象行で
--- distribution を評価する。 mean に列参照がある GLM 形 (例: Normal (a+b*'x') s)
--- も evalDist の per-row 評価 ((Just i)) で正しく行ごとに展開される。
+-- | [日本語]: 各 observe instance について、 各 posterior sample × 各対象行で
+--   distribution を評価する。 mean に列参照がある GLM 形 (例: Normal (a+b*@x@) s)
+--   も evalDist の per-row 評価 ((Just i)) で正しく行ごとに展開される。
+--   [English]: For each observe instance, evaluates the distribution at
+--   each posterior sample × each target row. GLM forms whose mean contains
+--   a column reference (e.g. Normal (a+b*@x@) s) are also correctly
+--   expanded per row via evalDist's per-row evaluation ((Just i)).
 computeObsDists
   :: [TopBind]
   -> [DoStmt]
@@ -1545,9 +1795,13 @@ computeObsDists topBinds stmts dataMap samples =
   , not (null rows)
   ]
 
--- | 'ObsDistSet' 群から WAIC/LOO 用の log-likelihood 行列 (S × N) を作る。
--- 行 = posterior sample、 列 = 全 observe instance の全対象行を連結。
--- @Hanalyze.Stat.ModelSelect.waic@ / @loo@ がこの shape を期待する。
+-- | [日本語]: 'ObsDistSet' 群から WAIC/LOO 用の log-likelihood 行列 (S × N) を作る。
+--   行 = posterior sample、 列 = 全 observe instance の全対象行を連結。
+--   @Hanalyze.Stat.ModelSelect.waic@ / @loo@ がこの shape を期待する。
+--   [English]: Builds the log-likelihood matrix (S × N) for WAIC\/LOO from
+--   a set of 'ObsDistSet's. Rows = posterior samples; columns = all target
+--   rows of all observe instances, concatenated.
+--   @Hanalyze.Stat.ModelSelect.waic@ \/ @loo@ expect this shape.
 pointwiseLogLik :: [ObsDistSet] -> [[Double]]
 pointwiseLogLik sets =
   [ concatMap (\set -> zipWith HBM.logDensity (sampleRow set s) (odsObserved set)) sets
@@ -1560,13 +1814,24 @@ pointwiseLogLik sets =
       (row : _) -> row
       []        -> []
 
--- | log-lik 行列 (S×N) から非有限 (NaN / ±Inf) を含む観測列を除外する
--- (Phase 27.5 後続 TODO4、 2026-06-02)。 'distAt' の eval 失敗 (= Normal NaN) や
--- 退化パラメータで 'logDensity' が NaN / Inf になった観測点は、 そのまま waic/loo に
--- 渡すと per-observation 集計 (lppd / pwaic) を汚染して全体が NaN → JSON null に
--- なる。 該当する観測列 (= 全 sample で同一観測点) を丸ごと落として残りで waic/loo を
--- 計算できるようにする。 返り値は (除外後行列, 落とした列数)。 全列が非有限なら
--- ([], N) を返し、 呼び出し側は waic/loo を Nothing にできる。
+-- | [日本語]: log-lik 行列 (S×N) から非有限 (NaN / ±Inf) を含む観測列を除外する。
+--   @distAt@ の eval 失敗 (= Normal NaN) や
+--   退化パラメータで @logDensity@ が NaN / Inf になった観測点は、 そのまま waic/loo に
+--   渡すと per-observation 集計 (lppd / pwaic) を汚染して全体が NaN → JSON null に
+--   なる。 該当する観測列 (= 全 sample で同一観測点) を丸ごと落として残りで waic/loo を
+--   計算できるようにする。 返り値は (除外後行列, 落とした列数)。 全列が非有限なら
+--   ([], N) を返し、 呼び出し側は waic/loo を Nothing にできる。
+--   [English]: Excludes observation columns containing non-finite values
+--   (NaN \/ ±Inf) from the log-lik matrix (S×N). Observation points where
+--   @distAt@ fails to evaluate (= Normal NaN) or @logDensity@ becomes NaN \/
+--   Inf due to degenerate parameters would, if passed straight into
+--   waic\/loo, contaminate the per-observation aggregates (lppd \/ pwaic)
+--   and turn the whole result into NaN → JSON null. This drops the affected
+--   observation columns (= the same observation point across all samples)
+--   entirely, so waic\/loo can be computed from what remains. The return
+--   value is (the matrix after exclusion, the number of dropped columns).
+--   If every column is non-finite, returns ([], N), letting the caller turn
+--   waic\/loo into Nothing.
 finitePointwiseLogLik :: [[Double]] -> ([[Double]], Int)
 finitePointwiseLogLik mat =
   let cols     = transpose mat              -- [obs点][sample]
@@ -1591,25 +1856,37 @@ finitePointwiseLogLik mat =
 -- bind 名 @L@ を 'reconstructMatrixComb' で再構築して MvNormalChol に渡す
 -- (Phase 43 'reconstructComb' の行列版)。
 
--- | 行列値 combinator の再構築仕様 (suffix 付き base 名 + 次元 k)。
+-- | [日本語]: 行列値 combinator の再構築仕様 (suffix 付き base 名 + 次元 k)。
+--   [English]: The reconstruction spec for a matrix-valued combinator
+--   (suffixed base name + dimension k).
 data MatrixCombSpec
-  = LkjCholSpec Text Int   -- ^ suffix 付き base 名, k (= 行列次元)
+  = LkjCholSpec Text Int   -- ^ [日本語]: suffix 付き base 名, k (= 行列次元) [English]: suffixed base name, k (= the matrix dimension)
   deriving (Show)
 
--- | DoBind の RHS が行列値 combinator (lkjCorrCholesky) なら 'MatrixCombSpec' を
--- 返す ('matchMatrixComb' / 'matrixCombSuffix' と同じ命名規律)。
+-- | [日本語]: DoBind の RHS が行列値 combinator (lkjCorrCholesky) なら 'MatrixCombSpec' を
+--   返す ('matchMatrixComb' / 'matrixCombSuffix' と同じ命名規律)。
+--   [English]: If the DoBind's RHS is a matrix-valued combinator
+--   (lkjCorrCholesky), returns a 'MatrixCombSpec' (following the same
+--   naming rule as 'matchMatrixComb' \/ 'matrixCombSuffix').
 matchMatrixCombSpec :: Text -> Expr -> Maybe MatrixCombSpec
 matchMatrixCombSpec suf rhs = case collectApp rhs of
   Right ("lkjCorrCholesky", [ELit (LText bn), ELit (LNumber d), _etaE]) ->
     Just (LkjCholSpec (bn <> suf) (round d))
   _ -> Nothing
 
--- | lkjCorrCholesky の相関 Cholesky L を 1 posterior サンプルから再構築する。
--- sampled latent は @<nm>_u<i>_<j>@ (Beta in (0,1))、 partial correlation は
--- @z_ij = 2u - 1@。 L は 'HBM.lkjCorrCholesky' の deterministic 構築を replay:
+-- | [日本語]: lkjCorrCholesky の相関 Cholesky L を 1 posterior サンプルから再構築する。
+--   sampled latent は @<nm>_u<i>_<j>@ (Beta in (0,1))、 partial correlation は
+--   @z_ij = 2u - 1@。 L は @HBM.lkjCorrCholesky@ の deterministic 構築を replay:
 --   L_00 = 1、 対角 L_ii = √(1 - Σ_{k<i} z_{i,k}²)、
 --   対角下 L_ij = z_ij · √(Π_{k<j}(1 - z_{i,k}²))  (j < i)。
--- sampled latent が欠ければ 'Nothing'。
+--   sampled latent が欠ければ 'Nothing'。
+--   [English]: Reconstructs lkjCorrCholesky's correlation Cholesky factor L
+--   from one posterior sample. The sampled latents are
+--   @<nm>_u<i>_<j>@ (Beta in (0,1)); the partial correlation is
+--   @z_ij = 2u - 1@. L replays 'HBM.lkjCorrCholesky''s deterministic
+--   construction: L_00 = 1, the diagonal L_ii = √(1 - Σ_{k<i} z_{i,k}²),
+--   and the sub-diagonal L_ij = z_ij · √(Π_{k<j}(1 - z_{i,k}²)) (j < i).
+--   Returns 'Nothing' if a sampled latent is missing.
 reconstructMatrixComb :: Map.Map Text Double -> MatrixCombSpec -> Maybe [[Double]]
 reconstructMatrixComb sm (LkjCholSpec nm k) = do
   let uKey i j = nm <> "_u" <> T.pack (show i) <> "_" <> T.pack (show j)
@@ -1628,7 +1905,9 @@ reconstructMatrixComb sm (LkjCholSpec nm k) = do
         | j <- [0 .. k - 1] ]
   pure [ lRow i | i <- [0 .. k - 1] ]
 
--- | observeMV 式から (名前, distribution 式全体, 観測列名リスト) を抽出。
+-- | [日本語]: observeMV 式から (名前, distribution 式全体, 観測列名リスト) を抽出。
+--   [English]: Extracts (name, the whole distribution expression, the list
+--   of observed column names) from an observeMV expression.
 observeMVFull :: Expr -> Maybe (Text, Expr, [Text])
 observeMVFull e = case collectApp e of
   Right ("observeMV", [ELit (LText nm), distExpr, EList colRefs]) ->
@@ -1637,9 +1916,13 @@ observeMVFull e = case collectApp e of
          then Just (nm, distExpr, cols) else Nothing
   _ -> Nothing
 
--- | observeMV instance (plate 展開済)。 'collectObsInstances' の MV 版で、
--- 単一 'oiObsCol' でなく **列リスト** を持ち、 list/matrix combinator の
--- 再構築仕様も保持する。
+-- | [日本語]: observeMV instance (plate 展開済)。 'collectObsInstances' の MV 版で、
+--   単一 'oiObsCol' でなく __列リスト__ を持ち、 list/matrix combinator の
+--   再構築仕様も保持する。
+--   [English]: An observeMV instance (plate-expanded). The MV counterpart of
+--   'collectObsInstances': instead of a single 'oiObsCol', it holds
+--   __a list of columns__, and also retains the reconstruction specs for
+--   list \/ matrix combinators.
 data MvObsInstance = MvObsInstance
   { mviObsName     :: Text
   , mviDistExpr    :: Expr
@@ -1651,8 +1934,11 @@ data MvObsInstance = MvObsInstance
   , mviMatrixCombs :: [(Text, MatrixCombSpec)]
   }
 
--- | stmts を plate 展開しながら observeMV instance を集める
--- ('collectObsInstances' と同じ suffix / 行 / 群変数 / latent 名規律を replay)。
+-- | [日本語]: stmts を plate 展開しながら observeMV instance を集める
+--   ('collectObsInstances' と同じ suffix / 行 / 群変数 / latent 名規律を replay)。
+--   [English]: Collects observeMV instances while plate-expanding the stmts
+--   (replaying the same suffix \/ row \/ group-variable \/ latent-naming
+--   rule as 'collectObsInstances').
 collectMvObsInstances :: DataMap -> [DoStmt] -> [MvObsInstance]
 collectMvObsInstances dm = go "" Nothing Map.empty Map.empty [] []
   where
@@ -1685,18 +1971,26 @@ collectMvObsInstances dm = go "" Nothing Map.empty Map.empty [] []
               : go suf rows nameKey penv lcombs mcombs rest
         | otherwise -> go suf rows nameKey penv lcombs mcombs rest
 
--- | observeMV 1 個分の WAIC/PPC 評価結果。 'ObsDistSet' の MV 版。
+-- | [日本語]: observeMV 1 個分の WAIC/PPC 評価結果。 'ObsDistSet' の MV 版。
+--   [English]: The WAIC\/PPC evaluation result for one observeMV. The MV
+--   counterpart of 'ObsDistSet'.
 data MvObsDistSet = MvObsDistSet
-  { mvodsName     :: !Text                          -- ^ 表示名 (top="y"、 group="y_1")
-  , mvodsCols     :: ![Text]                        -- ^ 観測列名リスト (長さ k)
-  , mvodsObserved :: ![[Double]]                    -- ^ [row][component] = 各行の k-vector
-  , mvodsDists    :: ![[HBM.Distribution Double]]   -- ^ [sample][row] の Distribution
+  { mvodsName     :: !Text                          -- ^ [日本語]: 表示名 (top="y"、 group="y_1") [English]: the display name (top="y", group="y_1")
+  , mvodsCols     :: ![Text]                        -- ^ [日本語]: 観測列名リスト (長さ k) [English]: the list of observed column names (length k)
+  , mvodsObserved :: ![[Double]]                    -- ^ [日本語]: [row][component] = 各行の k-vector [English]: [row][component] = each row's k-vector
+  , mvodsDists    :: ![[HBM.Distribution Double]]   -- ^ [日本語]: [sample][row] の Distribution [English]: the Distribution at [sample][row]
   }
 
--- | observeMV instance × sample × 行で多変量 Distribution を評価する
--- ('computeObsDists' の MV 版)。 dist は行不変 (μ/Σ は latent) なので各行で
--- 同一だが、 既存経路に合わせ row 評価する。 latent Σ は 'reconstructMatrixComb'
--- で L を、 list 引数は 'reconstructComb' で復元して env に束縛する。
+-- | [日本語]: observeMV instance × sample × 行で多変量 Distribution を評価する
+--   ('computeObsDists' の MV 版)。 dist は行不変 (μ/Σ は latent) なので各行で
+--   同一だが、 既存経路に合わせ row 評価する。 latent Σ は 'reconstructMatrixComb'
+--   で L を、 list 引数は 'reconstructComb' で復元して env に束縛する。
+--   [English]: Evaluates the multivariate Distribution at each observeMV
+--   instance × sample × row (the MV counterpart of 'computeObsDists'). The
+--   dist is row-invariant (μ\/Σ are latents), so it's the same for every
+--   row, but evaluation is done per row to match the existing path. The
+--   latent Σ's L is restored via 'reconstructMatrixComb', and list
+--   arguments are restored via 'reconstructComb', then bound into the env.
 computeMvObsDists
   :: [TopBind]
   -> [DoStmt]
@@ -1742,9 +2036,13 @@ computeMvObsDists topBinds stmts dataMap samples =
   , not (null rows)
   ]
 
--- | MV observe の pointwise log-lik 行列 (S×N)。 各行 (= 1 観測点) の寄与は
--- k-vector joint density 'HBM.obsLogSum'。 scalar 経路の 'pointwiseLogLik' と
--- 列方向に連結して使う (worker 側)。
+-- | [日本語]: MV observe の pointwise log-lik 行列 (S×N)。 各行 (= 1 観測点) の寄与は
+--   k-vector joint density 'HBM.obsLogSum'。 scalar 経路の 'pointwiseLogLik' と
+--   列方向に連結して使う (worker 側)。
+--   [English]: The pointwise log-lik matrix (S×N) for MV observe. Each row's
+--   (= one observation point's) contribution is the k-vector joint density
+--   'HBM.obsLogSum'. Used by concatenating column-wise with the scalar
+--   path's 'pointwiseLogLik' (on the worker side).
 pointwiseLogLikMv :: [MvObsDistSet] -> [[Double]]
 pointwiseLogLikMv sets =
   [ concatMap (\set -> [ HBM.obsLogSum (distRow set s !! r) (mvodsObserved set !! r)

@@ -39,7 +39,8 @@ import qualified Numeric.LinearAlgebra as LA
 import           Hanalyze.Optim.Common
 import qualified Hanalyze.Optim.Numeric as ON
 
--- | L-BFGS 設定。
+-- | [日本語]: L-BFGS 設定。
+--   [English]: L-BFGS configuration.
 data LBFGSConfig = LBFGSConfig
   { lbStop    :: !StopCriteria
   , lbMemory   :: !Int        -- ^ History size @m@ (5–20 typical).
@@ -79,8 +80,12 @@ runLBFGSWith :: LBFGSConfig
              -> IO OptimResult
 runLBFGSWith cfg fUser gUser x0 = pure (runLBFGSWithPure cfg fUser gUser x0)
 
--- | 純粋版 ('runLBFGSWith' は本体が完全に純粋 = @let … in pure result@ ゆえ IO は不要)。
--- 乱数を使わない決定的最適化なので、 純粋に閉じられる ('fitSVMPure' 等が利用)。
+-- | [日本語]: 純粋版 ('runLBFGSWith' は本体が完全に純粋 = @let … in pure result@ ゆえ IO は不要)。
+--   乱数を使わない決定的最適化なので、 純粋に閉じられる (@fitSVMPure@ 等が利用)。
+--   [English]: The pure variant ('runLBFGSWith''s body is entirely pure —
+--   @let … in pure result@ — so IO isn't needed). Since this is a
+--   deterministic optimization that uses no randomness, it can stay pure
+--   (used by @fitSVMPure@ etc).
 runLBFGSWithPure :: LBFGSConfig
                  -> ([Double] -> Double)
                  -> ([Double] -> [Double])
@@ -276,13 +281,16 @@ twoLoop ss ys q =
       r        = foldl step2 r0 triplesAlphas
   in LA.scale (-1) r
 
--- | backtracking + Armijo 条件 @f(x + αd) ≤ f(x) + c1 α gᵀd@。
--- @alpha0@ = 初期ステップ幅 (通常 1.0、初回最急降下では 1/‖g‖₁ 等で抑える)。
+-- | [日本語]: backtracking + Armijo 条件 @f(x + αd) ≤ f(x) + c1 α gᵀd@。
+--   @alpha0@ = 初期ステップ幅 (通常 1.0、初回最急降下では 1/‖g‖₁ 等で抑える)。
+--   [English]: Backtracking + Armijo condition @f(x + αd) ≤ f(x) + c1 α
+--   gᵀd@. @alpha0@ = the initial step size (normally 1.0; on the first
+--   steepest-descent step it is capped at, e.g., 1/‖g‖₁).
 lineSearch :: LBFGSConfig
            -> (LA.Vector Double -> Double)
            -> LA.Vector Double -> Double
            -> LA.Vector Double -> LA.Vector Double
-           -> Double                                  -- ^ 初期ステップ幅 α₀
+           -> Double                                  -- ^[日本語]:  [日本語]: 初期ステップ幅 α₀。 [English]: Initial step size α₀.
            -> (LA.Vector Double, Double, Double)
 lineSearch cfg f x fx g d alpha0 =
   let gtd = LA.dot g d

@@ -6,7 +6,7 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- FastICA (Hyvärinen 1999) による独立成分分析。
+-- [日本語]: FastICA (Hyvärinen 1999) による独立成分分析。
 --
 -- 観測 X = A · S (n_samples × p)、 S が互いに独立な非ガウシアン成分のとき、
 -- A を推定して S = A⁻¹ · X を抽出する。 ICA-LiNGAM (Shimizu 2006) の前段
@@ -14,13 +14,13 @@
 --
 -- ## アルゴリズム
 --
--- 1. **Centering**: X の各列を中心化
--- 2. **Whitening**: X の covariance を eigen 分解して
+-- 1. __Centering__: X の各列を中心化
+-- 2. __Whitening__: X の covariance を eigen 分解して
 --    @Z = E · D^(-1/2) · Eᵀ · X@ を作る (Z の cov = I)
--- 3. **Fixed-point iteration** (per component): 任意の w から始めて
+-- 3. __Fixed-point iteration__ (per component): 任意の w から始めて
 --    @w⁺ = E[Z · g(wᵀZ)] - E[g'(wᵀZ)] · w@、 正規化、 直交化 (デフレーション)、
 --    収束 (|wᵀwᵒˡᵈ| ≈ 1) まで繰返し
--- 4. **回収**: 全成分の row 構成 W に対し、 S = W · Z、 A = pinv(W) (whitened
+-- 4. __回収__: 全成分の row 構成 W に対し、 S = W · Z、 A = pinv(W) (whitened
 --    座標から元座標への戻し変換は別途)
 --
 -- non-linearity g としては logcosh (Hyvärinen 標準) を採用:
@@ -30,6 +30,36 @@
 --
 -- 'ICAResult' は分離行列 W (p × p, whitened 座標)、 mixing 行列 A (元座標、
 -- W · whiten から逆算)、 推定独立成分 S (n × p)、 収束情報を持つ。
+--
+-- [English]: Independent component analysis via FastICA (Hyvärinen 1999).
+--
+-- Given the observation X = A · S (n_samples × p), where S consists of
+-- mutually independent, non-Gaussian components, this estimates A and
+-- extracts S = A⁻¹ · X. Used as a preprocessing step for ICA-LiNGAM
+-- (Shimizu 2006) and for signal separation in general.
+--
+-- ## Algorithm
+--
+-- 1. __Centering__: center each column of X.
+-- 2. __Whitening__: eigen-decompose the covariance of X to form
+--    @Z = E · D^(-1/2) · Eᵀ · X@ (the covariance of Z is I).
+-- 3. __Fixed-point iteration__ (per component): starting from an
+--    arbitrary w, repeatedly apply @w⁺ = E[Z · g(wᵀZ)] - E[g'(wᵀZ)] · w@,
+--    normalize, deflate (orthogonalize), until convergence
+--    (|wᵀwᵒˡᵈ| ≈ 1).
+-- 4. __Recovery__: with W formed from all components' rows, S = W · Z,
+--    A = pinv(W) (the transform back from whitened to original
+--    coordinates is separate).
+--
+-- The non-linearity g used is logcosh (Hyvärinen's standard choice):
+-- g(u) = tanh(a·u), g'(u) = a·(1 - tanh²(a·u)), a = 1.0.
+--
+-- ## Output
+--
+-- 'ICAResult' holds the separation matrix W (p × p, whitened
+-- coordinates), the mixing matrix A (original coordinates, back-computed
+-- from W · whiten), the estimated independent components S (n × p), and
+-- convergence information.
 module Hanalyze.Math.ICA
   ( ICAConfig (..)
   , ICAResult (..)
@@ -56,7 +86,9 @@ data ICAConfig = ICAConfig
   { icaMaxIter   :: !Int
   , icaTol       :: !Double
   , icaNumComp   :: !(Maybe Int)
-    -- ^ 抽出する成分数。 'Nothing' で全成分 (= p)
+    -- ^ [日本語]: 抽出する成分数。 'Nothing' で全成分 (= p)。
+    --   [English]: The number of components to extract. 'Nothing' means
+    --   all components (= p).
   , icaSeed      :: !(Maybe Int)
   } deriving (Show)
 
@@ -70,15 +102,22 @@ defaultICAConfig = ICAConfig
 
 data ICAResult = ICAResult
   { icaW           :: !(LA.Matrix Double)
-    -- ^ whitened 空間での分離行列 (p × p)
+    -- ^ [日本語]: whitened 空間での分離行列 (p × p)。
+    --   [English]: The separation matrix in whitened space (p × p).
   , icaA           :: !(LA.Matrix Double)
-    -- ^ 元 X 空間における推定 mixing 行列。 X ≈ S · Aᵀ + mean
+    -- ^ [日本語]: 元 X 空間における推定 mixing 行列。 X ≈ S · Aᵀ + mean。
+    --   [English]: The estimated mixing matrix in the original X space.
+    --   X ≈ S · Aᵀ + mean.
   , icaUnmixing    :: !(LA.Matrix Double)
-    -- ^ 元 X 空間における分離行列 (S = (X - mean) · unmixingᵀ)
+    -- ^ [日本語]: 元 X 空間における分離行列 (S = (X - mean) · unmixingᵀ)。
+    --   [English]: The separation matrix in the original X space
+    --   (S = (X - mean) · unmixingᵀ).
   , icaS           :: !(LA.Matrix Double)
-    -- ^ 推定独立成分 (n × k)
+    -- ^ [日本語]: 推定独立成分 (n × k)。
+    --   [English]: The estimated independent components (n × k).
   , icaMean        :: !(LA.Vector Double)
-    -- ^ 列平均 (centering 用)
+    -- ^ [日本語]: 列平均 (centering 用)。
+    --   [English]: Column means (for centering).
   , icaConverged   :: !Bool
   , icaIterations  :: !Int
   } deriving (Show)
@@ -87,8 +126,12 @@ data ICAResult = ICAResult
 -- 主実装
 -- ===========================================================================
 
--- | FastICA 本体 (Phase 77.C で PrimMonad 一般化)。 Gen を受け取り ST/IO いずれでも動く
---   (IORef→MutVar)。 'fitICA' (IO) / 'fitICAPure' (ST・seed) が gen を作って呼ぶ。
+-- | [日本語]: FastICA 本体 (PrimMonad へ一般化済)。 Gen を受け取り ST/IO いずれでも動く
+--   (IORef→MutVar)。 'fitICA' (IO) / @fitICAPure@ (ST・seed) が gen を作って呼ぶ。
+--   [English]: The core FastICA implementation (generalized to
+--   'PrimMonad'). Takes a Gen and works under either ST or IO
+--   (IORef→MutVar). 'fitICA' (IO) \/ @fitICAPure@ (ST, seeded) construct
+--   the gen and call this.
 fitICAGen :: PrimMonad m => ICAConfig -> LA.Matrix Double -> MWC.Gen (PrimState m) -> m ICAResult
 fitICAGen cfg x gen = do
   let !n  = LA.rows x
@@ -164,7 +207,9 @@ fitICAGen cfg x gen = do
     deflate :: [LA.Vector Double] -> LA.Vector Double -> LA.Vector Double
     deflate ws w = foldl (\acc wi -> acc - LA.scale (acc `LA.dot` wi) wi) w ws
 
--- | FastICA (IO)。 'icaSeed' が 'Just' なら決定的、 'Nothing' で system random。
+-- | [日本語]: FastICA (IO)。 'icaSeed' が 'Just' なら決定的、 'Nothing' で system random。
+--   [English]: FastICA (IO). Deterministic when 'icaSeed' is 'Just';
+--   uses the system random source when 'Nothing'.
 fitICA :: ICAConfig -> LA.Matrix Double -> IO ICAResult
 fitICA cfg x = do
   gen <- case icaSeed cfg of
@@ -172,8 +217,12 @@ fitICA cfg x = do
     Nothing -> MWC.createSystemRandom
   fitICAGen cfg x gen
 
--- | FastICA の **seed 純粋版** (Phase 77.C・@df |->@ 用)。 'icaSeed' (既定 12345・'Nothing' は
+-- | [日本語]: FastICA の __seed 純粋版__ (@df |->@ 用)。 'icaSeed' (既定 12345・'Nothing' は
 --   12345 fallback) で 'runST'+MWC。 同 seed で IO 版とビット一致 (乱数列は monad 非依存)。
+--   [English]: The __seeded pure version__ of FastICA (for @df |->@).
+--   Uses 'runST'+MWC with 'icaSeed' (default 12345; 'Nothing' falls back
+--   to 12345). Bit-identical to the IO version for the same seed (the
+--   random sequence is monad-independent).
 fitICAPure :: ICAConfig -> LA.Matrix Double -> ICAResult
 fitICAPure cfg x = runST $ do
   gen <- MWC.initialize (V.fromList [fromIntegral (maybe 12345 id (icaSeed cfg))])

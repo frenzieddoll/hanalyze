@@ -84,24 +84,49 @@ ess xs
     pairSums (a : b : rest) = (a + b) : pairSums rest
     pairSums _              = []
 
--- | arviz / Stan 互換の rank-normalized **bulk ESS** (Vehtari et al. 2021)。
+-- | [日本語]: arviz / Stan 互換の rank-normalized __bulk ESS__ (Vehtari et al. 2021)。
 --
--- 引数は 'rhat' と同じ「パラメータ 1 つの chain ごとの sample 列」。手順は
--- arviz の @ess(method="bulk")@ と同一:
+--   引数は 'rhat' と同じ「パラメータ 1 つの chain ごとの sample 列」。手順は
+--   arviz の @ess(method="bulk")@ と同一:
 --
--- 1. 各 chain を半分に split (奇数長は中央 1 点を落とす) して 2M 本の
---    sub-chain にする
--- 2. 全値プールの平均 rank (同値は平均) を
---    @(r − 3\/8) \/ (S + 1\/4)@ で (0,1) に写し Φ⁻¹ で z 化 (rank 正規化)
--- 3. 多 chain 結合自己相関 @ρ̂_t = 1 − (W − mean acov_t) \/ var⁺@ に
---    Geyer の initial positive + monotone sequence を適用し
---    @τ̂ = −1 + 2Σρ̂@ (下限 @1\/log₁₀(MN)@)、@ESS = MN \/ τ̂@
+--   1. 各 chain を半分に split (奇数長は中央 1 点を落とす) して 2M 本の
+--      sub-chain にする
+--   2. 全値プールの平均 rank (同値は平均) を
+--      @(r − 3\/8) \/ (S + 1\/4)@ で (0,1) に写し Φ⁻¹ で z 化 (rank 正規化)
+--   3. 多 chain 結合自己相関 @ρ̂_t = 1 − (W − mean acov_t) \/ var⁺@ に
+--      Geyer の initial positive + monotone sequence を適用し
+--      @τ̂ = −1 + 2Σρ̂@ (下限 @1\/log₁₀(MN)@)、@ESS = MN \/ τ̂@
 --
--- 単 chain の 'ess' (Geyer IMSE・τ 下限 1 クランプで n 頭打ち) と異なり
--- 多 chain 情報と rank 正規化で裾の重い分布でも安定し、PyMC / arviz の
--- @ess_bulk@ と数値比較できる (Phase 92 B4: bench の指標非対称の是正)。
--- chain が短すぎるとき (split 後 4 draw 未満・arviz は NaN を返す領域) は
--- フォールバックとして元の総 draw 数を返す。
+--   単 chain の @ess@ (Geyer IMSE・τ 下限 1 クランプで n 頭打ち) と異なり
+--   多 chain 情報と rank 正規化で裾の重い分布でも安定し、PyMC / arviz の
+--   @ess_bulk@ と数値比較できる (bench の指標非対称の是正)。
+--   chain が短すぎるとき (split 後 4 draw 未満・arviz は NaN を返す領域) は
+--   フォールバックとして元の総 draw 数を返す。
+--   [English]: arviz\/Stan-compatible rank-normalized __bulk ESS__
+--   (Vehtari et al. 2021).
+--
+--   The argument is the same "per-chain sample list for a single
+--   parameter" as 'rhat'. The procedure matches arviz's
+--   @ess(method="bulk")@:
+--
+--   1. Split each chain in half (dropping the middle point for odd
+--      length) to get 2M sub-chains.
+--   2. Map the pooled average rank across all values (ties averaged) to
+--      (0,1) via @(r − 3\/8) \/ (S + 1\/4)@ and z-transform through Φ⁻¹
+--      (rank normalization).
+--   3. Apply Geyer's initial positive + monotone sequence to the
+--      multi-chain combined autocorrelation
+--      @ρ̂_t = 1 − (W − mean acov_t) \/ var⁺@, giving
+--      @τ̂ = −1 + 2Σρ̂@ (floored at @1\/log₁₀(MN)@) and
+--      @ESS = MN \/ τ̂@.
+--
+--   Unlike single-chain @ess@ (Geyer's IMSE, capped at n via the τ ≥ 1
+--   floor), this is stable on heavy-tailed distributions thanks to the
+--   multi-chain information and rank normalization, and is numerically
+--   comparable to PyMC\/arviz's @ess_bulk@ (fixing a metric asymmetry
+--   seen in benchmarking). When chains are too short (fewer than 4 draws
+--   after splitting — the region where arviz returns NaN), it falls back
+--   to the original total draw count.
 essBulk :: [[Double]] -> Double
 essBulk chains
   | m < 1 || n < 4 = fromIntegral (sum (map length nonEmpty))  -- 元の総 draw 数
@@ -116,8 +141,11 @@ essBulk chains
     sub  = map (take n) sub0
     m    = length sub
 
--- | rank 正規化 (arviz @_z_scale@): 全 chain プールの平均 rank →
--- @(r − 3\/8)\/(S + 1\/4)@ → 標準正規の分位関数。chain 構造は保存する。
+-- | [日本語]: rank 正規化 (arviz @_z_scale@): 全 chain プールの平均 rank →
+--   @(r − 3\/8)\/(S + 1\/4)@ → 標準正規の分位関数。chain 構造は保存する。
+--   [English]: Rank normalization (arviz's @_z_scale@): pooled average
+--   rank across all chains → @(r − 3\/8)\/(S + 1\/4)@ → standard normal
+--   quantile function. The chain structure is preserved.
 rankNormalize :: [[Double]] -> [[Double]]
 rankNormalize chains = rechunk (map length chains) (map z ranks)
   where
@@ -128,8 +156,10 @@ rankNormalize chains = rechunk (map length chains) (map z ranks)
     rechunk []           _  = []
     rechunk (len : lens) xs = let (h, t) = splitAt len xs in h : rechunk lens t
 
--- | 同値を平均 rank (scipy @rankdata(method="average")@ 相当) にした
--- 1-based rank を入力順で返す。
+-- | [日本語]: 同値を平均 rank (scipy @rankdata(method="average")@ 相当) にした
+--   1-based rank を入力順で返す。
+--   [English]: Returns 1-based ranks in input order, with ties given the
+--   average rank (equivalent to scipy's @rankdata(method="average")@).
 averageRanks :: [Double] -> [Double]
 averageRanks xs = map snd (sortBy (comparing fst) ranked)
   where
@@ -143,8 +173,10 @@ averageRanks xs = map snd (sortBy (comparing fst) ranked)
           avg = fromIntegral (2 * pos + k + 1) / 2 :: Double
       in [ (i, avg) | (i, _) <- g ] ++ go (pos + k) gs
 
--- | 多 chain 結合 ESS (arviz @_ess@ の忠実な移植)。入力 = z 化済み等長
--- sub-chain 群。
+-- | [日本語]: 多 chain 結合 ESS (arviz @_ess@ の忠実な移植)。入力 = z 化済み等長
+--   sub-chain 群。
+--   [English]: Multi-chain combined ESS (a faithful port of arviz's
+--   @_ess@). Input: a group of equal-length, z-transformed sub-chains.
 essMultiChain :: [[Double]] -> Double
 essMultiChain sub
   | isNaN varPlus || varPlus <= 0 = sTotal
@@ -200,7 +232,9 @@ essMultiChain sub
       let mu = sum vs / fromIntegral (length vs)
       in sum [ (x - mu) ^ (2 :: Int) | x <- vs ] / fromIntegral (length vs - 1)
 
--- | biased 自己共分散 (分母 n・arviz @_autocov@ と同じ規約) を lag 0..n-1 で。
+-- | [日本語]: biased 自己共分散 (分母 n・arviz @_autocov@ と同じ規約) を lag 0..n-1 で。
+--   [English]: Biased autocovariance (denominator n, matching arviz's
+--   @_autocov@ convention) at lags 0..n-1.
 autocovBiased :: V.Vector Double -> V.Vector Double
 autocovBiased v = V.generate nn at
   where
@@ -290,13 +324,24 @@ bfmi es
     numer    = sum (map (\d -> d * d) diffs)
                / fromIntegral (length diffs)
 
--- | Rank-normalized per-chain histogram counts (PyMC @plot_rank@ の素材・
--- Vehtari et al. 2021)。 全 chain をプールした値に昇順 rank (1..n) を振り、
--- chain ごとに @nBins@ 個のビンへ振り分けた **ビンごとのカウント** を返す。
--- 返り値は chain ごとの長さ @nBins@ のカウント列 (= @[[count]]@・入力 chain 順)。
--- 収束時は各 chain の rank 分布が一様 (= どのビンもほぼ同数) に近づく。
+-- | [日本語]: Rank-normalized per-chain histogram counts (PyMC @plot_rank@ の素材・
+--   Vehtari et al. 2021)。 全 chain をプールした値に昇順 rank (1..n) を振り、
+--   chain ごとに @nBins@ 個のビンへ振り分けた __ビンごとのカウント__ を返す。
+--   返り値は chain ごとの長さ @nBins@ のカウント列 (= @[[count]]@・入力 chain 順)。
+--   収束時は各 chain の rank 分布が一様 (= どのビンもほぼ同数) に近づく。
 --
--- ビン境界は Viz/Plot 両経路で共有するためここに一元化する (二重実装を避ける)。
+--   ビン境界は Viz/Plot 両経路で共有するためここに一元化する (二重実装を避ける)。
+--   [English]: Rank-normalized per-chain histogram counts (the material
+--   behind PyMC's @plot_rank@; Vehtari et al. 2021). Assigns an ascending
+--   rank (1..n) to the values pooled across all chains, then returns the
+--   __per-bin counts__ once each chain's ranks are distributed into
+--   @nBins@ bins. The result is a per-chain list of length-@nBins@ count
+--   sequences (= @[[count]]@, in input chain order). At convergence each
+--   chain's rank distribution approaches uniform (= roughly equal counts
+--   in every bin).
+--
+--   Bin boundaries are centralized here so both the Viz and Plot paths
+--   share them (avoiding a duplicate implementation).
 rankHist :: Int -> [[Double]] -> [[Int]]
 rankHist nBins perChain =
   [ [ length (filter (== b) (chainBins c)) | b <- [0 .. nBins - 1] ]

@@ -8,16 +8,30 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Phase 58.6b: 依存追跡型 'Track' を 'Hanalyze.Model.HBM' から分離。
+-- [日本語]: 依存追跡型 'Track' を 'Hanalyze.Model.HBM' から分離。
 --
--- 'Track' は @Floating@ 演算を通して「この値はどの latent 変数に依存するか」を
--- 伝播する型。 'ModelP' をこの型で特殊化することで各 Observe / Deterministic
--- ノードの親集合を自動抽出する ('extractDeps')。 DAG 可視化 (buildModelGraph)
--- の基盤。
+--   'Track' は @Floating@ 演算を通して「この値はどの latent 変数に依存するか」を
+--   伝播する型。 'ModelP' をこの型で特殊化することで各 Observe / Deterministic
+--   ノードの親集合を自動抽出する ('extractDeps')。 DAG 可視化 (buildModelGraph)
+--   の基盤。
 --
--- 依存は下層 'Hanalyze.Model.HBM.Model' (Node / ModelF / lmParents 等) と
--- '...Distribution' (Distribution / distName) のみ。 評価層 (logJoint 等) には
--- 依存しない (runTrack = logJoint の Track 特殊化は Eval 層に置く)。
+--   依存は下層 'Hanalyze.Model.HBM.Model' (Node / ModelF / lmParents 等) と
+--   '...Distribution' (Distribution / distName) のみ。 評価層 (logJoint 等) には
+--   依存しない (runTrack = logJoint の Track 特殊化は Eval 層に置く)。
+-- [English]: The dependency-tracking type 'Track', factored out of
+--   'Hanalyze.Model.HBM'.
+--
+--   'Track' is a type that propagates "which latent variable does this
+--   value depend on" through @Floating@ operations. Specializing 'ModelP'
+--   to this type automatically extracts each Observe / Deterministic
+--   node's set of parents ('extractDeps'). This underlies DAG
+--   visualization (buildModelGraph).
+--
+--   Dependencies only reach into the lower layers
+--   'Hanalyze.Model.HBM.Model' (Node / ModelF / lmParents, etc.) and
+--   '...Distribution' (Distribution / distName). There is no dependency on
+--   the evaluation layer (logJoint, etc.) — runTrack, the Track
+--   specialization of logJoint, lives in the Eval layer instead.
 module Hanalyze.Model.HBM.Track
   ( Track (..)
   , trackVar
@@ -38,20 +52,28 @@ import Hanalyze.Model.HBM.Distribution
 -- 依存追跡型 Track
 -- ---------------------------------------------------------------------------
 
--- | Floating 演算を通して「この値はどの変数に依存するか」を伝播する型。
+-- | [日本語]: Floating 演算を通して「この値はどの変数に依存するか」を伝播する型。
 --
--- @ModelP@ をこの型で特殊化することで、各 Observe ノードが
--- どの latent 変数に依存しているか自動抽出できる。
+--   @ModelP@ をこの型で特殊化することで、各 Observe ノードが
+--   どの latent 変数に依存しているか自動抽出できる。
+--   [English]: A type that propagates "which variable does this value
+--   depend on" through @Floating@ operations.
+--
+--   Specializing @ModelP@ to this type lets us automatically extract which
+--   latent variables each Observe node depends on.
 data Track = Track
   { trackVal  :: !Double
   , trackDeps :: !(Set Text)
   } deriving (Show, Eq)
 
--- | 変数として登場する Track (deps に自分の名前を入れる)。
+-- | [日本語]: 変数として登場する Track (deps に自分の名前を入れる)。
+--   [English]: A Track that appears as a variable (its own name is added
+--   to deps).
 trackVar :: Text -> Double -> Track
 trackVar n v = Track v (Set.singleton n)
 
--- | 定数として扱う Track (deps なし)。
+-- | [日本語]: 定数として扱う Track (deps なし)。
+--   [English]: A Track treated as a constant (empty deps).
 trackConst :: Double -> Track
 trackConst v = Track v Set.empty
 
@@ -104,13 +126,23 @@ instance Real Track where
 instance RealFrac Track where
   properFraction (Track a sa) = let (i, f) = properFraction a in (i, Track f sa)
 
--- | モデルを Track 型で実行し、各ノードの依存関係を抽出する。
+-- | [日本語]: モデルを Track 型で実行し、各ノードの依存関係を抽出する。
 --
--- Sample n: その変数自体は @{n}@ に依存する (自己依存)。
--- Observe n: 分布のパラメータに含まれる latent 変数の集合を deps とする。
+--   Sample n: その変数自体は @{n}@ に依存する (自己依存)。
+--   Observe n: 分布のパラメータに含まれる latent 変数の集合を deps とする。
 --
--- Phase 40: plate スタックを保持し、 各 Node に 'nodePlates' を埋める。
--- 同時に出現した plate (name, size) を 'Map Text Int' で返す。
+--   plate スタックを保持し、 各 Node に 'nodePlates' を埋める。
+--   同時に出現した plate (name, size) を 'Map Text Int' で返す。
+--   [English]: Runs the model with the Track type and extracts each node's
+--   dependencies.
+--
+--   Sample n: the variable itself depends on @{n}@ (self-dependency).
+--   Observe n: deps is the set of latent variables appearing in the
+--   distribution's parameters.
+--
+--   Maintains a plate stack, filling in each Node's 'nodePlates'. Returns
+--   the plates encountered along the way as (name, size) in a
+--   'Map Text Int'.
 extractDeps :: forall r. ModelP r -> ([Node], Map Text Int)
 extractDeps m =
   let (ns, plates) = go m [] [] Map.empty Map.empty Map.empty in (ns, plates)
@@ -213,7 +245,9 @@ extractDeps m =
             nd { nodeDeps = nodeDeps nd <> parents }
           _ -> nd
 
--- | Distribution Track に含まれる依存変数集合を取り出す。
+-- | [日本語]: Distribution Track に含まれる依存変数集合を取り出す。
+--   [English]: Extracts the set of dependency variables contained in a
+--   Distribution Track.
 distDepsT :: Distribution Track -> Set Text
 distDepsT (Normal mu sig)    = trackDeps mu <> trackDeps sig
 distDepsT (Exponential r)    = trackDeps r

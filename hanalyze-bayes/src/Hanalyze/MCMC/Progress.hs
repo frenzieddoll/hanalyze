@@ -4,24 +4,46 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- MCMC サンプリングの進捗表示 (Phase 61.2)。
+-- [日本語]: MCMC サンプリングの進捗表示。
 --
--- 'Hanalyze.MCMC.NUTS.nutsChainsStream' の chain index 付き callback に
--- 接続して、 全 chain 集計の進捗 1 行を stderr に描画する:
+--   'Hanalyze.MCMC.NUTS.nutsChainsStream' の chain index 付き callback に
+--   接続して、 全 chain 集計の進捗 1 行を stderr に描画する:
 --
--- > chains 2/4 done | draw 3400/8000 (warmup) | div 12 | 380.0 it/s
+--   > chains 2/4 done | draw 3400/8000 (warmup) | div 12 | 380.0 it/s
 --
--- 設計 (phase-61 計画の柱):
+--   設計 (計画の柱):
 --
--- * 表示は「現在の chain」 でなく**全 chain 集計** (chain は mapConcurrently
---   並列で同時進行するため「現在」 が無い)。
--- * callback はサンプラループ内で**同期実行**される ('nutsStream' doc 明記)
---   ので、 描画はカウンタ先行の間引き (全体の ~0.5% 刻み) を通過した時だけ
---   時刻取得 + 描画する。 ホットパスに乗るのはカウンタ更新のみ。
--- * TTY (対話端末) では @\\r@ 上書きの 1 行、 非 TTY (CI ログ等) では
---   10% 刻みの行出力。
--- * 並列 chain からの stderr 競合は 'MVar' の単一描画権で回避
---   (取れなければ描画 skip = 次の間引き通過で追いつく)。
+--   - 表示は「現在の chain」 でなく__全 chain 集計__ (chain は mapConcurrently
+--     並列で同時進行するため「現在」 が無い)。
+--   - callback はサンプラループ内で__同期実行__される (@nutsStream@ doc 明記)
+--     ので、 描画はカウンタ先行の間引き (全体の ~0.5% 刻み) を通過した時だけ
+--     時刻取得 + 描画する。 ホットパスに乗るのはカウンタ更新のみ。
+--   - TTY (対話端末) では @\\r@ 上書きの 1 行、 非 TTY (CI ログ等) では
+--     10% 刻みの行出力。
+--   - 並列 chain からの stderr 競合は @MVar@ の単一描画権で回避
+--     (取れなければ描画 skip = 次の間引き通過で追いつく)。
+-- [English]: Progress display for MCMC sampling.
+--
+--   This hooks into the chain-indexed callback of
+--   'Hanalyze.MCMC.NUTS.nutsChainsStream' and renders one progress
+--   line, aggregated across all chains, to stderr:
+--
+--   > chains 2/4 done | draw 3400/8000 (warmup) | div 12 | 380.0 it/s
+--
+--   Design (pillars of the plan):
+--
+--   - The display shows __aggregated progress across all chains__, not "the
+--     current chain" (since chains run concurrently via mapConcurrently,
+--     there is no single "current" chain).
+--   - The callback runs __synchronously__ inside the sampler loop (as
+--     documented on @nutsStream@), so rendering only fetches the time and
+--     draws once the counter passes a throttling threshold (~0.5% of the
+--     total). Only the counter update sits on the hot path.
+--   - On a TTY (interactive terminal), a single line is overwritten with
+--     @\\r@; on a non-TTY (e.g. CI logs), a line is emitted every 10%.
+--   - Contention on stderr from parallel chains is avoided via a single
+--     drawing right held in an @MVar@ (if it can't be taken, the render is
+--     skipped and catches up at the next throttled pass).
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Hanalyze.MCMC.Progress
@@ -47,23 +69,31 @@ import Hanalyze.MCMC.NUTS (SampleEvent (..))
 -- スナップショット + 純粋フォーマッタ
 -- ===========================================================================
 
--- | 全 chain 集計の進捗スナップショット (描画と独立な純粋データ)。
+-- | [日本語]: 全 chain 集計の進捗スナップショット (描画と独立な純粋データ)。
+--   [English]: A progress snapshot aggregated across all chains (pure data,
+--   independent of rendering).
 data ProgressSnapshot = ProgressSnapshot
-  { psChains      :: Int     -- ^ 総 chain 数。
-  , psChainsDone  :: Int     -- ^ 完了 chain 数。
-  , psDraw        :: Int     -- ^ 全 chain 合算の消化 iteration 数 (burn-in 込み)。
-  , psTotal       :: Int     -- ^ 全 chain 合算の総 iteration 数。
-  , psWarmup      :: Bool    -- ^ いずれかの chain が warmup (burn-in) 中か。
-  , psDivergent   :: Int     -- ^ divergence 累計 (全 chain)。
-  , psItersPerSec :: Double  -- ^ 開始からの平均スループット (iteration/s)。
+  { psChains      :: Int     -- ^ [日本語]: 総 chain 数。 [English]: Total number of chains.
+  , psChainsDone  :: Int     -- ^ [日本語]: 完了 chain 数。 [English]: Number of completed chains.
+  , psDraw        :: Int     -- ^ [日本語]: 全 chain 合算の消化 iteration 数 (burn-in 込み)。 [English]: Iterations consumed, summed across all chains (including burn-in).
+  , psTotal       :: Int     -- ^ [日本語]: 全 chain 合算の総 iteration 数。 [English]: Total iterations, summed across all chains.
+  , psWarmup      :: Bool    -- ^ [日本語]: いずれかの chain が warmup (burn-in) 中か。 [English]: Whether any chain is currently in warmup (burn-in).
+  , psDivergent   :: Int     -- ^ [日本語]: divergence 累計 (全 chain)。 [English]: Cumulative divergence count (all chains).
+  , psItersPerSec :: Double  -- ^ [日本語]: 開始からの平均スループット (iteration/s)。 [English]: Average throughput since start (iterations/s).
   } deriving (Show, Eq)
 
--- | 進捗 1 行の純粋フォーマッタ。 例:
+-- | [日本語]: 進捗 1 行の純粋フォーマッタ。 例:
 --
--- @
--- formatProgress (ProgressSnapshot 4 2 3400 8000 True 12 380.0)
---   == "chains 2\/4 done | draw 3400\/8000 (warmup) | div 12 | 380.0 it\/s"
--- @
+--   @
+--   formatProgress (ProgressSnapshot 4 2 3400 8000 True 12 380.0)
+--     == "chains 2\/4 done | draw 3400\/8000 (warmup) | div 12 | 380.0 it\/s"
+--   @
+--   [English]: A pure formatter for one progress line. Example:
+--
+--   @
+--   formatProgress (ProgressSnapshot 4 2 3400 8000 True 12 380.0)
+--     == "chains 2\/4 done | draw 3400\/8000 (warmup) | div 12 | 380.0 it\/s"
+--   @
 formatProgress :: ProgressSnapshot -> Text
 formatProgress ps = T.intercalate " | "
   [ "chains " <> tshow (psChainsDone ps) <> "/" <> tshow (psChains ps) <> " done"
@@ -78,25 +108,39 @@ formatProgress ps = T.intercalate " | "
 -- stderr レンダラ
 -- ===========================================================================
 
--- | レンダラ内部の可変状態 (chain ごとの消化数 / warmup フラグ / div 累計)。
+-- | [日本語]: レンダラ内部の可変状態 (chain ごとの消化数 / warmup フラグ / div 累計)。
+--   [English]: The renderer's internal mutable state (per-chain consumed
+--   count / warmup flag / cumulative divergence count).
 data RState = RState
-  { rsDraws :: !(IM.IntMap Int)   -- ^ chain index → 消化 iteration 数。
-  , rsWarm  :: !(IM.IntMap Bool)  -- ^ chain index → 直近 event が burn-in か。
-  , rsDiv   :: !Int               -- ^ divergence 累計。
+  { rsDraws :: !(IM.IntMap Int)   -- ^ [日本語]: chain index → 消化 iteration 数。 [English]: chain index → number of consumed iterations.
+  , rsWarm  :: !(IM.IntMap Bool)  -- ^ [日本語]: chain index → 直近 event が burn-in か。 [English]: chain index → whether the most recent event was burn-in.
+  , rsDiv   :: !Int               -- ^ [日本語]: divergence 累計。 [English]: Cumulative divergence count.
   }
 
--- | stderr 進捗レンダラを作る。 返り値 = (chain index 付き callback, 終了処理)。
+-- | [日本語]: stderr 進捗レンダラを作る。 返り値 = (chain index 付き callback, 終了処理)。
 --
--- 終了処理は最終スナップショットを描画して行を閉じる (TTY では改行を補う)。
--- 'Hanalyze.MCMC.NUTS.nutsChainsStream' に渡す想定:
+--   終了処理は最終スナップショットを描画して行を閉じる (TTY では改行を補う)。
+--   'Hanalyze.MCMC.NUTS.nutsChainsStream' に渡す想定:
 --
--- @
--- (onSample, finish) <- newProgressRenderer chains (burnIn + iters)
--- chains <- nutsChainsStream m cfg chains initC seed onSample
--- finish
--- @
-newProgressRenderer :: Int   -- ^ 総 chain 数
-                    -> Int   -- ^ chain あたりの総 iteration 数 (burn-in 込み)
+--   @
+--   (onSample, finish) <- newProgressRenderer chains (burnIn + iters)
+--   chains <- nutsChainsStream m cfg chains initC seed onSample
+--   finish
+--   @
+--   [English]: Creates an stderr progress renderer. Returns
+--   (a chain-index-aware callback, a finalizer).
+--
+--   The finalizer renders the final snapshot and closes the line (adding a
+--   newline on a TTY). Intended to be passed to
+--   'Hanalyze.MCMC.NUTS.nutsChainsStream':
+--
+--   @
+--   (onSample, finish) <- newProgressRenderer chains (burnIn + iters)
+--   chains <- nutsChainsStream m cfg chains initC seed onSample
+--   finish
+--   @
+newProgressRenderer :: Int   -- ^ [日本語]: 総 chain 数 [English]: Total number of chains
+                    -> Int   -- ^ [日本語]: chain あたりの総 iteration 数 (burn-in 込み) [English]: Total iterations per chain (including burn-in)
                     -> IO (Int -> SampleEvent -> IO (), IO ())
 newProgressRenderer nChains perChain = do
   isTTY    <- hIsTerminalDevice stderr

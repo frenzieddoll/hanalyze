@@ -11,7 +11,7 @@
 -- tasks. Originally embedded in @Hanalyze.Stat.VI@; extracted here as a shared
 -- foundation.
 --
--- 使い方:
+-- [日本語]: 使い方:
 --
 -- @
 -- let cfg = defaultAdamConfig { adamLearningRate = 0.01, adamIterations = 1000 }
@@ -21,6 +21,16 @@
 --
 -- 'adamStep' 単体は 1 ステップだけ進める低レベル API で、`Hanalyze.Stat.VI` などが
 -- 内部で利用する。
+-- [English]: Usage:
+--
+-- @
+-- let cfg = defaultAdamConfig { adamLearningRate = 0.01, adamIterations = 1000 }
+--     gradFn x = ...                            -- gradient (ascent direction)
+--     (xFinal, history) = runAdam cfg gradFn x0
+-- @
+--
+-- 'adamStep' by itself is a low-level API that advances a single step;
+-- it's used internally by things like @Hanalyze.Stat.VI@.
 {-# LANGUAGE OverloadedStrings #-}
 module Hanalyze.Optim.Adam
   ( -- * 設定

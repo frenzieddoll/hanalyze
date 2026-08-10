@@ -89,10 +89,8 @@ GLM-Poisson (18.4×) と比べ倍率は大きく縮小した — 750 観測 (30�
 共通: 上段2×2 (モデル構造DAG/forest/PPC/energy) + 下段paramごと
 [事後分布|trace]。
 
-- `figures/hs_dashboard_full.png`
-- `figures/py_dashboard_full.svg`
-
-(図はベンチ実行後に `figures/` へ生成される。リポジトリには含めていない)
+- [hs_dashboard_full.png](./figures/hs_dashboard_full.png)
+- [py_dashboard_full.svg](./figures/py_dashboard_full.svg)
 
 ### 既知の課題
 

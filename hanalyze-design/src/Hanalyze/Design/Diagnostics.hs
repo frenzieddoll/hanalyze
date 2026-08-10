@@ -6,16 +6,16 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- DoE 設計診断: Alias Matrix / VIF / D-A-G-I efficiency。
+-- [日本語]: DoE 設計診断: Alias Matrix / VIF / D-A-G-I efficiency。
 --
 -- 設計行列 @X@ (n × p) に対して、 multicollinearity と最適性指標を一括算出。
 --
 -- ===  efficiency 指標
 --
---   * D-efficiency = (|XᵀX| / n^p)^{1/p}
---   * A-efficiency = p / trace((XᵀX/n)⁻¹)
---   * G-efficiency = p / max_i (n · x_iᵀ (XᵀX)⁻¹ x_i)
---   * I-efficiency = 1 / (n · trace((XᵀX)⁻¹ · M))、
+--   - D-efficiency = (|XᵀX| / n^p)^{1/p}
+--   - A-efficiency = p / trace((XᵀX/n)⁻¹)
+--   - G-efficiency = p / max_i (n · x_iᵀ (XᵀX)⁻¹ x_i)
+--   - I-efficiency = 1 / (n · trace((XᵀX)⁻¹ · M))、
 --     M = 1/n · XᵀX (= self-moment 近似版)
 --
 -- ===  VIF
@@ -29,6 +29,33 @@
 -- @A = (XᵀX)⁻¹ Xᵀ Z@、 ここで Z は 「設計に入れていない交絡項」 のモデル
 -- 行列。 ここでは Z を Optional 引数として取り、 未指定の場合は
 -- アライアス対象が無いとして空行列を返す。
+--
+-- [English]: DoE design diagnostics: Alias Matrix \/ VIF \/ D-A-G-I
+-- efficiency.
+--
+-- Computes multicollinearity and optimality metrics in bulk for the design
+-- matrix @X@ (n × p).
+--
+-- ===  Efficiency metrics
+--
+--   - D-efficiency = (|XᵀX| / n^p)^{1/p}
+--   - A-efficiency = p / trace((XᵀX/n)⁻¹)
+--   - G-efficiency = p / max_i (n · x_iᵀ (XᵀX)⁻¹ x_i)
+--   - I-efficiency = 1 / (n · trace((XᵀX)⁻¹ · M)),
+--     M = 1/n · XᵀX (a self-moment approximation)
+--
+-- ===  VIF
+--
+-- For each column j, using the R² of "regressing j on all columns other
+-- than j", @VIF_j = 1 / (1 − R²_j)@. Assumes X includes an intercept, and
+-- the intercept column (all 1s) is skipped.
+--
+-- ===  Alias Matrix
+--
+-- @A = (XᵀX)⁻¹ Xᵀ Z@, where Z is the model matrix of "confounding terms
+-- not included in the design". Z is taken here as an optional argument;
+-- when unspecified, an empty matrix is returned as there is nothing to
+-- alias.
 module Hanalyze.Design.Diagnostics
   ( DesignDiagnostics (..)
   , diagnostics
@@ -56,26 +83,32 @@ data DesignDiagnostics = DesignDiagnostics
 -- 公開 API
 -- ===========================================================================
 
--- | Alias を含めない簡易版 (Z = 空)。
+-- | [日本語]: Alias を含めない簡易版 (Z = 空)。
+--   [English]: A simplified version without Alias (Z = empty).
 diagnostics :: LA.Matrix Double -> DesignDiagnostics
 diagnostics x =
   let dd = computeDiagnostics x
   in dd { ddAliasMatrix = LA.fromLists [[]] }
 
--- | Z (交絡対象モデル行列) 込みの完全版。 Z の行数は X と一致する必要がある。
+-- | [日本語]: Z (交絡対象モデル行列) 込みの完全版。 Z の行数は X と一致する必要がある。
+--   [English]: The full version, including Z (the model matrix of
+--   confounding terms). Z's row count must match X's.
 diagnosticsWithAlias :: LA.Matrix Double -> LA.Matrix Double -> DesignDiagnostics
 diagnosticsWithAlias x z =
   let dd = computeDiagnostics x
       a  = aliasMatrix x z
   in dd { ddAliasMatrix = a }
 
--- | VIF を各列について返す (全 1 列は VIF = 1)。
+-- | [日本語]: VIF を各列について返す (全 1 列は VIF = 1)。
+--   [English]: Returns the VIF for each column (an all-1s column has
+--   VIF = 1).
 vifVector :: LA.Matrix Double -> LA.Vector Double
 vifVector x =
   let p = LA.cols x
   in LA.fromList [ vifForCol x j | j <- [0 .. p - 1] ]
 
--- | Alias matrix A = (XᵀX)⁻¹ Xᵀ Z。
+-- | [日本語]: Alias matrix A = (XᵀX)⁻¹ Xᵀ Z。
+--   [English]: The alias matrix A = (XᵀX)⁻¹ Xᵀ Z.
 aliasMatrix :: LA.Matrix Double -> LA.Matrix Double -> LA.Matrix Double
 aliasMatrix x z =
   let xtx = LA.tr x LA.<> x
@@ -130,7 +163,9 @@ computeDiagnostics x =
        , ddAliasMatrix = LA.fromLists [[]]
        }
 
--- | 列 j の VIF。 全 1 列 (切片) は 1 を返す。
+-- | [日本語]: 列 j の VIF。 全 1 列 (切片) は 1 を返す。
+--   [English]: The VIF of column j. Returns 1 for an all-1s column
+--   (intercept).
 vifForCol :: LA.Matrix Double -> Int -> Double
 vifForCol x j =
   let col = LA.flatten (x LA.¿ [j])

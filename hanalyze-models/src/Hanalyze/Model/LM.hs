@@ -4,7 +4,14 @@
 -- Copyright   : (c) 2026 Aelysce Project (Toshiaki Honda)
 -- License     : BSD-3-Clause
 --
--- Ordinary linear regression by least squares.
+-- [日本語]: 最小二乗法による線形回帰の fit・予測・信頼/予測区間。
+--
+-- hmatrix の @\\\\@ (LAPACK) を使って @β = (XᵀX)⁻¹ Xᵀ y@ を解く。
+-- @t × √(s² xᵢᵀ(XᵀX)⁻¹xᵢ)@ による信頼区間・予測区間、 CLI やレポート
+-- ビルダーから使うための @DataFrame@ の便利アダプタを提供する。
+--
+-- [English]: Fitting, prediction, and confidence\/prediction intervals for
+-- ordinary linear regression by least squares.
 --
 -- Solves @β = (XᵀX)⁻¹ Xᵀ y@ via hmatrix's @\\\\@ (LAPACK). Provides
 -- confidence and prediction bands using
@@ -52,8 +59,10 @@ instance Model LinearModel where
   fit     _ = fitLM
   predict _ = predictLM
 
--- | Ordinary Least Squares (Matrix canonical, 多出力対応):
--- B = (XᵀX)⁻¹ Xᵀ Y、各列を独立に解く。
+-- | [日本語]: Ordinary Least Squares (Matrix canonical、 多出力対応):
+--   B = (XᵀX)⁻¹ Xᵀ Y、各列を独立に解く。
+--   [English]: Ordinary Least Squares (matrix-canonical form, supports
+--   multiple outputs): B = (XᵀX)⁻¹ Xᵀ Y, solving each column independently.
 fitLM :: LA.Matrix Double -> LA.Matrix Double -> FitResult
 fitLM x y =
   let beta  = x LA.<\> y                   -- p × q
@@ -65,11 +74,14 @@ fitLM x y =
 predictLM :: LA.Matrix Double -> LA.Matrix Double -> LA.Matrix Double
 predictLM beta xNew = xNew LA.<> beta
 
--- | 単一出力 (Vector y) の便利ラッパ。@asColumn@ で 1 列行列に変換。
+-- | [日本語]: 単一出力 (Vector y) の便利ラッパ。@asColumn@ で 1 列行列に変換。
+--   [English]: Convenience wrapper for a single output (Vector y). Converts
+--   to a 1-column matrix with @asColumn@.
 fitLMVec :: LA.Matrix Double -> LA.Vector Double -> FitResult
 fitLMVec x y = fitLM x (LA.asColumn y)
 
--- | 1 出力での予測 (β は Vector)。
+-- | [日本語]: 1 出力での予測 (β は Vector)。
+--   [English]: Prediction for a single output (β is a Vector).
 predictLMVec :: LA.Vector Double -> LA.Matrix Double -> LA.Vector Double
 predictLMVec beta xNew = xNew LA.#> beta
 
@@ -96,26 +108,43 @@ data CIBand = CIBand
   , ciLevel    :: Double
   } deriving (Show)
 
--- | Pointwise confidence band for the mean response (1 出力前提)。
--- Formula: ŷᵢ ± t_{α/2, n−p} × sqrt(s² × xᵢᵀ (XᵀX)⁻¹ xᵢ)
+-- | [日本語]: Pointwise confidence band for the mean response (1 出力前提)。
+--   Formula: ŷᵢ ± t_{α/2, n−p} × sqrt(s² × xᵢᵀ (XᵀX)⁻¹ xᵢ)
 --
--- 訓練設計行列上で評価する版 (= 各点の中心は fitted)。 grid 評価が要るときは
--- 'confidenceBandAt' を使う。
+--   訓練設計行列上で評価する版 (= 各点の中心は fitted)。 grid 評価が要るときは
+--   @confidenceBandAt@ を使う。
+--   [English]: Pointwise confidence band for the mean response (assumes a
+--   single output). Formula: ŷᵢ ± t_{α/2, n−p} × sqrt(s² × xᵢᵀ (XᵀX)⁻¹ xᵢ).
+--
+--   The variant evaluated on the training design matrix (= each point's
+--   center is the fitted value). Use @confidenceBandAt@ when grid
+--   evaluation is needed.
 confidenceBand :: LA.Matrix Double -> FitResult -> Double -> CIBand
 confidenceBand x res level = confidenceBandAt x res level x
 
--- | 訓練設計行列 @xTrain@ で推定した分散核 (s², (XᵀX)⁻¹, t 値) を、 別の
--- 評価点設計行列 @xEval@ の各行で band 化する。 中心は @xEval·β@、 半幅は
--- @t × √(s² × x₀ᵀ (XᵀX)⁻¹ x₀)@。 自由度・s² は訓練データで決まる。
+-- | [日本語]: 訓練設計行列 @xTrain@ で推定した分散核 (s², (XᵀX)⁻¹, t 値) を、 別の
+--   評価点設計行列 @xEval@ の各行で band 化する。 中心は @xEval·β@、 半幅は
+--   @t × √(s² × x₀ᵀ (XᵀX)⁻¹ x₀)@。 自由度・s² は訓練データで決まる。
 --
--- ★grid 評価の核: 訓練点ではなく等間隔 grid の設計行列を @xEval@ に渡すと、
--- 回帰曲線・CI 帯が滑らかになる (= 疎・不均一データのガタつき解消)。 訓練点を
--- そのまま渡せば 'confidenceBand' と一致する (LM では @xTrain·β = fitted@)。
+--   ★grid 評価の核: 訓練点ではなく等間隔 grid の設計行列を @xEval@ に渡すと、
+--   回帰曲線・CI 帯が滑らかになる (= 疎・不均一データのガタつき解消)。 訓練点を
+--   そのまま渡せば @confidenceBand@ と一致する (LM では @xTrain·β = fitted@)。
+--   [English]: Takes the variance core (s², (XᵀX)⁻¹, t value) estimated on
+--   the training design matrix @xTrain@ and turns each row of a separate
+--   evaluation-point design matrix @xEval@ into a band. The center is
+--   @xEval·β@, and the half-width is @t × √(s² × x₀ᵀ (XᵀX)⁻¹ x₀)@. The
+--   degrees of freedom and s² are determined by the training data.
+--
+--   ★The core of grid evaluation: passing an evenly-spaced grid's design
+--   matrix (instead of the training points) as @xEval@ smooths out the
+--   regression curve and CI band (= removes jaggedness from sparse\/uneven
+--   data). Passing the training points directly reproduces
+--   @confidenceBand@ (for LM, @xTrain·β = fitted@).
 confidenceBandAt
-  :: LA.Matrix Double  -- ^ 訓練設計行列 X (分散核の推定元)
-  -> FitResult         -- ^ fit 結果 (β / 残差)
-  -> Double            -- ^ 信頼水準 (例 0.95)
-  -> LA.Matrix Double  -- ^ 評価点設計行列 X₀ (band を評価する行)
+  :: LA.Matrix Double  -- ^ [日本語]: 訓練設計行列 X (分散核の推定元)。 [English]: The training design matrix X (source of the variance core).
+  -> FitResult         -- ^ [日本語]: fit 結果 (β / 残差)。 [English]: The fit result (β \/ residuals).
+  -> Double            -- ^ [日本語]: 信頼水準 (例 0.95)。 [English]: The confidence level (e.g. 0.95).
+  -> LA.Matrix Double  -- ^ [日本語]: 評価点設計行列 X₀ (band を評価する行)。 [English]: The evaluation-point design matrix X₀ (rows at which the band is evaluated).
   -> CIBand
 confidenceBandAt xTrain res level xEval =
   let df    = fromIntegral (LA.rows xTrain - LA.cols xTrain)
@@ -136,23 +165,30 @@ confidenceBandAt xTrain res level xEval =
              his   = zipWith (\yh xi -> yh + se xi) yHats rs
          in CIBand los his level
 
--- | 予測区間 (prediction interval) 版の 'confidenceBandAt'。 半幅に**観測分散**
--- @σ̂²@ を 1 つ加える: @t × √(s² × (1 + x₀ᵀ (XᵀX)⁻¹ x₀))@ (CI には @1 +@ が無い)。
--- = 新規観測 1 点が入る区間 (平均の信頼区間より広い)。 statsmodels の
--- @get_prediction().summary_frame()['obs_ci_lower/upper']@ と一致する。
+-- | [日本語]: 予測区間 (prediction interval) 版の @confidenceBandAt@。 半幅に
+--   __観測分散__ @σ̂²@ を 1 つ加える: @t × √(s² × (1 + x₀ᵀ (XᵀX)⁻¹ x₀))@
+--   (CI には @1 +@ が無い)。 = 新規観測 1 点が入る区間 (平均の信頼区間より広い)。
+--   statsmodels の @get_prediction().summary_frame()['obs_ci_lower/upper']@
+--   と一致する。
+--   [English]: The prediction-interval version of @confidenceBandAt@. Adds
+--   one unit of __observation variance__ @σ̂²@ to the half-width:
+--   @t × √(s² × (1 + x₀ᵀ (XᵀX)⁻¹ x₀))@ (the CI has no @1 +@ term). This is
+--   the interval that contains a single new observation (wider than the
+--   confidence interval for the mean). Matches statsmodels'
+--   @get_prediction().summary_frame()['obs_ci_lower/upper']@.
 -- (hanalyze-portable)
 predictionBandAt
-  :: LA.Matrix Double  -- ^ 訓練設計行列 X (分散核の推定元)
-  -> FitResult         -- ^ fit 結果 (β / 残差)
-  -> Double            -- ^ 信頼水準 (例 0.95)
-  -> LA.Matrix Double  -- ^ 評価点設計行列 X₀ (band を評価する行)
+  :: LA.Matrix Double  -- ^ [日本語]: 訓練設計行列 X (分散核の推定元)。 [English]: The training design matrix X (source of the variance core).
+  -> FitResult         -- ^ [日本語]: fit 結果 (β / 残差)。 [English]: The fit result (β \/ residuals).
+  -> Double            -- ^ [日本語]: 信頼水準 (例 0.95)。 [English]: The confidence level (e.g. 0.95).
+  -> LA.Matrix Double  -- ^ [日本語]: 評価点設計行列 X₀ (band を評価する行)。 [English]: The evaluation-point design matrix X₀ (rows at which the band is evaluated).
   -> CIBand
 predictionBandAt xTrain res level xEval =
   let df    = fromIntegral (LA.rows xTrain - LA.cols xTrain)
       beta  = coefficientsV res
       rs    = LA.toRows xEval
       yHats = [ xi `LA.dot` beta | xi <- rs ]
-  -- df<=0 は CI/PI 定義不能 → 幅ゼロ帯 (線のみ)。 'confidenceBandAt' と同方針。
+  -- df<=0 は CI/PI 定義不能 → 幅ゼロ帯 (線のみ)。 @confidenceBandAt@ と同方針。
   in if df <= 0
        then CIBand yHats yHats level
        else
@@ -260,7 +296,8 @@ fitPolyWithSmooth band nGrid df xCol yCol = do
       let (los, his) = computeBand level True
       in return (res, SmoothFit (V.toList xGrid) yGrid los his True)
 
--- | 各列ごとに R² を計算 (多出力対応)。
+-- | [日本語]: 各列ごとに R² を計算 (多出力対応)。
+--   [English]: Computes R² for each column (supports multiple outputs).
 computeR2Multi :: LA.Matrix Double -> LA.Matrix Double -> LA.Vector Double
 computeR2Multi y yHat =
   let q = LA.cols y

@@ -238,7 +238,8 @@ toLowerAscii c
 factorial :: Int -> Int
 factorial n = product [1 .. n]
 
--- | 二項係数: 乗算公式 O(min(k, n-k))
+-- | [日本語]: 二項係数: 乗算公式 O(min(k, n-k))
+--   [English]: Binomial coefficient: multiplicative formula, O(min(k, n-k)).
 choose :: Int -> Int -> Int
 choose n k
   | k < 0 || k > n = 0

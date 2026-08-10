@@ -82,7 +82,7 @@ data DEConfig = DEConfig
   } deriving (Show, Eq)
 
 -- | Default configuration: 200 iterations, population @max(20, 10×D)@,
--- @F = 0.5@, @CR = 0.9@, **'JDE' self-adaptive** strategy, minimization.
+-- @F = 0.5@, @CR = 0.9@, __'JDE' self-adaptive__ strategy, minimization.
 --
 -- 'JDE' is the recommended default because the classic @F = 0.7@ /
 -- @CR = 0.9@ is brittle on diverse problem types (Sphere, Rastrigin
@@ -192,11 +192,17 @@ jdeFLo, jdeFHi :: Double
 jdeFLo = 0.1
 jdeFHi = 0.9
 
--- | 1 世代の更新。'DEStrategy' によって @F_i@/@CR_i@ の扱いが分かれる:
+-- | [日本語]: 1 世代の更新。'DEStrategy' によって @F_i@/@CR_i@ の扱いが分かれる:
 --
 --   * 'ClassicRand1Bin': @F_i = deF cfg@, @CR_i = deCR cfg@ (固定)。
 --   * 'JDE'            : 各 trial 前に確率 'jdeTau' で再サンプリング、
 --     trial が採用された場合のみ新値を保持。
+--   [English]: The update for one generation. How @F_i@\/@CR_i@ are handled
+--   depends on the 'DEStrategy':
+--
+--   * 'ClassicRand1Bin': @F_i = deF cfg@, @CR_i = deCR cfg@ (fixed).
+--   * 'JDE'            : re-sampled before each trial with probability
+--     'jdeTau'; the new values are kept only if the trial is accepted.
 stepDE :: DEConfig
        -> ([Double] -> Double)
        -> MWC.GenIO
@@ -237,7 +243,9 @@ stepDE cfg f gen pop = do
       else return (xi, fi, fOld,   crOld)
   return newPop
 
--- | i と異なる 3 つの相異なるインデックスを集団 [0, n) から選ぶ。
+-- | [日本語]: i と異なる 3 つの相異なるインデックスを集団 [0, n) から選ぶ。
+--   [English]: Picks 3 distinct indices from the population [0, n), all
+--   different from i.
 pickThree :: Int -> Int -> MWC.GenIO -> IO [Int]
 pickThree n i gen = do
   let pickOne avoid = do

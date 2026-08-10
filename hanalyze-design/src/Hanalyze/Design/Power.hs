@@ -9,10 +9,10 @@
 --
 -- Main functions:
 --
---   * 'powerTTest'        — power of a two-sample t-test.
---   * 'sampleSizeTTest'   — @n@ required to attain a given power.
---   * 'powerOneWayAnova'  — power of an F-test (one-way ANOVA).
---   * 'powerProportion'   — power of a two-sample proportion test.
+--   - 'powerTTest'        — power of a two-sample t-test.
+--   - 'sampleSizeTTest'   — @n@ required to attain a given power.
+--   - 'powerOneWayAnova'  — power of an F-test (one-way ANOVA).
+--   - 'powerProportion'   — power of a two-sample proportion test.
 module Hanalyze.Design.Power
   ( -- * t 検定
     powerTTest

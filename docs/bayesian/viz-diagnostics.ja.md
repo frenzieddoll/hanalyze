@@ -1,6 +1,6 @@
 # MCMC 診断 viz ガイド (Hanalyze.Viz.MCMC)
 
-> 🌐 [English](viz-diagnostics.md) | **日本語**
+> 🌐 [English](viz-diagnostics.md) ｜ **日本語**
 >
 > NUTS / HMC / 平均場 ADVI / Full-rank ADVI など主要 sampler に共通の **収束
 > 診断 viz / 事後予測 viz / 要約表** をまとめて参照できるガイド。
@@ -38,7 +38,8 @@
 ## Plot 抽出子経路 (hgg SVG) の診断図
 
 上の表は `Hanalyze.Viz.MCMC` (VegaLite/HTML) 経路。 **`Hanalyze.Plot`
-(flag plot-integration・hgg SVG) 経路**は `HBMModel` を直接取る `*Of` 抽出子で、
+(別パッケージ `hanalyze-plot`、`cabal build --project-file=cabal.project.plot` で
+ビルド・hgg SVG) 経路**は `HBMModel` を直接取る `*Of` 抽出子で、
 `df |-> hbm` の流れにそのまま乗る (`toPlot` / `<>` で合成可)。 Phase 73 で `autocorrOf` /
 `rankOf` を足し、 **HTML 経路と SVG 経路の診断図カバレッジが対称**になった。
 
@@ -128,9 +129,9 @@ HDI forest 94% (`forestOf`)・事後予測チェック (`ppcOf`)・事後予測 
 ```haskell
 import Hanalyze.Plot     (hbm, defaultHBM, (|->), toPlot, epred, tracesOf, forestOf
                                , dagOf, ppcOf, autocorrOf, rankOf)
-import Hgg.Plot.Spec        (ColData (..), layer, scatter, subplots, subplotCols, vconcat)
-import Hgg.Plot.Frame       ((|>>))
-import Hgg.Plot.Backend.SVG (saveSVGBound)
+import Graphics.Hgg.Spec        (ColData (..), layer, scatter, subplots, subplotCols, vconcat)
+import Graphics.Hgg.Frame       ((|>>))
+import Graphics.Hgg.Backend.SVG (saveSVGBound)
 import Data.Text                (Text)
 
 -- df = [("x", NumData …), ("y", NumData …)]; `model :: ModelP ()` が自分のプログラム
