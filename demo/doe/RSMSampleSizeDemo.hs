@@ -26,14 +26,14 @@ import           Hanalyze.Plot
                    ( customDesign, customSpec, numFactor, contFactor, quadratic, designFrame
                    , designTable, designModel, profiler, toPlot, (|->) )
 import           Hanalyze.DataIO.Convert (getDoubleVec)
-import           Hgg.Plot.Spec
+import           Graphics.Hgg.Spec
                    ( ColData (..), layer, linePoints, scatterPoints, Point2 (..)
                    , color, markWidth
                    , refHorizontal, title, subtitle, xLabel, yLabel, width, height
                    , theme, ThemeName (..) )
-import           Hgg.Plot.Frame ((|>>))
-import           Hgg.Plot.Color (fromHex)
-import           Hgg.Plot.Backend.SVG (saveSVG, saveSVGBound)
+import           Graphics.Hgg.Frame ((|>>))
+import           Graphics.Hgg.Color (fromHex)
+import           Graphics.Hgg.Backend.SVG (saveSVG, saveSVGBound)
 
 -- === 真の応答曲面とモデル ==================================================
 

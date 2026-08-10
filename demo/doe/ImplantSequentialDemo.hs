@@ -37,15 +37,15 @@ import           Hanalyze.Plot
                    , Design (..), toPlot, (|->) )
 import           Hanalyze.Design.Workflow (CustomSpec (..))
 import           Hanalyze.Design.DSD (dsdDesign, DSDResult (..))
-import           Hgg.Plot.Spec
+import           Graphics.Hgg.Spec
                    ( ColData (..), layer, bar, scatterPoints, Point2 (..)
                    , inline, inlineCat, colorBy, color
                    , title, subtitle, xLabel, yLabel, width, height
                    , xAxis, axisRotate
                    , theme, ThemeName (..) )
-import           Hgg.Plot.Frame ((|>>))
-import           Hgg.Plot.Color (fromHex)
-import           Hgg.Plot.Backend.SVG (saveSVGBound)
+import           Graphics.Hgg.Frame ((|>>))
+import           Graphics.Hgg.Color (fromHex)
+import           Graphics.Hgg.Backend.SVG (saveSVGBound)
 
 -- ===========================================================================
 -- Phase 0: 因子・真の応答 (ground truth)・ref・spec
