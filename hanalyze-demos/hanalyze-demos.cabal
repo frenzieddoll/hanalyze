@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name:          hanalyze-demos
-version:       0.1.0.1
+version:       0.2.0.1
 synopsis:      Demo and benchmark executables for the hanalyze toolkit
 description:
     The 151 demo and benchmark executables of the hanalyze toolkit.

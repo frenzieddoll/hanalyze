@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name:          hanalyze-bayes
-version:       0.1.0.1
+version:       0.2.0.1
 synopsis:      Bayesian layer of hanalyze: HBM DSL, MCMC samplers, model comparison
 description:
     The Bayesian inference layer of the hanalyze toolkit, depending on
@@ -78,4 +78,4 @@ library
     , ad                   >= 4.4  && < 4.6
     , reflection           >= 2.1  && < 2.2
     , vector               >= 0.12 && < 0.14
-    , hanalyze-core == 0.1.0.1
+    , hanalyze-core == 0.2.0.1

@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name:          hanalyze-cli
-version:       0.1.0.1
+version:       0.2.0.1
 synopsis:      hanalyze command-line interface for the hanalyze toolkit
 description:
     The @hanalyze@ command-line executable of the hanalyze toolkit.
@@ -39,7 +39,7 @@ executable hanalyze
   default-language: GHC2021
   build-depends:
       base       >= 4.14 && < 5
-    , hanalyze == 0.1.0.1
+    , hanalyze == 0.2.0.1
     , text       >= 1.2  && < 2.2
     , vector     >= 0.12 && < 0.14
     , hmatrix    >= 0.20 && < 0.22

@@ -2,7 +2,7 @@
 
 > 🌐 **English** | [日本語](README.ja.md)
 
-[![License: BSD-3](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/LICENSE)
+[![License: BSD-3](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/LICENSE)
 [![GHC](https://img.shields.io/badge/GHC-9.6.7-blueviolet.svg)](https://www.haskell.org/ghc/)
 
 **hanalyze** is a Haskell-native statistical engineering toolkit: regression, GLMM, Bayesian inference (HMC/NUTS/Gibbs/ADVI/SMC), Gaussian processes, machine learning (SVM / gradient boosting / neural networks), survival analysis (KM / Cox / AFT / competing risks), time series (ARIMA / GARCH / state space), causal discovery (LiNGAM) and treatment-effect estimation, design of experiments (classical + custom optimal design), multi-objective optimisation, native plotting, and HTML reporting integrated under one API.
@@ -24,38 +24,38 @@ Benchmarks (see below) show competitive accuracy with Python/R references in the
 
 ## Gallery
 
-Every figure below (and 90+ more across [`docs/`](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.0/docs/)) is generated straight
+Every figure below (and 90+ more across [`docs/`](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.1/docs/)) is generated straight
 from analysis results via the hgg integration — pure Haskell, SVG out.
 
 | | |
 |:--:|:--:|
-| ![Linear regression with CI band](https://raw.githubusercontent.com/frenzieddoll/hanalyze/v0.2.0.0/docs/images/lm-scatter-ci.svg)<br>Linear regression — fit + 95% CI ([docs](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/regression/01-lm.md)) | ![HBM MCMC dashboard](https://raw.githubusercontent.com/frenzieddoll/hanalyze/v0.2.0.0/docs/images/hbm-dashboard.svg)<br>Bayesian MCMC dashboard — trace / density / R̂ / ESS ([docs](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/bayesian/viz-diagnostics.md)) |
-| ![Gaussian process mean and credible band](https://raw.githubusercontent.com/frenzieddoll/hanalyze/v0.2.0.0/docs/images/gp-mean-ci.svg)<br>Gaussian process — mean + credible band ([docs](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/regression/04-gp.md)) | ![Kernel SVM decision boundary](https://raw.githubusercontent.com/frenzieddoll/hanalyze/v0.2.0.0/docs/images/svm-rbf-boundary.svg)<br>Kernel SVM (RBF) — decision boundary + support vectors ([docs](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/ml/usage-ml-extensions.md)) |
-| ![DOE prediction profiler](https://raw.githubusercontent.com/frenzieddoll/hanalyze/v0.2.0.0/docs/images/doe-profiler.svg)<br>DOE prediction profiler — response vs each factor + CI ([docs](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/api-guide/09-doe.md)) | ![RSM 3D response surface](https://raw.githubusercontent.com/frenzieddoll/hanalyze/v0.2.0.0/docs/images/rsm-surface-3d.svg)<br>RSM response surface (3D) ([docs](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/doe/01-doe.md)) |
-| ![DirectLiNGAM causal DAG](https://raw.githubusercontent.com/frenzieddoll/hanalyze/v0.2.0.0/docs/images/lingam-dag.svg)<br>DirectLiNGAM causal discovery — estimated DAG ([docs](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/api-guide/08-causal.md)) | ![Kaplan-Meier survival curves](https://raw.githubusercontent.com/frenzieddoll/hanalyze/v0.2.0.0/docs/images/km-survival.svg)<br>Kaplan-Meier survival curves ([docs](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/regression/10-survival.md)) |
-| ![Time-series forecast](https://raw.githubusercontent.com/frenzieddoll/hanalyze/v0.2.0.0/docs/images/ts-forecast.svg)<br>Time-series forecast ([docs](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/regression/09-timeseries.md)) | ![k-means clusters with 95% ellipses](https://raw.githubusercontent.com/frenzieddoll/hanalyze/v0.2.0.0/docs/images/kmeans-ellipse.svg)<br>k-means clusters + 95% ellipses ([docs](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/stat/05-cluster.md)) |
+| ![Linear regression with CI band](https://raw.githubusercontent.com/frenzieddoll/hanalyze/v0.2.0.1/docs/images/lm-scatter-ci.svg)<br>Linear regression — fit + 95% CI ([docs](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/regression/01-lm.md)) | ![HBM MCMC dashboard](https://raw.githubusercontent.com/frenzieddoll/hanalyze/v0.2.0.1/docs/images/hbm-dashboard.svg)<br>Bayesian MCMC dashboard — trace / density / R̂ / ESS ([docs](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/bayesian/viz-diagnostics.md)) |
+| ![Gaussian process mean and credible band](https://raw.githubusercontent.com/frenzieddoll/hanalyze/v0.2.0.1/docs/images/gp-mean-ci.svg)<br>Gaussian process — mean + credible band ([docs](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/regression/04-gp.md)) | ![Kernel SVM decision boundary](https://raw.githubusercontent.com/frenzieddoll/hanalyze/v0.2.0.1/docs/images/svm-rbf-boundary.svg)<br>Kernel SVM (RBF) — decision boundary + support vectors ([docs](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/ml/usage-ml-extensions.md)) |
+| ![DOE prediction profiler](https://raw.githubusercontent.com/frenzieddoll/hanalyze/v0.2.0.1/docs/images/doe-profiler.svg)<br>DOE prediction profiler — response vs each factor + CI ([docs](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/api-guide/09-doe.md)) | ![RSM 3D response surface](https://raw.githubusercontent.com/frenzieddoll/hanalyze/v0.2.0.1/docs/images/rsm-surface-3d.svg)<br>RSM response surface (3D) ([docs](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/doe/01-doe.md)) |
+| ![DirectLiNGAM causal DAG](https://raw.githubusercontent.com/frenzieddoll/hanalyze/v0.2.0.1/docs/images/lingam-dag.svg)<br>DirectLiNGAM causal discovery — estimated DAG ([docs](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/api-guide/08-causal.md)) | ![Kaplan-Meier survival curves](https://raw.githubusercontent.com/frenzieddoll/hanalyze/v0.2.0.1/docs/images/km-survival.svg)<br>Kaplan-Meier survival curves ([docs](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/regression/10-survival.md)) |
+| ![Time-series forecast](https://raw.githubusercontent.com/frenzieddoll/hanalyze/v0.2.0.1/docs/images/ts-forecast.svg)<br>Time-series forecast ([docs](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/regression/09-timeseries.md)) | ![k-means clusters with 95% ellipses](https://raw.githubusercontent.com/frenzieddoll/hanalyze/v0.2.0.1/docs/images/kmeans-ellipse.svg)<br>k-means clusters + 95% ellipses ([docs](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/stat/05-cluster.md)) |
 
 ---
 
 ## Capabilities
 
 Features are organised by topic, with **the details delegated to the per-topic docs and
-the package READMEs**. The full index is [`docs/README.md`](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/README.md); the
-exhaustive API dictionary is [`docs/api-guide/`](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/api-guide/README.md) (12 chapters).
+the package READMEs**. The full index is [`docs/README.md`](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/README.md); the
+exhaustive API dictionary is [`docs/api-guide/`](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/api-guide/README.md) (12 chapters).
 
 | Topic | Main items | Guide | API |
 |---|---|---|---|
-| Statistical inference | 12 hypothesis tests, multiple-comparison correction, bootstrap CI, effect size + power, cross-validation | [stat/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.0/docs/stat/) | [10 stat](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/api-guide/10-stat.md) |
-| Regression | LM / GLM / GLMM / robust / quantile / penalized (ridge…SCAD) / spline / GAM / GP / RFF | [regression/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.0/docs/regression/) | [02 regression](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/api-guide/02-regression.md) |
-| Machine learning | Random forest / GBM / decision tree / k-NN / naive Bayes / SVM / MLP / MDS / PDP and ICE | [ml/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.0/docs/ml/) | [05 ml](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/api-guide/05-ml.md) |
-| Multivariate | PCA / PLS / RRR / CCA / discriminant analysis / clustering / FDA | [fda/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.0/docs/fda/) | [04 multivariate](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/api-guide/04-multivariate.md) |
-| Causal | Propensity score / IPW / DR / CATE / all 7 LiNGAM variants | [causal/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.0/docs/causal/) | [08 causal](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/api-guide/08-causal.md) |
-| Bayesian | HBM DSL (plates, hierarchy) / MH, HMC, NUTS, Gibbs, ADVI / convergence diagnostics / posterior predictive | [bayesian/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.0/docs/bayesian/) | [03 bayesian-hbm](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/api-guide/03-bayesian-hbm.md) |
-| Time series & survival | AR / VAR / GARCH / Kalman / Kaplan-Meier / competing risks / AFT / Cox | [timeseries/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.0/docs/timeseries/) | [06](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/api-guide/06-timeseries.md) / [07](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/api-guide/07-survival.md) |
-| Optimization | Nelder-Mead / L-BFGS / DE / CMA-ES / NSGA-II / Bayesian optimization / augmented Lagrangian | [optim/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.0/docs/optim/) | — |
-| Design of experiments | Factorial / RSM / D-, A-, I-, G-optimal / orthogonal arrays / Taguchi / custom design / power | [doe/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.0/docs/doe/) | [09 doe](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/api-guide/09-doe.md) |
-| Data I/O | CSV / Parquet / JSON loading, cleaning, reshaping (`Data.Transform` / `Data.Wrangle`) | [io/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.0/docs/io/) | [11 data](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/api-guide/11-data.md) |
-| Visualization | Vega-Lite based charts, integrated HTML reports, HBM DAG rendering | [visualization/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.0/docs/visualization/) | [12 plot](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/api-guide/12-plot.md) |
+| Statistical inference | 12 hypothesis tests, multiple-comparison correction, bootstrap CI, effect size + power, cross-validation | [stat/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.1/docs/stat/) | [10 stat](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/api-guide/10-stat.md) |
+| Regression | LM / GLM / GLMM / robust / quantile / penalized (ridge…SCAD) / spline / GAM / GP / RFF | [regression/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.1/docs/regression/) | [02 regression](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/api-guide/02-regression.md) |
+| Machine learning | Random forest / GBM / decision tree / k-NN / naive Bayes / SVM / MLP / MDS / PDP and ICE | [ml/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.1/docs/ml/) | [05 ml](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/api-guide/05-ml.md) |
+| Multivariate | PCA / PLS / RRR / CCA / discriminant analysis / clustering / FDA | [fda/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.1/docs/fda/) | [04 multivariate](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/api-guide/04-multivariate.md) |
+| Causal | Propensity score / IPW / DR / CATE / all 7 LiNGAM variants | [causal/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.1/docs/causal/) | [08 causal](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/api-guide/08-causal.md) |
+| Bayesian | HBM DSL (plates, hierarchy) / MH, HMC, NUTS, Gibbs, ADVI / convergence diagnostics / posterior predictive | [bayesian/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.1/docs/bayesian/) | [03 bayesian-hbm](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/api-guide/03-bayesian-hbm.md) |
+| Time series & survival | AR / VAR / GARCH / Kalman / Kaplan-Meier / competing risks / AFT / Cox | [timeseries/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.1/docs/timeseries/) | [06](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/api-guide/06-timeseries.md) / [07](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/api-guide/07-survival.md) |
+| Optimization | Nelder-Mead / L-BFGS / DE / CMA-ES / NSGA-II / Bayesian optimization / augmented Lagrangian | [optim/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.1/docs/optim/) | — |
+| Design of experiments | Factorial / RSM / D-, A-, I-, G-optimal / orthogonal arrays / Taguchi / custom design / power | [doe/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.1/docs/doe/) | [09 doe](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/api-guide/09-doe.md) |
+| Data I/O | CSV / Parquet / JSON loading, cleaning, reshaping (`Data.Transform` / `Data.Wrangle`) | [io/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.1/docs/io/) | [11 data](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/api-guide/11-data.md) |
+| Visualization | Vega-Lite based charts, integrated HTML reports, HBM DAG rendering | [visualization/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.1/docs/visualization/) | [12 plot](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/api-guide/12-plot.md) |
 
 **One entry point**: every model is fitted with `df |-> spec` and drawn with `toPlot`.
 The plotting integration lives in a separate package, `hanalyze-plot`
@@ -163,7 +163,7 @@ descriptive stats, tests, effect sizes, distributions, plotting helpers and CSV
 I/O) for quick exploration; reach for the individual `Hanalyze.Model.*` /
 `Hanalyze.Stat.*` modules when you need their full surface.
 
-See [docs/01-quickstart.md](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/01-quickstart.md) for a fuller introduction.
+See [docs/01-quickstart.md](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/01-quickstart.md) for a fuller introduction.
 
 ---
 
@@ -185,7 +185,7 @@ hanalyze taguchi sn / analyze     Taguchi method
 hanalyze clean <file> --rule ...  dirty-data cleaning
 ```
 
-For per-command flags, run `hanalyze <cmd> --help` or see [docs/01-quickstart.md](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/01-quickstart.md).
+For per-command flags, run `hanalyze <cmd> --help` or see [docs/01-quickstart.md](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/01-quickstart.md).
 
 ---
 
@@ -238,7 +238,7 @@ add value.
 > R is included in the feature map only — no numerical bench against R has been run.
 
 Numbers below come from `bench/results/{haskell,python}/*.csv`; see
-[bench/results/SUMMARY.md](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/bench/results/SUMMARY.md) for the full table and
+[bench/results/SUMMARY.md](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/bench/results/SUMMARY.md) for the full table and
 benchmark conditions (`OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1`,
 single-thread, deterministic seeds).
 
@@ -260,7 +260,7 @@ single-thread, deterministic seeds).
 | **Multi-output regression / Regrid** | MultiLM 2.3× faster than sklearn; `regridLong` 20× faster than a hand-written pandas+scipy synthesis. |
 | **Visualisation** | Vega-Lite specs via hvega (grammar-of-graphics-style); HTML reports built-in. |
 
-See [docs/comparison/python-r.md](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/docs/comparison/python-r.md) for the feature map, and [bench/results/SUMMARY.md](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/bench/results/SUMMARY.md) for numbers.
+See [docs/comparison/python-r.md](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/docs/comparison/python-r.md) for the feature map, and [bench/results/SUMMARY.md](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/bench/results/SUMMARY.md) for numbers.
 
 ---
 
@@ -270,7 +270,7 @@ Selected results from `bench/results/SUMMARY.md`. Each entry is a single
 benchmark configuration; absolute objective values depend on iteration
 counts, seeds, and tolerances — see the SUMMARY for full conditions.
 NUTS is additionally validated against posteriordb reference posteriors
-(see [bench/posteriordb/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.0/bench/posteriordb/)).
+(see [bench/posteriordb/](https://github.com/frenzieddoll/hanalyze/tree/v0.2.0.1/bench/posteriordb/)).
 
 - **NUTS 8-schools** (warmup 500, samples 1000): hanalyze 1492 ms with ESS(mu) 839 vs blackjax 530 ms / ESS 810 in this run
 - **Holt-Winters seasonal n=500 p=12**: hanalyze 0.19 ms vs statsmodels MLE 96 ms in this run (note: hanalyze uses fixed α=0.3 closed-form; statsmodels does MLE)
@@ -283,7 +283,7 @@ NUTS is additionally validated against posteriordb reference posteriors
 - **Constrained Quad2D (eq)**: hanalyze 0.062 ms vs scipy SLSQP 0.69 ms in this run
 - **regridLong on jagged long-form**: hanalyze 0.99 ms vs pandas+scipy synthesis 19.4 ms in this run
 
-Reproduce: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 cabal run bench-{regression,kernel,optim,mo,bo,mcmc-b7,mcmc-extras,ts-extras,optim-plus,stat-util,multi-output,regrid}`, then `bench/python/bench_*.py` (see [bench/README.md](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/bench/README.md)).
+Reproduce: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 cabal run bench-{regression,kernel,optim,mo,bo,mcmc-b7,mcmc-extras,ts-extras,optim-plus,stat-util,multi-output,regrid}`, then `bench/python/bench_*.py` (see [bench/README.md](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/bench/README.md)).
 
 ---
 
@@ -392,7 +392,7 @@ bench/venv/bin/python bench/aggregate.py > bench/results/SUMMARY.md
 
 ## License
 
-BSD-3-Clause License — see [LICENSE](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.0/LICENSE).
+BSD-3-Clause License — see [LICENSE](https://github.com/frenzieddoll/hanalyze/blob/v0.2.0.1/LICENSE).
 
 ## Author
 

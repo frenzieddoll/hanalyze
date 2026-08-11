@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name:          hanalyze-core
-version:       0.1.0.1
+version:       0.2.0.1
 synopsis:      Bottom layer of hanalyze: stats, tests, optimisation, MCMC core
 description:
     The bottom layer of the hanalyze toolkit: pure numerics with no

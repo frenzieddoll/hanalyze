@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name:          hanalyze-plot
-version:       0.1.0.1
+version:       0.2.0.1
 synopsis:      Static-plot integration for hanalyze (toPlot / Plottable)
 description:
     The integration layer between hanalyze and the sibling
@@ -86,7 +86,7 @@ library
     , unicode-transforms   >= 0.4  && < 0.5
     , regex-tdfa           >= 1.3  && < 1.4
     , regex-base           >= 0.94 && < 0.95
-    , hanalyze       == 0.1.0.1
+    , hanalyze       == 0.2.0.1
     , hgg-core
     , hgg-svg
     , hgg-3d

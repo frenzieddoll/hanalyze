@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name:          hanalyze-viz
-version:       0.1.0.1
+version:       0.2.0.1
 synopsis:      Vega-Lite visualization and HTML report layer of hanalyze
 description:
     The visualization and reporting layer of the hanalyze toolkit. It
@@ -74,8 +74,8 @@ library
     , vector               >= 0.12 && < 0.14
     , dataframe-core        ^>= 1.1
     , dataframe-operations  >= 1.1.1 && < 1.2
-    , hanalyze-core == 0.1.0.1
-    , hanalyze-frame == 0.1.0.1
-    , hanalyze-bayes == 0.1.0.1
-    , hanalyze-models == 0.1.0.1
-    , hanalyze-design == 0.1.0.1
+    , hanalyze-core == 0.2.0.1
+    , hanalyze-frame == 0.2.0.1
+    , hanalyze-bayes == 0.2.0.1
+    , hanalyze-models == 0.2.0.1
+    , hanalyze-design == 0.2.0.1
