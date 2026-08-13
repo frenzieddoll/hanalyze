@@ -32,9 +32,10 @@ common warnings
   ghc-options: -Wall -Wcompat -Widentities -Wredundant-constraints
 
 -- Phase 108: viz 層は -O1 (report/chart 生成は ms オーダー one-shot で -O2 の
--- 実行性能価値なし、build 短縮を優先。実測 = bench/results/phase108/)
+-- 実行性能価値なし、build 短縮を優先。実測 = bench/results/phase108/)。
+-- -O1 は cabal 既定のため明示しない (明示 -O は Hackage の cabal check が reject)
 common opt
-  ghc-options: -O1 -funbox-strict-fields
+  ghc-options: -funbox-strict-fields
 
 library
   import:           warnings, opt

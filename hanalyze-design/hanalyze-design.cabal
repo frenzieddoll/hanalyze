@@ -32,9 +32,10 @@ common warnings
   ghc-options: -Wall -Wcompat -Widentities -Wredundant-constraints
 
 -- Phase 108: design 層は -O1 検証中 (bench-custom-design gate で regression 無し
--- を確認できた場合のみ採用。実測 = bench/results/phase108/)
+-- を確認できた場合のみ採用。実測 = bench/results/phase108/)。
+-- -O1 は cabal 既定のため明示しない (明示 -O は Hackage の cabal check が reject)
 common opt
-  ghc-options: -O1 -funbox-strict-fields
+  ghc-options: -funbox-strict-fields
 
 library
   import:           warnings, opt
