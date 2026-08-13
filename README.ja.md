@@ -105,7 +105,7 @@ module 地図と単体利用の例**がある。
 
 | package | 役割 |
 |---|---|
-| [`hanalyze`](hanalyze/README.ja.md) | 全層を再輸出する umbrella (通常はこれ) |
+| [`hanalyze`](hanalyze/ARCHITECTURE.ja.md) | 全層を再輸出する umbrella (通常はこれ) |
 | [`-core`](hanalyze-core/README.ja.md) | 記述統計・検定・最適化・数値核 |
 | [`-frame`](hanalyze-frame/README.ja.md) | DataFrame 連携・読込・整形・Fit API |
 | [`-models`](hanalyze-models/README.ja.md) | 回帰・機械学習・時系列・生存・因果 |

@@ -105,7 +105,7 @@ dependency. **Each package has a README** with a module map and a standalone exa
 
 | Package | Role |
 |---|---|
-| [`hanalyze`](hanalyze/README.md) | Umbrella re-exporting every layer (use this unless you have a reason not to) |
+| [`hanalyze`](hanalyze/ARCHITECTURE.md) | Umbrella re-exporting every layer (use this unless you have a reason not to) |
 | [`-core`](hanalyze-core/README.md) | Descriptive statistics, tests, optimization, numerical core |
 | [`-frame`](hanalyze-frame/README.md) | DataFrame integration, loading, reshaping, the fit API |
 | [`-models`](hanalyze-models/README.md) | Regression, machine learning, time series, survival, causal |
