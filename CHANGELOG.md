@@ -161,18 +161,20 @@ Initial Hackage release. (Version 0.1.0.0 was uploaded only as a
 candidate and never published; the multi-output GP API was rearranged
 before publication — see below.)
 
-### Multi-output GP — API のデフォルトを shared-HP に変更
-- `Hanalyze.Model.MultiGP.fitMultiGP` / `fitMultiGPMV` の **挙動を sklearn 流
-  shared-HP 版に置き換え**。1 回の HP 最適化で全 q 出力の合算周辺尤度を
-  最大化し、`Ky = K + σ_n² I` の Cholesky を再利用する (RBF 専用、
-  `q > 1` で旧版比 ~q× 速い)。
-- 旧来の per-output 独立 HP 版 (任意カーネル対応) は
-  `fitMultiGPIndep` / `fitMultiGPMVIndep` に **改名**。
-- 旧 `fitMultiGPMVSharedHP` は新しい `fitMultiGPMV` に統合済 (削除)。
-- 既存ユーザーは `fitMultiGP kern ...` を `fitMultiGPIndep kern ...` に
-  置き換えれば従来の挙動を維持できる。
+### Multi-output GP — default API switched to shared hyperparameters
+- `Hanalyze.Model.MultiGP.fitMultiGP` / `fitMultiGPMV` **now use the
+  sklearn-style shared-HP behaviour**: a single hyperparameter optimisation
+  maximises the summed marginal likelihood of all q outputs and reuses the
+  Cholesky factor of `Ky = K + σ_n² I` (RBF only; ~q× faster than the old
+  version for `q > 1`).
+- The previous per-output independent-HP version (arbitrary kernels) was
+  **renamed** to `fitMultiGPIndep` / `fitMultiGPMVIndep`.
+- The old `fitMultiGPMVSharedHP` was merged into the new `fitMultiGPMV`
+  (removed).
+- Existing users can keep the old behaviour by replacing
+  `fitMultiGP kern ...` with `fitMultiGPIndep kern ...`.
 
-### LM diagnostics + Taguchi/Quality 拡張
+### LM diagnostics + Taguchi/Quality extensions
 - `Hanalyze.Model.LM.Diagnostics` (new module): inference and residual diagnostics
   for OLS — `ciTValue`, `lmStdErrors[Multi]`, `CoefStats` /
   `lmCoefStats[Multi]` (SE / t / two-sided p), `FStat` / `lmFStatistic`
