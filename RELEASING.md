@@ -39,8 +39,8 @@ grep -o 'https://[^")<> ]*' README.md | sed 's/#.*$//;s/[.,]$//' | sort -u | \
   uploaded (which packages go to Hackage is decided per release).
 - `Hanalyze.Plot` lives in the separate `hanalyze-plot` package (the old
   `plot-integration` flag was removed with the multi-package split). It
-  depends on the sibling hgg packages (`hgg-core`/`hgg-frame`/`hgg-svg`/
-  `hgg-pdf`/`hgg-rasterific`/`hgg-3d`/`hgg-custom`); until hgg is on
+  depends on the sibling hgg packages (`hgg-core`/`hgg-svg`/`hgg-3d`/
+  `hgg-custom`, bounds `>= 0.2 && < 0.3`); until hgg 0.2 is on
   Hackage, point a checkout via `cabal.project.plot.local` and build with
   `cabal build --project-file=cabal.project.plot hanalyze-plot` before
   releasing to catch hgg API drift.

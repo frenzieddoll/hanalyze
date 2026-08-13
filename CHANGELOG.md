@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [PVP](https://pvp.haskell.org/) versioning.
 
+## [0.2.0.1] - 2026-08-13
+
+### Changed (multi-package split)
+- hanalyze is now a multi-package project. Published packages: `hanalyze`
+  (umbrella — re-exports every module, existing imports keep working
+  unchanged), `hanalyze-core` / `-frame` / `-bayes` / `-models` / `-design` /
+  `-viz`, and `hanalyze-cli`. All share version 0.2.0.1.
+- The `Hanalyze.*.Plot` integration layer moved from the umbrella's
+  `plot-integration` cabal flag to its own package `hanalyze-plot`
+  (published separately, after the hgg 0.2 release). The `plot-integration`
+  flag no longer exists; depend on `hanalyze-plot` instead.
+- Version compatibility: hanalyze 0.2.0.1+ pairs with hgg 0.2.x
+  (`hanalyze-plot` 0.2.0.1 / `hgg-analyze-bridge` 0.2).
+
+### Fixed
+- Test-suite `other-modules` completeness (HBMSummarySpec, Stat.MCMCSpec,
+  Stat.SummarySpec are now compiled into the test build).
+- Documentation tree is English-default (`docs/**/*.md` English,
+  `*.ja.md` Japanese originals).
+
 ## [0.2.0.0] - 2026-07-18
 
 ### Added (NUTS streaming callback for live MCMC progress)
