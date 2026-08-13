@@ -61,6 +61,12 @@
 plot 連携は別 package `hanalyze-plot` にあり
 (`cabal build --project-file=cabal.project.plot`)。
 
+plot エコシステムとの版数対応:
+
+| hgg | hanalyze | 連携 package |
+|---|---|---|
+| 0.2.x | 0.2.0.1+ | `hanalyze-plot` 0.2.0.1 (analyze → plot) / `hgg-analyze-bridge` 0.2 (plot → analyze) |
+
 ## インストール
 
 ### 動作環境
@@ -198,7 +204,7 @@ hanalyze clean <file> --rule ...  汚いデータのクリーニング
 | `hanalyze-demos/demo/bayesian/SimpsonParadoxDemo.hs` | 階層モデルでパラドックスを解明 |
 | `hanalyze-demos/demo/io/DirtyDataDemo.hs` | 19 種の汚い CSV を自動防衛 |
 
-実行: `dist-newstyle/build/x86_64-linux/ghc-9.6.7/hanalyze-0.2.0.0/x/<demo-name>/build/<demo-name>/<demo-name>` で起動。
+実行: `dist-newstyle/build/x86_64-linux/ghc-9.6.7/hanalyze-demos-0.2.0.1/x/<demo-name>/build/<demo-name>/<demo-name>` で起動。
 
 ---
 

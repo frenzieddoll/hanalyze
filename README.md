@@ -61,6 +61,12 @@ exhaustive API dictionary is [`docs/api-guide/`](https://github.com/frenzieddoll
 The plotting integration lives in a separate package, `hanalyze-plot`
 (`cabal build --project-file=cabal.project.plot`).
 
+Version compatibility with the plotting ecosystem:
+
+| hgg | hanalyze | integration packages |
+|---|---|---|
+| 0.2.x | 0.2.0.1+ | `hanalyze-plot` 0.2.0.1 (analyze → plot) / `hgg-analyze-bridge` 0.2 (plot → analyze) |
+
 ## Installation
 
 ### Requirements
@@ -204,7 +210,7 @@ For per-command flags, run `hanalyze <cmd> --help` or see [docs/01-quickstart.md
 | `hanalyze-demos/demo/bayesian/SimpsonParadoxDemo.hs` | Disentangle Simpson's paradox via hierarchical model |
 | `hanalyze-demos/demo/io/DirtyDataDemo.hs` | Auto-defend against 19 dirty CSV variants |
 
-Run: `dist-newstyle/build/x86_64-linux/ghc-9.6.7/hanalyze-0.2.0.0/x/<demo-name>/build/<demo-name>/<demo-name>`.
+Run: `dist-newstyle/build/x86_64-linux/ghc-9.6.7/hanalyze-demos-0.2.0.1/x/<demo-name>/build/<demo-name>/<demo-name>`.
 
 ---
 

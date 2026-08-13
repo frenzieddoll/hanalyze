@@ -87,10 +87,10 @@ library
     , regex-tdfa           >= 1.3  && < 1.4
     , regex-base           >= 0.94 && < 0.95
     , hanalyze       == 0.2.0.1
-    , hgg-core
-    , hgg-svg
-    , hgg-3d
-    , hgg-custom
+    , hgg-core     >= 0.2  && < 0.3
+    , hgg-svg      >= 0.2  && < 0.3
+    , hgg-3d       >= 0.2  && < 0.3
+    , hgg-custom   >= 0.2  && < 0.3
 
 -- Phase 46 (hgg 統合) のテスト。 Phase 106 で umbrella から移設
 -- (umbrella component が本 package に依存すると package 循環になるため)。
